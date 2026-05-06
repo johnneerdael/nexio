@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationOwnershipService
@@ -20,7 +21,6 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
@@ -57,7 +57,6 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -71,7 +70,6 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -121,11 +119,8 @@ class HomeViewModel @Inject constructor(
     internal val tmdbDiscoveryService: TmdbDiscoveryService,
     internal val kitsuDiscoveryService: KitsuDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
-    internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
-    internal val tmdbService: TmdbService,
     internal val metadataRouterFacade: MetadataRouterFacade,
     internal val providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
-    internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
@@ -285,6 +280,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewUserAgentsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
+    internal val trailerSelectedFallbackYtIdsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailabilityInFlightKeys = Collections.synchronizedSet(mutableSetOf<String>())
     internal val trailerMetadataAvailabilityJobs = Collections.synchronizedSet(mutableSetOf<Job>())
     internal var activeTrailerPreviewItemId: String? = null
@@ -385,6 +381,8 @@ class HomeViewModel @Inject constructor(
             .filterValues { it }
             .keys
             .toSet()
+    val trailerSelectedFallbackYtIds: Map<String, String>
+        get() = trailerSelectedFallbackYtIdsState
 
     init {
         observeStartupPerfTelemetry()
@@ -734,9 +732,14 @@ class HomeViewModel @Inject constructor(
             return
         }
         val capturedGeneration = homeProfileGeneration
+        val capturedProfileSession = profileManager.activeProfileSession.value
         deferredStartupRefreshJob = viewModelScope.launch {
             var nextReason: String? = reason
-            while (nextReason != null && isCurrentHomeProfileGeneration(capturedGeneration)) {
+            while (
+                nextReason != null &&
+                isCurrentHomeProfileGeneration(capturedGeneration) &&
+                profileManager.activeProfileSession.value == capturedProfileSession
+            ) {
                 val currentReason = nextReason
                 if (!isNonPlaybackHomeWorkAllowed()) {
                     startupRefreshPending = false
@@ -748,16 +751,26 @@ class HomeViewModel @Inject constructor(
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
                 logStartupPerf("catalog_refresh_start", "reason=$currentReason")
-                runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration, reason = currentReason)
+                runSerializedPostStartupRefresh(
+                    expectedGeneration = capturedGeneration,
+                    expectedProfileSession = capturedProfileSession,
+                    reason = currentReason
+                )
                 logStartupPerf("catalog_refresh_end", "reason=$currentReason")
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
-                nextReason = if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+                nextReason = if (
+                    isCurrentHomeProfileGeneration(capturedGeneration) &&
+                    profileManager.activeProfileSession.value == capturedProfileSession
+                ) {
                     pendingSerializedHomeRefreshReason
                 } else {
                     null
                 }
             }
-            if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+            if (
+                isCurrentHomeProfileGeneration(capturedGeneration) &&
+                profileManager.activeProfileSession.value == capturedProfileSession
+            ) {
                 runDeferredFocusedItemEnrichmentIfReady()
             }
         }
@@ -840,7 +853,9 @@ class HomeViewModel @Inject constructor(
         Log.i("StartupPerf", "t=${SystemClock.elapsedRealtime()}ms event=$event$suffix")
     }
 
-    internal fun scheduleUpdateCatalogRows() {
+    internal fun scheduleUpdateCatalogRows(
+        profileSessionForUpdate: ActiveProfileSession = profileManager.activeProfileSession.value
+    ) {
         if (shouldSuppressIncrementalHomeSnapshotPublish()) {
             return
         }
@@ -859,22 +874,28 @@ class HomeViewModel @Inject constructor(
                 else -> 50L
             }
             delay(debounceMs)
-            updateCatalogRows()
+            updateCatalogRows(profileSessionForUpdate)
         }
     }
 
-    internal suspend fun flushCatalogRowsForFirstPaint() {
+    internal suspend fun flushCatalogRowsForFirstPaint(
+        profileSessionForUpdate: ActiveProfileSession = profileManager.activeProfileSession.value
+    ) {
         if (shouldSuppressIncrementalHomeSnapshotPublish()) {
             return
         }
         catalogUpdateJob?.cancel()
         hasRenderedFirstCatalog = true
-        updateCatalogRows()
+        updateCatalogRows(profileSessionForUpdate)
     }
 
-    private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
-    private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long, reason: String) =
-        runSerializedPostStartupRefreshPipeline(expectedGeneration, reason)
+    private suspend fun updateCatalogRows(profileSessionForUpdate: ActiveProfileSession) =
+        updateCatalogRowsPipeline(profileSessionForUpdate)
+    private suspend fun runSerializedPostStartupRefresh(
+        expectedGeneration: Long,
+        expectedProfileSession: ActiveProfileSession,
+        reason: String
+    ) = runSerializedPostStartupRefreshPipeline(expectedGeneration, expectedProfileSession, reason)
 
     internal var posterStatusReconcileJob: Job? = null
 

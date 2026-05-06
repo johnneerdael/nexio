@@ -3,9 +3,11 @@ package com.nexio.tv.ui.screensaver
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TrailerDisplayState
 
 @Immutable
 data class IdleScreensaverSlide(
@@ -13,8 +15,8 @@ data class IdleScreensaverSlide(
     val itemType: String,
     val addonBaseUrl: String,
     val title: String,
-    val backgroundUrl: String,
-    val logoUrl: String?,
+    val backgroundArtwork: ArtworkDisplayRef,
+    val logoArtwork: ArtworkDisplayRef?,
     val genres: List<String>,
     val description: String?,
     val releaseInfo: String?,
@@ -22,7 +24,7 @@ data class IdleScreensaverSlide(
     val imdbRating: Float?,
     val tomatoesRating: Double? = null,
     val modeData: IdleScreensaverModeData = IdleScreensaverModeData(
-        image = IdleScreensaverImageModeData(fallbackArtworkUrls = listOf(backgroundUrl))
+        image = IdleScreensaverImageModeData(fallbackArtwork = listOf(backgroundArtwork))
     )
 )
 
@@ -34,12 +36,12 @@ data class IdleScreensaverModeData(
 
 @Immutable
 data class IdleScreensaverImageModeData(
-    val fallbackArtworkUrls: List<String> = emptyList()
+    val fallbackArtwork: List<ArtworkDisplayRef> = emptyList()
 )
 
 @Immutable
 data class IdleScreensaverTrailerModeData(
-    val trailerYtIds: List<String>
+    val trailerState: TrailerDisplayState
 )
 
 @Immutable
@@ -48,38 +50,41 @@ data class IdleTrailerScreensaverCandidate(
     val itemType: String,
     val addonBaseUrl: String,
     val title: String,
-    val logoUrl: String?,
-    val backgroundUrl: String,
-    val fallbackArtworkUrls: List<String>,
+    val logoArtwork: ArtworkDisplayRef?,
+    val backgroundArtwork: ArtworkDisplayRef,
+    val fallbackArtwork: List<ArtworkDisplayRef>,
     val genres: List<String>,
     val description: String?,
     val releaseInfo: String?,
     val runtime: String?,
     val imdbRating: Float?,
     val tomatoesRating: Double? = null,
-    val trailerYtIds: List<String>,
+    val trailerState: TrailerDisplayState,
     val stableIds: ProviderIds = ProviderIds()
 ) {
     constructor(
         slide: IdleScreensaverSlide,
-        trailerYtIds: List<String>
+        trailerState: TrailerDisplayState
     ) : this(
         itemId = slide.itemId,
         itemType = slide.itemType,
         addonBaseUrl = slide.addonBaseUrl,
         title = slide.title,
-        logoUrl = slide.logoUrl,
-        backgroundUrl = slide.backgroundUrl,
-        fallbackArtworkUrls = slide.modeData.image.fallbackArtworkUrls.ifEmpty { listOf(slide.backgroundUrl) },
+        logoArtwork = slide.logoArtwork,
+        backgroundArtwork = slide.backgroundArtwork,
+        fallbackArtwork = slide.modeData.image.fallbackArtwork.ifEmpty { listOf(slide.backgroundArtwork) },
         genres = slide.genres,
         description = slide.description,
         releaseInfo = slide.releaseInfo,
         runtime = slide.runtime,
         imdbRating = slide.imdbRating,
         tomatoesRating = slide.tomatoesRating,
-        trailerYtIds = trailerYtIds,
+        trailerState = trailerState,
         stableIds = ProviderIds()
     )
+
+    val playbackRefs: List<TrailerPlaybackRef>
+        get() = listOfNotNull(trailerState.selectedPlaybackRef).distinct()
 
     val slide: IdleScreensaverSlide
         get() = IdleScreensaverSlide(
@@ -87,8 +92,8 @@ data class IdleTrailerScreensaverCandidate(
             itemType = itemType,
             addonBaseUrl = addonBaseUrl,
             title = title,
-            backgroundUrl = backgroundUrl,
-            logoUrl = logoUrl,
+            backgroundArtwork = backgroundArtwork,
+            logoArtwork = logoArtwork,
             genres = genres,
             description = description,
             releaseInfo = releaseInfo,
@@ -96,8 +101,8 @@ data class IdleTrailerScreensaverCandidate(
             imdbRating = imdbRating,
             tomatoesRating = tomatoesRating,
             modeData = IdleScreensaverModeData(
-                image = IdleScreensaverImageModeData(fallbackArtworkUrls = fallbackArtworkUrls),
-                trailer = IdleScreensaverTrailerModeData(trailerYtIds = trailerYtIds)
+                image = IdleScreensaverImageModeData(fallbackArtwork = fallbackArtwork),
+                trailer = IdleScreensaverTrailerModeData(trailerState = trailerState)
             )
         )
 }
@@ -127,6 +132,6 @@ data class ScreensaverTrailerCandidate(
     val overview: String?,
     val rating: TitleRating?,
     val artwork: ArtworkBundle,
-    val fallbackTrailerYtIds: List<String>,
+    val trailerState: TrailerDisplayState,
     val stableIds: ProviderIds
 )

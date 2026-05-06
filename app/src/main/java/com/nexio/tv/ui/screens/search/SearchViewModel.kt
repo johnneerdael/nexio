@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.image.SearchSuggestionPosterModel
+import com.nexio.tv.core.image.SearchSuggestionPosterRegistry
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
@@ -48,7 +50,8 @@ class SearchViewModel @Inject constructor(
     private val imdbPosterLookupService: ImdbPosterLookupService,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val tmdbDiscoveryService: TmdbDiscoveryService,
-    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    private val searchSuggestionPosterRegistry: SearchSuggestionPosterRegistry = SearchSuggestionPosterRegistry()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -146,7 +149,7 @@ class SearchViewModel @Inject constructor(
                     _uiState.update { it.copy(searchPosterPreviewEnabled = enabled) }
                     if (!enabled) {
                         posterEnrichmentJob?.cancel()
-                        _uiState.update { it.copy(imdbSuggestionPosters = emptyMap()) }
+                        _uiState.update { it.copy(imdbSuggestionPosters = retainRegisteredPosters(emptyMap())) }
                     } else {
                         enrichPosters(_uiState.value.imdbSuggestions)
                     }
@@ -171,18 +174,33 @@ class SearchViewModel @Inject constructor(
                     } catch (_: Exception) {
                         null
                     } ?: return@launch
+                    val model = searchSuggestionPosterRegistry.register(
+                        tconst = suggestion.tconst,
+                        rawUrl = url
+                    ) ?: return@launch
                     val stillRelevant = _uiState.value.imdbSuggestions
                         .any { it.tconst == suggestion.tconst }
                     if (!stillRelevant) return@launch
                     _uiState.update { state ->
-                        if (state.imdbSuggestionPosters[suggestion.tconst] == url) state
-                        else state.copy(
-                            imdbSuggestionPosters = state.imdbSuggestionPosters + (suggestion.tconst to url)
-                        )
+                        if (state.imdbSuggestionPosters[suggestion.tconst] == model) state
+                        else {
+                            state.copy(
+                                imdbSuggestionPosters = retainRegisteredPosters(
+                                    state.imdbSuggestionPosters + (suggestion.tconst to model)
+                                )
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    private fun retainRegisteredPosters(
+        posters: Map<String, SearchSuggestionPosterModel>
+    ): Map<String, SearchSuggestionPosterModel> {
+        searchSuggestionPosterRegistry.retainOnly(posters.values.toSet())
+        return posters
     }
 
     private data class LayoutPrefs(
@@ -242,7 +260,7 @@ class SearchViewModel @Inject constructor(
                 it.copy(
                     suggestions = emptyList(),
                     imdbSuggestions = emptyList(),
-                    imdbSuggestionPosters = emptyMap()
+                    imdbSuggestionPosters = retainRegisteredPosters(emptyMap())
                 )
             }
             posterEnrichmentJob?.cancel()
@@ -255,7 +273,7 @@ class SearchViewModel @Inject constructor(
                 it.copy(
                     suggestions = emptyList(),
                     imdbSuggestions = emptyList(),
-                    imdbSuggestionPosters = emptyMap()
+                    imdbSuggestionPosters = retainRegisteredPosters(emptyMap())
                 )
             }
             posterEnrichmentJob?.cancel()
@@ -286,7 +304,7 @@ class SearchViewModel @Inject constructor(
                     it.copy(
                         suggestions = names,
                         imdbSuggestions = imdbResults,
-                        imdbSuggestionPosters = prunedPosters
+                        imdbSuggestionPosters = retainRegisteredPosters(prunedPosters)
                     )
                 }
                 enrichPosters(imdbResults)
@@ -295,7 +313,7 @@ class SearchViewModel @Inject constructor(
 
             posterEnrichmentJob?.cancel()
             _uiState.update {
-                it.copy(imdbSuggestions = emptyList(), imdbSuggestionPosters = emptyMap())
+                it.copy(imdbSuggestions = emptyList(), imdbSuggestionPosters = retainRegisteredPosters(emptyMap()))
             }
 
             val addons = try {
@@ -379,7 +397,7 @@ class SearchViewModel @Inject constructor(
                 query = rawQuery,
                 suggestions = emptyList(),
                 imdbSuggestions = emptyList(),
-                imdbSuggestionPosters = emptyMap()
+                imdbSuggestionPosters = retainRegisteredPosters(emptyMap())
             )
         }
 

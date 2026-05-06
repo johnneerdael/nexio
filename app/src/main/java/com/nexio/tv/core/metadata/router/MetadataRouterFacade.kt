@@ -5,10 +5,15 @@ import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -25,12 +30,18 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.ProviderSeasonTrailerRefResolver
+import com.nexio.tv.data.trailer.SeasonMediaAvailability
+import com.nexio.tv.data.trailer.SeasonTrailerRefRequest
+import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.data.trailer.rankedTmdbTrailerPlaybackRefs
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.PersonDetail
@@ -62,15 +73,19 @@ class MetadataRouterFacade(
         sink = NoopRuntimeTraceSink,
         sessionId = { null }
     ),
-    private val metadataSecondaryRepository: MetadataSecondaryRepository? = null,
     private val trailerService: TrailerService? = null,
     private val trailerResolver: TrailerResolver? = null,
     private val reviewResolver: ReviewResolver? = null,
     private val recommendationResolver: RecommendationResolver? = null,
     private val organizationPersonResolver: OrganizationPersonResolver? = null,
     private val tmdbOrganizationService: TmdbOrganizationService? = null,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
+    private val seasonTrailerRefResolver: SeasonTrailerRefResolver? = null
 ) {
+    private val effectiveTrailerResolver: TrailerResolver by lazy {
+        trailerResolver ?: TrailerResolver(traceEvents)
+    }
+
     @Inject
     constructor(
         router: MetadataRouter,
@@ -82,14 +97,14 @@ class MetadataRouterFacade(
         idMappingStore: IdMappingStore,
         stableIdBundleLookup: StableIdBundleResolver.Lookup,
         traceEvents: TraceMetadataEvents,
-        metadataSecondaryRepository: MetadataSecondaryRepository? = null,
         trailerService: TrailerService? = null,
         trailerResolver: TrailerResolver? = null,
         reviewResolver: ReviewResolver? = null,
         recommendationResolver: RecommendationResolver? = null,
         organizationPersonResolver: OrganizationPersonResolver? = null,
         tmdbOrganizationService: TmdbOrganizationService? = null,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
+        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
+        seasonTrailerRefResolver: ProviderSeasonTrailerRefResolver
     ) : this(
         router = router,
         providerPlanExecutor = providerPlanExecutor,
@@ -102,14 +117,14 @@ class MetadataRouterFacade(
             lookup = stableIdBundleLookup
         ),
         traceEvents = traceEvents,
-        metadataSecondaryRepository = metadataSecondaryRepository,
         trailerService = trailerService,
         trailerResolver = trailerResolver,
         reviewResolver = reviewResolver,
         recommendationResolver = recommendationResolver,
         organizationPersonResolver = organizationPersonResolver,
         tmdbOrganizationService = tmdbOrganizationService,
-        posterRatingsUrlResolver = posterRatingsUrlResolver
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        seasonTrailerRefResolver = seasonTrailerRefResolver
     )
 
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
@@ -202,24 +217,28 @@ class MetadataRouterFacade(
         val route = routeRequest(request)
         val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
         val runResult = providerPlanRunner.run(plan)
-        val previewCandidate = request.sourceContext.toPreviewCandidate(route.provider)
+        val previewCandidate = request.sourceContext
+            .toPreviewCandidate(route.provider)
+            ?.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
         val resolvedDocument = fieldResolver.resolveWithPreview(
             preview = previewCandidate,
             primary = runResult.primaryCandidate,
             secondary = runResult.secondaryCandidates,
             requestContentId = request.contentId
         )
-        val displayMetadata = resolvedDocument.toHomeDisplayMetadata(initialDisplay)
+        val displayMetadata = resolvedDocument.toHomeDisplayMetadata(
+            initialDisplay.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
+        )
 
         // F-B-04: dispatch scheduled networkResolvers and emit metadata.field_selected events for each.
         // Each resolver consumes candidates produced by ProviderPlanRunner and either picks a winner
         // (TrailerResolver, RecommendationResolver) or aggregates (ReviewResolver, OrganizationPersonResolver).
         // ARTWORK / ADDON_DISPLAY / RATING / TRACKING participate via FieldResolver / orchestrator local
-        // pass — no separate dispatch needed. SKIP_SEGMENTS was removed in Task 20 (F-12-01); player
-        // skip is owned by SkipIntroRepository, not the resolver pipeline.
+        // pass — no separate dispatch needed. Player skip uses SkipSegmentResolver outside this
+        // scheduled metadata pipeline.
         resolverSchedule.networkResolvers.forEach { resolverType ->
             when (resolverType) {
-                ResolverType.TRAILERS -> trailerResolver?.resolve(
+                ResolverType.TRAILERS -> effectiveTrailerResolver.resolve(
                     contentId = request.contentId,
                     primary = runResult.primaryCandidateFor(ResolvedField.TRAILERS),
                     secondary = runResult.secondaryCandidatesFor(ResolvedField.TRAILERS)
@@ -288,48 +307,20 @@ class MetadataRouterFacade(
         )
     }
 
-    /**
-     * F2-B-08: trace-only [resolveRequest] discard pattern. The internal `resolveRequest(req)`
-     * call is fired purely so canonical trace events emit (`metadata.route_decision`,
-     * `metadata.field_selected`, etc.). The result is intentionally discarded because the rich
-     * 22-field [TmdbEnrichment] shape is not carried by [ResolvedMetadataDocument] — the second
-     * call to [MetadataSecondaryRepository.fetchTmdbEnrichment] returns the rich payload.
-     *
-     * Specifically, [ResolvedMetadataDocument] omits director, writer, full cast, production
-     * companies, networks, and collection data that downstream `enrichMeta(...)` call sites
-     * depend on. Changing this method to return the resolved document instead of delegating
-     * will silently drop all of those fields.
-     *
-     * See cluster D Task 7 and cluster H F2-B-08 for the architecture decision.
-     */
     suspend fun fetchTmdbEnrichment(
         metadataRequest: MetadataRequest,
         tmdbId: String,
         contentType: ContentType
     ): TmdbEnrichment? {
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "fetchTmdbEnrichment requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        val enrichmentRequest = if (metadataRequest.depth == MetadataDepth.DETAIL_SECONDARY) {
+            metadataRequest
+        } else {
+            metadataRequest.copy(depth = MetadataDepth.DETAIL_SECONDARY)
         }
-        // Fire canonical trace events via the resolve pipeline.
-        resolveRequest(metadataRequest)
-        // Delegate to the secondary repository for the rich TMDB shape.
-        return repo.fetchTmdbEnrichment(tmdbId, contentType)
+        val resolution = resolveRequest(enrichmentRequest)
+        return resolution.resolvedDocument.toLegacyTmdbEnrichmentOrNull()
     }
 
-    /**
-     * F2-B-08: trace-only [resolveRequest] discard pattern. The internal `resolveRequest(req)`
-     * call is fired purely so canonical trace events emit (`metadata.route_decision`,
-     * `metadata.field_selected`, etc.). The result is intentionally discarded because the
-     * trailer pipeline produces a player-ready [TrailerResolutionResult] (In-App YouTube
-     * extraction, separate video/audio adaptive URLs) which is richer than anything carried
-     * by [ResolvedMetadataDocument] or the `ResolvedField.TRAILERS` carry-set.
-     *
-     * If you change this method to return the resolved document instead of delegating to
-     * [TrailerService], you will lose adaptive-URL resolution, YouTube extraction, and all
-     * fallback/retry logic that [TrailerService] encapsulates.
-     *
-     * See cluster H F2-B-08 for the architecture decision.
-     */
     suspend fun fetchTrailer(
         metadataRequest: MetadataRequest,
         title: String,
@@ -340,33 +331,135 @@ class MetadataRouterFacade(
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? {
-        val service = checkNotNull(trailerService) {
-            "fetchTrailer requires MetadataRouterFacade to be constructed with a non-null TrailerService"
+        val trailerRequest = metadataRequest.copy(
+            depth = if (metadataRequest.depth == MetadataDepth.DETAIL_SECONDARY) {
+                MetadataDepth.DETAIL_SECONDARY
+            } else {
+                MetadataDepth.DETAIL_MEDIA
+            },
+            seasonNumber = seasonNumber ?: metadataRequest.seasonNumber
+        )
+        val resolution = resolveRequest(trailerRequest)
+        val trailerResolution = resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = contentId ?: metadataRequest.contentId,
+                title = title,
+                year = year,
+                stableIds = ProviderIds(
+                    tmdb = tmdbId?.trim()?.takeIf { it.isNotBlank() }
+                ),
+                fallbackYtIds = fallbackYtIds,
+                surface = TrailerSurface.DETAIL,
+                type = type,
+                seasonNumber = seasonNumber,
+                contentId = contentId ?: metadataRequest.contentId,
+                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs()
+            )
+        )
+        return trailerResolution.selected?.let { ref ->
+            trailerService?.resolvePlaybackSource(
+                ref = ref,
+                title = title,
+                year = year
+            )
         }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_MEDIA).
-        resolveRequest(metadataRequest)
-        // Delegate to TrailerService for the actual playback-ready resolution.
-        return service.resolveTrailer(
-            title = title,
-            year = year,
+    }
+
+    fun resolveTrailer(request: TrailerResolveRequest): TrailerResolution {
+        return effectiveTrailerResolver.resolveTrailer(request)
+    }
+
+    suspend fun fetchTitleMediaAvailability(
+        metadataRequest: MetadataRequest,
+        tmdbId: String? = null,
+        type: String? = null,
+        contentId: String? = null,
+        fallbackYtIds: List<String> = emptyList()
+    ): Boolean {
+        val resolution = resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_MEDIA))
+        return resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = contentId ?: metadataRequest.contentId,
+                title = metadataRequest.contentId,
+                stableIds = ProviderIds(
+                    tmdb = tmdbId?.trim()?.takeIf { it.isNotBlank() }
+                ),
+                fallbackYtIds = fallbackYtIds,
+                surface = TrailerSurface.DETAIL,
+                type = type,
+                contentId = contentId ?: metadataRequest.contentId,
+                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs()
+            )
+        ).availability.available
+    }
+
+    internal suspend fun fetchSeasonMediaAvailability(
+        metadataRequest: MetadataRequest,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): SeasonMediaAvailability {
+        val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
+        val resolution = resolveRequest(
+            metadataRequest.copy(
+                depth = MetadataDepth.DETAIL_MEDIA,
+                seasonNumber = effectiveSeason
+            )
+        )
+
+        val refRequest = seasonRefRequest(
+            title = metadataRequest.contentId,
+            year = null,
             tmdbId = tmdbId,
             type = type,
-            seasonNumber = seasonNumber,
-            contentId = contentId,
-            fallbackYtIds = fallbackYtIds
+            seasonNumber = effectiveSeason,
+            contentId = contentId
+        )
+        val seasonTrailerRefs = seasonTrailerRefResolver
+            ?.resolveSeasonTrailerRefs(refRequest)
+            .orEmpty()
+        val trailerAvailability = resolveTrailer(
+            seasonTrailerResolveRequest(
+                metadataRequest = metadataRequest,
+                title = metadataRequest.contentId,
+                year = null,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = effectiveSeason,
+                contentId = contentId,
+                providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs() + seasonTrailerRefs
+            )
+        ).availability.available
+
+        val seasonRecapRefs = seasonTrailerRefResolver
+            ?.resolveSeasonRecapRefs(refRequest)
+            .orEmpty()
+        val recapAvailability = resolveTrailer(
+            seasonTrailerResolveRequest(
+                metadataRequest = metadataRequest,
+                title = metadataRequest.contentId,
+                year = null,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = effectiveSeason,
+                contentId = contentId,
+                providerCandidates = seasonRecapRefs,
+                itemKeySuffix = "recap"
+            )
+        ).availability.available
+
+        return SeasonMediaAvailability(
+            hasTrailerOrTeaser = trailerAvailability,
+            hasRecap = recapAvailability
         )
     }
 
     /**
      * F2-TM-01: Season trailer path routed through canonical facade.
      *
-     * Fires canonical trace events (`metadata.route_decision`, `metadata.resolver_schedule`)
-     * via [resolveRequest] at depth [MetadataDepth.DETAIL_MEDIA], then delegates the actual
-     * season-trailer resolution to [TrailerService.getSeasonTrailerPlaybackSource].
-     *
-     * The resolved [TrailerPlaybackSource] is richer than anything carried by
-     * [ResolvedMetadataDocument] — [TrailerService] handles adaptive-URL selection and
-     * YouTube extraction internally.
+     * Provider-plan candidates and resolver-owned season-ref adapter candidates are selected by
+     * [TrailerResolver]. [TrailerService] remains only a transport adapter for the selected ref.
      */
     suspend fun fetchSeasonTrailer(
         metadataRequest: MetadataRequest,
@@ -377,29 +470,63 @@ class MetadataRouterFacade(
         seasonNumber: Int? = null,
         contentId: String? = null
     ): TrailerPlaybackSource? {
-        val service = checkNotNull(trailerService) {
-            "fetchSeasonTrailer requires MetadataRouterFacade to be constructed with a non-null TrailerService"
-        }
-        // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
-        resolveRequest(metadataRequest)
-        return service.getSeasonTrailerPlaybackSource(
-            title = title,
-            year = year,
-            tmdbId = tmdbId,
-            type = type,
-            seasonNumber = seasonNumber,
-            contentId = contentId
+        val service = trailerService
+        val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
+        val resolution = resolveRequest(
+            metadataRequest.copy(
+                depth = MetadataDepth.DETAIL_MEDIA,
+                seasonNumber = effectiveSeason
+            )
         )
+        val providerSelection = resolveTrailer(
+            seasonTrailerResolveRequest(
+                metadataRequest = metadataRequest,
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = effectiveSeason,
+                contentId = contentId,
+                providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs()
+            )
+        )
+        providerSelection.toFirstSeasonPlaybackSource(service, title, year)?.let { source ->
+            return source
+        }
+
+        val seasonTrailerRefs = seasonTrailerRefResolver
+            ?.resolveSeasonTrailerRefs(
+                seasonRefRequest(
+                    title = title,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = type,
+                    seasonNumber = effectiveSeason,
+                    contentId = contentId
+                )
+            )
+            .orEmpty()
+        val seasonSelection = resolveTrailer(
+            seasonTrailerResolveRequest(
+                metadataRequest = metadataRequest,
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = effectiveSeason,
+                contentId = contentId,
+                providerCandidates = seasonTrailerRefs,
+                itemKeySuffix = "season"
+            )
+        )
+        return seasonSelection.toFirstSeasonPlaybackSource(service, title, year)
     }
 
     /**
      * F2-TM-01: Season recap path routed through canonical facade.
      *
-     * Fires canonical trace events (`metadata.route_decision`, `metadata.resolver_schedule`)
-     * via [resolveRequest] at depth [MetadataDepth.DETAIL_MEDIA], then delegates the actual
-     * season-recap resolution to [TrailerService.getSeasonRecapPlaybackSource].
-     *
-     * See [fetchSeasonTrailer] for the architecture rationale (same pattern).
+     * Recap refs are discovered through the resolver-owned season-ref adapter and selected by
+     * [TrailerResolver]. [TrailerService] only translates the selected ref into playback.
      */
     suspend fun fetchSeasonRecap(
         metadataRequest: MetadataRequest,
@@ -410,12 +537,51 @@ class MetadataRouterFacade(
         seasonNumber: Int? = null,
         contentId: String? = null
     ): TrailerPlaybackSource? {
-        val service = checkNotNull(trailerService) {
-            "fetchSeasonRecap requires MetadataRouterFacade to be constructed with a non-null TrailerService"
-        }
-        // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
-        resolveRequest(metadataRequest)
-        return service.getSeasonRecapPlaybackSource(
+        val service = trailerService
+        val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
+        resolveRequest(
+            metadataRequest.copy(
+                depth = MetadataDepth.DETAIL_MEDIA,
+                seasonNumber = effectiveSeason
+            )
+        )
+        val seasonRecapRefs = seasonTrailerRefResolver
+            ?.resolveSeasonRecapRefs(
+                seasonRefRequest(
+                    title = title,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = type,
+                    seasonNumber = effectiveSeason,
+                    contentId = contentId
+                )
+            )
+            .orEmpty()
+        val recapSelection = resolveTrailer(
+            seasonTrailerResolveRequest(
+                metadataRequest = metadataRequest,
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = effectiveSeason,
+                contentId = contentId,
+                providerCandidates = seasonRecapRefs,
+                itemKeySuffix = "recap"
+            )
+        )
+        return recapSelection.toFirstSeasonPlaybackSource(service, title, year)
+    }
+
+    private fun seasonRefRequest(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?
+    ): SeasonTrailerRefRequest =
+        SeasonTrailerRefRequest(
             title = title,
             year = year,
             tmdbId = tmdbId,
@@ -423,18 +589,11 @@ class MetadataRouterFacade(
             seasonNumber = seasonNumber,
             contentId = contentId
         )
-    }
 
     /**
      * Routes a review fetch through the canonical resolve pipeline at depth
-     * [MetadataDepth.DETAIL_SECONDARY], aggregating REVIEWS candidates from every
-     * registered review adapter (TMDB, Trakt). If no adapter produced reviews
-     * (e.g. plan didn't include a review step), falls back to the direct
-     * [MetadataSecondaryRepository.fetchReviews] TMDB call so existing TMDB-only
-     * flows keep working.
-     *
-     * Trace events fire via the resolver pipeline: `metadata.route_decision`,
-     * `metadata.provider_plan`, `metadata.field_selected(REVIEWS)`.
+     * [MetadataDepth.DETAIL_SECONDARY], aggregating REVIEWS candidates from provider-plan
+     * adapters (TMDB, Trakt).
      */
     suspend fun fetchReviews(
         metadataRequest: MetadataRequest,
@@ -457,10 +616,6 @@ class MetadataRouterFacade(
      * Returns the aggregated [ReviewsPage] with continuation state so the VM load-more flow
      * (Task 6d) can request page N+1 without losing track of pagination.
      *
-     * Backwards-compat fallback: when no resolver candidate produces reviews (e.g. plan didn't
-     * include a review step yet), falls back to the direct
-     * [MetadataSecondaryRepository.fetchReviews] TMDB call — the same fallback the existing
-     * non-paginated [fetchReviews] uses — and returns it as a single page with `hasMore=false`.
      */
     suspend fun fetchReviewsPage(
         metadataRequest: MetadataRequest,
@@ -469,89 +624,31 @@ class MetadataRouterFacade(
         page: Int = DEFAULT_REVIEWS_PAGE,
         limit: Int = DEFAULT_REVIEWS_LIMIT
     ): ReviewsPage {
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "fetchReviewsPage requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
-        }
         val paginatedRequest = metadataRequest.copy(
+            depth = MetadataDepth.DETAIL_SECONDARY,
             pagination = PaginationCursor(page = page, limit = limit)
         )
-        // Resolve through the canonical pipeline (depth = DETAIL_SECONDARY) — fires
-        // metadata.route_decision + per-step provider_plan + per-field field_selected events.
         val resolution = resolveRequest(paginatedRequest)
-
-        // Collect REVIEWS-bearing candidates from every adapter that produced one
-        // (TmdbReviewMetadataAdapter, TraktReviewMetadataAdapter, etc.).
-        val resolverReviews: List<MetaReview> = resolution.providerRunResult
-            ?.stepResults
-            ?.mapNotNull { stepResult ->
-                @Suppress("UNCHECKED_CAST")
-                stepResult.candidate?.fields?.get(ResolvedField.REVIEWS)?.value as? List<MetaReview>
-            }
-            ?.flatten()
-            .orEmpty()
-
-        if (resolverReviews.isEmpty()) {
-            // Backwards-compat fallback: legacy TMDB-only flow with no continuation state.
-            val fallback = repo.fetchReviews(tmdbId, contentType)
-            return ReviewsPage(reviews = fallback, hasMore = false, nextPage = null)
-        }
-
-        // Single-adapter "full page" heuristic: if any adapter returned exactly `limit`
-        // reviews, assume there's at least one more page available. The VM is the source
-        // of truth for the cursor it next requests; this just exposes whether load-more
-        // should be offered.
-        val hasMore = resolverReviews.size >= limit
-        return ReviewsPage(
-            reviews = resolverReviews,
-            hasMore = hasMore,
-            nextPage = if (hasMore) page + 1 else null
-        )
+        return resolution.providerRunResult.toLegacyReviewsPage(page = page, limit = limit)
     }
 
     /**
      * Routes a recommendations fetch through the canonical resolve pipeline at depth
-     * [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
-     * `metadata.field_selected` trace events fire. Resolver output is consumed FIRST
-     * (from [TmdbRecommendationMetadataAdapter] or another [ResolvedField.RECOMMENDATIONS]
-     * producer in the step results). Falls back to [MetadataSecondaryRepository.fetchMoreLikeThis]
-     * only when the resolver pipeline returns an empty list, preserving the existing
-     * TMDB-only path for plans that do not yet include a recommendation step.
-     *
-     * F2-TM-02: prior to this fix the resolver output was discarded and the repo was
-     * always called; resolver output now takes precedence.
+     * [MetadataDepth.DETAIL_SECONDARY] and returns RECOMMENDATIONS candidates from
+     * provider-plan output.
      */
     suspend fun fetchRecommendations(
         metadataRequest: MetadataRequest,
         tmdbId: String,
         contentType: ContentType
     ): List<MetaPreview> {
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "fetchRecommendations requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
-        }
-        // Resolve through the canonical pipeline — fires metadata.route_decision +
-        // per-step provider_plan + per-field field_selected events.
-        val resolution = resolveRequest(metadataRequest)
-
-        // Collect RECOMMENDATIONS from every step result that produced one.
-        val resolverRecommendations: List<MetaPreview> = resolution.providerRunResult
-            ?.stepResults
-            ?.mapNotNull { stepResult ->
-                @Suppress("UNCHECKED_CAST")
-                stepResult.candidate?.fields?.get(ResolvedField.RECOMMENDATIONS)?.value as? List<MetaPreview>
-            }
-            ?.flatten()
-            .orEmpty()
-
-        // Use resolver output when non-empty; fall back to legacy repo call only when
-        // no adapter produced recommendations (e.g. plan didn't include a recommendation step).
-        return resolverRecommendations.takeIf { it.isNotEmpty() }
-            ?: repo.fetchMoreLikeThis(tmdbId, contentType)
+        val resolution = resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_SECONDARY))
+        return resolution.providerRunResult.toLegacyRecommendations()
     }
 
     /**
      * Routes a TMDB person-id-by-name lookup through the canonical resolve pipeline so
-     * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
-     * then delegates the exact-name search to [MetadataSecondaryRepository].
+     * that `metadata.route_decision` and `metadata.field_selected` trace events fire.
      *
      * The secondary navigation-target hydration path
      * uses this to resolve TMDB person ids for actors that arrived via Kitsu metadata.
@@ -562,18 +659,18 @@ class MetadataRouterFacade(
         metadataRequest: MetadataRequest,
         name: String
     ): Int? {
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "findPersonIdByExactName requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
-        }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
-        resolveRequest(metadataRequest)
-        return repo.findPersonIdByExactName(name)
+        val resolution = resolveRequest(
+            metadataRequest.copy(
+                contentId = "tmdb:person:$name",
+                depth = MetadataDepth.DETAIL_SECONDARY
+            )
+        )
+        return resolution.providerRunResult.toLegacyPersonIdOrNull()
     }
 
     /**
      * Routes a TMDB company-id-by-name lookup through the canonical resolve pipeline so
-     * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
-     * then delegates the exact-name search to [MetadataSecondaryRepository].
+     * that `metadata.route_decision` and `metadata.field_selected` trace events fire.
      *
      * Used by the secondary navigation-target hydration path to resolve TMDB
      * company ids for organizations that arrived from non-TMDB metadata.
@@ -582,47 +679,37 @@ class MetadataRouterFacade(
         metadataRequest: MetadataRequest,
         name: String
     ): Int? {
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "findCompanyIdByExactName requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
-        }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
-        resolveRequest(metadataRequest)
-        return repo.findCompanyIdByExactName(name)
+        val resolution = resolveRequest(
+            metadataRequest.copy(
+                contentId = "tmdb:company:$name",
+                depth = MetadataDepth.DETAIL_SECONDARY
+            )
+        )
+        return resolution.providerRunResult.toLegacyCompanyIdOrNull()
     }
 
     /**
      * Routes a TMDB person-detail fetch through the canonical resolve pipeline so that
-     * `metadata.route_decision` and `metadata.field_selected` trace events fire, then
-     * delegates the rich person-detail (biography, known-for, credits) fetch to
-     * [MetadataSecondaryRepository].
+     * `metadata.route_decision` and `metadata.field_selected` trace events fire.
      */
     suspend fun fetchPersonDetail(
         metadataRequest: MetadataRequest,
         personId: Int,
         preferCrewCredits: Boolean = false
     ): PersonDetail? {
-        // Resolve through the canonical pipeline (fires metadata.route_decision +
-        // per-step provider_plan + per-field field_selected events).
-        val resolution = resolveRequest(metadataRequest)
-
-        // If the request's contentId carries the TVDB person prefix, the resolver pipeline
-        // dispatches TvdbOrganizationPersonAdapter; surface its CAST candidate as PersonDetail.
-        if (metadataRequest.contentId.startsWith("tvdb:person:")) {
-            val tvdbPersonDetail = resolution.providerRunResult
-                ?.stepResults
-                ?.firstOrNull { it.candidate?.provider == MetadataPrimaryProvider.TVDB }
-                ?.candidate
-                ?.fields
-                ?.get(ResolvedField.CAST)
-                ?.value as? PersonDetail
-            if (tvdbPersonDetail != null) return tvdbPersonDetail
+        val request = if (metadataRequest.contentId.startsWith("tvdb:person:")) {
+            metadataRequest.copy(depth = MetadataDepth.DETAIL_SECONDARY)
+        } else {
+            metadataRequest.copy(
+                contentId = "tmdb:person:$personId",
+                depth = MetadataDepth.DETAIL_SECONDARY,
+                sourceContext = metadataRequest.sourceContext.copy(
+                    itemType = if (preferCrewCredits) PERSON_CREW_ITEM_TYPE else metadataRequest.sourceContext.itemType
+                )
+            )
         }
-
-        // Default TMDB path: delegate to the secondary repository for the rich shape.
-        val repo = checkNotNull(metadataSecondaryRepository) {
-            "fetchPersonDetail requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
-        }
-        return repo.fetchPersonDetail(personId, preferCrewCredits)
+        val resolution = resolveRequest(request)
+        return resolution.providerRunResult.toLegacyPersonDetailOrNull(preferCrewCredits)
     }
 
     /**
@@ -946,6 +1033,27 @@ class MetadataRouterFacade(
         )
     }
 
+    private fun MetadataCandidate.withoutSilentLocalizedTextFallback(
+        primary: MetadataCandidate
+    ): MetadataCandidate? {
+        val fields = fields.filterNot { (field, _) ->
+            field in localizedTextFields && !primary.hasUsableLocalizedTextField(field)
+        }
+        if (fields.isEmpty()) return null
+        return copy(fields = fields)
+    }
+
+    private fun HomeDisplayMetadata.withoutSilentLocalizedTextFallback(
+        primary: MetadataCandidate
+    ): HomeDisplayMetadata =
+        copy(
+            title = title.takeIf { primary.hasUsableLocalizedTextField(ResolvedField.TITLE) },
+            description = description.takeIf { primary.hasUsableLocalizedTextField(ResolvedField.OVERVIEW) }
+        )
+
+    private fun MetadataCandidate.hasUsableLocalizedTextField(field: ResolvedField): Boolean =
+        (fields[field]?.value as? String)?.isNotBlank() == true
+
     private fun HomeDisplayMetadata.toPreviewFields(): Map<ResolvedField, FieldValue> =
         buildMap {
             title?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
@@ -1037,6 +1145,270 @@ class MetadataRouterFacade(
             remoteIds = remoteIds
         )
 
+    private fun ResolvedMetadataDocument.toLegacyTmdbEnrichmentOrNull(): TmdbEnrichment? {
+        val hasData = listOf(
+            title,
+            overview,
+            poster,
+            backdrop,
+            logo,
+            releaseDate,
+            ageRating,
+            language,
+            runtimeMinutes,
+            rating
+        ).any { it != null } ||
+            genres.isNotEmpty() ||
+            countries.isNotEmpty() ||
+            castMembers.isNotEmpty() ||
+            productionCompanies.isNotEmpty() ||
+            networks.isNotEmpty()
+        if (!hasData) return null
+
+        return TmdbEnrichment(
+            localizedTitle = title,
+            description = overview,
+            genres = genres,
+            backdrop = backdrop,
+            logo = logo,
+            poster = poster,
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = castMembers,
+            releaseInfo = releaseDate,
+            rating = (rating as? Number)?.toDouble(),
+            runtimeMinutes = runtimeMinutes,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = productionCompanies,
+            networks = networks,
+            ageRating = ageRating,
+            countries = countries.takeIf { it.isNotEmpty() },
+            language = language,
+            collectionId = null,
+            collectionName = null
+        )
+    }
+
+    private fun ProviderPlanRunResult?.toLegacyReviewsPage(page: Int, limit: Int): ReviewsPage {
+        val reviews = this.toFieldValues(ResolvedField.REVIEWS)
+            .flatMap { value ->
+                when (value) {
+                    is ReviewsPage -> value.reviews
+                    is MetaReview -> listOf(value)
+                    is Collection<*> -> value.filterIsInstance<MetaReview>()
+                    else -> emptyList()
+                }
+            }
+        val hasMore = reviews.size >= limit
+        return ReviewsPage(
+            reviews = reviews,
+            hasMore = hasMore,
+            nextPage = if (hasMore) page + 1 else null
+        )
+    }
+
+    private fun ProviderPlanRunResult?.toLegacyRecommendations(): List<MetaPreview> =
+        this.toFieldValues(ResolvedField.RECOMMENDATIONS)
+            .flatMap { value ->
+                when (value) {
+                    is MetaPreview -> listOf(value)
+                    is Collection<*> -> value.filterIsInstance<MetaPreview>()
+                    else -> emptyList()
+                }
+            }
+
+    private fun ProviderPlanRunResult?.toTrailerPlaybackRefs(): List<TrailerPlaybackRef> =
+        toFieldValues(ResolvedField.TRAILERS)
+            .flatMap(::trailerPlaybackRefsFrom)
+
+    private fun ProviderPlanRunResult?.toSeasonTrailerPlaybackRefs(): List<TrailerPlaybackRef> =
+        this?.stepResults
+            ?.filter { stepResult -> stepResult.step.apiShapeId == TmdbApiShapes.SEASON_VIDEOS }
+            ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(ResolvedField.TRAILERS)?.value }
+            ?.flatMap(::trailerPlaybackRefsFrom)
+            .orEmpty()
+
+    private fun seasonTrailerResolveRequest(
+        metadataRequest: MetadataRequest,
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?,
+        providerCandidates: List<TrailerPlaybackRef>,
+        itemKeySuffix: String? = null
+    ): TrailerResolveRequest {
+        val itemKey = buildString {
+            append(contentId ?: metadataRequest.contentId)
+            seasonNumber?.let { append(":season:").append(it) }
+            itemKeySuffix?.let { append(':').append(it) }
+        }
+        return TrailerResolveRequest(
+            itemKey = itemKey,
+            title = title,
+            year = year,
+            stableIds = ProviderIds(
+                tmdb = tmdbId?.trim()?.takeIf { it.isNotBlank() }
+            ),
+            fallbackYtIds = emptyList(),
+            surface = TrailerSurface.DETAIL,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId ?: metadataRequest.contentId,
+            providerCandidates = providerCandidates
+        )
+    }
+
+    private suspend fun TrailerPlaybackRef.toSeasonPlaybackSource(
+        service: TrailerService?,
+        title: String,
+        year: String?
+    ): TrailerPlaybackSource? {
+        if (this is TrailerPlaybackRef.InAppSource) {
+            return toInlinePlaybackSource()
+        }
+        val transported = service?.resolvePlaybackSource(
+            ref = this,
+            title = title,
+            year = year
+        )
+        return when (transported) {
+            is TrailerResolutionResult.Playback -> transported.source
+            is TrailerResolutionResult.External,
+            null -> toInlinePlaybackSource()
+        }
+    }
+
+    private suspend fun TrailerResolution.toFirstSeasonPlaybackSource(
+        service: TrailerService?,
+        title: String,
+        year: String?
+    ): TrailerPlaybackSource? {
+        for (candidate in candidates) {
+            candidate.toSeasonPlaybackSource(service, title, year)?.let { return it }
+        }
+        return null
+    }
+
+    private fun TrailerPlaybackRef.toInlinePlaybackSource(): TrailerPlaybackSource? =
+        when (this) {
+            is TrailerPlaybackRef.InAppSource -> TrailerPlaybackSource(
+                videoUrl = videoUrl,
+                audioUrl = audioUrl,
+                userAgent = userAgent
+            )
+            is TrailerPlaybackRef.ExternalUrl,
+            is TrailerPlaybackRef.ItemLookup,
+            is TrailerPlaybackRef.YouTubeId -> null
+        }
+
+    private fun ProviderPlanRunResult?.toLegacyPersonIdOrNull(): Int? =
+        (
+            this.toFieldValues(ResolvedField.CANONICAL_ID) +
+                this.toFieldValues(ResolvedField.CAST) +
+                this.toFieldValues(ResolvedField.CREW)
+            ).firstNotNullOfOrNull { value ->
+            when (value) {
+                is PersonDetail -> value.tmdbId
+                is String -> value.tmdbNumericSuffix()
+                is Collection<*> -> value.firstNotNullOfOrNull { item ->
+                    when (item) {
+                        is PersonDetail -> item.tmdbId
+                        is String -> item.tmdbNumericSuffix()
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+        }
+
+    private fun ProviderPlanRunResult?.toLegacyCompanyIdOrNull(): Int? =
+        (
+            this.toFieldValues(ResolvedField.CANONICAL_ID) +
+                this.toFieldValues(ResolvedField.ORGANIZATION_LIST)
+            ).firstNotNullOfOrNull { value ->
+            when (value) {
+                is MetaCompany -> value.tmdbId
+                is Int -> value
+                is String -> value.tmdbNumericSuffix()
+                is Collection<*> -> value.firstNotNullOfOrNull { item ->
+                    when (item) {
+                        is MetaCompany -> item.tmdbId
+                        is Int -> item
+                        is String -> item.tmdbNumericSuffix()
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+        }
+
+    private fun ProviderPlanRunResult?.toLegacyPersonDetailOrNull(preferCrewCredits: Boolean): PersonDetail? {
+        val preferredFields = if (preferCrewCredits) {
+            listOf(ResolvedField.CREW, ResolvedField.CAST)
+        } else {
+            listOf(ResolvedField.CAST, ResolvedField.CREW)
+        }
+        return preferredFields.firstNotNullOfOrNull { field ->
+            this.toFieldValues(field).firstNotNullOfOrNull { value ->
+                when (value) {
+                    is PersonDetail -> value
+                    is Collection<*> -> value.filterIsInstance<PersonDetail>().firstOrNull()
+                    else -> null
+                }
+            }
+        }
+    }
+
+    private fun ProviderPlanRunResult?.toFieldValues(field: ResolvedField): List<Any?> =
+        this?.stepResults
+            ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(field)?.value }
+            .orEmpty()
+
+    private fun trailerPlaybackRefsFrom(value: Any?): List<TrailerPlaybackRef> =
+        when (value) {
+            is TrailerResolutionResult -> listOf(value.toTrailerPlaybackRef())
+            is TrailerPlaybackSource -> listOf(value.toTrailerPlaybackRef())
+            is TmdbVideoResult -> rankedTmdbTrailerPlaybackRefs(listOf(value))
+            is String -> listOfNotNull(value.toTrailerPlaybackRef())
+            is Collection<*> -> {
+                val tmdbVideos = value.filterIsInstance<TmdbVideoResult>()
+                if (tmdbVideos.size == value.size) {
+                    rankedTmdbTrailerPlaybackRefs(tmdbVideos)
+                } else {
+                    value.flatMap(::trailerPlaybackRefsFrom)
+                }
+            }
+            else -> emptyList()
+        }
+
+    private fun TrailerResolutionResult.toTrailerPlaybackRef(): TrailerPlaybackRef =
+        when (this) {
+            is TrailerResolutionResult.Playback -> source.toTrailerPlaybackRef()
+            is TrailerResolutionResult.External -> TrailerPlaybackRef.ExternalUrl(url)
+        }
+
+    private fun TrailerPlaybackSource.toTrailerPlaybackRef(): TrailerPlaybackRef =
+        TrailerPlaybackRef.InAppSource(
+            videoUrl = videoUrl,
+            audioUrl = audioUrl,
+            userAgent = userAgent
+        )
+
+    private fun String.toTrailerPlaybackRef(): TrailerPlaybackRef? {
+        val normalized = trim().takeIf { it.isNotBlank() } ?: return null
+        return if ("://" in normalized) {
+            TrailerPlaybackRef.ExternalUrl(normalized)
+        } else {
+            TrailerPlaybackRef.YouTubeId(normalized)
+        }
+    }
+
+    private fun String.tmdbNumericSuffix(): Int? =
+        substringAfterLast(':').trim().toIntOrNull()
+
     private fun MetadataPrimaryProvider?.toTvProvider(): TvProvider =
         when (this) {
             MetadataPrimaryProvider.KITSU -> TvProvider.KITSU
@@ -1052,9 +1424,11 @@ class MetadataRouterFacade(
         }
 
     private companion object {
+        const val PERSON_CREW_ITEM_TYPE = "person_crew"
         const val DEFAULT_REVIEWS_PAGE = 1
         const val DEFAULT_REVIEWS_LIMIT = 20
         val IMDB_ID_REGEX = Regex("tt\\d+", RegexOption.IGNORE_CASE)
         val NUMERIC_ID_REGEX = Regex("\\d+")
+        val localizedTextFields = setOf(ResolvedField.TITLE, ResolvedField.OVERVIEW)
     }
 }

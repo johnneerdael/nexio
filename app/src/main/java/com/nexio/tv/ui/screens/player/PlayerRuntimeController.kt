@@ -13,6 +13,7 @@ import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
 import com.nexio.tv.core.player.auth.EgressIpFingerprint
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.resolver.SkipSegmentResolver
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
@@ -28,7 +29,6 @@ import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.EpisodeMappingEntry
@@ -64,7 +64,7 @@ class PlayerRuntimeController(
     internal val addonRepository: AddonRepository,
     internal val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
     internal val trackingScrobbleService: TrackingScrobbleService,
-    internal val skipIntroRepository: SkipIntroRepository,
+    internal val skipSegmentResolver: SkipSegmentResolver,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,

@@ -13,6 +13,15 @@ data class ResolvedRailMediaIdentity(
     val externalIds: List<ExternalIdEntity>
 )
 
+/**
+ * Temporary compatibility adapter for rail cache ownership keys.
+ *
+ * Canonical identity ownership belongs to StableIdBundleResolver. This adapter may normalize
+ * already-observed rail identifiers for cache key stability only. It must not perform network
+ * identity bridging and must not be injected into UI, ViewModel, player, or screensaver code.
+ *
+ * Expiration: remove after MetaPreview/RailItemPreview carry StableIdBundle directly.
+ */
 @Singleton
 class RailMediaIdentityResolver @Inject constructor() {
     fun fromPreview(

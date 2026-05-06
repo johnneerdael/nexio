@@ -87,7 +87,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
         }
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
-            every { allProgress } returns flowOf(emptyList())
+            every { observeProgress(any()) } returns flowOf(emptyList())
         }
         val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
             every { read(any()) } returns null
@@ -161,7 +161,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val args = constructor.parameterTypes.map { type ->
             when (type) {
                 WatchProgressRepository::class.java -> mockk<WatchProgressRepository>(relaxed = true) {
-                    every { allProgress } returns flowOf(emptyList())
+                    every { observeProgress(any()) } returns flowOf(emptyList())
                 }
                 TrackingProgressService::class.java -> trackingProgressService
                 TrackingProviderStateService::class.java -> mockk<TrackingProviderStateService>(relaxed = true) {
@@ -504,7 +504,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             }
             val service = ContinueWatchingSnapshotService(
                 watchProgressRepository = mockk(relaxed = true) {
-                    every { allProgress } returns flowOf(emptyList())
+                    every { observeProgress(any()) } returns flowOf(emptyList())
                 },
                 trackingProgressService = traktProgressService,
                 trackingProviderStateService = trackingProviderStateService,
@@ -542,7 +542,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             }
             val service = ContinueWatchingSnapshotService(
                 watchProgressRepository = mockk(relaxed = true) {
-                    every { allProgress } returns flowOf(emptyList())
+                    every { observeProgress(any()) } returns flowOf(emptyList())
                 },
                 trackingProgressService = trackingProgressService,
                 trackingProviderStateService = mockk(relaxed = true) {

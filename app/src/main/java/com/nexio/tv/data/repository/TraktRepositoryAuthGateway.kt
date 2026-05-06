@@ -14,5 +14,9 @@ class TraktRepositoryAuthGateway @Inject constructor(
 
     suspend fun currentAuthSession(): TrackingAuthSession = authService.currentAuthSession()
 
+    suspend fun mutationAccountScopedSession(
+        session: TrackingAuthSession = authService.currentAuthSession()
+    ): TrackingAuthSession = authService.mutationAccountScopedSession(session)
+
     fun currentTraktProfileId(): Int = authService.currentTraktProfileId()
 }

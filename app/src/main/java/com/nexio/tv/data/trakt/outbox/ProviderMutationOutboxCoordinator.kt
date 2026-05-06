@@ -17,7 +17,8 @@ import kotlin.math.max
 @Singleton
 class ProviderMutationOutboxCoordinator @Inject constructor(
     private val worker: TraktMutationOutboxWorker,
-    adapters: Set<@JvmSuppressWildcards TraktMutationAdapter>
+    adapters: Set<@JvmSuppressWildcards TraktMutationAdapter>,
+    private val accountScopeValidator: ProviderMutationAccountScopeValidator
 ) {
     companion object {
         private const val TAG = "ProviderOutboxCoordinator"
@@ -43,6 +44,7 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
     }
 
     suspend fun enqueueAndDrain(envelope: TraktMutationEnvelope): TraktMutationEnvelope {
+        accountScopeValidator.validateForEnqueue(envelope)
         val adapter = adapterFor(envelope.adapterKey)
         adapter.applyOptimistic(envelope)
         val queued = worker.enqueue(envelope)
@@ -114,46 +116,62 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
             }
 
             val adapter = adapterFor(lease.envelope.adapterKey)
-            val execution = runCatching { adapter.execute(lease.envelope) }
+            val execution = runCatching {
+                accountScopeValidator.validateForExecute(lease.envelope)
+                adapter.execute(lease.envelope)
+            }
                 .getOrElse { error ->
-                    TraktMutationExecutionResult.Failure(
-                        reason = error.message ?: error::class.java.simpleName,
-                        throwable = error
-                    )
+                    if (error is ProviderMutationAccountScopeException) {
+                        TraktMutationExecutionResult.AccountScopeMismatch(
+                            reason = "ACCOUNT_SCOPE_MISMATCH",
+                            throwable = error
+                        )
+                    } else {
+                        TraktMutationExecutionResult.Failure(
+                            reason = error.message ?: error::class.java.simpleName,
+                            throwable = error
+                        )
+                    }
                 }
 
-            when (execution) {
-                is TraktMutationExecutionResult.Success -> {
-                    worker.settle(
-                        profileId = lease.envelope.profileId,
-                        leaseToken = lease.envelope.leaseToken ?: return,
-                        settlement = TraktMutationSettlement.Succeeded(
-                            httpStatusCode = execution.httpStatusCode
-                        )
-                    )
+            val settlement = when (execution) {
+                is TraktMutationExecutionResult.Success -> TraktMutationSettlement.Succeeded(
+                    httpStatusCode = execution.httpStatusCode
+                )
+                is TraktMutationExecutionResult.AccountScopeMismatch -> TraktMutationSettlement.TerminalFailure(
+                    reason = execution.reason,
+                    httpStatusCode = null
+                )
+                is TraktMutationExecutionResult.Failure -> worker.classifyFailure(
+                    failure = execution,
+                    attemptCount = lease.envelope.attemptCount
+                )
+            }
+
+            val settled = worker.settle(
+                profileId = lease.envelope.profileId,
+                leaseToken = lease.envelope.leaseToken ?: return,
+                settlement = settlement
+            )
+
+            when (settlement) {
+                is TraktMutationSettlement.Succeeded -> {
                     runCatching { adapter.reconcileSuccess(lease.envelope) }
                         .onFailure { error ->
                             Log.w(TAG, "Failed to reconcile successful provider mutation ${lease.envelope.id}: ${error.message}")
                         }
                 }
 
-                is TraktMutationExecutionResult.Failure -> {
-                    val settlement = worker.classifyFailure(
-                        failure = execution,
-                        attemptCount = lease.envelope.attemptCount
-                    )
-                    val settled = worker.settle(
-                        profileId = lease.envelope.profileId,
-                        leaseToken = lease.envelope.leaseToken ?: return,
-                        settlement = settlement
-                    )
-                    if (settlement is TraktMutationSettlement.TerminalFailure && settled != null) {
+                is TraktMutationSettlement.TerminalFailure -> {
+                    if (settled != null) {
                         runCatching { adapter.rollbackToServerTruth(settled, settlement) }
                             .onFailure { error ->
                                 Log.w(TAG, "Failed to rollback terminal provider mutation ${settled.id}: ${error.message}")
                             }
                     }
                 }
+
+                is TraktMutationSettlement.Retryable -> Unit
             }
         }
     }

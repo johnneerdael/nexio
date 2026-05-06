@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.simkl
 
+import com.nexio.tv.data.repository.testSimklSession
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleResponseDto
 import com.nexio.tv.data.repository.SimklProgressService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
@@ -31,7 +32,8 @@ class SimklScrobbleMutationAdapterTest {
                 title = "Server truth",
                 contentType = "movie"
             ),
-            optimisticVersion = 7L
+            optimisticVersion = 7L,
+            session = testSimklSession()
         )
 
         assertEquals("simkl.scrobble:movie:tt1234567:2025", envelope.collapseKey)
@@ -55,7 +57,8 @@ class SimklScrobbleMutationAdapterTest {
             item = movieItem("Arrival"),
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = controller.nextOptimisticVersion()
+            optimisticVersion = controller.nextOptimisticVersion(),
+            session = testSimklSession()
         )
 
         adapter.rollbackToServerTruth(
@@ -79,7 +82,7 @@ class SimklScrobbleMutationAdapterTest {
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
             optimisticVersion = 1L,
-            profileId = 2
+            session = testSimklSession(profileId = 2)
         )
 
         coEvery { remote.checkin(any(), capture(session)) } returns Response.success(SimklScrobbleResponseDto(action = "checkin"))
@@ -103,7 +106,8 @@ class SimklScrobbleMutationAdapterTest {
             action = "stop",
             progressPercent = 95f,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 1L
+            optimisticVersion = 1L,
+            session = testSimklSession()
         )
 
         adapter.reconcileSuccess(envelope)

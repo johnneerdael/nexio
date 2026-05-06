@@ -20,7 +20,7 @@ enum class MetadataDecisionReason {
 
 enum class MetadataMediaKind { MOVIE, SERIES, ANIME, UNKNOWN }
 
-enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, SEASON, PLAYER }
+enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, DETAIL_FULL, SEASON, PLAYER }
 enum class ResolverType {
     ADDON_DISPLAY,
     RATING,
@@ -167,6 +167,7 @@ data class ResolvedMetadataDocument(
     val countries: List<String> = emptyList(),
     val language: String? = null,
     val castMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
+    val crewMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
     val productionCompanies: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
     val networks: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
     val airsTime: String? = null,

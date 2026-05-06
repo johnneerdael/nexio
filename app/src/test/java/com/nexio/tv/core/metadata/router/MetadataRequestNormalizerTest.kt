@@ -78,6 +78,19 @@ class MetadataRequestNormalizerTest {
     }
 
     @Test
+    fun `provider object lookup names preserve embedded colons`() {
+        val request = MetadataRequest(
+            contentId = "tmdb:person:Actor: The Sequel",
+            contentType = ContentType.MOVIE,
+            sourceContext = MetadataSourceContext()
+        )
+
+        val normalized = normalizer.normalize(request)
+
+        assertEquals("tmdb:person:Actor: The Sequel", normalized.parentId)
+    }
+
+    @Test
     fun `blank id is preserved as blank`() {
         val request = MetadataRequest(
             contentId = "   ",

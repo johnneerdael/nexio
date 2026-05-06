@@ -11,8 +11,12 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.nexio.tv.core.image.IntegrationPosterFetcher
+import com.nexio.tv.core.image.LegacyRemoteArtworkFetcher
+import com.nexio.tv.core.image.LegacyRemoteArtworkKeyer
 import com.nexio.tv.core.image.ImageCacheTtlWorker
 import com.nexio.tv.core.image.NexioArtworkFetcher
+import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
+import com.nexio.tv.core.image.SearchSuggestionPosterKeyer
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.sync.StartupSyncService
@@ -36,6 +40,8 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var integrationRuntime: IntegrationRuntime
     @Inject lateinit var integrationPosterFetcherFactory: IntegrationPosterFetcher.Factory
     @Inject lateinit var nexioArtworkFetcherFactory: NexioArtworkFetcher.Factory
+    @Inject lateinit var legacyRemoteArtworkFetcherFactory: LegacyRemoteArtworkFetcher.Factory
+    @Inject lateinit var searchSuggestionPosterFetcherFactory: SearchSuggestionPosterFetcher.Factory
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -73,6 +79,10 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             .components {
                 add(nexioArtworkFetcherFactory)
                 add(integrationPosterFetcherFactory)
+                add(legacyRemoteArtworkFetcherFactory)
+                add(LegacyRemoteArtworkKeyer())
+                add(searchSuggestionPosterFetcherFactory)
+                add(SearchSuggestionPosterKeyer())
             }
             .memoryCache {
                 MemoryCache.Builder(this)

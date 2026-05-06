@@ -8,9 +8,11 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 import io.mockk.coEvery
@@ -57,8 +59,11 @@ class IdleScreensaverRepositoryTest {
         assertEquals("tmdb:550", slide.itemId)
         assertEquals("movie", slide.itemType)
         assertEquals("Fight Club", slide.title)
-        assertEquals("nexio-artwork://asset/fight-club-backdrop", slide.backgroundUrl)
-        assertEquals(listOf("nexio-artwork://asset/fight-club-backdrop"), slide.modeData.image.fallbackArtworkUrls)
+        assertEquals("nexio-artwork://asset/fight-club-backdrop", slide.backgroundArtwork.toLegacyArtworkString())
+        assertEquals(
+            listOf("nexio-artwork://asset/fight-club-backdrop"),
+            slide.modeData.image.fallbackArtwork.map { it.toLegacyArtworkString() }
+        )
         assertEquals(8.8f, slide.imdbRating ?: 0f, 0.0f)
         assertNull(slide.modeData.trailer)
         assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
@@ -92,7 +97,7 @@ class IdleScreensaverRepositoryTest {
         assertEquals("tmdb:1399", slide.itemId)
         assertEquals("series", slide.itemType)
         assertEquals("Game of Thrones", slide.title)
-        assertEquals("nexio-artwork://asset/got-poster", slide.backgroundUrl)
+        assertEquals("nexio-artwork://asset/got-poster", slide.backgroundArtwork.toLegacyArtworkString())
         assertEquals(9.2f, slide.imdbRating ?: 0f, 0.0f)
         coVerify(exactly = 1) { candidateRepository.getCandidatesSnapshot(3) }
     }
@@ -115,7 +120,7 @@ class IdleScreensaverRepositoryTest {
                         source = TitleRatingSource.IMDB
                     ),
                     artwork = ArtworkBundle(backdrop = artworkRef("backdrop-81189", ArtworkType.BACKDROP)),
-                    fallbackTrailerYtIds = emptyList(),
+                    trailerState = TrailerDisplayState(),
                     stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
                 )
             )
@@ -150,8 +155,11 @@ class IdleScreensaverRepositoryTest {
         val slide = repository.slides.value.single()
         assertEquals("__placeholder__", slide.itemId)
         assertEquals("placeholder", slide.itemType)
-        assertEquals("nexio-placeholder://backdrop", slide.backgroundUrl)
-        assertEquals(listOf("nexio-placeholder://backdrop"), slide.modeData.image.fallbackArtworkUrls)
+        assertEquals("nexio-placeholder://backdrop", slide.backgroundArtwork.toLegacyArtworkString())
+        assertEquals(
+            listOf("nexio-placeholder://backdrop"),
+            slide.modeData.image.fallbackArtwork.map { it.toLegacyArtworkString() }
+        )
         assertNull(slide.modeData.trailer)
         assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
         coVerify(exactly = 1) { candidateRepository.getCandidatesSnapshot(4) }
@@ -176,7 +184,7 @@ class IdleScreensaverRepositoryTest {
                         backdrop = artworkRef("fight-backdrop", ArtworkType.BACKDROP),
                         poster = artworkRef("fight-poster", ArtworkType.POSTER)
                     ),
-                    fallbackTrailerYtIds = emptyList(),
+                    trailerState = TrailerDisplayState(),
                     stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
                 )
             )
@@ -193,7 +201,7 @@ class IdleScreensaverRepositoryTest {
                 "nexio-artwork://asset/fight-backdrop",
                 "nexio-artwork://asset/fight-poster"
             ),
-            repository.trailerCandidates.value.single().fallbackArtworkUrls
+            repository.trailerCandidates.value.single().fallbackArtwork.map { it.toLegacyArtworkString() }
         )
     }
 

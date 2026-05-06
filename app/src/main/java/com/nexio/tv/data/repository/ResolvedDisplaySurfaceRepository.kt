@@ -33,16 +33,54 @@ class ResolvedDisplaySurfaceRepository(
 
     @Synchronized
     fun publishResolvedItems(
-        profileSession: ActiveProfileSession,
+        surfaceKey: String,
         items: List<ResolvedDisplayItem>
     ): Boolean {
+        if (surfaceKey != HOME_SURFACE_KEY) return false
+        val active = activeProfileSession()
+        surfaces.update { current ->
+            val existing = current[active.profileId].orEmpty()
+            val incomingKeys = items.map { item -> item.itemKey }.toSet()
+            val merged = existing
+                .filterNot { item -> item.itemKey in incomingKeys } +
+                items
+            current + (active.profileId to merged.distinctBy { item -> item.itemKey })
+        }
+        return true
+    }
+
+    @Synchronized
+    fun publishResolvedItems(
+        profileSession: ActiveProfileSession,
+        items: List<ResolvedDisplayItem>
+    ): Boolean = publishResolvedItems(
+        surfaceKey = HOME_SURFACE_KEY,
+        profileSession = profileSession,
+        items = items
+    )
+
+    @Synchronized
+    fun publishResolvedItems(
+        surfaceKey: String,
+        profileSession: ActiveProfileSession,
+        items: List<ResolvedDisplayItem>,
+        replace: Boolean = true
+    ): Boolean {
+        if (surfaceKey != HOME_SURFACE_KEY) return false
         val active = activeProfileSession()
         if (active.profileId != profileSession.profileId || active.sessionId != profileSession.sessionId) {
             return false
         }
 
         surfaces.update { current ->
-            current + (profileSession.profileId to items.distinctBy { item -> item.itemKey })
+            val nextItems = if (replace) {
+                items
+            } else {
+                val existing = current[profileSession.profileId].orEmpty()
+                val incomingKeys = items.map { item -> item.itemKey }.toSet()
+                existing.filterNot { item -> item.itemKey in incomingKeys } + items
+            }
+            current + (profileSession.profileId to nextItems.distinctBy { item -> item.itemKey })
         }
         return true
     }
@@ -54,5 +92,9 @@ class ResolvedDisplaySurfaceRepository(
         items: List<ResolvedDisplayItem>
     ) {
         surfaces.update { current -> current + (profileId to items.distinctBy { item -> item.itemKey }) }
+    }
+
+    companion object {
+        const val HOME_SURFACE_KEY = "home"
     }
 }

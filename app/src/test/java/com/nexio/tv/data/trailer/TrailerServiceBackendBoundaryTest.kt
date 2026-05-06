@@ -1,6 +1,7 @@
 package com.nexio.tv.data.trailer
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.integration.trailer.TrailerBackendProvider
 import com.nexio.tv.data.integration.trailer.TrailerTmdbProvider
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -130,6 +132,32 @@ class TrailerServiceBackendBoundaryTest {
         )
 
         assertNull(result)
+    }
+
+    @Test
+    fun `typed youtube playback ref falls back to external url when extraction misses`() = runTest {
+        val extractor = mockk<InAppYouTubeExtractor>()
+        val backendProvider = mockk<TrailerBackendProvider>()
+
+        coEvery { extractor.extractPlaybackSource(any()) } returns null
+        coEvery { backendProvider.resolveYouTubePlaybackSource(any(), any(), any()) } returns null
+
+        val service = buildService(
+            inAppYouTubeExtractor = extractor,
+            trailerBackendProvider = backendProvider
+        )
+
+        val result = service.resolvePlaybackSource(
+            ref = TrailerPlaybackRef.YouTubeId("abc12345678"),
+            title = "Demo",
+            year = "2026"
+        )
+
+        assertTrue(result is TrailerResolutionResult.External)
+        assertEquals(
+            "https://www.youtube.com/watch?v=abc12345678",
+            (result as TrailerResolutionResult.External).url
+        )
     }
 
     @Test

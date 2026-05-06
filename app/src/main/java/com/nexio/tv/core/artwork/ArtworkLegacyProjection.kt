@@ -8,4 +8,6 @@ fun ArtworkDisplayRef?.toLegacyArtworkString(): String? =
                 ?: "nexio-artwork://decision/${decisionKey.value}"
         is ArtworkDisplayRef.Placeholder ->
             "nexio-placeholder://${placeholderType.name.lowercase()}"
+        is ArtworkDisplayRef.LegacyString ->
+            value
     }

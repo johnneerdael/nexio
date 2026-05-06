@@ -53,8 +53,8 @@ class MetaDetailsEffectiveContentIdTest {
     @Test
     fun `episode progress lookup switches to loaded meta id`() = runTest(dispatcher) {
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
-        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+        every { watchProgressRepository.getAllEpisodeProgress(any(), any()) } returns flowOf(emptyMap())
+        every { watchProgressRepository.getProgress(any(), any()) } returns flowOf(null)
 
         // Use a mock facade that returns canonicalId="tt0944947" so that canonical.toMeta()
         // produces meta.id = "tt0944947". This verifies that the effectiveContentId switches
@@ -91,7 +91,7 @@ class MetaDetailsEffectiveContentIdTest {
         )
         advanceUntilIdle()
 
-        verify { watchProgressRepository.getAllEpisodeProgress("tt0944947") }
+        verify { watchProgressRepository.getAllEpisodeProgress(1, "tt0944947") }
     }
 
     private fun buildResolutionResult(canonicalId: String) = MetadataResolutionResult(

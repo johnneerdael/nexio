@@ -65,6 +65,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 
 private const val HERO_DESCRIPTION_MAX_LINES = 6
 
@@ -97,8 +100,9 @@ internal fun HeroContentSection(
     val isSeriesApi = remember(meta.apiType) {
         meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true)
     }
-    val logoModel = remember(context, meta.logo) {
-        meta.logo?.let { logo ->
+    val logoModel = remember(context, meta.artwork, meta.logo) {
+        (meta.artwork?.logo.toCoilModelOrNull()
+            ?: meta.logo.toLegacyArtworkCoilModelOrNull("${meta.id}:logo", ArtworkType.LOGO))?.let { logo ->
             ImageRequest.Builder(context)
                 .data(logo)
                 .crossfade(true)
@@ -107,7 +111,7 @@ internal fun HeroContentSection(
     }
     var logoLoadFailed by remember(meta.logo) { mutableStateOf(false) }
     val shouldShowLogo =
-        !meta.logo.isNullOrBlank() &&
+        logoModel != null &&
             !logoLoadFailed
     val libraryAddPainter = rememberRawSvgPainter(
         context = context,

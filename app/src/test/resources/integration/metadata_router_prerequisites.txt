@@ -4,6 +4,7 @@ tmdb.find.external_id
 tmdb.movie.core
 tmdb.tv.core
 tmdb.season.episodes
+tmdb.season.videos
 tmdb.movie.videos
 tmdb.tv.videos
 tmdb.movie.recommendations
@@ -16,6 +17,7 @@ tmdb.network.detail
 tvdb.login
 tvdb.remoteid.lookup
 tvdb.series.extended
+tvdb.tv.trailers
 tvdb.person.extended
 tvdb.series.translation
 tvdb.series.episodes.season_type

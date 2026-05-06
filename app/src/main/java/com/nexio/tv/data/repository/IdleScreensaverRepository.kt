@@ -1,6 +1,10 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.PlaceholderType
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
@@ -15,15 +19,19 @@ import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "IdleScreensaverRepo"
 private const val PLACEHOLDER_ITEM_ID = "__placeholder__"
-private const val PLACEHOLDER_BACKDROP_URL = "nexio-placeholder://backdrop"
+private val PLACEHOLDER_BACKDROP_ARTWORK = ArtworkDisplayRef.Placeholder(
+    placeholderType = PlaceholderType.BACKDROP,
+    imageType = ArtworkType.BACKDROP,
+    trace = ArtworkTrace.empty()
+)
 
 private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
     itemId = PLACEHOLDER_ITEM_ID,
     itemType = "placeholder",
     addonBaseUrl = "",
     title = "",
-    backgroundUrl = PLACEHOLDER_BACKDROP_URL,
-    logoUrl = null,
+    backgroundArtwork = PLACEHOLDER_BACKDROP_ARTWORK,
+    logoArtwork = null,
     genres = emptyList(),
     description = null,
     releaseInfo = null,
@@ -31,7 +39,7 @@ private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
     imdbRating = null,
     tomatoesRating = null,
     modeData = IdleScreensaverModeData(
-        image = IdleScreensaverImageModeData(fallbackArtworkUrls = listOf(PLACEHOLDER_BACKDROP_URL))
+        image = IdleScreensaverImageModeData(fallbackArtwork = listOf(PLACEHOLDER_BACKDROP_ARTWORK))
     )
 )
 

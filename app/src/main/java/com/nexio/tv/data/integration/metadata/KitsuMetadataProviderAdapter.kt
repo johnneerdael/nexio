@@ -11,6 +11,7 @@ import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -23,11 +24,14 @@ import com.nexio.tv.data.remote.api.KitsuAnimeStaffResource
 import com.nexio.tv.data.remote.api.KitsuCollectionResponse
 import com.nexio.tv.data.remote.api.KitsuIncludedResource
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
+import com.nexio.tv.data.remote.api.KitsuReviewResource
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.MetaReview
+import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PosterShape
 import javax.inject.Inject
 
@@ -126,6 +130,15 @@ class KitsuMetadataProviderAdapter @Inject constructor(
             KitsuApiShapes.MEDIA_RELATIONSHIPS -> {
                 integrationProvider.fetchMediaRelationships(route.parentId, kitsuId, mediaKind)
                     .toKitsuRelationshipCandidate(this.provider)
+            }
+            KitsuApiShapes.ANIME_REVIEWS -> {
+                integrationProvider.fetchReviews(
+                    rawId = route.parentId,
+                    kitsuId = kitsuId,
+                    mediaKind = mediaKind,
+                    page = route.pagination?.page ?: 1,
+                    limit = route.pagination?.limit ?: 20
+                ).toKitsuReviewCandidate(this.provider, route.pagination?.page ?: 1, route.pagination?.limit ?: 20)
             }
             else -> emptyCandidate(this.provider)
         }
@@ -315,6 +328,52 @@ class KitsuMetadataProviderAdapter @Inject constructor(
         )
     }
 
+    private fun KitsuCollectionResponse<KitsuReviewResource>?.toKitsuReviewCandidate(
+        provider: MetadataPrimaryProvider,
+        page: Int,
+        limit: Int
+    ): MetadataCandidate {
+        val reviewsPage = toKitsuReviewsPage(page = page.coerceAtLeast(1), limit = limit.coerceIn(1, 20))
+        return MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                if (reviewsPage.reviews.isNotEmpty()) {
+                    put(ResolvedField.REVIEWS, FieldValue(reviewsPage, FieldOwner.REVIEWS))
+                }
+            }
+        )
+    }
+
+    private fun KitsuCollectionResponse<KitsuReviewResource>?.toKitsuReviewsPage(
+        page: Int,
+        limit: Int
+    ): ReviewsPage {
+        val body = this
+        val includedByKey = body?.included.orEmpty().associateBy { "${it.type}:${it.id}" }
+        val reviews = body?.data.orEmpty().mapNotNull { review ->
+            val attributes = review.attributes ?: return@mapNotNull null
+            val content = attributes.content?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val userRef = review.relationships?.user?.data
+            val user = userRef?.let { includedByKey["${it.type}:${it.id}"] }
+            MetaReview(
+                id = review.id.orEmpty(),
+                author = user?.attributes.bestDisplayName() ?: userRef?.id?.let { "Kitsu user $it" } ?: "Kitsu",
+                content = content,
+                rating = attributes.rating?.let { it / 2.0 },
+                createdAt = attributes.createdAt,
+                updatedAt = attributes.updatedAt,
+                source = MetaReviewSource.KITSU,
+                hasSpoiler = attributes.spoiler == true
+            )
+        }
+        val rawCount = body?.data.orEmpty().size
+        return ReviewsPage(
+            reviews = reviews,
+            hasMore = rawCount >= limit,
+            nextPage = if (rawCount >= limit) page + 1 else null
+        )
+    }
+
     private fun KitsuCollectionResponse<*>?.includedByKey(): Map<String, KitsuIncludedResource> =
         this?.included.orEmpty().associateBy { "${it.type}:${it.id}" }
 
@@ -361,7 +420,8 @@ class KitsuMetadataProviderAdapter @Inject constructor(
             KitsuApiShapes.CASTINGS,
             KitsuApiShapes.ANIME_STAFF,
             KitsuApiShapes.ANIME_PRODUCTIONS,
-            KitsuApiShapes.MEDIA_RELATIONSHIPS
+            KitsuApiShapes.MEDIA_RELATIONSHIPS,
+            KitsuApiShapes.ANIME_REVIEWS
         )
     }
 }

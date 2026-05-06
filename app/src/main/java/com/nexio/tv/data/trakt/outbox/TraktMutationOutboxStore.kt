@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -113,10 +114,37 @@ class TraktMutationOutboxStore private constructor(
         if (element == null || element.isJsonNull) return null
         return runCatching {
             val obj = element.asJsonObject
+            val provider = obj.stringOrNull("provider")
+            val credentialHash = obj.stringOrNull("credentialHash")
+            if (provider.isNullOrBlank() || credentialHash.isNullOrBlank()) {
+                return@runCatching quarantinedLegacyEnvelope(obj)
+            }
             gson.fromJson(obj, TraktMutationEnvelope::class.java)
                 .copy(profileId = obj.intOrNull("profileId") ?: 1)
                 .sanitizedOrNull()
         }.getOrNull()
+    }
+
+    private fun quarantinedLegacyEnvelope(obj: JsonObject): TraktMutationEnvelope? {
+        val adapterKey = obj.stringOrNull("adapterKey")?.takeIf { it.isNotBlank() } ?: return null
+        val mutationKind = obj.stringOrNull("mutationKind")?.takeIf { it.isNotBlank() } ?: return null
+        val priority = runCatching {
+            TraktMutationPriorityBucket.valueOf(obj.stringOrNull("priority") ?: "")
+        }.getOrNull() ?: return null
+        return TraktMutationEnvelope(
+            id = obj.stringOrNull("id")?.takeIf { it.isNotBlank() } ?: return null,
+            profileId = (obj.intOrNull("profileId") ?: 1).coerceAtLeast(1),
+            provider = TrackingProvider.TRAKT,
+            credentialHash = "legacy-missing-account-scope",
+            adapterKey = adapterKey,
+            mutationKind = mutationKind,
+            priority = priority,
+            payload = obj.objectOrNull("payload") ?: JsonObject(),
+            metadata = obj.objectOrNull("metadata") ?: JsonObject(),
+            state = TraktMutationLifecycleState.TERMINAL_FAILED,
+            lastError = "MISSING_ACCOUNT_SCOPE",
+            completedAtMs = System.currentTimeMillis()
+        )
     }
 
     private fun TraktMutationEnvelope.sanitizedOrNull(): TraktMutationEnvelope? {
@@ -125,10 +153,14 @@ class TraktMutationOutboxStore private constructor(
         val cleanMutationKind = (mutationKind as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val cleanPriority = (priority as TraktMutationPriorityBucket?) ?: return null
         val cleanState = (state as TraktMutationLifecycleState?) ?: return null
+        val cleanProvider = (provider as TrackingProvider?) ?: return null
+        val cleanCredentialHash = (credentialHash as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
 
         return copy(
             id = cleanId,
             profileId = profileId.coerceAtLeast(1),
+            provider = cleanProvider,
+            credentialHash = cleanCredentialHash,
             adapterKey = cleanAdapterKey,
             mutationKind = cleanMutationKind,
             priority = cleanPriority,
@@ -144,6 +176,8 @@ class TraktMutationOutboxStore private constructor(
                 items.forEach { envelope ->
                     val obj = gson.toJsonTree(envelope).asJsonObject
                     obj.addProperty("profileId", envelope.profileId)
+                    obj.addProperty("provider", envelope.provider.name)
+                    obj.addProperty("credentialHash", envelope.credentialHash)
                     add(obj)
                 }
             })
@@ -155,6 +189,12 @@ class TraktMutationOutboxStore private constructor(
     private fun JsonObject.intOrNull(key: String): Int? {
         return runCatching {
             get(key)?.takeIf { !it.isJsonNull }?.asInt
+        }.getOrNull()
+    }
+
+    private fun JsonObject.stringOrNull(key: String): String? {
+        return runCatching {
+            get(key)?.takeIf { !it.isJsonNull }?.asString
         }.getOrNull()
     }
 

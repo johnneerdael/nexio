@@ -231,7 +231,7 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
-    fun `rail preview source context participates in production field resolution`() = runTest {
+    fun `rail preview source context participates without filling missing primary text`() = runTest {
         val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
         val sink = RecordingTraceSink()
 
@@ -257,10 +257,9 @@ class MetadataRouterFacadeTest {
         )
 
         assertEquals("Runtime title", result.resolvedDocument.title)
-        assertEquals("Rail overview", result.resolvedDocument.overview)
+        assertNull(result.resolvedDocument.overview)
         assertEquals(SourceRole.PRIMARY, result.resolvedDocument.sourceRoles[ResolvedField.TITLE])
-        assertEquals(SourceRole.RAIL_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.OVERVIEW])
-        assertEquals("TRAKT", result.resolvedDocument.sourceProviders[ResolvedField.OVERVIEW])
+        assertFalse(result.resolvedDocument.sourceRoles.containsKey(ResolvedField.OVERVIEW))
         assertEquals(
             IgnoredFieldOverwrite(
                 field = ResolvedField.TITLE,
@@ -288,7 +287,7 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
-    fun `addon preview source context remains addon preview for production fallback fields`() = runTest {
+    fun `addon preview source context participates without filling missing primary text`() = runTest {
         val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
         val sink = RecordingTraceSink()
 
@@ -313,13 +312,8 @@ class MetadataRouterFacadeTest {
         )
 
         assertEquals("Runtime title", result.resolvedDocument.title)
-        assertEquals("Addon overview", result.resolvedDocument.overview)
-        assertEquals(SourceRole.ADDON_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.OVERVIEW])
-        assertEquals("cinemeta", result.resolvedDocument.sourceProviders[ResolvedField.OVERVIEW])
-
-        val overviewPayload = selectedTracePayload(sink, ResolvedField.OVERVIEW)
-        assertEquals("ADDON_PREVIEW", overviewPayload["sourceRole"])
-        assertEquals("addon preview fills until canonical arrives", overviewPayload["ownershipRule"])
+        assertNull(result.resolvedDocument.overview)
+        assertFalse(result.resolvedDocument.sourceRoles.containsKey(ResolvedField.OVERVIEW))
 
         val titlePayload = selectedTracePayload(sink, ResolvedField.TITLE)
         assertEquals("PRIMARY", titlePayload["sourceRole"])
@@ -335,6 +329,40 @@ class MetadataRouterFacadeTest {
             ),
             rejectedCandidates.single()
         )
+    }
+
+    @Test
+    fun `successful TVDB route suppresses preview text when primary localized text is missing`() = runTest {
+        val adapter = EmptyTextMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).resolveRequest(
+            MetadataRequest(
+                contentId = "tvdb:123",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    addonId = "cinemeta",
+                    addonMetadata = HomeDisplayMetadata(
+                        title = "Addon title",
+                        description = "Addon overview",
+                        poster = "Addon poster"
+                    ),
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.TMDB.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
+        assertNull(result.resolvedDocument.title)
+        assertNull(result.resolvedDocument.overview)
+        assertEquals("Addon poster", result.resolvedDocument.poster)
+        assertNull(result.displayMetadata.title)
+        assertNull(result.displayMetadata.description)
+        assertEquals("Addon poster", result.displayMetadata.poster)
+        assertFalse(result.resolvedDocument.sourceRoles.containsKey(ResolvedField.TITLE))
+        assertFalse(result.resolvedDocument.sourceRoles.containsKey(ResolvedField.OVERVIEW))
+        assertEquals(SourceRole.ADDON_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.POSTER])
     }
 
     @Test
@@ -778,6 +806,21 @@ class MetadataRouterFacadeTest {
                 episodeMetadata = episodeMetadata
             )
         }
+    }
+
+    private class EmptyTextMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = route.provider,
+                    fields = emptyMap()
+                )
+            )
     }
 
     private class GenreReleaseMetadataProviderAdapter(

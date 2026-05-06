@@ -68,6 +68,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.nexio.tv.core.image.SearchSuggestionPosterModel
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -562,7 +563,7 @@ fun SearchScreen(
                     Spacer(modifier = Modifier.height(SearchPanelSpacing))
                     ImdbSuggestionDropdown(
                         suggestions = uiState.imdbSuggestions,
-                        posterUrls = uiState.imdbSuggestionPosters,
+                        posterModels = uiState.imdbSuggestionPosters,
                         posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                         onSelect = { suggestion ->
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
@@ -638,7 +639,7 @@ fun SearchScreen(
                     item {
                         ImdbSuggestionDropdown(
                             suggestions = uiState.imdbSuggestions,
-                            posterUrls = uiState.imdbSuggestionPosters,
+                            posterModels = uiState.imdbSuggestionPosters,
                             posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                             onSelect = { suggestion ->
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
@@ -827,7 +828,7 @@ fun SearchScreen(
 @Composable
 private fun ImdbSuggestionDropdown(
     suggestions: List<ImdbSuggestion>,
-    posterUrls: Map<String, String> = emptyMap(),
+    posterModels: Map<String, SearchSuggestionPosterModel> = emptyMap(),
     posterPreviewEnabled: Boolean = false,
     onSelect: (ImdbSuggestion) -> Unit,
     modifier: Modifier = Modifier,
@@ -859,7 +860,7 @@ private fun ImdbSuggestionDropdown(
                     shape = ButtonDefaults.shape(SearchSelectableItemShape)
                 ) {
                     val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
-                    val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
+                    val posterModel = if (posterPreviewEnabled) posterModels[suggestion.tconst] else null
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -870,10 +871,12 @@ private fun ImdbSuggestionDropdown(
                                     .width(28.dp)
                                     .height(42.dp)
                             ) {
-                                if (posterUrl != null) {
+                                if (posterModel != null) {
                                     coil.compose.AsyncImage(
                                         model = coil.request.ImageRequest.Builder(LocalContext.current)
-                                            .data(posterUrl)
+                                            .data(posterModel)
+                                            .memoryCacheKey(posterModel.key)
+                                            .diskCacheKey(posterModel.key)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = null,

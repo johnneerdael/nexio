@@ -88,6 +88,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.ui.findLifecycleOwner
@@ -886,7 +889,16 @@ fun MetaDetailsScreen(
             )
         ) {
             ImmediateDetailTrailerTakeoverOverlay(
-                backdropUrl = immediateTakeoverMeta.displayBackground ?: immediateTakeoverMeta.displayPoster
+                backdropModel = immediateTakeoverMeta.artwork?.backdrop.toCoilModelOrNull()
+                    ?: immediateTakeoverMeta.artwork?.poster.toCoilModelOrNull()
+                    ?: immediateTakeoverMeta.displayBackground.toLegacyArtworkCoilModelOrNull(
+                        "${immediateTakeoverMeta.id}:backdrop",
+                        ArtworkType.BACKDROP
+                    )
+                    ?: immediateTakeoverMeta.displayPoster.toLegacyArtworkCoilModelOrNull(
+                        "${immediateTakeoverMeta.id}:poster",
+                        ArtworkType.POSTER
+                    )
             )
         }
     }
@@ -907,7 +919,7 @@ fun MetaDetailsScreen(
 
 @Composable
 private fun ImmediateDetailTrailerTakeoverOverlay(
-    backdropUrl: String?
+    backdropModel: Any?
 ) {
     Box(
         modifier = Modifier
@@ -915,10 +927,10 @@ private fun ImmediateDetailTrailerTakeoverOverlay(
             .zIndex(100f)
             .background(NexioColors.Background)
     ) {
-        if (!backdropUrl.isNullOrBlank()) {
+        if (backdropModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(backdropUrl)
+                    .data(backdropModel)
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
@@ -1029,6 +1041,12 @@ private fun MetaDetailsContent(
     val displayPoster = meta.displayPoster
     val displayBackground = meta.displayBackground
     val displayLogo = meta.displayLogo
+    val backdropCoilModel = remember(meta.artwork, displayBackground, displayPoster) {
+        meta.artwork?.backdrop.toCoilModelOrNull()
+            ?: meta.artwork?.poster.toCoilModelOrNull()
+            ?: displayBackground.toLegacyArtworkCoilModelOrNull("${meta.id}:backdrop", ArtworkType.BACKDROP)
+            ?: displayPoster.toLegacyArtworkCoilModelOrNull("${meta.id}:poster", ArtworkType.POSTER)
+    }
     val displayMeta = remember(meta, displayPoster, displayBackground, displayLogo) {
         meta.copy(
             poster = displayPoster,
@@ -1652,13 +1670,12 @@ private fun MetaDetailsContent(
     }
     val backdropRequest = remember(
         localContext,
-        displayBackground,
-        displayPoster,
+        backdropCoilModel,
         backdropWidthPx,
         backdropHeightPx
     ) {
         ImageRequest.Builder(localContext)
-            .data(displayBackground ?: displayPoster)
+            .data(backdropCoilModel)
             .crossfade(true)
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
@@ -2156,7 +2173,7 @@ private fun MetaDetailsContent(
                     )
                 } else if (immediateTrailerTakeoverPending || isTrailerLoading) {
                     ImmediateDetailTrailerTakeoverOverlay(
-                        backdropUrl = displayBackground ?: displayPoster
+                        backdropModel = backdropCoilModel
                     )
                 }
             }

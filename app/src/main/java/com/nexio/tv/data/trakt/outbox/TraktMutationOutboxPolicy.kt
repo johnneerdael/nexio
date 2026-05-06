@@ -221,7 +221,9 @@ class TraktMutationOutboxPolicy(
                 existing.mutationKind == incoming.mutationKind &&
                 existing.collapseKey == collapseKey &&
                 existing.priority == incoming.priority &&
-                existing.profileId == incoming.profileId
+                existing.profileId == incoming.profileId &&
+                existing.provider == incoming.provider &&
+                existing.credentialHash == incoming.credentialHash
             ) {
                 existing.copy(
                     state = TraktMutationLifecycleState.COLLAPSED,
@@ -302,6 +304,9 @@ class TraktMutationOutboxPolicy(
 
     companion object {
         private val queueComparator = compareBy<TraktMutationEnvelope>(
+            { it.profileId },
+            { it.provider.name },
+            { it.credentialHash },
             { it.priority.sortOrder },
             { it.nextAttemptAtMs },
             { it.createdAtMs },

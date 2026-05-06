@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
@@ -44,43 +43,34 @@ class WatchProgressPreferencesProfileBoundaryTest {
         )
     }
 
-    private fun TestScope.makeManager(): ProfileManager {
-        val dataStoreImpl = ProfileDataStoreImpl(createDataStore(backgroundScope), Gson())
-        return ProfileManager(
-            dataStore = dataStoreImpl,
-            factory = factory,
-            context = context,
-            scope = backgroundScope
-        )
-    }
-
     @Test
-    fun `content progress query follows active profile switches`() = runTest {
-        val manager = makeManager()
-        val preferences = WatchProgressPreferences(factory, manager)
+    fun `content progress query reads the requested profile store`() = runTest {
+        val preferences = WatchProgressPreferences(factory)
         val contentId = uniqueContentId("tt-shared")
-        val progressFlow = preferences.getProgress(contentId)
+        val profileOneFlow = preferences.getProgress(profileId = 1, contentId = contentId)
+        val profileTwoFlow = preferences.getProgress(profileId = 2, contentId = contentId)
 
-        preferences.saveProgress(sampleProgress(contentId = contentId, name = "profile one"))
-        assertEquals("profile one", progressFlow.first()?.name)
+        preferences.saveProgress(1, sampleProgress(contentId = contentId, name = "profile one"))
+        assertEquals("profile one", profileOneFlow.first()?.name)
+        assertEquals(null, profileTwoFlow.first())
 
-        val profileTwoId = createAndSwitchToSecondProfile(manager)
-        preferences.saveProgress(sampleProgress(contentId = contentId, name = "profile two"))
+        preferences.saveProgress(2, sampleProgress(contentId = contentId, name = "profile two"))
 
-        val switched = progressFlow.awaitValue { it?.name == "profile two" }
-        assertEquals(profileTwoId, manager.activeProfileId.value)
-        assertEquals("profile two", switched?.name)
+        assertEquals("profile one", profileOneFlow.first()?.name)
+        assertEquals("profile two", profileTwoFlow.awaitValue { it?.name == "profile two" }?.name)
     }
 
     @Test
-    fun `episode progress map query follows active profile switches`() = runTest {
-        val manager = makeManager()
-        val preferences = WatchProgressPreferences(factory, manager)
+    fun `episode progress map query reads the requested profile store`() = runTest {
+        val preferences = WatchProgressPreferences(factory)
         val contentId = uniqueContentId("tt-series")
-        val episodeMapFlow = preferences.getAllEpisodeProgress(contentId)
-        val episodeFlow = preferences.getEpisodeProgress(contentId, season = 1, episode = 1)
+        val profileOneMapFlow = preferences.getAllEpisodeProgress(profileId = 1, contentId = contentId)
+        val profileOneEpisodeFlow = preferences.getEpisodeProgress(profileId = 1, contentId = contentId, season = 1, episode = 1)
+        val profileTwoMapFlow = preferences.getAllEpisodeProgress(profileId = 2, contentId = contentId)
+        val profileTwoEpisodeFlow = preferences.getEpisodeProgress(profileId = 2, contentId = contentId, season = 1, episode = 1)
 
         preferences.saveProgress(
+            1,
             sampleProgress(
                 contentId = contentId,
                 name = "profile one episode",
@@ -88,11 +78,12 @@ class WatchProgressPreferencesProfileBoundaryTest {
                 episode = 1
             )
         )
-        assertEquals("profile one episode", episodeMapFlow.first()[1 to 1]?.name)
-        assertEquals("profile one episode", episodeFlow.first()?.name)
+        assertEquals("profile one episode", profileOneMapFlow.first()[1 to 1]?.name)
+        assertEquals("profile one episode", profileOneEpisodeFlow.first()?.name)
+        assertEquals(null, profileTwoEpisodeFlow.first())
 
-        createAndSwitchToSecondProfile(manager)
         preferences.saveProgress(
+            2,
             sampleProgress(
                 contentId = contentId,
                 name = "profile two episode",
@@ -101,10 +92,11 @@ class WatchProgressPreferencesProfileBoundaryTest {
             )
         )
 
-        val switched = episodeMapFlow.awaitValue { it[1 to 1]?.name == "profile two episode" }
-        val switchedSingleEpisode = episodeFlow.awaitValue { it?.name == "profile two episode" }
-        assertEquals("profile two episode", switched[1 to 1]?.name)
-        assertEquals("profile two episode", switchedSingleEpisode?.name)
+        assertEquals("profile one episode", profileOneMapFlow.first()[1 to 1]?.name)
+        val profileTwoMap = profileTwoMapFlow.awaitValue { it[1 to 1]?.name == "profile two episode" }
+        val profileTwoEpisode = profileTwoEpisodeFlow.awaitValue { it?.name == "profile two episode" }
+        assertEquals("profile two episode", profileTwoMap[1 to 1]?.name)
+        assertEquals("profile two episode", profileTwoEpisode?.name)
     }
 
     private suspend fun <T> Flow<T>.awaitValue(predicate: (T) -> Boolean): T =
@@ -113,15 +105,6 @@ class WatchProgressPreferencesProfileBoundaryTest {
                 first(predicate)
             }
         }
-
-    private suspend fun createAndSwitchToSecondProfile(manager: ProfileManager): Int {
-        manager.createProfile("Secondary", "#E53935")
-        val profileId = manager.profiles.first { profiles -> profiles.size >= 2 }
-            .first { profile -> profile.id != 1 }
-            .id
-        manager.setActiveProfile(profileId)
-        return profileId
-    }
 
     private fun uniqueContentId(prefix: String): String =
         "$prefix-${System.nanoTime()}"

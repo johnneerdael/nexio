@@ -289,7 +289,8 @@ class TraktLibraryService @Inject constructor(
             enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildCreateListEnvelope(
                     provisionalKey = provisionalKey,
-                    body = request
+                    body = request,
+                    session = mutationSession()
                 )
             )
         }
@@ -321,6 +322,7 @@ class TraktLibraryService @Inject constructor(
                         description = description,
                         privacy = privacy.apiValue
                     ),
+                    session = mutationSession(),
                     rollbackState = rollbackState(before)
                 )
             )
@@ -342,6 +344,7 @@ class TraktLibraryService @Inject constructor(
             enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildDeleteListEnvelope(
                     listId = listId,
+                    session = mutationSession(),
                     rollbackState = rollbackState(before)
                 )
             )
@@ -372,6 +375,7 @@ class TraktLibraryService @Inject constructor(
             enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildReorderListsEnvelope(
                     rank = rank,
+                    session = mutationSession(),
                     rollbackState = rollbackState(before)
                 )
             )
@@ -381,7 +385,7 @@ class TraktLibraryService @Inject constructor(
     private suspend fun enqueueLibraryMutation(
         envelope: TraktMutationEnvelope
     ) {
-        traktMutationOutboxCoordinator.enqueueAndDrain(envelope.copy(profileId = activeProfileId()))
+        traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
     }
 
     suspend fun refreshNow() {
@@ -776,6 +780,7 @@ class TraktLibraryService @Inject constructor(
         enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildWatchlistAddEnvelope(
                 body = body,
+                session = mutationSession(),
                 rollbackState = rollbackState
             )
         )
@@ -789,6 +794,7 @@ class TraktLibraryService @Inject constructor(
         enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildWatchlistRemoveEnvelope(
                 body = body,
+                session = mutationSession(),
                 rollbackState = rollbackState
             )
         )
@@ -804,6 +810,7 @@ class TraktLibraryService @Inject constructor(
             TraktLibraryMutationAdapter.buildListAddEnvelope(
                 listId = listId,
                 body = body,
+                session = mutationSession(),
                 rollbackState = rollbackState
             )
         )
@@ -819,6 +826,7 @@ class TraktLibraryService @Inject constructor(
             TraktLibraryMutationAdapter.buildListRemoveEnvelope(
                 listId = listId,
                 body = body,
+                session = mutationSession(),
                 rollbackState = rollbackState
             )
         )
@@ -1368,6 +1376,12 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    private suspend fun mutationSession(profileId: Int = activeProfileId()): TrackingAuthSession {
+        return traktAuthService.mutationAccountScopedSession(
+            TrackingAuthSession(TrackingProvider.TRAKT, profileId)
+        )
+    }
 
     suspend fun refreshCollection(force: Boolean = false) {
         if (force) {

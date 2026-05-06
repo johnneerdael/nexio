@@ -1,5 +1,9 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.resolver.SkipIntroRepositoryPort
+import com.nexio.tv.core.metadata.router.resolver.SkipProviderRoute
+import com.nexio.tv.core.metadata.router.resolver.SkipSegmentRequest
+import com.nexio.tv.core.metadata.router.resolver.SkipSegmentResolver
 import com.nexio.tv.data.remote.api.TheIntroDbMediaResponse
 import com.nexio.tv.data.remote.api.TheIntroDbSegmentTimestamp
 import org.junit.Assert.assertEquals
@@ -51,30 +55,74 @@ class SkipIntroRepositoryTidbTest {
     }
 
     @Test
-    fun `arbiter routes explicit anime paths to anime primary`() {
+    fun `resolver policy routes explicit anime paths to anime primary`() {
+        val resolver = SkipSegmentResolver(NoOpSkipIntroRepositoryPort)
+
         assertEquals(
             SkipProviderRoute.ANIME_PRIMARY,
-            SkipProviderArbiter.resolve(contentType = "anime", effectiveId = "tt1234567", fallbackId = "tt1234567")
+            resolver.resolveRoute(
+                SkipSegmentRequest(
+                    contentType = "anime",
+                    currentVideoId = "tt1234567",
+                    contentId = "tt1234567",
+                    season = null,
+                    episode = null
+                )
+            )
         )
         assertEquals(
             SkipProviderRoute.ANIME_PRIMARY,
-            SkipProviderArbiter.resolve(contentType = "series", effectiveId = "mal:57658:1", fallbackId = "tt1234567")
+            resolver.resolveRoute(
+                SkipSegmentRequest(
+                    contentType = "series",
+                    currentVideoId = "mal:57658:1",
+                    contentId = "tt1234567",
+                    season = null,
+                    episode = null
+                )
+            )
         )
         assertEquals(
             SkipProviderRoute.ANIME_PRIMARY,
-            SkipProviderArbiter.resolve(contentType = "series", effectiveId = "tt1234567", fallbackId = "addon:anime:tt1234567")
+            resolver.resolveRoute(
+                SkipSegmentRequest(
+                    contentType = "series",
+                    currentVideoId = "tt1234567",
+                    contentId = "addon:anime:tt1234567",
+                    season = null,
+                    episode = null
+                )
+            )
         )
     }
 
     @Test
-    fun `arbiter routes normal movie and tv content to TheIntroDB`() {
+    fun `resolver policy routes normal movie and tv content to TheIntroDB`() {
+        val resolver = SkipSegmentResolver(NoOpSkipIntroRepositoryPort)
+
         assertEquals(
             SkipProviderRoute.THEINTRODB,
-            SkipProviderArbiter.resolve(contentType = "movie", effectiveId = "tt0111161", fallbackId = "tt0111161")
+            resolver.resolveRoute(
+                SkipSegmentRequest(
+                    contentType = "movie",
+                    currentVideoId = "tt0111161",
+                    contentId = "tt0111161",
+                    season = null,
+                    episode = null
+                )
+            )
         )
         assertEquals(
             SkipProviderRoute.THEINTRODB,
-            SkipProviderArbiter.resolve(contentType = "series", effectiveId = "1399:1:1", fallbackId = "1399")
+            resolver.resolveRoute(
+                SkipSegmentRequest(
+                    contentType = "series",
+                    currentVideoId = "1399:1:1",
+                    contentId = "1399",
+                    season = null,
+                    episode = null
+                )
+            )
         )
     }
 
@@ -92,5 +140,21 @@ class SkipIntroRepositoryTidbTest {
         assertEquals(2, mapped.size)
         assertTrue(mapped.all { it.type == "intro" })
         assertEquals(20.0, mapped[1].startTime, 0.0001)
+    }
+
+    private object NoOpSkipIntroRepositoryPort : SkipIntroRepositoryPort {
+        override fun clearCachedIntervals() = Unit
+
+        override suspend fun getSkipIntervals(contentId: String?, season: Int?, episode: Int?): List<SkipInterval> =
+            emptyList()
+
+        override suspend fun getAnimePrimarySkipIntervals(imdbId: String?, season: Int, episode: Int): List<SkipInterval> =
+            emptyList()
+
+        override suspend fun getSkipIntervalsForMal(malId: String, episode: Int): List<SkipInterval> =
+            emptyList()
+
+        override suspend fun getSkipIntervalsForKitsu(kitsuId: String, episode: Int): List<SkipInterval> =
+            emptyList()
     }
 }

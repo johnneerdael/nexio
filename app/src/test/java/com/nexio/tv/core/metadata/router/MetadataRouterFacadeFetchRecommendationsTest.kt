@@ -1,14 +1,11 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -18,20 +15,16 @@ import org.junit.Test
  * Pins the contract that `MetadataRouterFacade.fetchRecommendations(...)`:
  *  1. Fires the canonical `metadata.route_decision` (and at least one `metadata.field_selected`)
  *     trace events via the resolve pipeline at depth `DETAIL_SECONDARY`.
- *  2. Returns the [MetaPreview] list from [MetadataSecondaryRepository] unchanged.
- *
- * Facade-level pin for Task 15 of the cluster-A facade-bypass migration:
- * `MetaDetailsViewModel.loadMoreLikeThis(...)` no longer calls the secondary repository
- * directly for TMDB recommendations, so trace observability (audit's primary goal) is restored.
+ *  2. Returns the provider-plan RECOMMENDATIONS candidate projection.
  */
 class MetadataRouterFacadeFetchRecommendationsTest {
 
     @Test
-    fun `fetchRecommendations delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `fetchRecommendations returns provider-plan recommendations and emits canonical trace events`() = runTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
 
-        val canned = listOf(
+        val recommendations = listOf(
             MetaPreview(
                 id = "tmdb:456",
                 type = ContentType.MOVIE,
@@ -48,16 +41,16 @@ class MetadataRouterFacadeFetchRecommendationsTest {
             )
         )
 
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-        coEvery { secondaryRepo.fetchMoreLikeThis("603", ContentType.MOVIE) } returns canned
-
         val tmdbCandidate = MetadataCandidate(
             provider = MetadataPrimaryProvider.TMDB,
+            resolverType = ResolverType.RECOMMENDATIONS,
             fields = mapOf(
-                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY)
+                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY),
+                ResolvedField.RECOMMENDATIONS to FieldValue(recommendations, FieldOwner.RECOMMENDATIONS)
             )
         )
 
+        var observedPagination: PaginationCursor? = null
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -74,11 +67,18 @@ class MetadataRouterFacadeFetchRecommendationsTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(
-                setOf(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
+                setOf(
+                    CannedCandidateAdapter(
+                        provider = MetadataPrimaryProvider.TMDB,
+                        candidate = tmdbCandidate,
+                        candidateShape = TmdbApiShapes.MOVIE_RECOMMENDATIONS,
+                        observePagination = { observedPagination = it }
+                    )
+                )
             ),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
+        val requestPagination = PaginationCursor(page = 7, limit = 70)
 
         val result = facade.fetchRecommendations(
             metadataRequest = MetadataRequest(
@@ -86,14 +86,15 @@ class MetadataRouterFacadeFetchRecommendationsTest {
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE,
+                pagination = requestPagination
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE
         )
 
-        assertEquals(canned, result)
-        coVerify(exactly = 1) { secondaryRepo.fetchMoreLikeThis("603", ContentType.MOVIE) }
+        assertEquals(recommendations, result)
+        assertEquals(requestPagination, observedPagination)
 
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
@@ -109,15 +110,25 @@ class MetadataRouterFacadeFetchRecommendationsTest {
 
     private class CannedCandidateAdapter(
         override val provider: MetadataPrimaryProvider,
-        private val candidate: MetadataCandidate
+        private val candidate: MetadataCandidate,
+        private val candidateShape: String,
+        private val observePagination: (PaginationCursor?) -> Unit = {}
     ) : MetadataProviderAdapter {
         override fun supports(step: ProviderPlanStep): Boolean = true
 
-        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
-            ProviderStepResult(
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            if (step.apiShapeId == candidateShape) {
+                observePagination(route.pagination)
+            }
+            return ProviderStepResult(
                 step = step,
-                candidate = candidate,
+                candidate = if (step.apiShapeId == candidateShape) {
+                    candidate
+                } else {
+                    MetadataCandidate(provider = provider, fields = emptyMap())
+                },
                 episodeMetadata = emptyMap()
             )
+        }
     }
 }

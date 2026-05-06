@@ -3,13 +3,9 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,24 +15,16 @@ import org.junit.Test
  * Pins the contract that `MetadataRouterFacade.fetchReviews(...)`:
  *  1. Fires the canonical `metadata.route_decision` (and at least one `metadata.field_selected`)
  *     trace events via the resolve pipeline at depth `DETAIL_SECONDARY`.
- *  2. Returns the [MetaReview] list from [MetadataSecondaryRepository] unchanged.
- *
- * Facade-level pin for Task 13 of the cluster-A facade-bypass migration:
- * `MetaDetailsViewModel.fetchTmdbReviews(...)` no longer calls the secondary repository
- * directly for TMDB reviews, so trace observability (audit's primary goal) is restored.
- *
- * The Trakt review path (`ReviewsRepository.fetchTraktReviewPage(...)`) intentionally
- * stays direct — see Task 12 scope decision (deferred until `MetadataPrimaryProvider.TRAKT`
- * is added to the provider enum).
+ *  2. Returns the provider-plan REVIEWS candidate projection.
  */
 class MetadataRouterFacadeFetchReviewsTest {
 
     @Test
-    fun `fetchReviews delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `fetchReviews returns provider-plan reviews and emits canonical trace events`() = runTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
 
-        val canned = listOf(
+        val providerReviews = listOf(
             MetaReview(
                 id = "rev-1",
                 author = "siskel",
@@ -49,13 +37,12 @@ class MetadataRouterFacadeFetchReviewsTest {
             )
         )
 
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-        coEvery { secondaryRepo.fetchReviews("603", ContentType.MOVIE) } returns canned
-
         val tmdbCandidate = MetadataCandidate(
             provider = MetadataPrimaryProvider.TMDB,
+            resolverType = ResolverType.REVIEWS,
             fields = mapOf(
-                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY)
+                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY),
+                ResolvedField.REVIEWS to FieldValue(providerReviews, FieldOwner.REVIEWS)
             )
         )
 
@@ -75,26 +62,29 @@ class MetadataRouterFacadeFetchReviewsTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(
-                setOf(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
+                setOf(
+                    CannedCandidateAdapter(
+                        provider = MetadataPrimaryProvider.TMDB,
+                        candidate = tmdbCandidate,
+                        candidateShape = TmdbApiShapes.MOVIE_REVIEWS
+                    )
+                )
             ),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
-
         val result = facade.fetchReviews(
             metadataRequest = MetadataRequest(
                 contentId = "tmdb:603",
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE
         )
 
-        assertEquals(canned, result)
-        coVerify(exactly = 1) { secondaryRepo.fetchReviews("603", ContentType.MOVIE) }
+        assertEquals(providerReviews, result)
 
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
@@ -146,9 +136,6 @@ class MetadataRouterFacadeFetchReviewsTest {
             )
         )
 
-        // The secondary repo must NOT be hit when resolver candidates produced reviews.
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -172,8 +159,7 @@ class MetadataRouterFacadeFetchReviewsTest {
                     )
                 )
             ),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
 
         val result = facade.fetchReviews(
@@ -197,8 +183,6 @@ class MetadataRouterFacadeFetchReviewsTest {
             "expected Trakt review in aggregated result, got $result",
             result.any { it.source == MetaReviewSource.TRAKT && it.content == "trakt-r1" }
         )
-        // Backwards-compat fallback must NOT trigger when resolver produced reviews.
-        coVerify(exactly = 0) { secondaryRepo.fetchReviews(any(), any()) }
     }
 
     @Test
@@ -255,9 +239,6 @@ class MetadataRouterFacadeFetchReviewsTest {
             }
         }
 
-        // Secondary repo must NOT be hit because the resolver produced reviews.
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -274,8 +255,7 @@ class MetadataRouterFacadeFetchReviewsTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(setOf(capturingAdapter)),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
 
         val result = facade.fetchReviewsPage(
@@ -284,7 +264,7 @@ class MetadataRouterFacadeFetchReviewsTest {
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE,
@@ -297,8 +277,6 @@ class MetadataRouterFacadeFetchReviewsTest {
         assertEquals(3, result.nextPage)
         // Pagination cursor was threaded MetadataRequest -> MetadataRoute -> adapter.
         assertEquals(PaginationCursor(page = 2, limit = limit), observedPagination)
-        // Backwards-compat fallback must NOT trigger when resolver produced reviews.
-        coVerify(exactly = 0) { secondaryRepo.fetchReviews(any(), any()) }
     }
 
     @Test
@@ -335,8 +313,6 @@ class MetadataRouterFacadeFetchReviewsTest {
                 )
         }
 
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -353,8 +329,7 @@ class MetadataRouterFacadeFetchReviewsTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(setOf(reviewOnlyAdapter)),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
 
         val result = facade.fetchReviewsPage(
@@ -378,14 +353,19 @@ class MetadataRouterFacadeFetchReviewsTest {
 
     private class CannedCandidateAdapter(
         override val provider: MetadataPrimaryProvider,
-        private val candidate: MetadataCandidate
+        private val candidate: MetadataCandidate,
+        private val candidateShape: String
     ) : MetadataProviderAdapter {
         override fun supports(step: ProviderPlanStep): Boolean = true
 
         override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
             ProviderStepResult(
                 step = step,
-                candidate = candidate,
+                candidate = if (step.apiShapeId == candidateShape) {
+                    candidate
+                } else {
+                    MetadataCandidate(provider = provider, fields = emptyMap())
+                },
                 episodeMetadata = emptyMap()
             )
     }

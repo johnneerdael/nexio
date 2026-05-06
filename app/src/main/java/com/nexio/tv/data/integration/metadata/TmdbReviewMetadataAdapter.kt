@@ -35,6 +35,9 @@ class TmdbReviewMetadataAdapter @Inject constructor(
 
     override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId in REVIEW_SHAPES
 
+    override fun priorityFor(step: ProviderPlanStep): Int =
+        if (supports(step)) SECONDARY_ADAPTER_PRIORITY else 0
+
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
         val tmdbId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
@@ -67,5 +70,6 @@ class TmdbReviewMetadataAdapter @Inject constructor(
             TmdbApiShapes.MOVIE_REVIEWS,
             TmdbApiShapes.TV_REVIEWS
         )
+        const val SECONDARY_ADAPTER_PRIORITY = 100
     }
 }

@@ -61,16 +61,37 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private fun objectEntitySteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep>? {
-        if (depth != MetadataDepth.DETAIL_SECONDARY) return null
+        if (depth != MetadataDepth.DETAIL_SECONDARY && depth != MetadataDepth.DETAIL_FULL) return null
         val parts = route.parentId.split(":")
         if (parts.size < 3) return null
         val provider = parts[0].lowercase()
         val kind = parts[1].lowercase()
+        val entityToken = parts.getOrNull(2).orEmpty()
         return when {
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "person" ->
-                listOf(step(TmdbApiShapes.PERSON_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+                listOf(
+                    step(
+                        when {
+                            route.sourceContext.itemType == PERSON_CREW_ITEM_TYPE -> TmdbApiShapes.PERSON_COMBINED_CREDITS
+                            entityToken.toIntOrNull() == null -> TmdbApiShapes.PERSON_FIND_BY_NAME
+                            else -> TmdbApiShapes.PERSON_DETAIL
+                        },
+                        MetadataPrimaryProvider.TMDB,
+                        ProviderPlanRole.SECONDARY
+                    )
+                )
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "company" ->
-                listOf(step(TmdbApiShapes.COMPANY_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+                listOf(
+                    step(
+                        if (entityToken.toIntOrNull() == null) {
+                            TmdbApiShapes.COMPANY_FIND_BY_NAME
+                        } else {
+                            TmdbApiShapes.COMPANY_DETAIL
+                        },
+                        MetadataPrimaryProvider.TMDB,
+                        ProviderPlanRole.SECONDARY
+                    )
+                )
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && (kind == "network" || kind == "org") ->
                 listOf(step(TmdbApiShapes.NETWORK_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
             provider == "tvdb" && route.provider == MetadataPrimaryProvider.TVDB && kind == "person" ->
@@ -105,7 +126,14 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_MEDIA || depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_MEDIA || depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
+            if (isSeries && route.seasonNumber != null) {
+                steps += step(
+                    apiShapeId = TmdbApiShapes.SEASON_VIDEOS,
+                    provider = MetadataPrimaryProvider.TMDB,
+                    role = ProviderPlanRole.MEDIA
+                )
+            }
             steps += step(
                 apiShapeId = if (isSeries) TmdbApiShapes.TV_VIDEOS else TmdbApiShapes.MOVIE_VIDEOS,
                 provider = MetadataPrimaryProvider.TMDB,
@@ -113,7 +141,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(
                 apiShapeId = if (isSeries) TmdbApiShapes.TV_REVIEWS else TmdbApiShapes.MOVIE_REVIEWS,
                 provider = MetadataPrimaryProvider.TMDB,
@@ -139,7 +167,8 @@ class ProviderPlanExecutor @Inject constructor() {
 
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 
@@ -168,9 +197,20 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
+        if (depth == MetadataDepth.DETAIL_MEDIA ||
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
+            steps += step(
+                apiShapeId = TvdbApiShapes.TV_TRAILERS,
+                provider = MetadataPrimaryProvider.TVDB,
+                role = ProviderPlanRole.MEDIA
+            )
+        }
+
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 
@@ -188,7 +228,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         )
 
-        if (depth == MetadataDepth.SEASON || depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.SEASON || depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(
                 apiShapeId = KitsuApiShapes.ANIME_EPISODES,
                 provider = MetadataPrimaryProvider.KITSU,
@@ -196,16 +236,18 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(KitsuApiShapes.CASTINGS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.ANIME_STAFF, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.ANIME_PRODUCTIONS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.MEDIA_RELATIONSHIPS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
+            steps += step(KitsuApiShapes.ANIME_REVIEWS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
         }
 
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 
@@ -234,6 +276,7 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private companion object {
+        const val PERSON_CREW_ITEM_TYPE = "person_crew"
         val unsupportedDepths = setOf(MetadataDepth.PREVIEW)
     }
 

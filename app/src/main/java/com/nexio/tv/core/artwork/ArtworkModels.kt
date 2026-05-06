@@ -118,6 +118,17 @@ sealed interface ArtworkDisplayRef {
         override val trace: ArtworkTrace,
         override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ) : ArtworkDisplayRef
+
+    data class LegacyString(
+        val value: String,
+        override val imageType: ArtworkType,
+        override val trace: ArtworkTrace,
+        override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
+    ) : ArtworkDisplayRef {
+        init {
+            require(value.isNotBlank()) { "LegacyString artwork value must not be blank" }
+        }
+    }
 }
 
 data class ArtworkCandidate(

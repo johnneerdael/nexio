@@ -67,7 +67,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
     }
 
     @Test
-    fun `anime detail uses Kitsu characters related and productions with guarded tmdb person bridge`() = runTest(dispatcher) {
+    fun `anime detail uses provider plan Kitsu characters related and productions without tmdb bridge`() = runTest(dispatcher) {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
@@ -114,9 +114,6 @@ class MetaDetailsKitsuAdvancedMetadataTest {
                 )
             )
         )
-        coEvery { tmdbMetadataService.findPersonIdByExactName("Trina Nishimura") } returns 1162
-        coEvery { tmdbMetadataService.findCompanyIdByExactName("Production I.G") } returns 10
-
         val viewModel = buildMetaDetailsViewModel(
             meta = buildAnimeMeta(),
             itemId = "kitsu:7442",
@@ -145,9 +142,9 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals("Mikasa Ackerman", meta.castMembers.single().name)
         assertEquals("Trina Nishimura", meta.castMembers.single().character)
         assertEquals("https://kitsu.test/mikasa.jpg", meta.castMembers.single().photo)
-        assertEquals(1162, meta.castMembers.single().tmdbId)
+        assertEquals(null, meta.castMembers.single().tmdbId)
         assertEquals("Production I.G", meta.productionCompanies.single().name)
-        assertEquals(10, meta.productionCompanies.single().tmdbId)
+        assertEquals(null, meta.productionCompanies.single().tmdbId)
         assertEquals("10", meta.productionCompanies.single().providerId)
         assertEquals(1, viewModel.uiState.value.relatedItems.size)
         assertEquals("Attack on Titan Picture Drama", viewModel.uiState.value.relatedItems.single().name)
@@ -281,11 +278,11 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals("Izuku Midoriya", meta.castMembers.single().name)
         assertEquals("Daiki Yamashita", meta.castMembers.single().character)
         assertEquals(true, viewModel.uiState.value.isAnimeDetail)
-        coVerify(exactly = 1) { kitsuMetadataService.fetchAdvancedDetail("kitsu:7442", any(), "ja") }
+        coVerify(atLeast = 1) { kitsuMetadataService.fetchAdvancedDetail("kitsu:7442", any(), "ja") }
     }
 
     @Test
-    fun `anime detail renders characters and related before tmdb bridge hydration completes`() = runTest(dispatcher) {
+    fun `anime detail renders characters and related from provider plan without tmdb bridge hydration`() = runTest(dispatcher) {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
@@ -453,7 +450,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
     }
 
     @Test
-    fun `anime detail loads Kitsu reviews through metadata secondary repository`() = runTest(dispatcher) {
+    fun `anime detail loads Kitsu reviews through provider plan resolved fields`() = runTest(dispatcher) {
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
         coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
@@ -504,6 +501,74 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals(MetaReviewSource.KITSU, viewModel.uiState.value.reviews.single().source)
         assertEquals("Zoro", viewModel.uiState.value.reviews.single().author)
         assertEquals(false, viewModel.uiState.value.isReviewsLoading)
+    }
+
+    @Test
+    fun `anime detail loads more Kitsu reviews from resolved pagination state`() = runTest(dispatcher) {
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(seriesTvdbId = null, localizedTitle = "One Piece", language = "ja")
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:12", any(), "ja") } returns KitsuAdvancedAnimeDetail()
+        coEvery { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 1, limit = 20) } returns ReviewsPage(
+            reviews = listOf(
+                MetaReview(
+                    id = "2355",
+                    author = "Zoro",
+                    content = "Before I begin, let me address one thing.",
+                    rating = 9.0,
+                    source = MetaReviewSource.KITSU
+                )
+            ),
+            hasMore = true,
+            nextPage = 2
+        )
+        coEvery { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 2, limit = 20) } returns ReviewsPage(
+            reviews = listOf(
+                MetaReview(
+                    id = "2356",
+                    author = "Nami",
+                    content = "The voyage keeps going.",
+                    rating = 8.0,
+                    source = MetaReviewSource.KITSU
+                )
+            ),
+            hasMore = false,
+            nextPage = null
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "kitsu:12", name = "One Piece"),
+            itemId = "kitsu:12",
+            itemType = "series",
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = true,
+                useReviews = true,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+        viewModel.onEvent(MetaDetailsEvent.OnReviewItemFocused(index = 0))
+        advanceUntilIdle()
+
+        assertEquals(listOf("Zoro", "Nami"), viewModel.uiState.value.reviews.map { it.author })
+        coVerify(exactly = 1) { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 2, limit = 20) }
     }
 
     @Test

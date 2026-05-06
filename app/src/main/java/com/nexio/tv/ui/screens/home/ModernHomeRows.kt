@@ -86,7 +86,10 @@ import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
@@ -115,6 +118,27 @@ internal fun resolveModernCarouselCardImageUrl(
     } else {
         itemImageUrl ?: heroPoster ?: frozenBackdropUrl ?: heroBackdrop
     }
+}
+
+internal fun resolveModernCarouselCardArtworkModel(
+    item: ModernCarouselItem,
+    useLandscapePosters: Boolean,
+    focusedPosterBackdropExpandEnabled: Boolean,
+    isBackdropExpanded: Boolean,
+    fallbackModel: String? = item.imageUrl
+): Any? {
+    val useBackdrop = useLandscapePosters || (focusedPosterBackdropExpandEnabled && isBackdropExpanded)
+    val artwork = item.metaPreview?.artwork
+    val typedModel = if (useBackdrop) {
+        artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
+    } else {
+        artwork?.poster.toCoilModelOrNull() ?: artwork?.backdrop.toCoilModelOrNull()
+    }
+    val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
+    return typedModel ?: fallbackModel.toLegacyArtworkCoilModelOrNull(
+        ownerKey = "${item.key}:${fallbackType.name.lowercase()}",
+        imageType = fallbackType
+    )
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -445,16 +469,22 @@ internal fun ModernRowSection(
             val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
 
             fun enqueueIfNeeded(item: ModernCarouselItem) {
-                val url = item.imageUrl ?: return
+                val model = resolveModernCarouselCardArtworkModel(
+                    item = item,
+                    useLandscapePosters = useLandscapePosters,
+                    focusedPosterBackdropExpandEnabled = false,
+                    isBackdropExpanded = false
+                ) ?: return
                 val (widthPx, heightPx) = when (item.payload) {
                     is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                     is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
                 }
-                val cacheKey = "${url}_${widthPx}x${heightPx}"
+                val modelKey = model.toString()
+                val cacheKey = "${modelKey}_${widthPx}x${heightPx}"
                 if (imageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) return
                 imageLoader.enqueue(
                     ImageRequest.Builder(context)
-                        .data(url)
+                        .data(model)
                         .memoryCacheKey(cacheKey)
                         .size(width = widthPx, height = heightPx)
                         .build()
@@ -766,19 +796,29 @@ private fun ModernCarouselCard(
     val requestHeightPx = remember(cardHeight, density) {
         with(density) { cardHeight.roundToPx() }
     }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, item.metaPreview?.id, item.metaPreview?.posterProviderTag) {
-        imageUrl?.let {
+    val coilModel = remember(item, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+        resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = useLandscapePosters,
+            focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+            isBackdropExpanded = isBackdropExpanded,
+            fallbackModel = imageUrl
+        )
+    }
+    val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, item.metaPreview?.id, item.metaPreview?.posterProviderTag) {
+        coilModel?.let { model ->
+            val modelKey = model.toString()
             val diskKey = item.metaPreview?.let { meta ->
                 if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-                    ArtworkImageCacheKeys.backdrop(meta.id, it)
+                    ArtworkImageCacheKeys.backdrop(meta.id, modelKey)
                 } else {
-                    ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag, it)
+                    ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag, modelKey)
                 }
             }
             ImageRequest.Builder(context)
-                .data(it)
+                .data(model)
                 .crossfade(false)
-                .memoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}")
+                .memoryCacheKey("${modelKey}_${requestWidthPx}x${requestHeightPx}")
                 .apply { if (diskKey != null) diskCacheKey(diskKey) }
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
@@ -793,12 +833,14 @@ private fun ModernCarouselCard(
     }
     val effectiveLogoUrl = frozenLogoUrl.value
     val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, item.metaPreview?.id) {
-        effectiveLogoUrl?.let {
+        (item.metaPreview?.artwork?.logo.toCoilModelOrNull()
+            ?: effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO))?.let {
+            val modelKey = it.toString()
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
-                .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
-                .apply { item.metaPreview?.let { meta -> diskCacheKey(ArtworkImageCacheKeys.logo(meta.id, it)) } }
+                .memoryCacheKey("${modelKey}_${maxLogoWidthPx}x${logoHeightPx}")
+                .apply { item.metaPreview?.let { meta -> diskCacheKey(ArtworkImageCacheKeys.logo(meta.id, modelKey)) } }
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }
@@ -806,10 +848,10 @@ private fun ModernCarouselCard(
     var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
-    val hasImage = !imageUrl.isNullOrBlank()
+    val hasImage = coilModel != null
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
-            !effectiveLogoUrl.isNullOrBlank() &&
+            logoModel != null &&
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }

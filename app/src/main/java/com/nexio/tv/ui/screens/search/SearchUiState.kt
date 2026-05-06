@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.search
 
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import com.nexio.tv.core.image.SearchSuggestionPosterModel
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
@@ -36,7 +37,7 @@ data class SearchUiState(
     val recentSearches: List<String> = emptyList(),
     val suggestions: List<String> = emptyList(),
     val imdbSuggestions: List<ImdbSuggestion> = emptyList(),
-    val imdbSuggestionPosters: Map<String, String> = emptyMap(),
+    val imdbSuggestionPosters: Map<String, SearchSuggestionPosterModel> = emptyMap(),
     val searchPosterPreviewEnabled: Boolean = false
 )
 

@@ -144,20 +144,28 @@ class TmdbOrganizationPersonAdapter @Inject constructor(
         )
 
     /**
-     * `parentId` for find-by-name routes is `tmdb:<urlencoded-name>` or just the raw
-     * name; we accept either form and strip the optional `tmdb:` prefix.
+     * `parentId` for find-by-name routes is `tmdb:person:<name>`,
+     * `tmdb:company:<name>`, `tmdb:<name>`, or just the raw name; we accept each
+     * form and pass the raw display name to the repository.
      */
     private fun nameFromParentId(parentId: String): String? {
         val trimmed = parentId.trim().takeIf { it.isNotBlank() } ?: return null
-        val stripped = if (trimmed.startsWith("tmdb:", ignoreCase = true)) {
-            trimmed.substringAfter(':')
-        } else {
-            trimmed
+        val stripped = when {
+            trimmed.startsWith(TMDB_PERSON_PREFIX, ignoreCase = true) ->
+                trimmed.drop(TMDB_PERSON_PREFIX.length)
+            trimmed.startsWith(TMDB_COMPANY_PREFIX, ignoreCase = true) ->
+                trimmed.drop(TMDB_COMPANY_PREFIX.length)
+            trimmed.startsWith(TMDB_PREFIX, ignoreCase = true) ->
+                trimmed.drop(TMDB_PREFIX.length)
+            else -> trimmed
         }
-        return stripped.takeIf { it.isNotBlank() }
+        return stripped.trim().takeIf { it.isNotBlank() }
     }
 
     private companion object {
+        const val TMDB_PREFIX = "tmdb:"
+        const val TMDB_PERSON_PREFIX = "tmdb:person:"
+        const val TMDB_COMPANY_PREFIX = "tmdb:company:"
         val SUPPORTED_SHAPES = setOf(
             TmdbApiShapes.PERSON_DETAIL,
             TmdbApiShapes.PERSON_COMBINED_CREDITS,
