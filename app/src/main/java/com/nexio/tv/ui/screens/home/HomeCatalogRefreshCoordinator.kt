@@ -124,7 +124,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog: (String, String?) -> Unit
     ): List<CatalogRow> {
         if (rows.isEmpty()) return rows
-        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val artworkProviderSettings = posterRatingsUrlResolver.currentSettings()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val hydratedRows = rows.map { row ->
             val rowKey = homeCatalogGlobalKey(row)
@@ -165,7 +165,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 // This path can hydrate every refreshed row item, so keep stable-bundle routing
                 // in the existing visible/focused hydration paths where work is bounded.
                 val enriched = titleRatingOverrideRepository.enrichPreview(localized)
-                posterRatingsUrlResolver.apply(enriched, activePosterProvider)
+                posterRatingsUrlResolver.applyArtworkRef(enriched, artworkProviderSettings)
             }
             row.copy(items = hydratedItems)
         }

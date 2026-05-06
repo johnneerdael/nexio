@@ -235,6 +235,26 @@ class RawRemoteArtworkUrlBoundaryTest {
         }
     }
 
+    @Test
+    fun `home catalog refresh does not call legacy poster ratings apply`() {
+        val file = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeCatalogRefreshCoordinator.kt")
+        val offenders = file.readText()
+            .lines()
+            .mapIndexedNotNull { index, line ->
+                if (legacyPosterRatingsApplyRegex.containsMatchIn(line)) {
+                    "${file.invariantSeparatorsPath}:${index + 1}:legacy-poster-ratings-apply"
+                } else {
+                    null
+                }
+            }
+
+        assertTrue(
+            "Home refresh must use applyArtworkRef/currentSettings instead of legacy raw provider apply:\n" +
+                offenders.joinToString(separator = "\n"),
+            offenders.isEmpty()
+        )
+    }
+
     private fun metadataUiArtworkFiles(): List<File> {
         val roots = listOf(
             File("app/src/main/java/com/nexio/tv/ui/screens/home"),
@@ -414,6 +434,7 @@ class RawRemoteArtworkUrlBoundaryTest {
             """\b(?:poster|backdrop|background|logo|thumbnail|imageModel|imageUrl|stableBackdrop)\b\s*=""",
             setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)
         )
+        private val legacyPosterRatingsApplyRegex = Regex("""posterRatingsUrlResolver\.apply\s*\(""")
 
         private fun variableReferenceRegex(variable: String): Regex {
             return Regex("""\b${Regex.escape(variable)}\b""")
