@@ -242,7 +242,10 @@ internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List
         .flatMap { it.items.asSequence() }
         .filter { item -> item.trailerYtIds.isNotEmpty() }
         .forEach { item ->
-            trailerMetadataAvailableState[homeTrailerAvailabilityKey(item.id, item.apiType)] = true
+            trailerMetadataAvailableState.remove(homeTrailerAvailabilityKey(item.id, item.apiType))
+            if (!hasPublishedHomeTrailerPreview(item.id, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
+                trailerPreviewNegativeCache[item.id] = true
+            }
         }
 }
 
@@ -280,10 +283,18 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         trailerPreviewRequestVersion++
     }
     trailerPreviewLoadingIds.remove(itemId)
-    if (fallbackYtId.isNullOrBlank()) {
+    if (!hasPublishedHomeTrailerPreview(itemId, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
         trailerPreviewNegativeCache[itemId] = true
     }
 }
+
+internal fun hasPublishedHomeTrailerPreview(
+    itemId: String,
+    trailerPreviewUrls: Map<String, String>,
+    trailerPreviewExternalUrls: Map<String, String>
+): Boolean =
+    !trailerPreviewUrls[itemId].isNullOrBlank() ||
+        !trailerPreviewExternalUrls[itemId].isNullOrBlank()
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     // Rail-preview-first hydration: RAIL_PREVIEW items are routed through the same

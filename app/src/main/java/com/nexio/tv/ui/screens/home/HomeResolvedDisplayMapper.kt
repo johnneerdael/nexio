@@ -62,7 +62,7 @@ internal object HomeResolvedDisplayMapper {
             ),
             artwork = fields.artwork ?: ArtworkBundle(),
             rating = fields.imdbRating?.let { value -> TitleRating(value.toString().toDouble(), ratingSource) },
-            trailer = TrailerDisplayState(fallbackTrailerYtIds = trailerYtIds),
+            trailer = TrailerDisplayState(),
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
                 overlay.isStale(nowMs) -> HydrationState.STALE_READY
