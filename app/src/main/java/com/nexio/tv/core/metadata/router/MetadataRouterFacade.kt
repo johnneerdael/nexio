@@ -217,7 +217,9 @@ class MetadataRouterFacade(
         val route = routeRequest(request)
         val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
         val runResult = providerPlanRunner.run(plan)
-        val previewCandidate = request.sourceContext.toPreviewCandidate(route.provider)
+        val previewCandidate = request.sourceContext
+            .toPreviewCandidate(route.provider)
+            ?.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
         val resolvedDocument = fieldResolver.resolveWithPreview(
             preview = previewCandidate,
             primary = runResult.primaryCandidate,
@@ -1029,6 +1031,16 @@ class MetadataRouterFacade(
         )
     }
 
+    private fun MetadataCandidate.withoutSilentLocalizedTextFallback(
+        primary: MetadataCandidate
+    ): MetadataCandidate? {
+        val fields = fields.filterNot { (field, _) ->
+            field in localizedTextFields && !primary.fields.containsKey(field)
+        }
+        if (fields.isEmpty()) return null
+        return copy(fields = fields)
+    }
+
     private fun HomeDisplayMetadata.toPreviewFields(): Map<ResolvedField, FieldValue> =
         buildMap {
             title?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
@@ -1403,5 +1415,6 @@ class MetadataRouterFacade(
         const val DEFAULT_REVIEWS_LIMIT = 20
         val IMDB_ID_REGEX = Regex("tt\\d+", RegexOption.IGNORE_CASE)
         val NUMERIC_ID_REGEX = Regex("\\d+")
+        val localizedTextFields = setOf(ResolvedField.TITLE, ResolvedField.OVERVIEW)
     }
 }
