@@ -92,7 +92,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -154,7 +155,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -241,7 +243,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -327,7 +330,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -368,7 +372,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         repository.cancelActiveStreamRequests("request-a")
@@ -403,7 +408,8 @@ class StreamRepositoryImplTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = NoAnimeIdentityIndex
+            animeIdentityIndex = NoAnimeIdentityIndex,
+            traceMetadataEvents = mockk(relaxed = true)
         )
 
         val result = repository.getStreamsFromAddon(

@@ -714,6 +714,40 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitStreamRequestClassified(
+        contentId: String,
+        parentId: String,
+        contentIsAnime: Boolean,
+        evidence: String,
+    ) {
+        emitTraceEvent(
+            eventType = "stream.request_classified",
+            payload = mapOf(
+                "contentId" to contentId,
+                "parentId" to parentId,
+                "contentIsAnime" to contentIsAnime,
+                "evidence" to evidence,
+            )
+        )
+    }
+
+    fun emitStreamAddonBucketed(
+        addonIdHash: String,
+        addonIsAnime: Boolean,
+        contentIsAnime: Boolean,
+        isAnimeBucket: Boolean,
+    ) {
+        emitTraceEvent(
+            eventType = "stream.addon_bucketed",
+            payload = mapOf(
+                "addonIdHash" to addonIdHash,
+                "addonIsAnime" to addonIsAnime,
+                "contentIsAnime" to contentIsAnime,
+                "isAnimeBucket" to isAnimeBucket,
+            )
+        )
+    }
+
     private fun emitHomeHydrationEvent(
         eventType: String,
         payload: Map<String, Any?>
