@@ -60,6 +60,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.decodeFromString
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -728,6 +729,7 @@ class AccountConfigSyncContractTest {
                 url = "https://beta.example",
                 parserPreset = "torrentio",
                 enabled = true,
+                isAnime = true,
                 sortOrder = 2
             ),
             AccountAddonPayload(
@@ -747,8 +749,25 @@ class AccountConfigSyncContractTest {
         assertEquals(AddonParserPreset.GENERIC, addonConfigs[0].parserPreset)
         assertEquals("https://beta.example/manifest.json", addonConfigs[1].url)
         assertEquals(AddonParserPreset.TORRENTIO, addonConfigs[1].parserPreset)
+        assertTrue(addonConfigs[1].isAnime)
         assertEquals("https://opensubtitlesv3-pro.dexter21767.com/manifest.json", addonConfigs[2].url)
         assertEquals(AddonParserPreset.GENERIC, addonConfigs[2].parserPreset)
+        assertFalse(addonConfigs[2].isAnime)
+    }
+
+    @Test
+    fun `account addon payload deserializes is_anime from wire shape`() {
+        val payload = Json.decodeFromString<AccountAddonPayload>(
+            """
+                {
+                  "url": "https://anime.example",
+                  "parser_preset": "GENERIC",
+                  "is_anime": true
+                }
+            """.trimIndent()
+        )
+
+        assertTrue(payload.isAnime)
     }
 
     @Test
