@@ -224,32 +224,33 @@ class ContinueWatchingSnapshotService @Inject constructor(
             activeProfileIdFlow()
                 .distinctUntilChanged()
                 .flatMapLatest { profileId ->
-                    trackingProviderStateService.state.map { state ->
+                    trackingProviderStateService.stateForProfile(profileId).map { state ->
                         profileId to state.hasAuthenticatedProvider
                     }.distinctUntilChanged()
                 }
                 .flatMapLatest { (profileId, isAuthenticated) ->
                     if (!isAuthenticated) {
-                        val empty = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
-                        rawSnapshotState.value = empty
-                        snapshotState.value = empty
                         ownershipService?.removeRail(RailKeyFactory.continueWatching(profileId))
                         lastRefreshRequestMs = 0L
                         cancelReemitScheduling()
                         hasSeenAuthenticatedSession = false
-                        flowOf(
-                            LiveContinueWatchingSnapshotEmission(
+                        watchProgressRepository.observeProgress(profileId)
+                            .map { allProgress ->
+                                LiveContinueWatchingSnapshotEmission(
                                 profileId = profileId,
-                                hasLoadedRemoteSnapshot = false,
-                                snapshot = null
-                            )
-                        )
+                                    hasLoadedRemoteSnapshot = true,
+                                    snapshot = buildRawSnapshot(
+                                        allProgress = allProgress,
+                                        nextUpEntries = emptyList(),
+                                        traktUpNextEntries = emptyList()
+                                    )
+                                )
+                            }
                     } else {
                         hasSeenAuthenticatedSession = true
-                        @Suppress("DEPRECATION")
                         combine(
                             trackingProgressService.observeRemoteSnapshotLoaded(),
-                            watchProgressRepository.allProgress,
+                            watchProgressRepository.observeProgress(profileId),
                             trackingProgressService.observeContinueWatchingNextUp(),
                             trackingProgressService.observeSyntheticContinueWatchingNextUp()
                         ) { hasLoadedRemoteSnapshot, allProgress, nextUpEntries, traktUpNextEntries ->

@@ -1,7 +1,10 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
+import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
@@ -14,13 +17,71 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import javax.inject.Provider
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 
 class WatchProgressRepositoryProviderRoutingTest {
+    private val profileSession = ActiveProfileSession(
+        profileId = 1,
+        sessionId = "session-1",
+        sessionOrdinal = 1L,
+        startedAtMs = 1_000L
+    )
+
+    @Test
+    fun `watch progress persists locally without tracking account`() = runTest {
+        val preferences = mockk<WatchProgressPreferences>(relaxed = true)
+        val trackingProgressService = mockTrackingProgressService()
+        val progress = sampleEpisodeProgress()
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(),
+            trackingProgressService = trackingProgressService,
+            preferences = preferences
+        )
+
+        repo.upsertProgress(profileSession, progress, syncRemote = true)
+
+        coVerify(exactly = 1) { preferences.saveProgress(1, progress) }
+        verify(exactly = 0) { trackingProgressService.applyOptimisticProgress(any()) }
+    }
+
+    @Test
+    fun `watch progress remote sync is skipped when no tracking account is authenticated`() = runTest {
+        val trackingProgressService = mockTrackingProgressService()
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(),
+            trackingProgressService = trackingProgressService
+        )
+
+        repo.upsertProgress(profileSession, sampleEpisodeProgress(), syncRemote = true)
+
+        verify(exactly = 0) { trackingProgressService.applyOptimisticProgress(any()) }
+    }
+
+    @Test
+    fun `watch progress write rejects stale profile session before local persistence`() = runTest {
+        val staleSession = profileSession.copy(sessionId = "stale-session")
+        val activeSession = profileSession.copy(sessionId = "active-session")
+        val preferences = mockk<WatchProgressPreferences>(relaxed = true)
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(),
+            preferences = preferences,
+            profileManager = testProfileManager(activeSession)
+        )
+
+        try {
+            repo.upsertProgress(staleSession, sampleEpisodeProgress(), syncRemote = false)
+            fail("Expected stale profile session to be rejected")
+        } catch (_: ProfileBoundaryException) {
+        }
+        coVerify(exactly = 0) { preferences.saveProgress(any(), any()) }
+    }
 
     @Test
     fun `markAsCompleted routes history add through simkl adapter when simkl is selected`() = runTest {
@@ -38,12 +99,13 @@ class WatchProgressRepositoryProviderRoutingTest {
             preferences = preferences
         )
 
-        repo.markAsCompleted(sampleEpisodeProgress())
+        repo.markAsCompleted(profileSession, sampleEpisodeProgress())
 
         assertEquals(SimklProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
         assertEquals(SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_ADD, envelopeSlot.captured.mutationKind)
         coVerify(exactly = 1) {
             preferences.saveProgress(
+                1,
                 match { progress ->
                     progress.contentId == "tt1520211" &&
                         progress.season == 1 &&
@@ -69,7 +131,7 @@ class WatchProgressRepositoryProviderRoutingTest {
             outbox = outbox
         )
 
-        repo.removeFromHistory(contentId = "tt1520211", season = 1, episode = 2)
+        repo.removeFromHistory(profileSession, contentId = "tt1520211", season = 1, episode = 2)
 
         assertEquals(SimklProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
         assertEquals(SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE, envelopeSlot.captured.mutationKind)
@@ -99,7 +161,7 @@ class WatchProgressRepositoryProviderRoutingTest {
             outbox = outbox
         )
 
-        repo.removeProgress(contentId = "tt1520211", season = 1, episode = 2)
+        repo.removeProgress(profileSession, contentId = "tt1520211", season = 1, episode = 2)
 
         assertEquals(SimklProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
         assertEquals(SimklProgressHistoryMutationAdapter.MUTATION_KIND_PLAYBACK_DELETE, envelopeSlot.captured.mutationKind)
@@ -110,11 +172,14 @@ class WatchProgressRepositoryProviderRoutingTest {
         providerState: EffectiveTrackingProviderState,
         trackingProgressService: TrackingProgressService = mockTrackingProgressService(),
         outbox: TraktMutationOutboxCoordinator = mockk(relaxed = true),
-        preferences: WatchProgressPreferences = mockk(relaxed = true)
+        preferences: WatchProgressPreferences = mockk(relaxed = true),
+        profileManager: ProfileManager = testProfileManager()
     ): WatchProgressRepositoryImpl {
         val trackingProviderStateService = mockk<TrackingProviderStateService> {
             every { state } returns flowOf(providerState)
             coEvery { currentState() } returns providerState
+            every { stateForProfile(any()) } returns flowOf(providerState)
+            coEvery { currentState(any()) } returns providerState
         }
         return WatchProgressRepositoryImpl(
             watchProgressPreferences = preferences,
@@ -129,8 +194,19 @@ class WatchProgressRepositoryProviderRoutingTest {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
             },
             metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true),
-            accountScopeProvider = TestTrackingAccountScopeProvider()
+            accountScopeProvider = TestTrackingAccountScopeProvider(),
+            profileManager = profileManager
         )
+    }
+
+    private fun testProfileManager(session: ActiveProfileSession = profileSession): ProfileManager {
+        val activeProfileId = MutableStateFlow(session.profileId)
+        val activeProfileSession = MutableStateFlow(session)
+        return mockk {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.isPrimaryProfileActive } returns true
+        }
     }
 
     private fun mockTrackingProgressService(): TrackingProgressService {

@@ -430,8 +430,8 @@ class MetaDetailsSeasonMediaViewModelTest {
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
-        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+        every { watchProgressRepository.getAllEpisodeProgress(any(), any()) } returns progressFlow
+        every { watchProgressRepository.getProgress(any(), any()) } returns flowOf(null)
         coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
         coEvery { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) } returns listOf(
             com.nexio.tv.data.remote.api.TmdbEpisode(
@@ -462,9 +462,9 @@ class MetaDetailsSeasonMediaViewModelTest {
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
-        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
-        coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } throws IllegalStateException("boom")
+        every { watchProgressRepository.getAllEpisodeProgress(any(), any()) } returns progressFlow
+        every { watchProgressRepository.getProgress(any(), any()) } returns flowOf(null)
+        coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any(), any()) } throws IllegalStateException("boom")
         coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
         coEvery { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) } returns listOf(
             com.nexio.tv.data.remote.api.TmdbEpisode(
@@ -1020,8 +1020,8 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { libraryRepository.isInWatchlist(any(), any()) } returns flowOf(false)
 
         val effectiveWatchProgressRepository = watchProgressRepository ?: mockk<WatchProgressRepository>(relaxed = true).also {
-            every { it.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-            every { it.getProgress(any()) } returns flowOf(null)
+            every { it.getAllEpisodeProgress(any(), any()) } returns flowOf(emptyMap())
+            every { it.getProgress(any(), any()) } returns flowOf(null)
         }
 
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
@@ -1086,6 +1086,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             ),
             metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
             profileBoundary = profileBoundary,
+            profileManager = defaultProfileManager(),
             mdbListRepository = mdbListRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,

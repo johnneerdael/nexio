@@ -80,7 +80,7 @@ class ContinueWatchingSnapshotReadTraceTest {
 
         return ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { allProgress } returns MutableStateFlow(emptyList())
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(false)

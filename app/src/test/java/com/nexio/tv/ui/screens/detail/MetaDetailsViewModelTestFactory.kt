@@ -5,7 +5,9 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -39,6 +41,7 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -69,6 +72,7 @@ fun buildMetaDetailsViewModel(
     tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(),
     kitsuMetadataService: KitsuMetadataService = mockk(relaxed = true),
     profileBoundary: ProfileBoundary = defaultProfileBoundary(),
+    profileManager: ProfileManager = defaultProfileManager(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository(),
@@ -127,6 +131,7 @@ fun buildMetaDetailsViewModel(
         ),
         metadataSecondaryRepository = metadataSecondaryRepository,
         profileBoundary = profileBoundary,
+        profileManager = profileManager,
         mdbListRepository = mdbListRepository,
         titleRatingOverrideRepository = titleRatingOverrideRepository,
         episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
@@ -212,9 +217,24 @@ fun defaultProfileBoundary(): ProfileBoundary {
 
 fun defaultWatchProgressRepository(): WatchProgressRepository {
     val repo = mockk<WatchProgressRepository>(relaxed = true)
-    every { repo.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-    every { repo.getProgress(any()) } returns flowOf(null)
+    every { repo.getAllEpisodeProgress(any(), any()) } returns flowOf(emptyMap())
+    every { repo.getProgress(any(), any()) } returns flowOf(null)
+    every { repo.isWatched(any(), any(), any(), any()) } returns flowOf(false)
     return repo
+}
+
+fun defaultProfileManager(): ProfileManager {
+    val session = ActiveProfileSession(
+        profileId = 1,
+        sessionId = "session-1",
+        sessionOrdinal = 1L,
+        startedAtMs = 1_000L
+    )
+    return mockk {
+        every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        every { this@mockk.activeProfileSession } returns MutableStateFlow(session)
+        every { this@mockk.isPrimaryProfileActive } returns true
+    }
 }
 
 fun defaultLibraryRepository(): LibraryRepository {
