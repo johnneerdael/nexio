@@ -265,11 +265,33 @@ class SharedResolutionOpenFindingsArchitectureTest {
         return null
     }
 
-    private fun scanCrossProviderLocalizationFallbacks(file: File): List<String> =
-        file.readLines().flatMapIndexed { index, line ->
-            crossProviderFallbackRegex.findAll(line).map { match ->
-                "${file.invariantSeparatorsPath}:${index + 1}:cross-provider fallback '${match.value.trim()}'"
-            }.toList()
+    private fun scanCrossProviderLocalizationFallbacks(file: File): List<String> {
+        val lines = file.readLines()
+        val offenders = linkedSetOf<String>()
+
+        lines.forEachIndexed { index, _ ->
+            val snippet = lines
+                .drop(index)
+                .take(CROSS_PROVIDER_FALLBACK_WINDOW_LINES)
+                .joinToString(separator = "\n")
+            val lineOffsets = lineStartOffsets(snippet)
+
+            crossProviderFallbackRegex.findAll(snippet).forEach { match ->
+                val lineNumber = index + lineOffsets.count { offset -> offset <= match.range.first }
+                offenders += "${file.invariantSeparatorsPath}:$lineNumber:cross-provider fallback " +
+                    "'${match.value.trim().replace(Regex("""\s+"""), " ")}'"
+            }
+        }
+
+        return offenders.toList()
+    }
+
+    private fun lineStartOffsets(text: String): List<Int> =
+        buildList {
+            add(0)
+            text.forEachIndexed { index, char ->
+                if (char == '\n') add(index + 1)
+            }
         }
 
     private fun scanFiles(
@@ -325,12 +347,15 @@ class SharedResolutionOpenFindingsArchitectureTest {
     }
 
     private companion object {
+        private const val CROSS_PROVIDER_FALLBACK_WINDOW_LINES = 4
+
         private val rawMetadataArtworkFieldRegex = Regex(
             """\b(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:posterUrl|imageUrl|logoUrl|backdropUrl|displayPoster|displayBackground|displayThumbnail|url)\b"""
         )
         private val coilDataCallRegex = Regex("""\.data\s*\(""")
         private val crossProviderFallbackRegex = Regex(
-            """\b(?:tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?\s*\?:\s*tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?|tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?\s*\?:\s*tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?)\b"""
+            """\b(?:tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\{[^}]*\})?\s*\?:\s*tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\{[^}]*\})?|tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\{[^}]*\})?\s*\?:\s*tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\{[^}]*\})?)\b""",
+            RegexOption.DOT_MATCHES_ALL
         )
     }
 }
