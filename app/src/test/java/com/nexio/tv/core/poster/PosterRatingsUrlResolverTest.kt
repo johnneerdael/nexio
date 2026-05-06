@@ -20,6 +20,7 @@ import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.PosterShape
@@ -137,8 +138,9 @@ class PosterRatingsUrlResolverTest {
     }
 
     @Test
-    fun `rpdb poster url is built from imdb id when source poster is blank`() {
-        val resolved = resolver.resolvePosterUrl(
+    fun `active rpdb poster projection uses shared artwork ref`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolved = resolver(cache).resolvePosterArtworkString(
             originalPosterUrl = null,
             contentId = "tt15940132",
             contentType = ContentType.MOVIE,
@@ -148,15 +150,18 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        val request = PosterIntegrationRequest.fromModel(resolved!!)
-        assertEquals(IntegrationProvider.RPDB, request?.provider)
-        assertEquals("rpdb-key", request?.apiKey)
-        assertEquals("imdb/poster-default/tt15940132.jpg", request?.path)
+        assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
+        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
+        assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
     }
 
     @Test
-    fun `top posters url is built from tmdb id when source poster is blank`() {
-        val resolved = resolver.resolvePosterUrl(
+    fun `active top posters poster projection uses shared artwork ref from tmdb id`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolved = resolver(cache).resolvePosterArtworkString(
             originalPosterUrl = "",
             contentId = "tmdb:123",
             contentType = ContentType.SERIES,
@@ -166,15 +171,18 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        val request = PosterIntegrationRequest.fromModel(resolved!!)
-        assertEquals(IntegrationProvider.TOP_POSTERS, request?.provider)
-        assertEquals("top-key", request?.apiKey)
-        assertEquals("tmdb/poster/series-123.jpg", request?.path)
+        assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
+        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
+        assertEquals("tmdb", decision?.selectedCandidate?.providerTemplate?.idType)
+        assertEquals("series-123", decision?.selectedCandidate?.providerTemplate?.mediaId)
     }
 
     @Test
-    fun `top posters url is built from tvdb id when source poster is blank`() {
-        val resolved = resolver.resolvePosterUrl(
+    fun `active top posters poster projection uses shared artwork ref from tvdb id`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolved = resolver(cache).resolvePosterArtworkString(
             originalPosterUrl = null,
             contentId = "tvdb:121361",
             contentType = ContentType.SERIES,
@@ -184,14 +192,16 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        val request = PosterIntegrationRequest.fromModel(resolved!!)
-        assertEquals(IntegrationProvider.TOP_POSTERS, request?.provider)
-        assertEquals("top-key", request?.apiKey)
-        assertEquals("tvdb/poster/121361.jpg", request?.path)
+        assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
+        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
+        assertEquals("tvdb", decision?.selectedCandidate?.providerTemplate?.idType)
+        assertEquals("121361", decision?.selectedCandidate?.providerTemplate?.mediaId)
     }
 
     @Test
-    fun `rpdb poster url is built from tvdb id`() {
+    fun `legacy poster url resolver does not emit premium provider model`() {
         val resolved = resolver.resolvePosterUrl(
             originalPosterUrl = "https://tvdb.example/poster.jpg",
             contentId = "tvdb:121361",
@@ -202,10 +212,33 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        val request = PosterIntegrationRequest.fromModel(resolved!!)
-        assertEquals(IntegrationProvider.RPDB, request?.provider)
-        assertEquals("rpdb-key", request?.apiKey)
-        assertEquals("tvdb/poster-default/121361.jpg", request?.path)
+        assertEquals("https://tvdb.example/poster.jpg", resolved)
+        assertNoRawPremiumUrl(resolved)
+    }
+
+    @Test
+    fun `legacy poster artwork string preserves internal ref without active provider`() {
+        val ref = "nexio-artwork://asset/provider-poster-key"
+
+        val resolved = resolver.resolvePosterArtworkString(
+            originalPosterUrl = ref,
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            activeProvider = null
+        )
+
+        assertEquals(ref, resolved)
+    }
+
+    @Test
+    fun `meta apply preserves internal ref without active provider`() {
+        val ref = "nexio-artwork://decision/provider-decision-key"
+        val meta = meta(id = "tmdb:550", poster = ref)
+
+        val resolved = resolver.apply(meta, activeProvider = null)
+
+        assertEquals(ref, resolved.poster)
+        assertNull(resolved.posterProviderTag)
     }
 
     @Test
@@ -376,6 +409,49 @@ class PosterRatingsUrlResolverTest {
         val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals(ArtworkOwnerKey.CanonicalContent("imdb:tt15940132"), decision?.ownerKey)
+    }
+
+    @Test
+    fun `legacy meta preview apply emits shared artwork ref not integration poster model`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(id = "tt15940132", poster = "https://image.tmdb.org/t/p/w500/poster.jpg")
+
+        val resolved = resolver.apply(
+            preview,
+            PosterRatingsUrlResolver.ActiveProvider(
+                provider = PosterRatingsProvider.RPDB,
+                apiKey = "rpdb-key"
+            )
+        )
+
+        assertInternalArtworkRef(resolved.poster)
+        assertNoRawPremiumUrl(resolved.poster)
+        assertEquals("rpdb", resolved.posterProviderTag)
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
+    }
+
+    @Test
+    fun `legacy meta apply emits shared artwork ref not integration poster model`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val meta = meta(id = "tmdb:550", poster = "https://image.tmdb.org/t/p/w500/poster.jpg")
+
+        val resolved = resolver.apply(
+            meta,
+            PosterRatingsUrlResolver.ActiveProvider(
+                provider = PosterRatingsProvider.TOP_POSTERS,
+                apiKey = "top-key"
+            )
+        )
+
+        assertInternalArtworkRef(resolved.poster)
+        assertNoRawPremiumUrl(resolved.poster)
+        assertEquals("top_posters", resolved.posterProviderTag)
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
+        assertEquals(ArtworkOwnerKey.CanonicalContent("tmdb:movie-550"), decision?.ownerKey)
     }
 
     @Test
@@ -581,6 +657,30 @@ class PosterRatingsUrlResolverTest {
             imdbRating = null,
             genres = emptyList(),
             firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
+
+    private fun meta(id: String, poster: String?): Meta =
+        Meta(
+            id = id,
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Item $id",
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
         )
 
     private class CountingArtworkDecisionCache : ArtworkDecisionCache {

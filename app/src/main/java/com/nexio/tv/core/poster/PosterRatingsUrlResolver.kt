@@ -26,12 +26,12 @@ import com.nexio.tv.core.artwork.SensitiveArtworkUrl
 import com.nexio.tv.core.artwork.toPersistedCandidate
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.IntegrationPosterRequest
-import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.image.TopPostersThumbnailRequest
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -67,30 +67,40 @@ class PosterRatingsUrlResolver @Inject constructor(
     }
 
     fun apply(meta: Meta, activeProvider: ActiveProvider?): Meta {
-        if (activeProvider == null) return meta
-        val providerTag = activeProvider.provider.name.lowercase()
+        val resolved = resolvePosterArtworkRef(
+            originalPosterUrl = meta.poster,
+            contentId = meta.id,
+            contentType = meta.type,
+            activeProvider = activeProvider
+        ) as? ArtworkDisplayRef.RuntimeAsset
+        val poster = resolved.toLegacyArtworkString()
+            ?: meta.poster?.takeIf { it.isSafeRemoteArtworkFallback() || it.isInternalArtworkRef() }
         return meta.copy(
-            poster = resolvePosterUrl(
-                originalPosterUrl = meta.poster,
-                contentId = meta.id,
-                contentType = meta.type,
-                activeProvider = activeProvider
-            ),
-            posterProviderTag = providerTag
+            poster = poster,
+            posterProviderTag = resolved.premiumProviderTag()
         )
     }
 
     fun apply(metaPreview: MetaPreview, activeProvider: ActiveProvider?): MetaPreview {
-        if (activeProvider == null) return metaPreview
-        val providerTag = activeProvider.provider.name.lowercase()
+        if (metaPreview.poster?.isInternalArtworkRef() == true) return metaPreview
+
+        val settings = activeProvider.toArtworkProviderSettings() ?: return metaPreview.copy(
+            poster = metaPreview.poster?.takeIf { it.isSafeRemoteArtworkFallback() || it.isInternalArtworkRef() },
+            posterProviderTag = null
+        )
+        val fallbackPosterUrl = metaPreview.poster?.takeIf { it.isSafeRemoteArtworkFallback() }
+        val resolved = resolvePosterArtworkRef(
+            settings = settings,
+            providerIds = metaPreview.posterArtworkProviderIds(),
+            mediaKind = metaPreview.type.toMetadataMediaKind(),
+            ownerKey = metaPreview.posterArtworkOwnerKey(),
+            fallbackPosterUrl = fallbackPosterUrl
+        ) as? ArtworkDisplayRef.RuntimeAsset
+        val poster = resolved.toLegacyArtworkString()
+            ?: fallbackPosterUrl
         return metaPreview.copy(
-            poster = resolvePosterUrl(
-                originalPosterUrl = metaPreview.poster,
-                contentId = metaPreview.id,
-                contentType = metaPreview.type,
-                activeProvider = activeProvider
-            ),
-            posterProviderTag = providerTag
+            poster = poster,
+            posterProviderTag = resolved.premiumProviderTag()
         )
     }
 
@@ -229,6 +239,42 @@ class PosterRatingsUrlResolver @Inject constructor(
         ).toLegacyArtworkString()
             ?: fallbackPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() }
 
+    fun resolvePosterArtworkRef(
+        originalPosterUrl: String?,
+        contentId: String,
+        contentType: ContentType,
+        activeProvider: ActiveProvider?
+    ): ArtworkDisplayRef? {
+        val settings = activeProvider.toArtworkProviderSettings() ?: return null
+        val parsedProviderIds = parseContentId(contentId, contentType)?.toProviderIds() ?: ProviderIds()
+        val fallbackPosterUrl = originalPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() }
+        return resolvePosterArtworkRef(
+            settings = settings,
+            providerIds = parsedProviderIds,
+            mediaKind = contentType.toMetadataMediaKind(),
+            ownerKey = parsedProviderIds.posterArtworkOwnerKey(
+                contentId = contentId,
+                contentType = contentType,
+                fallbackPosterUrl = fallbackPosterUrl
+            ),
+            fallbackPosterUrl = fallbackPosterUrl
+        )
+    }
+
+    fun resolvePosterArtworkString(
+        originalPosterUrl: String?,
+        contentId: String,
+        contentType: ContentType,
+        activeProvider: ActiveProvider?
+    ): String? =
+        resolvePosterArtworkRef(
+            originalPosterUrl = originalPosterUrl,
+            contentId = contentId,
+            contentType = contentType,
+            activeProvider = activeProvider
+        ).toLegacyArtworkString()
+            ?: originalPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() || it.isInternalArtworkRef() }
+
     fun resolveEpisodeThumbnailArtworkRef(
         settings: ArtworkProviderSettings,
         providerIds: ProviderIds,
@@ -306,36 +352,16 @@ class PosterRatingsUrlResolver @Inject constructor(
     }
 
     /**
-     * Legacy raw compat path for older metadata services. UI-facing metadata adapters must use
-     * resolvePosterArtworkRef/resolvePosterArtworkString so premium providers remain internal refs.
+     * Legacy raw compat path retained for tests and older callers. It no longer builds premium
+     * provider models; UI-facing metadata adapters must use resolvePosterArtworkRef/string.
      */
     fun resolvePosterUrl(
         originalPosterUrl: String?,
         contentId: String,
         contentType: ContentType,
         activeProvider: ActiveProvider?
-    ): String? {
-        val provider = activeProvider ?: return originalPosterUrl
-        val id = parseContentId(contentId, contentType) ?: return originalPosterUrl
-
-        // Idempotent: if the poster is already from the active provider, return as-is.
-        if (originalPosterUrl != null && isAlreadyProviderUrl(originalPosterUrl, provider)) {
-            return originalPosterUrl
-        }
-
-        return when (provider.provider) {
-            PosterRatingsProvider.RPDB -> buildRpdbPosterUrl(
-                apiKey = provider.apiKey,
-                id = id
-            ) ?: originalPosterUrl
-            PosterRatingsProvider.TOP_POSTERS -> buildTopPostersUrl(
-                apiKey = provider.apiKey,
-                id = id,
-                fallbackUrl = originalPosterUrl?.takeIf { it.isNotBlank() }
-            )
-            PosterRatingsProvider.NONE -> originalPosterUrl
-        }
-    }
+    ): String? =
+        originalPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() || it.isInternalArtworkRef() }
 
     private fun buildPosterArtworkCandidates(
         settings: ArtworkProviderSettings,
@@ -619,30 +645,10 @@ class PosterRatingsUrlResolver @Inject constructor(
             "blur" to TopPostersThumbnailRequest.BLUR.toString()
         )
 
-    private fun stableHashHex8(s: String): String {
-        return stableHashHex(s).take(8)
-    }
-
     private fun stableHashHex(s: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256")
             .digest(s.toByteArray(Charsets.UTF_8))
         return bytes.joinToString("") { byte -> "%02x".format(byte) }
-    }
-
-    private fun isAlreadyProviderUrl(url: String, provider: ActiveProvider): Boolean {
-        val request = PosterIntegrationRequest.fromModel(url)
-        if (request != null) {
-            return when (provider.provider) {
-                PosterRatingsProvider.RPDB -> request.provider == IntegrationProvider.RPDB
-                PosterRatingsProvider.TOP_POSTERS -> request.provider == IntegrationProvider.TOP_POSTERS
-                PosterRatingsProvider.NONE -> false
-            }
-        }
-        return when (provider.provider) {
-            PosterRatingsProvider.RPDB -> url.startsWith(providerUrlPrefix("ratingposterdb"))
-            PosterRatingsProvider.TOP_POSTERS -> url.startsWith(providerUrlPrefix("top-posters"))
-            PosterRatingsProvider.NONE -> false
-        }
     }
 
     private fun providerUrlPrefix(hostToken: String): String =
@@ -673,6 +679,48 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun String.isLegacyIntegrationPosterModel(): Boolean =
         startsWith("integration-poster://", ignoreCase = true) ||
             IntegrationPosterRequest.fromModel(this) != null
+
+    private fun ActiveProvider?.toArtworkProviderSettings(): ArtworkProviderSettings? =
+        when (this?.provider) {
+            PosterRatingsProvider.RPDB -> ArtworkProviderSettings(
+                rpdbApiKey = apiKey,
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+            PosterRatingsProvider.TOP_POSTERS -> ArtworkProviderSettings(
+                topPostersApiKey = apiKey,
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                )
+            )
+            PosterRatingsProvider.NONE,
+            null -> null
+        }
+
+    private fun ArtworkDisplayRef.RuntimeAsset?.premiumProviderTag(): String? =
+        this
+            ?.takeIf { it.sourceRole == ArtworkSourceRole.PREMIUM }
+            ?.selectedProvider
+            ?.key
+            ?.lowercase()
+
+    private fun ProviderIds.posterArtworkOwnerKey(
+        contentId: String,
+        contentType: ContentType,
+        fallbackPosterUrl: String?
+    ): ArtworkOwnerKey =
+        canonicalArtworkContentId(contentType)?.let(ArtworkOwnerKey::CanonicalContent)
+            ?: ArtworkOwnerKey.PreviewItem(
+                itemKey = "${contentType.toApiString()}:${contentId.trim()}",
+                sourcePayloadHash = stableHashHex(
+                    listOf(
+                        "id=${contentId.trim()}",
+                        "type=${contentType.toApiString()}",
+                        "poster=${fallbackPosterUrl.orEmpty()}"
+                    ).joinToString("|")
+                )
+            )
 
     private fun MetaPreview.posterArtworkOwnerKey(): ArtworkOwnerKey {
         val stableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
@@ -759,47 +807,6 @@ class PosterRatingsUrlResolver @Inject constructor(
             contentType == ContentType.MOVIE -> "movie-$this"
             else -> "series-$this"
         }
-
-    private fun buildRpdbPosterUrl(apiKey: String, id: ProviderId): String? {
-        val idType = when (id.type) {
-            IdType.IMDB -> "imdb"
-            IdType.TMDB -> "tmdb"
-            IdType.TVDB -> "tvdb"
-            else -> return null
-        }
-        return PosterIntegrationRequest(
-            provider = IntegrationProvider.RPDB,
-            cacheKey = "rpdb:$idType:${id.value}:poster-default:${stableHashHex8(apiKey)}",
-            apiKey = apiKey,
-            path = "$idType/poster-default/${id.value}.jpg",
-            mimeType = "image/jpeg"
-        ).toModel()
-    }
-
-    private fun buildTopPostersUrl(
-        apiKey: String,
-        id: ProviderId,
-        fallbackUrl: String?
-    ): String {
-        val path = when (id.type) {
-            IdType.IMDB -> "imdb/poster/${id.value}.jpg"
-            IdType.TMDB -> "tmdb/poster/${id.value}.jpg"
-            IdType.TVDB -> "tvdb/poster/${id.value}.jpg"
-            IdType.TRAKT -> "trakt/poster/${id.value}.jpg"
-            IdType.MAL -> "mal/poster/${id.value}.jpg"
-            IdType.KITSU -> "kitsu/poster/${id.value}.jpg"
-            IdType.ANILIST -> "anilist/poster/${id.value}.jpg"
-            IdType.ANIDB -> "anidb/poster/${id.value}.jpg"
-        }
-        return PosterIntegrationRequest(
-            provider = IntegrationProvider.TOP_POSTERS,
-            cacheKey = "topposters:${id.type.name.lowercase()}:${id.value}:${stableHashHex8(apiKey)}",
-            apiKey = apiKey,
-            path = path,
-            fallbackUrl = fallbackUrl,
-            mimeType = "image/jpeg"
-        ).toModel()
-    }
 
     private fun parseContentId(contentId: String, contentType: ContentType): ProviderId? {
         val trimmed = contentId.trim()

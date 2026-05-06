@@ -448,7 +448,7 @@ class TvdbMetadataService @Inject constructor(
     ): TvMetadataEnrichment? {
         val artwork = selectArtwork(artworks.orEmpty())
         val tvdbPoster = artwork.poster ?: image.trimmed()
-        val poster = posterRatingsUrlResolver.resolvePosterUrl(
+        val poster = posterRatingsUrlResolver.resolvePosterArtworkString(
             originalPosterUrl = tvdbPoster,
             contentId = "tvdb:${identity.tvdbId}",
             contentType = ContentType.SERIES,

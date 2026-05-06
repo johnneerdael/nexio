@@ -109,6 +109,7 @@ import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.ui.components.ErrorState
+import com.nexio.tv.ui.components.FallbackArtworkImage
 import com.nexio.tv.ui.components.MetaDetailsSkeleton
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.components.TrailerPlayer
@@ -1041,12 +1042,15 @@ private fun MetaDetailsContent(
     val displayPoster = meta.displayPoster
     val displayBackground = meta.displayBackground
     val displayLogo = meta.displayLogo
-    val backdropCoilModel = remember(meta.artwork, displayBackground, displayPoster) {
+    val primaryBackdropCoilModel = remember(meta.artwork, displayBackground) {
         meta.artwork?.backdrop.toCoilModelOrNull()
-            ?: meta.artwork?.poster.toCoilModelOrNull()
             ?: displayBackground.toLegacyArtworkCoilModelOrNull("${meta.id}:backdrop", ArtworkType.BACKDROP)
+    }
+    val fallbackBackdropCoilModel = remember(meta.artwork, displayPoster) {
+        meta.artwork?.poster.toCoilModelOrNull()
             ?: displayPoster.toLegacyArtworkCoilModelOrNull("${meta.id}:poster", ArtworkType.POSTER)
     }
+    val backdropCoilModel = primaryBackdropCoilModel ?: fallbackBackdropCoilModel
     val displayMeta = remember(meta, displayPoster, displayBackground, displayLogo) {
         meta.copy(
             poster = displayPoster,
@@ -1670,15 +1674,31 @@ private fun MetaDetailsContent(
     }
     val backdropRequest = remember(
         localContext,
-        backdropCoilModel,
+        primaryBackdropCoilModel,
         backdropWidthPx,
         backdropHeightPx
     ) {
-        ImageRequest.Builder(localContext)
-            .data(backdropCoilModel)
-            .crossfade(true)
-            .size(width = backdropWidthPx, height = backdropHeightPx)
-            .build()
+        primaryBackdropCoilModel?.let { model ->
+            ImageRequest.Builder(localContext)
+                .data(model)
+                .crossfade(true)
+                .size(width = backdropWidthPx, height = backdropHeightPx)
+                .build()
+        }
+    }
+    val fallbackBackdropRequest = remember(
+        localContext,
+        fallbackBackdropCoilModel,
+        backdropWidthPx,
+        backdropHeightPx
+    ) {
+        fallbackBackdropCoilModel?.let { model ->
+            ImageRequest.Builder(localContext)
+                .data(model)
+                .crossfade(true)
+                .size(width = backdropWidthPx, height = backdropHeightPx)
+                .build()
+        }
     }
     val leftGradientBitmap = remember(backgroundColor, backdropWidthPx) {
         val w = backdropWidthPx.coerceAtLeast(1)
@@ -1817,8 +1837,9 @@ private fun MetaDetailsContent(
         // Sticky background — backdrop only. Trailer takeover is rendered above the detail content.
         Box(modifier = Modifier.fillMaxSize()) {
             // Backdrop image (fades out when trailer plays)
-            AsyncImage(
+            FallbackArtworkImage(
                 model = backdropRequest,
+                fallbackModel = fallbackBackdropRequest,
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()

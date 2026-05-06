@@ -461,9 +461,9 @@ class RawRemoteArtworkUrlBoundaryTest {
         private const val RAW_BOUNDARY_TEST_PATH =
             "app/src/test/java/com/nexio/tv/architecture/RawRemoteArtworkUrlBoundaryTest.kt"
         private val expectedSnapshotSanitizerAllowlist = listOf(
-            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:72" to
-                "\"https://api.ratingposterdb.com/\",",
             "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:73" to
+                "\"https://api.ratingposterdb.com/\",",
+            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:74" to
                 "\"https://api.top-posters.com/\""
         )
         private val expectedSnapshotSanitizerPrefixLocations =

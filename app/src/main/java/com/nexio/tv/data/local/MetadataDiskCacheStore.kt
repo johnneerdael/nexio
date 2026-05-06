@@ -153,7 +153,7 @@ class MetadataDiskCacheStore @Inject constructor(
         val key = buildMetaKey(itemKey = itemKey, languageTag = languageTag, providerToken = providerToken)
         runCatching {
             val payload = JsonObject().apply {
-                add("value", gson.toJsonTree(meta))
+                add("value", gson.toJsonTree(meta.sanitizedForCache()))
                 addProperty("languageEpoch", currentLanguageEpoch())
                 addProperty("metaSchemaVersion", META_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())

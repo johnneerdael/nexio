@@ -164,7 +164,7 @@ class RailPreviewFieldResolverTest {
             sourceProvider = "RPDB",
             sourceRole = SourceRole.ARTWORK,
             fields = mapOf(
-                ResolvedField.POSTER to FieldValue("integration-poster://fetch?provider=RPDB", FieldOwner.ARTWORK)
+                ResolvedField.POSTER to FieldValue("nexio-artwork://decision/rpdb-poster", FieldOwner.ARTWORK)
             )
         )
 
@@ -175,7 +175,7 @@ class RailPreviewFieldResolverTest {
         )
 
         assertEquals("Canonical title", document.title)
-        assertEquals("integration-poster://fetch?provider=RPDB", document.poster)
+        assertEquals("nexio-artwork://decision/rpdb-poster", document.poster)
         assertEquals(SourceRole.PRIMARY, document.sourceRoles[ResolvedField.TITLE])
         assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
         assertEquals("RPDB", document.sourceProviders[ResolvedField.POSTER])
