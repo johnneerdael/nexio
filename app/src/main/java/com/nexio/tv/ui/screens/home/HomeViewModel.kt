@@ -850,11 +850,12 @@ class HomeViewModel @Inject constructor(
         Log.i("StartupPerf", "t=${SystemClock.elapsedRealtime()}ms event=$event$suffix")
     }
 
-    internal fun scheduleUpdateCatalogRows() {
+    internal fun scheduleUpdateCatalogRows(
+        profileSessionForUpdate: ActiveProfileSession = profileManager.activeProfileSession.value
+    ) {
         if (shouldSuppressIncrementalHomeSnapshotPublish()) {
             return
         }
-        val profileSessionForUpdate = profileManager.activeProfileSession.value
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
             val debounceMs = when {
@@ -874,13 +875,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    internal suspend fun flushCatalogRowsForFirstPaint() {
+    internal suspend fun flushCatalogRowsForFirstPaint(
+        profileSessionForUpdate: ActiveProfileSession = profileManager.activeProfileSession.value
+    ) {
         if (shouldSuppressIncrementalHomeSnapshotPublish()) {
             return
         }
         catalogUpdateJob?.cancel()
         hasRenderedFirstCatalog = true
-        updateCatalogRows(profileManager.activeProfileSession.value)
+        updateCatalogRows(profileSessionForUpdate)
     }
 
     private suspend fun updateCatalogRows(profileSessionForUpdate: ActiveProfileSession) =
