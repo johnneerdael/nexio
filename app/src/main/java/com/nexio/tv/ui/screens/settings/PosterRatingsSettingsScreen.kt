@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
@@ -229,6 +230,18 @@ private fun ArtworkProviderSelectionDialog(
     onSelect: (ArtworkProviderChoiceKey) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val selectedIndex = remember(choices, selected) { choices.indexOf(selected).coerceAtLeast(0) }
+    val focusedChoice = choices.getOrNull(selectedIndex)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
+    val selectedFocusRequester = remember(selected) { FocusRequester() }
+
+    LaunchedEffect(selectedIndex, choices) {
+        if (choices.isNotEmpty()) {
+            listState.scrollToItem(selectedIndex)
+            runCatching { selectedFocusRequester.requestFocus() }
+        }
+    }
+
     NexioDialog(
         onDismiss = onDismiss,
         title = title,
@@ -241,6 +254,7 @@ private fun ArtworkProviderSelectionDialog(
                 .heightIn(max = 320.dp)
         ) {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
@@ -252,7 +266,13 @@ private fun ArtworkProviderSelectionDialog(
                         label = providerChoiceLabel(choice),
                         selected = choice == selected,
                         onClick = { onSelect(choice) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = if (choice == focusedChoice) {
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(selectedFocusRequester)
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
                     )
                 }
             }
