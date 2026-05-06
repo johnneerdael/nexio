@@ -132,6 +132,13 @@ class ProviderPlanExecutor @Inject constructor() {
                 provider = MetadataPrimaryProvider.TMDB,
                 role = ProviderPlanRole.MEDIA
             )
+            if (isSeries && route.seasonNumber != null) {
+                steps += step(
+                    apiShapeId = TmdbApiShapes.SEASON_VIDEOS,
+                    provider = MetadataPrimaryProvider.TMDB,
+                    role = ProviderPlanRole.MEDIA
+                )
+            }
         }
 
         if (depth == MetadataDepth.DETAIL_SECONDARY) {

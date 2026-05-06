@@ -33,6 +33,20 @@ class ProviderPlanSecondaryStepsTest {
     }
 
     @Test
+    fun `TMDB series DETAIL_SECONDARY plan owns selected season video step`() {
+        val plan = executor.buildPlan(
+            tmdbRoute(
+                mediaKind = MetadataMediaKind.SERIES,
+                seasonNumber = 2
+            ),
+            MetadataDepth.DETAIL_SECONDARY
+        )
+
+        assertStep(plan, TmdbApiShapes.TV_VIDEOS, MetadataPrimaryProvider.TMDB, ProviderPlanRole.MEDIA)
+        assertStep(plan, TmdbApiShapes.SEASON_VIDEOS, MetadataPrimaryProvider.TMDB, ProviderPlanRole.MEDIA)
+    }
+
+    @Test
     fun `Kitsu DETAIL_SECONDARY plan owns rich secondary steps`() {
         val plan = executor.buildPlan(kitsuRoute(), MetadataDepth.DETAIL_SECONDARY)
 
@@ -78,13 +92,17 @@ class ProviderPlanSecondaryStepsTest {
         assertEquals(false, step.required)
     }
 
-    private fun tmdbRoute(mediaKind: MetadataMediaKind): MetadataRoute =
+    private fun tmdbRoute(
+        mediaKind: MetadataMediaKind,
+        seasonNumber: Int? = null
+    ): MetadataRoute =
         MetadataRoute(
             provider = MetadataPrimaryProvider.TMDB,
             parentId = "tmdb:603",
             mediaKind = mediaKind,
             reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
             sourceContext = MetadataSourceContext(),
+            seasonNumber = seasonNumber,
             targetIds = mapOf(MetadataPrimaryProvider.TMDB to "603"),
             trace = emptyList()
         )
