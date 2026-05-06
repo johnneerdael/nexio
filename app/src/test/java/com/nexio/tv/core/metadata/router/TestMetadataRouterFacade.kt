@@ -8,6 +8,9 @@ import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.trailer.SeasonTrailerRefRequest
+import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
+import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
 import kotlin.math.absoluteValue
@@ -58,8 +61,60 @@ fun testMetadataRouterFacade(
         ),
         fieldResolver = FieldResolver(),
         trailerService = trailerService,
-        trailerResolver = TrailerResolver(traceEvents)
+        trailerResolver = TrailerResolver(traceEvents),
+        seasonTrailerRefResolver = trailerService?.let(::LegacySeasonTrailerRefResolver)
     )
+}
+
+private class LegacySeasonTrailerRefResolver(
+    private val trailerService: TrailerService
+) : SeasonTrailerRefResolver {
+    override suspend fun resolveSeasonTrailerRefs(request: SeasonTrailerRefRequest): List<com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef> {
+        val availability = trailerService.getSeasonMediaAvailability(
+            tmdbId = request.tmdbId,
+            type = request.type,
+            seasonNumber = request.seasonNumber,
+            contentId = request.contentId
+        )
+        if (!availability.hasTrailerOrTeaser) return emptyList()
+        return listOfNotNull(
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = request.title,
+                year = request.year,
+                tmdbId = request.tmdbId,
+                type = request.type,
+                seasonNumber = request.seasonNumber,
+                contentId = request.contentId
+            )?.toTrailerPlaybackRef()
+        )
+    }
+
+    override suspend fun resolveSeasonRecapRefs(request: SeasonTrailerRefRequest): List<com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef> {
+        val availability = trailerService.getSeasonMediaAvailability(
+            tmdbId = request.tmdbId,
+            type = request.type,
+            seasonNumber = request.seasonNumber,
+            contentId = request.contentId
+        )
+        if (!availability.hasRecap) return emptyList()
+        return listOfNotNull(
+            trailerService.getSeasonRecapPlaybackSource(
+                title = request.title,
+                year = request.year,
+                tmdbId = request.tmdbId,
+                type = request.type,
+                seasonNumber = request.seasonNumber,
+                contentId = request.contentId
+            )?.toTrailerPlaybackRef()
+        )
+    }
+
+    private fun TrailerPlaybackSource.toTrailerPlaybackRef(): com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef =
+        com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef.InAppSource(
+            videoUrl = videoUrl,
+            audioUrl = audioUrl,
+            userAgent = userAgent
+        )
 }
 
 private class TestMetadataProviderAdapter(
