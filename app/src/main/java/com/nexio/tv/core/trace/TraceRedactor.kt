@@ -21,11 +21,17 @@ class TraceRedactor {
         "code", "client_id"
     )
 
+    private val providerCredentialPathHosts = setOf(
+        "api.ratingposterdb.com",
+        "api.top-posters.com"
+    )
+
     fun redactUrl(url: String): String {
-        val q = url.indexOf('?')
-        if (q < 0) return url
-        val base = url.substring(0, q)
-        val query = url.substring(q + 1)
+        val pathRedactedUrl = redactProviderCredentialPath(url)
+        val q = pathRedactedUrl.indexOf('?')
+        if (q < 0) return pathRedactedUrl
+        val base = pathRedactedUrl.substring(0, q)
+        val query = pathRedactedUrl.substring(q + 1)
         val redactedQuery = query.split('&').joinToString("&") { pair ->
             val eq = pair.indexOf('=')
             if (eq < 0) return@joinToString pair
@@ -33,6 +39,25 @@ class TraceRedactor {
             if (key.lowercase() in redactedUrlKeys) "$key=<redacted>" else pair
         }
         return "$base?$redactedQuery"
+    }
+
+    private fun redactProviderCredentialPath(url: String): String {
+        val parsed = runCatching { java.net.URI(url) }.getOrNull() ?: return url
+        val host = parsed.host?.lowercase() ?: return url
+        if (host !in providerCredentialPathHosts) return url
+
+        val rawPath = parsed.rawPath ?: return url
+        val segments = rawPath.split("/")
+        if (segments.size < 2 || segments[1].isBlank()) return url
+
+        val redactedPath = segments.toMutableList()
+            .also { it[1] = "<redacted>" }
+            .joinToString("/")
+        val scheme = parsed.scheme ?: return url
+        val authority = parsed.rawAuthority ?: return url
+        val query = parsed.rawQuery?.let { "?$it" }.orEmpty()
+        val fragment = parsed.rawFragment?.let { "#$it" }.orEmpty()
+        return "$scheme://$authority$redactedPath$query$fragment"
     }
 
     fun redactHeaders(headers: Map<String, String>): Map<String, String> =

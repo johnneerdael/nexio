@@ -23,6 +23,40 @@ class TraceRedactorTest {
     }
 
     @Test
+    fun `RPDB path credential is redacted`() {
+        val redacted = r.redactUrl(
+            "https://api.ratingposterdb.com/rpdb-secret/imdb/poster-default/tt0137523.jpg"
+        )
+
+        assertEquals(
+            "https://api.ratingposterdb.com/<redacted>/imdb/poster-default/tt0137523.jpg",
+            redacted
+        )
+        assertFalse(redacted.contains("rpdb-secret"))
+    }
+
+    @Test
+    fun `Top Posters path credential is redacted and query redaction still applies`() {
+        val redacted = r.redactUrl(
+            "https://api.top-posters.com/top-secret/tvdb/thumbnail/1399/S1E2.jpg?api_key=QUERY_SECRET&blur=false"
+        )
+
+        assertEquals(
+            "https://api.top-posters.com/<redacted>/tvdb/thumbnail/1399/S1E2.jpg?api_key=<redacted>&blur=false",
+            redacted
+        )
+        assertFalse(redacted.contains("top-secret"))
+        assertFalse(redacted.contains("QUERY_SECRET"))
+    }
+
+    @Test
+    fun `non provider path segment is not redacted`() {
+        val redacted = r.redactUrl("https://image.tmdb.org/t/p/w500/poster.jpg")
+
+        assertEquals("https://image.tmdb.org/t/p/w500/poster.jpg", redacted)
+    }
+
+    @Test
     fun `Authorization header value is redacted`() {
         val out = r.redactHeaders(mapOf("Authorization" to "Bearer SECRET"))
         assertEquals("<redacted>", out["Authorization"])
