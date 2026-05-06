@@ -19,6 +19,8 @@ import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.RatingResolution
+import com.nexio.tv.core.metadata.router.resolver.RatingResolver
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedProductionCompany
@@ -144,7 +146,7 @@ class MetadataDisplayRepository @Inject constructor(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            ResolvedDetailRatingDisplay()
+            effectiveContext.toFallbackRatingDisplay()
         }
     }
 
@@ -405,6 +407,23 @@ class MetadataDisplayRepository @Inject constructor(
                 confidence = Confidence.LOW
             )
         }
+
+    private fun DetailRatingDisplayContext.toFallbackRatingDisplay(): ResolvedDetailRatingDisplay {
+        val resolvedTitleRating = RatingResolver.resolveTitleRating(
+            listOfNotNull(
+                primaryProviderTitleRatingCandidate,
+                previewFallbackTitleRatingCandidate
+            )
+        )?.toTitleRating()
+
+        return ResolvedDetailRatingDisplay(titleRating = resolvedTitleRating)
+    }
+
+    private fun RatingResolution.toTitleRating(): TitleRating =
+        TitleRating(
+            value = value,
+            source = sourceProvider.toTitleRatingSource() ?: TitleRatingSource.IMDB
+        )
 
     private fun MetadataResolutionResult.ratingSource(): TitleRatingSource =
         resolvedDocument.sourceProviders[ResolvedField.RATING].toTitleRatingSource()

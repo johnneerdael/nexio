@@ -10,6 +10,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.Video
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,22 +26,26 @@ class TitleRatingOverrideRepository @Inject constructor(
     ): List<RatingCandidate> {
         val imdbId = stableIdBundle?.sidecars?.imdbId ?: providerIds.imdb
         val candidates = mutableListOf<RatingCandidate>()
-        val customRating = imdbId
-            ?.let { customImdbTitleRatingsRepository.getTitleRatingByImdbId(it) }
-            ?: customImdbTitleRatingsRepository.getTitleRating(
-                contentId = preview.id,
-                fallbackItemId = preview.id,
-                contentType = preview.type,
-                fallbackItemType = preview.apiType
-            )
+        val customRating = runOptional {
+            imdbId
+                ?.let { customImdbTitleRatingsRepository.getTitleRatingByImdbId(it) }
+                ?: customImdbTitleRatingsRepository.getTitleRating(
+                    contentId = preview.id,
+                    fallbackItemId = preview.id,
+                    contentType = preview.type,
+                    fallbackItemType = preview.apiType
+                )
+        }
         customRating?.toRatingCandidate(SourceRole.CUSTOM_IMDB, "IMDB")?.let(candidates::add)
 
-        val mdblistRating = mdbListRepository.getRatingsForMeta(
-            meta = preview.toRatingsMeta(),
-            fallbackItemId = preview.id,
-            fallbackItemType = preview.apiType,
-            imdbIdOverride = imdbId
-        )?.ratings?.imdb
+        val mdblistRating = runOptional {
+            mdbListRepository.getRatingsForMeta(
+                meta = preview.toRatingsMeta(),
+                fallbackItemId = preview.id,
+                fallbackItemType = preview.apiType,
+                imdbIdOverride = imdbId
+            )?.ratings?.imdb
+        }
         mdblistRating?.toRatingCandidate(SourceRole.MDBLIST, "MDBLIST")?.let(candidates::add)
 
         return candidates
@@ -55,22 +60,26 @@ class TitleRatingOverrideRepository @Inject constructor(
     ): List<RatingCandidate> {
         val imdbId = stableIdBundle?.sidecars?.imdbId ?: providerIds.imdb
         val candidates = mutableListOf<RatingCandidate>()
-        val customRating = imdbId
-            ?.let { customImdbTitleRatingsRepository.getTitleRatingByImdbId(it) }
-            ?: customImdbTitleRatingsRepository.getTitleRating(
-                contentId = meta.id,
-                fallbackItemId = fallbackItemId,
-                contentType = meta.type,
-                fallbackItemType = fallbackItemType
-            )
+        val customRating = runOptional {
+            imdbId
+                ?.let { customImdbTitleRatingsRepository.getTitleRatingByImdbId(it) }
+                ?: customImdbTitleRatingsRepository.getTitleRating(
+                    contentId = meta.id,
+                    fallbackItemId = fallbackItemId,
+                    contentType = meta.type,
+                    fallbackItemType = fallbackItemType
+                )
+        }
         customRating?.toRatingCandidate(SourceRole.CUSTOM_IMDB, "IMDB")?.let(candidates::add)
 
-        val mdblistRating = mdbListRepository.getRatingsForMeta(
-            meta = meta,
-            fallbackItemId = fallbackItemId,
-            fallbackItemType = fallbackItemType,
-            imdbIdOverride = imdbId
-        )?.ratings?.imdb
+        val mdblistRating = runOptional {
+            mdbListRepository.getRatingsForMeta(
+                meta = meta,
+                fallbackItemId = fallbackItemId,
+                fallbackItemType = fallbackItemType,
+                imdbIdOverride = imdbId
+            )?.ratings?.imdb
+        }
         mdblistRating?.toRatingCandidate(SourceRole.MDBLIST, "MDBLIST")?.let(candidates::add)
 
         return candidates
@@ -117,3 +126,12 @@ class TitleRatingOverrideRepository @Inject constructor(
             artwork = artwork
         )
 }
+
+private inline fun <T> runOptional(block: () -> T): T? =
+    try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }

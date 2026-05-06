@@ -71,6 +71,26 @@ class TitleRatingOverrideRepositoryTest {
     }
 
     @Test
+    fun `custom imdb title candidate survives mdblist failure`() = runTest {
+        val custom = mockk<CustomImdbTitleRatingsRepository>()
+        val mdb = mockk<MDBListRepository>()
+        val repository = TitleRatingOverrideRepository(custom, mdb)
+        val preview = preview(id = "tt0944947", rating = 8.1f, source = TitleRatingSource.TMDB)
+
+        coEvery {
+            custom.getTitleRating("tt0944947", "tt0944947", ContentType.SERIES, "series")
+        } returns 9.2
+        coEvery {
+            mdb.getRatingsForMeta(any(), "tt0944947", "series", imdbIdOverride = null)
+        } throws IllegalStateException("mdblist unavailable")
+
+        val candidates = repository.titleRatingCandidates(preview)
+
+        assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
+        assertEquals(listOf(9.2), candidates.map { it.value })
+    }
+
+    @Test
     fun `meta candidate source accepts provider imdb ids for sidecar lookups`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
