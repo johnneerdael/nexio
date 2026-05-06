@@ -81,5 +81,6 @@ data class ProxyHeaders(
 data class AddonStreams(
     val addonName: String,
     val addonLogo: String?,
-    val streams: List<Stream>
+    val streams: List<Stream>,
+    val isAnimeBucket: Boolean = false,
 )

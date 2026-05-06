@@ -12,7 +12,9 @@ import com.nexio.tv.core.auth.stockAddonInstallConfigs
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -32,7 +34,8 @@ class AddonPreferences @Inject constructor(
 ) {
     data class AddonInstallConfig(
         val url: String,
-        val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+        val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        val isAnime: Boolean = false,
     )
 
     companion object {
@@ -95,7 +98,8 @@ class AddonPreferences @Inject constructor(
 
     suspend fun addAddon(
         url: String,
-        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        isAnime: Boolean = false,
     ) {
         store().edit { preferences ->
             val current = getCurrentList(preferences).toMutableList()
@@ -104,7 +108,8 @@ class AddonPreferences @Inject constructor(
             preferences[orderedUrlsKey] = gson.toJson(
                 current + AddonInstallConfig(
                     url = normalizedUrl,
-                    parserPreset = parserPreset
+                    parserPreset = parserPreset,
+                    isAnime = isAnime
                 )
             )
         }
@@ -151,11 +156,29 @@ class AddonPreferences @Inject constructor(
         }
     }
 
+    suspend fun updateAddonIsAnime(url: String, isAnime: Boolean) {
+        store().edit { preferences ->
+            val normalizedUrl = canonicalizeUrl(url)
+            val updated = getCurrentList(preferences).map { addon ->
+                if (addon.url.equals(normalizedUrl, ignoreCase = true)) {
+                    addon.copy(isAnime = isAnime)
+                } else {
+                    addon
+                }
+            }
+            preferences[orderedUrlsKey] = gson.toJson(updated)
+        }
+    }
+
     suspend fun setAddonConfigs(configs: List<AddonInstallConfig>) {
         store().edit { preferences ->
             val normalized = configs.mapNotNull { addon ->
                 safeCanonicalizeUrl(addon.url, "remote sync")?.let { url ->
-                    AddonInstallConfig(url = url, parserPreset = addon.parserPreset)
+                    AddonInstallConfig(
+                        url = url,
+                        parserPreset = addon.parserPreset,
+                        isAnime = addon.isAnime
+                    )
                 }
             }.distinctBy { it.url.lowercase() }
             preferences[orderedUrlsKey] = gson.toJson(normalized)
@@ -185,24 +208,40 @@ class AddonPreferences @Inject constructor(
 
     private fun parseInstallConfigList(json: String): List<AddonInstallConfig> {
         return try {
-            val objectType = object : TypeToken<List<AddonInstallConfig>>() {}.type
-            val parsedObjects: List<AddonInstallConfig>? = gson.fromJson(json, objectType)
-            if (parsedObjects != null) {
-                return parsedObjects.mapNotNull { addon ->
+            val root: JsonElement = JsonParser.parseString(json)
+            if (!root.isJsonArray) {
+                return getDefaultAddons().map { AddonInstallConfig(url = it) }
+            }
+
+            val array: JsonArray = root.asJsonArray
+            if (array.isEmpty) {
+                return emptyList()
+            }
+
+            val parsedAsObjects = array.mapNotNull { element ->
+                runCatching {
+                    gson.fromJson(element, AddonInstallConfig::class.java)
+                }.getOrNull()
+            }
+            if (parsedAsObjects.size == array.size()) {
+                return parsedAsObjects.mapNotNull { addon ->
                     safeCanonicalizeUrl(addon.url, "preferences")?.let { normalized ->
                         AddonInstallConfig(
                             url = normalized,
-                            parserPreset = addon.parserPreset
+                            parserPreset = addon.parserPreset,
+                            isAnime = addon.isAnime,
                         )
                     }
                 }.distinctBy { it.url.lowercase() }
             }
 
-            val legacyType = object : TypeToken<List<String>>() {}.type
-            val parsedUrls: List<String> = gson.fromJson(json, legacyType) ?: return emptyList()
-            parsedUrls.mapNotNull { url ->
-                safeCanonicalizeUrl(url, "preferences")?.let { normalized ->
-                    AddonInstallConfig(url = normalized)
+            array.mapNotNull { element ->
+                if (element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+                    safeCanonicalizeUrl(element.asString, "preferences")?.let { normalized ->
+                        AddonInstallConfig(url = normalized)
+                    }
+                } else {
+                    null
                 }
             }.distinctBy { it.url.lowercase() }
         } catch (e: Exception) {

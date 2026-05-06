@@ -6,7 +6,12 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
+import com.nexio.tv.core.metadata.router.AnimeIdScheme
+import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.MetadataIdParser
+import com.nexio.tv.core.metadata.router.MetadataParentIdNormalizer
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
 import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
 import com.nexio.tv.data.mapper.toDomain
@@ -40,7 +45,9 @@ class StreamRepositoryImpl @Inject constructor(
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val serviceWrapSessionFactory: ServiceWrapSessionFactory,
-    private val addonStreamRequestCanceller: AddonStreamRequestCanceller
+    private val addonStreamRequestCanceller: AddonStreamRequestCanceller,
+    private val animeIdentityIndex: AnimeIdentityIndex,
+    private val traceMetadataEvents: TraceMetadataEvents
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -64,9 +71,35 @@ class StreamRepositoryImpl @Inject constructor(
             val streamAddons = addons.filter { addon ->
                 addon.supportsStreamResource(type)
             }
+            val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
+            val contentIsAnime = if (streamAddons.none { it.isAnime }) {
+                false
+            } else {
+                val parsedContentId = MetadataIdParser.parse(parentContentId)
+                if (parsedContentId.scheme == AnimeIdScheme.UNKNOWN) {
+                    false
+                } else {
+                    try {
+                        animeIdentityIndex.isAnime(parsedContentId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Anime identity lookup failed for stream bucket hint: ${e.message}")
+                        false
+                    }
+                }
+            }
+            traceMetadataEvents.emitStreamRequestClassified(
+                contentId = videoId,
+                parentId = parentContentId,
+                contentIsAnime = contentIsAnime,
+                evidence = "AnimeIdentityIndex"
+            )
 
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()
             val addonDiagnostics = mutableListOf<AddonFetchDiagnostic>()
+            val animePriorityGateEnabled = contentIsAnime && streamAddons.any { it.isAnime }
+            var emittedSuccess = false
 
             coroutineScope {
                 val eventChannel = Channel<StreamPipelineEvent>(Channel.UNLIMITED)
@@ -110,10 +143,18 @@ class StreamRepositoryImpl @Inject constructor(
                                 is NetworkResult.Success -> {
                                     streamCount = streamsResult.data.size
                                     outcome = if (streamCount > 0) "success_non_empty" else "success_empty"
+                                    val isAnimeBucket = addon.isAnime && contentIsAnime
                                     emittedAddonStreams = AddonStreams(
                                         addonName = addon.displayName,
                                         addonLogo = addon.logo,
-                                        streams = streamsResult.data
+                                        streams = streamsResult.data,
+                                        isAnimeBucket = isAnimeBucket
+                                    )
+                                    traceMetadataEvents.emitStreamAddonBucketed(
+                                        addonIdHash = addonIdHash(addon.id),
+                                        addonIsAnime = addon.isAnime,
+                                        contentIsAnime = contentIsAnime,
+                                        isAnimeBucket = isAnimeBucket
                                     )
                                 }
                                 is NetworkResult.Error -> {
@@ -136,6 +177,7 @@ class StreamRepositoryImpl @Inject constructor(
                                     StreamPipelineEvent.AddonFetched(
                                         AddonFetchResult(
                                             addonStreams = emittedAddonStreams,
+                                            addonIsAnime = addon.isAnime,
                                             diagnostic = AddonFetchDiagnostic(
                                                 addonName = addon.displayName,
                                                 outcome = outcome,
@@ -151,11 +193,15 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
                 var remainingAddonEvents = jobs.size
+                var remainingAnimeAddonEvents = if (animePriorityGateEnabled) streamAddons.count { it.isAnime } else 0
                 var pendingWrapEvents = 0
                 while (remainingAddonEvents > 0 || pendingWrapEvents > 0) {
                     when (val event = eventChannel.receive()) {
                         is StreamPipelineEvent.AddonFetched -> {
                             remainingAddonEvents -= 1
+                            if (event.result.addonIsAnime) {
+                                remainingAnimeAddonEvents = (remainingAnimeAddonEvents - 1).coerceAtLeast(0)
+                            }
                             addonDiagnostics += event.result.diagnostic
                             if (diagnosticsEnabled) {
                                 logAddonFetchDiagnostic(
@@ -177,9 +223,13 @@ class StreamRepositoryImpl @Inject constructor(
                                 accumulatedResults[addonStreams.addonName] = AddonStreams(
                                     addonName = addonStreams.addonName,
                                     addonLogo = addonStreams.addonLogo,
-                                    streams = visibleStreams
+                                    streams = visibleStreams,
+                                    isAnimeBucket = addonStreams.isAnimeBucket
                                 )
-                                emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                if (remainingAnimeAddonEvents == 0) {
+                                    emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                    emittedSuccess = true
+                                }
                                 Log.d(
                                     TAG,
                                     "Emitted ${accumulatedResults.size} addon bucket(s), latest: ${addonStreams.addonName} visible=${visibleStreams.size}"
@@ -201,9 +251,13 @@ class StreamRepositoryImpl @Inject constructor(
                             accumulatedResults[batch.addonName] = AddonStreams(
                                 addonName = batch.addonName,
                                 addonLogo = batch.addonLogo ?: existing?.addonLogo,
-                                streams = mergedStreams
+                                streams = mergedStreams,
+                                isAnimeBucket = existing?.isAnimeBucket ?: false
                             )
-                            emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                            if (remainingAnimeAddonEvents == 0) {
+                                emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                emittedSuccess = true
+                            }
                         }
                     }
                 }
@@ -223,8 +277,8 @@ class StreamRepositoryImpl @Inject constructor(
             }
 
             // Emit final result (even if empty)
-            if (accumulatedResults.isEmpty()) {
-                emit(NetworkResult.Success(emptyList()))
+            if (!emittedSuccess) {
+                emit(NetworkResult.Success(accumulatedResults.values.toList()))
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -356,6 +410,7 @@ class StreamRepositoryImpl @Inject constructor(
 
 private data class AddonFetchResult(
     val addonStreams: AddonStreams?,
+    val addonIsAnime: Boolean,
     val diagnostic: AddonFetchDiagnostic
 )
 
@@ -371,3 +426,9 @@ private data class AddonFetchDiagnostic(
     val httpCode: Int?,
     val durationMs: Long
 )
+
+private fun addonIdHash(addonId: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(addonId.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+        .take(12)

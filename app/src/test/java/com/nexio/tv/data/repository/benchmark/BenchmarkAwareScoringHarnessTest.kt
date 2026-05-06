@@ -88,6 +88,76 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     @Test
+    fun `manual cap scoring uses finite priority rank before score and bitrate`() {
+        val anime = BenchmarkAwareScoringScenarioStream(
+            streamKey = "anime-720p",
+            providerId = "RD",
+            resolution = "720p",
+            quality = "WEB-DL",
+            encode = "AVC",
+            sizeBytes = 2L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("AAC")
+        ).toStreamCardModel().copy(addonPriorityRank = 0)
+        val generic = BenchmarkAwareScoringScenarioStream(
+            streamKey = "generic-2160p",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "BluRay Remux",
+            encode = "HEVC",
+            sizeBytes = 12L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("TrueHD", "Atmos")
+        ).toStreamCardModel()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = shadowRequest("priority-rank"),
+            streams = listOf(generic, anime),
+            manualBitrateCap = 200.0
+        )
+
+        assertEquals("anime-720p|RD", event.selected?.streamKey)
+        assertEquals(0, event.selected?.addonPriorityRank)
+    }
+
+    @Test
+    fun `manual cap scoring keeps score order when priority ranks are absent`() {
+        val anime = BenchmarkAwareScoringScenarioStream(
+            streamKey = "anime-720p",
+            providerId = "RD",
+            resolution = "720p",
+            quality = "WEB-DL",
+            encode = "AVC",
+            sizeBytes = 2L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("AAC")
+        ).toStreamCardModel()
+        val generic = BenchmarkAwareScoringScenarioStream(
+            streamKey = "generic-2160p",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "BluRay Remux",
+            encode = "HEVC",
+            sizeBytes = 12L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("TrueHD", "Atmos")
+        ).toStreamCardModel()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = shadowRequest("no-priority-rank"),
+            streams = listOf(generic, anime),
+            manualBitrateCap = 200.0
+        )
+
+        assertEquals("generic-2160p|RD", event.selected?.streamKey)
+        assertEquals(Int.MAX_VALUE, event.selected?.addonPriorityRank)
+    }
+
+    @Test
     fun `manual cap scoring uses preserved metadata size when parsed size is missing`() {
         val sizeBytes = 77_729_165_620L
         val card = BenchmarkAwareScoringScenarioStream(

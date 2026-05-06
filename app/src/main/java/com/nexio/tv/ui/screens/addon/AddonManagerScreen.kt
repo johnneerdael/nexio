@@ -78,6 +78,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
+import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -374,6 +375,7 @@ fun AddonManagerScreen(
                         onMoveUp = { viewModel.moveAddonUp(addon.baseUrl) },
                         onMoveDown = { viewModel.moveAddonDown(addon.baseUrl) },
                         onUpdateParserPreset = { viewModel.updateAddonParserPreset(addon.baseUrl, it) },
+                        onUpdateIsAnime = { viewModel.updateAddonIsAnime(addon.baseUrl, it) },
                         onRemove = { viewModel.removeAddon(addon.baseUrl) },
                         isReadOnly = viewModel.isReadOnly
                     )
@@ -899,6 +901,7 @@ private fun AddonCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onUpdateParserPreset: (AddonParserPreset) -> Unit,
+    onUpdateIsAnime: (Boolean) -> Unit,
     onRemove: () -> Unit,
     isReadOnly: Boolean = false
 ) {
@@ -939,6 +942,7 @@ private fun AddonCard(
                 onMoveUp = onMoveUp,
                 onMoveDown = onMoveDown,
                 onUpdateParserPreset = onUpdateParserPreset,
+                onUpdateIsAnime = onUpdateIsAnime,
                 onRemove = onRemove
             )
         }
@@ -955,6 +959,7 @@ private fun AddonCardContent(
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
     onUpdateParserPreset: (AddonParserPreset) -> Unit = {},
+    onUpdateIsAnime: (Boolean) -> Unit = {},
     onRemove: () -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(20.dp)) {
@@ -1056,6 +1061,31 @@ private fun AddonCardContent(
             style = MaterialTheme.typography.bodySmall,
             color = NexioColors.TextTertiary
         )
+
+        if (!isReadOnly) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Anime addon",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = NexioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Switch(
+                    checked = addon.isAnime,
+                    onCheckedChange = onUpdateIsAnime
+                )
+            }
+            Text(
+                text = "Prioritize this addon when fetching anime streams.",
+                style = MaterialTheme.typography.bodySmall,
+                color = NexioColors.TextSecondary
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(

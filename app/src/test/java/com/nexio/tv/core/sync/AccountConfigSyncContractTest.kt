@@ -60,6 +60,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.decodeFromString
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -90,6 +91,26 @@ class AccountConfigSyncContractTest {
         assertTrue(migration.contains("\"includeNsfw\""))
         assertTrue(migration.contains("'kitsuAuth'"))
         assertTrue(migration.contains("{integrations,kitsuAuth}"))
+    }
+
+    @Test
+    fun `addon is_anime migration persists addon sync field end to end`() {
+        val migration = File("supabase/migrations/20260506000000_add_account_addon_is_anime.sql").readText()
+
+        assertTrue(migration.contains("add column if not exists is_anime boolean not null default false"))
+        assertTrue(migration.contains("coalesce((entry->>'is_anime')::boolean, false)"))
+        assertTrue(migration.contains("'is_anime', coalesce(is_anime, false)"))
+        assertTrue(migration.contains("not in (1, 2, 5, 6, 7, 8, 9)"))
+        assertTrue(migration.contains("if coalesce(p_contract_version, 1) not in (1, 2, 5, 6, 7, 9) then"))
+        assertTrue(migration.contains("if v_contract_version not in (1, 2, 5, 6, 7, 9) then"))
+    }
+
+    @Test
+    fun `addon sync service push payload includes is_anime wire field`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt").readText()
+
+        assertTrue(source.contains("put(\"is_anime\", isAnime)"))
+        assertTrue(source.contains("Triple(parseStoredAddonInstallUrl(addon.url), addon.parserPreset, addon.isAnime)"))
     }
 
     @Test
@@ -728,6 +749,7 @@ class AccountConfigSyncContractTest {
                 url = "https://beta.example",
                 parserPreset = "torrentio",
                 enabled = true,
+                isAnime = true,
                 sortOrder = 2
             ),
             AccountAddonPayload(
@@ -747,8 +769,25 @@ class AccountConfigSyncContractTest {
         assertEquals(AddonParserPreset.GENERIC, addonConfigs[0].parserPreset)
         assertEquals("https://beta.example/manifest.json", addonConfigs[1].url)
         assertEquals(AddonParserPreset.TORRENTIO, addonConfigs[1].parserPreset)
+        assertTrue(addonConfigs[1].isAnime)
         assertEquals("https://opensubtitlesv3-pro.dexter21767.com/manifest.json", addonConfigs[2].url)
         assertEquals(AddonParserPreset.GENERIC, addonConfigs[2].parserPreset)
+        assertFalse(addonConfigs[2].isAnime)
+    }
+
+    @Test
+    fun `account addon payload deserializes is_anime from wire shape`() {
+        val payload = Json.decodeFromString<AccountAddonPayload>(
+            """
+                {
+                  "url": "https://anime.example",
+                  "parser_preset": "GENERIC",
+                  "is_anime": true
+                }
+            """.trimIndent()
+        )
+
+        assertTrue(payload.isAnime)
     }
 
     @Test
