@@ -259,6 +259,66 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `artwork materialization event writes to IntRuntime tag with curated fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("artwork.asset_materialized", mapOf(
+            "decisionKey" to "decision-rpdb-550",
+            "assetKey" to "asset-tmdb-fallback",
+            "provider" to "TMDB",
+            "imageType" to "POSTER",
+            "cacheDecision" to "FALLBACK_MATERIALIZED",
+            "networkExecuted" to true,
+            "success" to true
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=artwork.asset_materialized"))
+        assertTrue(msg.contains("decisionKey=decision-rpdb-550"))
+        assertTrue(msg.contains("assetKey=asset-tmdb-fallback"))
+        assertTrue(msg.contains("provider=TMDB"))
+        assertTrue(msg.contains("imageType=POSTER"))
+        assertTrue(msg.contains("cacheDecision=FALLBACK_MATERIALIZED"))
+        assertTrue(msg.contains("networkExecuted=true"))
+        assertTrue(msg.contains("success=true"))
+    }
+
+    @Test
+    fun `artwork fallback materialized event writes to IntRuntime tag with fallback provider`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("artwork.fallback_materialized", mapOf(
+            "decisionKey" to "decision-rpdb-550",
+            "fallbackProvider" to "TMDB",
+            "assetKey" to "asset-tmdb-fallback"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=artwork.fallback_materialized"))
+        assertTrue(msg.contains("decisionKey=decision-rpdb-550"))
+        assertTrue(msg.contains("fallbackProvider=TMDB"))
+        assertTrue(msg.contains("assetKey=asset-tmdb-fallback"))
+    }
+
+    @Test
+    fun `disabled integration runtime channel suppresses artwork logcat events`() {
+        val onlyMeta = object : LogcatChannelGate {
+            override fun isEnabled(channel: LogcatTraceChannel): Boolean =
+                channel == LogcatTraceChannel.META_ROUTE
+        }
+        val sink = LogcatRuntimeTraceSink(onlyMeta)
+
+        sink.emit(envelope("artwork.asset_materialized", mapOf(
+            "decisionKey" to "decision-rpdb-550",
+            "success" to false
+        )))
+
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.IntRuntime").size)
+    }
+
+    @Test
     fun `http_request event writes to IntRuntime tag with method and url`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("http.request", mapOf(
