@@ -25,6 +25,7 @@ import com.nexio.tv.core.artwork.RejectedArtworkCandidate
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
 import com.nexio.tv.core.artwork.toPersistedCandidate
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.image.IntegrationPosterRequest
 import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.image.TopPostersThumbnailRequest
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -94,18 +95,24 @@ class PosterRatingsUrlResolver @Inject constructor(
     }
 
     fun applyArtworkRef(metaPreview: MetaPreview, settings: ArtworkProviderSettings): MetaPreview {
+        val currentPoster = metaPreview.poster
+        if (currentPoster != null && currentPoster.isInternalArtworkRef()) {
+            return metaPreview
+        }
+
         val providerIds = metaPreview.posterArtworkProviderIds()
         val ownerKey = metaPreview.posterArtworkOwnerKey()
+        val fallbackPosterUrl = currentPoster?.takeIf { it.isSafeRemoteArtworkFallback() }
         val resolved = resolvePosterArtworkRef(
             settings = settings,
             providerIds = providerIds,
             mediaKind = metaPreview.type.toMetadataMediaKind(),
             ownerKey = ownerKey,
-            fallbackPosterUrl = metaPreview.poster?.takeIf { !it.isPremiumProviderRawUrl() }
+            fallbackPosterUrl = fallbackPosterUrl
         ) as? ArtworkDisplayRef.RuntimeAsset
 
         val poster = resolved.toLegacyArtworkString()
-            ?: metaPreview.poster?.takeIf { !it.isPremiumProviderRawUrl() }
+            ?: fallbackPosterUrl
         val providerTag = resolved
             ?.takeIf { it.sourceRole == ArtworkSourceRole.PREMIUM }
             ?.selectedProvider
@@ -218,9 +225,9 @@ class PosterRatingsUrlResolver @Inject constructor(
             providerIds = providerIds,
             mediaKind = mediaKind,
             ownerKey = ownerKey,
-            fallbackPosterUrl = fallbackPosterUrl
+            fallbackPosterUrl = fallbackPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() }
         ).toLegacyArtworkString()
-            ?: fallbackPosterUrl?.takeIf { it.isNotBlank() && !it.isPremiumProviderRawUrl() }
+            ?: fallbackPosterUrl?.takeIf { it.isSafeRemoteArtworkFallback() }
 
     fun resolveEpisodeThumbnailArtworkRef(
         settings: ArtworkProviderSettings,
@@ -384,6 +391,7 @@ class PosterRatingsUrlResolver @Inject constructor(
 
             fallbackPosterUrl
                 ?.takeIf { it.isNotBlank() }
+                ?.takeIf { it.isSafeRemoteArtworkFallback() }
                 ?.let { rawUrl ->
                     val normalizedUrlHash = ArtworkCacheKeys.normalizedUrlHash(rawUrl)
                     val fallbackProvider = fallbackProviderFor(rawUrl)
@@ -496,6 +504,7 @@ class PosterRatingsUrlResolver @Inject constructor(
 
             fallbackThumbnailUrl
                 ?.takeIf { it.isNotBlank() }
+                ?.takeIf { it.isSafeRemoteArtworkFallback() }
                 ?.let { rawUrl ->
                     val normalizedUrlHash = ArtworkCacheKeys.normalizedUrlHash(rawUrl)
                     add(
@@ -643,6 +652,28 @@ class PosterRatingsUrlResolver @Inject constructor(
         startsWith(providerUrlPrefix("ratingposterdb"), ignoreCase = true) ||
             startsWith(providerUrlPrefix("top-posters"), ignoreCase = true)
 
+    private fun String.isInternalArtworkRef(): Boolean =
+        startsWith("nexio-artwork://", ignoreCase = true) ||
+            startsWith("nexio-placeholder://", ignoreCase = true)
+
+    private fun String.isSafeRemoteArtworkFallback(): Boolean {
+        val value = trim()
+        if (value.isBlank()) return false
+        if (!value.startsWith("http://", ignoreCase = true) &&
+            !value.startsWith("https://", ignoreCase = true)
+        ) {
+            return false
+        }
+        if (value.isPremiumProviderRawUrl()) return false
+        if (value.isInternalArtworkRef()) return false
+        if (value.isLegacyIntegrationPosterModel()) return false
+        return true
+    }
+
+    private fun String.isLegacyIntegrationPosterModel(): Boolean =
+        startsWith("integration-poster://", ignoreCase = true) ||
+            IntegrationPosterRequest.fromModel(this) != null
+
     private fun MetaPreview.posterArtworkOwnerKey(): ArtworkOwnerKey {
         val stableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
         return stableIds.canonicalArtworkContentId(type)?.let(ArtworkOwnerKey::CanonicalContent)
@@ -685,17 +716,20 @@ class PosterRatingsUrlResolver @Inject constructor(
 
     private fun ProviderIds.withFallback(fallback: ProviderIds): ProviderIds =
         ProviderIds(
-            imdb = imdb ?: fallback.imdb,
-            tmdb = tmdb ?: fallback.tmdb,
-            tvdb = tvdb ?: fallback.tvdb,
-            trakt = trakt ?: fallback.trakt,
-            simkl = simkl ?: fallback.simkl,
-            kitsu = kitsu ?: fallback.kitsu,
-            slug = slug ?: fallback.slug,
-            mal = mal ?: fallback.mal,
-            anilist = anilist ?: fallback.anilist,
-            anidb = anidb ?: fallback.anidb
+            imdb = imdb.nonBlankOr(fallback.imdb),
+            tmdb = tmdb.nonBlankOr(fallback.tmdb),
+            tvdb = tvdb.nonBlankOr(fallback.tvdb),
+            trakt = trakt.nonBlankOr(fallback.trakt),
+            simkl = simkl.nonBlankOr(fallback.simkl),
+            kitsu = kitsu.nonBlankOr(fallback.kitsu),
+            slug = slug.nonBlankOr(fallback.slug),
+            mal = mal.nonBlankOr(fallback.mal),
+            anilist = anilist.nonBlankOr(fallback.anilist),
+            anidb = anidb.nonBlankOr(fallback.anidb)
         )
+
+    private fun String?.nonBlankOr(fallback: String?): String? =
+        this?.trim()?.takeIf { it.isNotBlank() } ?: fallback
 
     private fun ProviderId.toProviderIds(): ProviderIds =
         when (type) {
