@@ -1,0 +1,133 @@
+package com.nexio.tv.ui.screens.home
+
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class ModernHomeRowsArtworkModelTest {
+    @Test
+    fun `landscape cards prefer typed backdrop over poster`() {
+        val item = carouselItem(
+            ArtworkBundle(
+                poster = artworkRef("posterAsset", ArtworkType.POSTER),
+                backdrop = artworkRef("backdropAsset", ArtworkType.BACKDROP)
+            )
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = true,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.imageUrl
+        )
+
+        assertEquals("nexio-artwork://asset/backdropAsset", model)
+    }
+
+    @Test
+    fun `expanded cards preserve typed backdrop preference`() {
+        val item = carouselItem(
+            ArtworkBundle(
+                poster = artworkRef("posterAsset", ArtworkType.POSTER),
+                backdrop = artworkRef("backdropAsset", ArtworkType.BACKDROP)
+            )
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = true,
+            isBackdropExpanded = true,
+            fallbackModel = item.imageUrl
+        )
+
+        assertEquals("nexio-artwork://asset/backdropAsset", model)
+    }
+
+    @Test
+    fun `portrait cards prefer typed poster`() {
+        val item = carouselItem(
+            ArtworkBundle(
+                poster = artworkRef("posterAsset", ArtworkType.POSTER),
+                backdrop = artworkRef("backdropAsset", ArtworkType.BACKDROP)
+            )
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.imageUrl
+        )
+
+        assertEquals("nexio-artwork://asset/posterAsset", model)
+    }
+
+    private fun carouselItem(artwork: ArtworkBundle): ModernCarouselItem {
+        val preview = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "https://image.tmdb.org/t/p/w500/raw-poster.jpg",
+            posterShape = PosterShape.POSTER,
+            background = "https://image.tmdb.org/t/p/w780/raw-backdrop.jpg",
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            artwork = artwork
+        )
+        return ModernCarouselItem(
+            key = "item",
+            title = preview.name,
+            subtitle = null,
+            imageUrl = preview.displayBackground,
+            heroPreview = HeroPreview(
+                title = preview.name,
+                logo = null,
+                description = null,
+                contentTypeText = null,
+                yearText = null,
+                imdbText = null,
+                tomatoesText = null,
+                genres = emptyList(),
+                poster = preview.displayPoster,
+                backdrop = preview.displayBackground,
+                imageUrl = preview.displayBackground
+            ),
+            payload = ModernPayload.Catalog(
+                focusKey = "focus",
+                itemId = preview.id,
+                itemType = preview.apiType,
+                addonBaseUrl = "addon",
+                trailerTitle = preview.name,
+                trailerReleaseInfo = null,
+                trailerApiType = preview.apiType
+            ),
+            metaPreview = preview
+        )
+    }
+
+    private fun artworkRef(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =
+        ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("decision-$key"),
+            assetKey = ArtworkAssetKey(key),
+            imageType = type,
+            selectedProvider = ArtworkProviderId.RailPreview,
+            sourceRole = ArtworkSourceRole.RAIL_PREVIEW,
+            trace = ArtworkTrace.empty()
+        )
+}
