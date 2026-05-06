@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-05-06T00:15:07.824446Z",
+  "sources": {
+    "fribb": {
+      "url": "https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-full.json",
+      "commit": "97d0bda7146caad4463f87084549a6cb4aac4895",
+      "fetchedAt": "2026-05-06T00:15:07.824446Z"
+    },
+    "scudlee": {
+      "url": "https://raw.githubusercontent.com/Anime-Lists/anime-lists/refs/heads/master/anime-list-full.xml",
+      "commit": "96c97c117c25c964e103f0a2d4d4f8fd20f6205a",
+      "fetchedAt": "2026-05-06T00:15:07.824446Z"
+    }
+  },
+  "overlay": {
+    "version": 1,
+    "entryCount": 0
+  },
+  "counts": {
+    "identityRecords": 12960,
+    "episodeMappingRecords": 1409,
+    "skippedCount": 0
+  }
+}
