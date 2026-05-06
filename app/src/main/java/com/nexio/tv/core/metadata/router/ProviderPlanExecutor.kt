@@ -66,11 +66,32 @@ class ProviderPlanExecutor @Inject constructor() {
         if (parts.size < 3) return null
         val provider = parts[0].lowercase()
         val kind = parts[1].lowercase()
+        val entityToken = parts.getOrNull(2).orEmpty()
         return when {
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "person" ->
-                listOf(step(TmdbApiShapes.PERSON_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+                listOf(
+                    step(
+                        when {
+                            route.sourceContext.itemType == PERSON_CREW_ITEM_TYPE -> TmdbApiShapes.PERSON_COMBINED_CREDITS
+                            entityToken.toIntOrNull() == null -> TmdbApiShapes.PERSON_FIND_BY_NAME
+                            else -> TmdbApiShapes.PERSON_DETAIL
+                        },
+                        MetadataPrimaryProvider.TMDB,
+                        ProviderPlanRole.SECONDARY
+                    )
+                )
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "company" ->
-                listOf(step(TmdbApiShapes.COMPANY_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+                listOf(
+                    step(
+                        if (entityToken.toIntOrNull() == null) {
+                            TmdbApiShapes.COMPANY_FIND_BY_NAME
+                        } else {
+                            TmdbApiShapes.COMPANY_DETAIL
+                        },
+                        MetadataPrimaryProvider.TMDB,
+                        ProviderPlanRole.SECONDARY
+                    )
+                )
             provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && (kind == "network" || kind == "org") ->
                 listOf(step(TmdbApiShapes.NETWORK_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
             provider == "tvdb" && route.provider == MetadataPrimaryProvider.TVDB && kind == "person" ->
@@ -234,6 +255,7 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private companion object {
+        const val PERSON_CREW_ITEM_TYPE = "person_crew"
         val unsupportedDepths = setOf(MetadataDepth.PREVIEW)
     }
 

@@ -53,7 +53,6 @@ fun testMetadataRouterFacade(
                 .toSet()
         ),
         fieldResolver = FieldResolver(),
-        metadataSecondaryRepository = metadataSecondaryRepository,
         trailerService = trailerService
     )
 }
