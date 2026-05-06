@@ -37,7 +37,6 @@ import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
-import com.nexio.tv.data.trailer.buildYouTubeWatchUrl
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaCompany
@@ -356,7 +355,7 @@ class MetadataRouterFacade(
                 ref = ref,
                 title = title,
                 year = year
-            ) ?: ref.toLegacyTrailerResolutionWithoutTransport()
+            )
         }
     }
 
@@ -1358,21 +1357,6 @@ class MetadataRouterFacade(
             TrailerPlaybackRef.YouTubeId(normalized)
         }
     }
-
-    private fun TrailerPlaybackRef.toLegacyTrailerResolutionWithoutTransport(): TrailerResolutionResult? =
-        when (this) {
-            is TrailerPlaybackRef.ExternalUrl -> TrailerResolutionResult.External(url)
-            is TrailerPlaybackRef.InAppSource -> TrailerResolutionResult.Playback(
-                TrailerPlaybackSource(
-                    videoUrl = videoUrl,
-                    audioUrl = audioUrl,
-                    userAgent = userAgent
-                )
-            )
-            is TrailerPlaybackRef.YouTubeId -> TrailerResolutionResult.External(
-                buildYouTubeWatchUrl(videoId)
-            )
-        }
 
     private fun String.tmdbNumericSuffix(): Int? =
         substringAfterLast(':').trim().toIntOrNull()
