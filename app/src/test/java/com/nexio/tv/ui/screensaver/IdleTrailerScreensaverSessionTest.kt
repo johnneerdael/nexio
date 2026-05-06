@@ -1,7 +1,12 @@
 package com.nexio.tv.ui.screensaver
 
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TrailerDisplayState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,8 +26,8 @@ class IdleTrailerScreensaverSessionTest {
         val session = prepareIdleTrailerScreensaverSession(
             slides = slides,
             shuffleCandidates = { it }
-        ) { candidate, trailerId ->
-            if (candidate.slide.itemId == "movie-2" && trailerId == "def456ghi78") {
+        ) { candidate, playbackRef ->
+            if (candidate.slide.itemId == "movie-2" && playbackRef == TrailerPlaybackRef.YouTubeId("def456ghi78")) {
                 TrailerPlaybackSource(videoUrl = "https://video.example.com/movie-2.mp4")
             } else {
                 null
@@ -58,11 +63,11 @@ class IdleTrailerScreensaverSessionTest {
         val playback = resolveNextIdleTrailerPlayback(
             candidates = candidates,
             currentIndex = 2
-        ) { candidate, trailerId ->
+        ) { candidate, playbackRef ->
             if (candidate.slide.itemId == "movie-2") {
                 null
             } else {
-                TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
             }
         }
 
@@ -82,14 +87,14 @@ class IdleTrailerScreensaverSessionTest {
         val playback = resolveNextIdleTrailerPlayback(
             candidates = candidates,
             currentIndex = 0,
-            skippedPlaybackKeys = setOf(idleTrailerPlaybackKey(candidates[1], "def456ghi78"))
-        ) { candidate, trailerId ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+            skippedPlaybackKeys = setOf(idleTrailerPlaybackKey(candidates[1], TrailerPlaybackRef.YouTubeId("def456ghi78")))
+        ) { _, playbackRef ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
         }
 
         requireNotNull(playback)
         assertEquals("movie-3", playback.candidate.slide.itemId)
-        assertEquals("ghi789jkl01", playback.trailerId)
+        assertEquals(TrailerPlaybackRef.YouTubeId("ghi789jkl01"), playback.playbackRef)
         assertEquals(2, playback.index)
     }
 
@@ -133,15 +138,15 @@ class IdleTrailerScreensaverSessionTest {
             buildCandidate("movie-2", listOf("def456ghi78"))
         )
         val allSkipped = candidates.flatMap { c ->
-            c.trailerYtIds.map { id -> idleTrailerPlaybackKey(c, id) }
+            c.playbackRefs.map { ref -> idleTrailerPlaybackKey(c, ref) }
         }.toSet()
 
         val playback = resolveNextIdleTrailerPlayback(
             candidates = candidates,
             currentIndex = 0,
             skippedPlaybackKeys = allSkipped
-        ) { _, trailerId ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+        ) { _, playbackRef ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
         }
 
         assertNull(playback)
@@ -155,16 +160,16 @@ class IdleTrailerScreensaverSessionTest {
                 itemType = "series",
                 addonBaseUrl = "",
                 title = "Breaking Bad",
-                logoUrl = null,
-                backgroundUrl = "nexio-artwork://decision/backdrop-81189",
-                fallbackArtworkUrls = listOf("nexio-artwork://decision/backdrop-81189"),
+                logoArtwork = null,
+                backgroundArtwork = artworkRef("nexio-artwork://decision/backdrop-81189", ArtworkType.BACKDROP),
+                fallbackArtwork = listOf(artworkRef("nexio-artwork://decision/backdrop-81189", ArtworkType.BACKDROP)),
                 genres = emptyList(),
                 description = "A chemistry teacher...",
                 releaseInfo = "2008",
                 runtime = null,
                 imdbRating = 9.5f,
                 tomatoesRating = null,
-                trailerYtIds = emptyList(),
+                trailerState = TrailerDisplayState(),
                 stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
             )
         )
@@ -172,8 +177,8 @@ class IdleTrailerScreensaverSessionTest {
         val session = prepareIdleTrailerScreensaverSessionFromCandidates(
             candidates = candidates,
             shuffleCandidates = { it }
-        ) { candidate, trailerId ->
-            if (candidate.itemId == "tvdb:81189" && trailerId == RESOLVE_TRAILER_BY_ITEM_SENTINEL) {
+        ) { candidate, playbackRef ->
+            if (candidate.itemId == "tvdb:81189" && playbackRef is TrailerPlaybackRef.ItemLookup) {
                 TrailerPlaybackSource(videoUrl = "https://video.example/breaking-bad.m3u8")
             } else {
                 null
@@ -182,7 +187,7 @@ class IdleTrailerScreensaverSessionTest {
 
         requireNotNull(session)
         assertEquals("tvdb:81189", session.initialPlayback.candidate.itemId)
-        assertEquals(RESOLVE_TRAILER_BY_ITEM_SENTINEL, session.initialPlayback.trailerId)
+        assertTrue(session.initialPlayback.playbackRef is TrailerPlaybackRef.ItemLookup)
     }
 
     @Test
@@ -196,8 +201,8 @@ class IdleTrailerScreensaverSessionTest {
             candidates = candidates,
             currentIndex = 1,
             skippedPlaybackKeys = emptySet()
-        ) { _, trailerId ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+        ) { _, playbackRef ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
         }
 
         requireNotNull(playback)
@@ -216,7 +221,7 @@ class IdleTrailerScreensaverSessionTest {
         )
 
         assertEquals(listOf("movie-1", "movie-3"), candidates.map { it.slide.itemId })
-        assertTrue(candidates[1].trailerYtIds.distinct() == candidates[1].trailerYtIds)
+        assertTrue(candidates[1].playbackRefs.distinct() == candidates[1].playbackRefs)
     }
 
     private fun buildSlide(
@@ -228,8 +233,8 @@ class IdleTrailerScreensaverSessionTest {
             itemType = "movie",
             addonBaseUrl = "https://api.example.com",
             title = "Example $itemId",
-            backgroundUrl = "https://image.example.com/$itemId.jpg",
-            logoUrl = null,
+            backgroundArtwork = artworkRef("https://image.example.com/$itemId.jpg", ArtworkType.BACKDROP),
+            logoArtwork = null,
             genres = emptyList(),
             description = null,
             releaseInfo = "2024",
@@ -238,10 +243,10 @@ class IdleTrailerScreensaverSessionTest {
             tomatoesRating = null,
             modeData = IdleScreensaverModeData(
                 image = IdleScreensaverImageModeData(
-                    fallbackArtworkUrls = listOf("https://image.example.com/$itemId.jpg")
+                    fallbackArtwork = listOf(artworkRef("https://image.example.com/$itemId.jpg", ArtworkType.BACKDROP))
                 ),
                 trailer = trailerIds.takeIf { it.isNotEmpty() }?.let {
-                    IdleScreensaverTrailerModeData(trailerYtIds = it)
+                    IdleScreensaverTrailerModeData(TrailerDisplayState(fallbackTrailerYtIds = it))
                 }
             )
         )
@@ -256,16 +261,26 @@ class IdleTrailerScreensaverSessionTest {
             itemType = "movie",
             addonBaseUrl = "https://api.example.com",
             title = "Example $itemId",
-            logoUrl = null,
-            backgroundUrl = "https://image.example.com/$itemId.jpg",
-            fallbackArtworkUrls = listOf("https://image.example.com/$itemId.jpg"),
+            logoArtwork = null,
+            backgroundArtwork = artworkRef("https://image.example.com/$itemId.jpg", ArtworkType.BACKDROP),
+            fallbackArtwork = listOf(artworkRef("https://image.example.com/$itemId.jpg", ArtworkType.BACKDROP)),
             genres = emptyList(),
             description = null,
             releaseInfo = "2024",
             runtime = null,
             imdbRating = null,
             tomatoesRating = null,
-            trailerYtIds = trailerIds
+            trailerState = TrailerDisplayState(fallbackTrailerYtIds = trailerIds)
         )
     }
+
+    private fun artworkRef(value: String, imageType: ArtworkType): ArtworkDisplayRef =
+        ArtworkDisplayRef.LegacyString(
+            value = value,
+            imageType = imageType,
+            trace = ArtworkTrace.empty()
+        )
+
+    private fun TrailerPlaybackRef.videoIdForTest(): String =
+        (this as TrailerPlaybackRef.YouTubeId).videoId
 }

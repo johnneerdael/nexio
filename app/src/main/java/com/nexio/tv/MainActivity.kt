@@ -155,9 +155,9 @@ import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverOverlay
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverSessionStart
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
-import com.nexio.tv.ui.screensaver.RESOLVE_TRAILER_BY_ITEM_SENTINEL
 import com.nexio.tv.ui.screensaver.chooseIdleTrailerCandidates
 import com.nexio.tv.ui.screensaver.extractIdleTrailerReleaseYear
+import com.nexio.tv.ui.screensaver.trailerResolverContentId
 import com.nexio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
@@ -201,51 +201,39 @@ private data class MainUiPrefs(
 
 internal suspend fun resolveIdleTrailerScreensaverPlaybackSource(
     candidate: IdleTrailerScreensaverCandidate,
-    trailerId: String,
+    playbackRef: TrailerPlaybackRef,
     resolveTrailer: suspend (TrailerResolveRequest) -> TrailerResolution,
     resolvePlaybackSource: suspend (TrailerPlaybackRef) -> TrailerResolutionResult?
 ): TrailerPlaybackSource? {
-    val request = candidate.toTrailerResolverRequest(trailerId)
+    val request = candidate.toTrailerResolverRequest(playbackRef)
     val selectedRef = resolveTrailer(request).selected ?: return null
     val result = resolvePlaybackSource(selectedRef)
     return (result as? TrailerResolutionResult.Playback)?.source
 }
 
 private fun IdleTrailerScreensaverCandidate.toTrailerResolverRequest(
-    trailerId: String
+    playbackRef: TrailerPlaybackRef
 ): TrailerResolveRequest {
     return TrailerResolveRequest(
         itemKey = "${itemType.trim().lowercase()}:$itemId",
         title = title,
         year = extractIdleTrailerReleaseYear(releaseInfo),
         stableIds = stableIds,
-        fallbackYtIds = if (trailerId == RESOLVE_TRAILER_BY_ITEM_SENTINEL) {
-            emptyList()
-        } else {
-            listOf(trailerId)
-        },
         surface = TrailerSurface.SCREENSAVER,
         type = itemType,
-        contentId = trailerResolverContentId()
+        contentId = trailerResolverContentId(),
+        providerCandidates = listOf(playbackRef)
     )
-}
-
-private fun IdleTrailerScreensaverCandidate.trailerResolverContentId(): String {
-    return stableIds.tvdb?.trim()?.takeIf(String::isNotEmpty)?.let { "tvdb:$it" }
-        ?: stableIds.tmdb?.trim()?.takeIf(String::isNotEmpty)?.let { "tmdb:$it" }
-        ?: stableIds.imdb?.trim()?.takeIf(String::isNotEmpty)?.let { "imdb:$it" }
-        ?: stableIds.kitsu?.trim()?.takeIf(String::isNotEmpty)?.let { "kitsu:$it" }
-        ?: itemId
 }
 
 private suspend fun TrailerService.resolveIdleTrailerScreensaverPlaybackSource(
     trailerResolver: TrailerResolver,
     candidate: IdleTrailerScreensaverCandidate,
-    trailerId: String
+    playbackRef: TrailerPlaybackRef
 ): TrailerPlaybackSource? {
     return resolveIdleTrailerScreensaverPlaybackSource(
         candidate = candidate,
-        trailerId = trailerId,
+        playbackRef = playbackRef,
         resolveTrailer = { request ->
             trailerResolver.resolveTrailer(request)
         },
@@ -913,11 +901,11 @@ class MainActivity : ComponentActivity() {
                         idleTrailerSessionStart = if (mainUiPrefs.trailerScreensaverEnabled) {
                             com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSessionFromCandidates(
                                 candidates = idleTrailerCandidates
-                            ) { candidate, trailerId ->
+                            ) { candidate, playbackRef ->
                                 trailerService.resolveIdleTrailerScreensaverPlaybackSource(
                                     trailerResolver = trailerResolver,
                                     candidate = candidate,
-                                    trailerId = trailerId
+                                    playbackRef = playbackRef
                                 )
                             }
                         } else {
@@ -1106,11 +1094,11 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 )
                                             },
-                                            resolvePlaybackSource = { candidate, trailerId ->
+                                            resolvePlaybackSource = { candidate, playbackRef ->
                                                 trailerService.resolveIdleTrailerScreensaverPlaybackSource(
                                                     trailerResolver = trailerResolver,
                                                     candidate = candidate,
-                                                    trailerId = trailerId
+                                                    playbackRef = playbackRef
                                                 )
                                             }
                                         )
