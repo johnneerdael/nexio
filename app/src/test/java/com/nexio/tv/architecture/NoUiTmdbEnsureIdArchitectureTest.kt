@@ -10,12 +10,7 @@ class NoUiTmdbEnsureIdArchitectureTest {
         val offenders = scanFiles(
             files = productionKotlinFilesUnder("app/src/main/java/com/nexio/tv/ui") +
                 requiredFile("app/src/main/java/com/nexio/tv/MainActivity.kt"),
-            forbiddenPatterns = linkedMapOf(
-                "TmdbService" to Regex("""\bTmdbService\b"""),
-                "tmdbService" to Regex("""\btmdbService\b"""),
-                "ensureTmdbId(" to Regex("""\bensureTmdbId\s*\("""),
-                ".ensureTmdbId(" to Regex("""\.ensureTmdbId\s*\(""")
-            )
+            forbiddenPatterns = BRIDGE_CALL_PATTERNS
         )
 
         failIfNotEmpty(
@@ -23,6 +18,52 @@ class NoUiTmdbEnsureIdArchitectureTest {
             "UI and MainActivity must consume stable IDs from resolved detail/home surfaces " +
                 "instead of calling TMDB identity bridge helpers."
         )
+    }
+
+    @Test
+    fun `tmdb scanner ignores harmless service mentions without bridge calls`() {
+        val fixture = kotlinFixture(
+            """
+                package com.nexio.tv.ui.fixture
+
+                import com.nexio.tv.core.tmdb.TmdbService
+
+                class Fixture(
+                    private val tmdbService: TmdbService
+                ) {
+                    // tmdbService can exist here only as text in this fixture; ensure calls are banned.
+                    fun name(): String = "TmdbService"
+                }
+            """.trimIndent()
+        )
+
+        val offenders = scanFiles(listOf(fixture), BRIDGE_CALL_PATTERNS)
+
+        if (offenders.isNotEmpty()) {
+            fail("Harmless TmdbService/tmdbService mentions must not fail the bridge-call guard: $offenders")
+        }
+    }
+
+    @Test
+    fun `tmdb scanner catches bridge helper calls`() {
+        val fixture = kotlinFixture(
+            """
+                package com.nexio.tv.ui.fixture
+
+                class Fixture {
+                    suspend fun one(tmdbService: Any) {
+                        tmdbService.ensureTmdbId("tt0944947", "series")
+                        ensureTmdbId("tt0944947", "series")
+                    }
+                }
+            """.trimIndent()
+        )
+
+        val offenders = scanFiles(listOf(fixture), BRIDGE_CALL_PATTERNS)
+
+        if (offenders.size != 2) {
+            fail("Bridge-call guard must catch receiver and direct ensureTmdbId calls: $offenders")
+        }
     }
 
     private fun scanFiles(
@@ -65,5 +106,17 @@ class NoUiTmdbEnsureIdArchitectureTest {
         if (offenders.isNotEmpty()) {
             fail("$message Offenders:\n${offenders.joinToString(separator = "\n")}")
         }
+    }
+
+    private fun kotlinFixture(source: String): File =
+        File.createTempFile("NoUiTmdbEnsureIdArchitectureTest", ".kt").apply {
+            writeText(source)
+            deleteOnExit()
+        }
+
+    private companion object {
+        private val BRIDGE_CALL_PATTERNS = linkedMapOf(
+            "ensureTmdbId(" to Regex("""(?:\b(?:TmdbService|tmdbService)\s*\.\s*)?\bensureTmdbId\s*\(""")
+        )
     }
 }
