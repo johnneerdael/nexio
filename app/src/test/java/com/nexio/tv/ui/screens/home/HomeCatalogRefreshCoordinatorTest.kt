@@ -9,6 +9,7 @@ import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -16,6 +17,8 @@ import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
@@ -42,7 +45,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -592,6 +597,159 @@ class HomeCatalogRefreshCoordinatorTest {
         assertTrue(catalogsMap.isEmpty())
         coVerify(exactly = 0) { viewModel.flushCatalogRowsForFirstPaint(any()) }
         verify(exactly = 0) { viewModel.scheduleUpdateCatalogRows(any()) }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized refresh rejects final settlement after profile session changes during snapshot read`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+        var tmdbObserveCount = 0
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns linkedMapOf()
+        every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
+        every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flow {
+            tmdbObserveCount += 1
+            if (tmdbObserveCount == 2) {
+                activeProfileSession.value = expectedProfileSession.copy(
+                    profileId = 2,
+                    sessionId = "new-session",
+                    sessionOrdinal = 2L
+                )
+            }
+            emit(TmdbDiscoverySnapshot(updatedAtMs = tmdbObserveCount.toLong()))
+        }
+        every { viewModel.tmdbDiscoverySnapshot = any() } answers { Unit }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } returns 0
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertEquals(2, tmdbObserveCount)
+        verify(exactly = 0) { viewModel.tmdbDiscoverySnapshot = any() }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized synthetic renewal uses captured profile session and skips stale in-memory apply`() = runTest {
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val profileManager = mockk<ProfileManager>()
+        val syntheticHomeCatalogStore = mockk<SyntheticHomeCatalogStore>()
+        val expectedProfileSession = activeProfileSession()
+        val newerProfileSession = expectedProfileSession.copy(
+            profileId = 2,
+            sessionId = "new-session",
+            sessionOrdinal = 2L
+        )
+        val activeProfileSession = MutableStateFlow(newerProfileSession)
+        val activeProfileId = MutableStateFlow(newerProfileSession.profileId)
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val tmdbRow = CatalogRow(
+            addonId = TMDB_HOME_ADDON_ID,
+            addonName = "TMDB",
+            addonBaseUrl = "https://api.themoviedb.org/3",
+            catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+            catalogName = "TMDB Trending Movies",
+            type = ContentType.MOVIE,
+            items = listOf(preview(id = "tt-old-profile-tmdb", poster = "poster")),
+            hasMore = false
+        )
+        val tmdbSnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
+            updatedAtMs = 10L,
+            includeAdult = tmdbPrefs.includeAdult,
+            hideUnreleasedDigital = tmdbPrefs.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        every { profileManager.activeProfileSession } returns activeProfileSession
+        every { profileManager.activeProfileId } returns activeProfileId
+        every { viewModel.profileManager } returns profileManager
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.syntheticHomeCatalogStore } returns syntheticHomeCatalogStore
+        every { viewModel.syntheticCatalogStoreMutex } returns Mutex()
+        every { viewModel.tmdbCatalogPreferences } returns tmdbPrefs
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedKitsuSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticIncludeAdult } returns null
+        every { viewModel.persistedTmdbSyntheticHideUnreleasedDigital } returns null
+        every { syntheticHomeCatalogStore.read(profileId = expectedProfileSession.profileId) } returns
+            SyntheticHomeCatalogStore.Snapshot()
+        every { syntheticHomeCatalogStore.write(any(), profileId = expectedProfileSession.profileId) } answers { Unit }
+        every { syntheticHomeCatalogStore.write(any(), profileId = newerProfileSession.profileId) } answers { Unit }
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.renewTmdbSyntheticSnapshotPipeline(
+                snapshot = tmdbSnapshot,
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        verify(exactly = 1) {
+            syntheticHomeCatalogStore.write(any(), profileId = expectedProfileSession.profileId)
+        }
+        verify(exactly = 0) {
+            syntheticHomeCatalogStore.write(any(), profileId = newerProfileSession.profileId)
+        }
+        verify(exactly = 0) { viewModel.persistedTmdbSyntheticGroups = any() }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)

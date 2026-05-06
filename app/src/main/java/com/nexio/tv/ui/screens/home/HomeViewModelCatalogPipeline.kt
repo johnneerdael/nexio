@@ -1180,7 +1180,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=trakt_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=trakt")
                     if (isCurrentSerializedRefreshScope() && activeProfileTraktAuthenticated) {
-                        renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+                        renewTraktSyntheticSnapshotPipeline(
+                            snapshot = afterTraktSnapshot,
+                            expectedGeneration = expectedGeneration,
+                            expectedProfileSession = expectedProfileSession
+                        )
                     }
                     logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
@@ -1230,7 +1234,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=tmdb_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=tmdb")
                     if (isCurrentSerializedRefreshScope()) {
-                        renewTmdbSyntheticSnapshotPipeline(afterTmdbSnapshot)
+                        renewTmdbSyntheticSnapshotPipeline(
+                            snapshot = afterTmdbSnapshot,
+                            expectedGeneration = expectedGeneration,
+                            expectedProfileSession = expectedProfileSession
+                        )
                     }
                     logStartupPerf("synthetic_refresh_step_end", "source=tmdb rows=${persistedTmdbSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
@@ -1281,7 +1289,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=simkl_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=simkl")
                     if (isCurrentSerializedRefreshScope()) {
-                        renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
+                        renewSimklSyntheticSnapshotPipeline(
+                            snapshot = afterSimklSnapshot,
+                            expectedGeneration = expectedGeneration,
+                            expectedProfileSession = expectedProfileSession
+                        )
                     }
                     logStartupPerf("synthetic_refresh_step_end", "source=simkl rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
@@ -1327,7 +1339,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=mdblist_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
                     if (isCurrentSerializedRefreshScope()) {
-                        renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+                        renewMDBListSyntheticSnapshotPipeline(
+                            snapshot = afterMdbSnapshot,
+                            expectedGeneration = expectedGeneration,
+                            expectedProfileSession = expectedProfileSession
+                        )
                     }
                     logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
@@ -1435,6 +1451,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
     val afterSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val afterMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val afterTmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
+    if (!isCurrentSerializedRefreshScope()) {
+        Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh settlement after snapshot read generation=$expectedGeneration")
+        return
+    }
     val hydratedAfterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
         afterTraktSnapshot,
         syntheticTomatoesOverridesByItemId
@@ -1656,12 +1676,27 @@ private fun SyntheticHomeCatalogStore.Snapshot.withCurrentTmdbPreferenceProvenan
     )
 }
 
+private fun HomeViewModel.isCurrentSyntheticRenewalScope(
+    expectedGeneration: Long?,
+    expectedProfileSession: ActiveProfileSession?
+): Boolean {
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return false
+    if (expectedProfileSession != null && profileManager.activeProfileSession.value != expectedProfileSession) return false
+    return true
+}
+
 internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
-    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    expectedGeneration: Long? = null,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
-    val profileId = profileManager.activeProfileId.value
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
+    val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
     if (!activeProfileTraktAuthenticated) {
-        clearTraktHomeState("renew_trakt_synthetic_unauthenticated")
+        withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
+            clearTraktHomeState("renew_trakt_synthetic_unauthenticated")
+        }
         syntheticCatalogStoreMutex.withLock {
             withContext(Dispatchers.IO) {
                 val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
@@ -1723,15 +1758,19 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     }
     appliedTraktGroups?.let { groups ->
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
             persistedTraktSyntheticGroups = groups
         }
     }
 }
 
 internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
-    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot
+    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot,
+    expectedGeneration: Long? = null,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
-    val profileId = profileManager.activeProfileId.value
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
+    val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
     val simklPrefsSnapshot = simklCatalogPreferences
     var appliedSimklGroups: List<PersistedSyntheticCatalogGroup>? = null
 
@@ -1776,15 +1815,19 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
     }
     appliedSimklGroups?.let { groups ->
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
             persistedSimklSyntheticGroups = groups
         }
     }
 }
 
 internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
-    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
+    expectedGeneration: Long? = null,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
-    val profileId = profileManager.activeProfileId.value
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
+    val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
     val mdbPrefsSnapshot = mdbListCatalogPreferences
     var appliedMDBListGroups: List<PersistedSyntheticCatalogGroup>? = null
 
@@ -1816,15 +1859,19 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
     }
     appliedMDBListGroups?.let { groups ->
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
             persistedMDBListSyntheticGroups = groups
         }
     }
 }
 
 internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
-    snapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot
+    snapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot,
+    expectedGeneration: Long? = null,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
-    val profileId = profileManager.activeProfileId.value
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
+    val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
     val kitsuPrefsSnapshot = kitsuCatalogPreferences
     var appliedKitsuGroups: List<PersistedSyntheticCatalogGroup>? = null
 
@@ -1871,15 +1918,19 @@ internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
     }
     appliedKitsuGroups?.let { groups ->
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
             persistedKitsuSyntheticGroups = groups
         }
     }
 }
 
 internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
-    snapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot
+    snapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot,
+    expectedGeneration: Long? = null,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
-    val profileId = profileManager.activeProfileId.value
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
+    val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
     val tmdbPrefsSnapshot = tmdbCatalogPreferences
     var appliedTmdbSnapshot: SyntheticHomeCatalogStore.Snapshot? = null
 
@@ -1933,6 +1984,7 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
     }
     appliedTmdbSnapshot?.let { renewedSnapshot ->
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentSyntheticRenewalScope(expectedGeneration, expectedProfileSession)) return@withContext
             applyPersistedTmdbSyntheticSnapshot(renewedSnapshot)
         }
     }
