@@ -2,12 +2,14 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -15,12 +17,13 @@ import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvProvider
@@ -44,7 +47,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -107,16 +112,27 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
-    fun `tvdb home enrichment carries runtime into preview`() {
-        val enriched = preview(id = "a", poster = "posterA")
-            .applyTvMetadataEnrichmentForHome(
-                TvMetadataEnrichment(
-                    seriesTvdbId = 121361,
-                    runtimeMinutes = 52
-                )
+    fun `provider home enrichment no longer mutates preview runtime`() = runTest {
+        val item = preview(id = "a", poster = "posterA")
+        val resolver = mockk<ProviderLocalizedMetadataResolver>()
+        val profileBoundary = mockk<ProfileBoundary>()
+        coEvery { resolver.fetchDecision(any(), any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 121361,
+                runtimeMinutes = 52
             )
+        )
+        every { profileBoundary.currentLanguageTag() } returns "en"
 
-        assertEquals("52 min", enriched.runtime)
+        val enriched = overlayProviderLocalizedMetadataForHome(
+            item = item,
+            providerLocalizedMetadataResolver = resolver,
+            profileBoundary = profileBoundary
+        )
+
+        assertEquals(item, enriched)
     }
 
     @Test
@@ -406,7 +422,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
-        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = catalogsMap.values.toList()
             renderedRows += fullCatalogRows.value
         }
@@ -443,9 +459,16 @@ class HomeCatalogRefreshCoordinatorTest {
             2
         }
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -477,7 +500,258 @@ class HomeCatalogRefreshCoordinatorTest {
                 onLog = any()
             )
         }
-        coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint() }
+        coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint(profileSession) }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized refresh rejects catalog callback after profile session changes`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val oldPreview = preview(id = "tt-old-profile-row", poster = null).copy(name = "Old Profile Row")
+        val oldRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(oldPreview),
+            hasMore = false
+        )
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
+            fullCatalogRows.value = catalogsMap.values.toList()
+        }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            activeProfileSession.value = expectedProfileSession.copy(
+                profileId = 2,
+                sessionId = "new-session",
+                sessionOrdinal = 2L
+            )
+            onCatalogReady(
+                "addon_movie_popular",
+                oldRow,
+                CatalogItemDiff(addedOrChanged = listOf(oldPreview), removed = emptyList())
+            )
+            1
+        }
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertTrue(catalogsMap.isEmpty())
+        coVerify(exactly = 0) { viewModel.flushCatalogRowsForFirstPaint(any()) }
+        verify(exactly = 0) { viewModel.scheduleUpdateCatalogRows(any()) }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized refresh rejects final settlement after profile session changes during snapshot read`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+        var tmdbObserveCount = 0
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns linkedMapOf()
+        every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
+        every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flow {
+            tmdbObserveCount += 1
+            if (tmdbObserveCount == 2) {
+                activeProfileSession.value = expectedProfileSession.copy(
+                    profileId = 2,
+                    sessionId = "new-session",
+                    sessionOrdinal = 2L
+                )
+            }
+            emit(TmdbDiscoverySnapshot(updatedAtMs = tmdbObserveCount.toLong()))
+        }
+        every { viewModel.tmdbDiscoverySnapshot = any() } answers { Unit }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } returns 0
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertEquals(2, tmdbObserveCount)
+        verify(exactly = 0) { viewModel.tmdbDiscoverySnapshot = any() }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized synthetic renewal uses captured profile session and skips stale in-memory apply`() = runTest {
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val profileManager = mockk<ProfileManager>()
+        val syntheticHomeCatalogStore = mockk<SyntheticHomeCatalogStore>()
+        val expectedProfileSession = activeProfileSession()
+        val newerProfileSession = expectedProfileSession.copy(
+            profileId = 2,
+            sessionId = "new-session",
+            sessionOrdinal = 2L
+        )
+        val activeProfileSession = MutableStateFlow(newerProfileSession)
+        val activeProfileId = MutableStateFlow(newerProfileSession.profileId)
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val tmdbRow = CatalogRow(
+            addonId = TMDB_HOME_ADDON_ID,
+            addonName = "TMDB",
+            addonBaseUrl = "https://api.themoviedb.org/3",
+            catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+            catalogName = "TMDB Trending Movies",
+            type = ContentType.MOVIE,
+            items = listOf(preview(id = "tt-old-profile-tmdb", poster = "poster")),
+            hasMore = false
+        )
+        val tmdbSnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
+            updatedAtMs = 10L,
+            includeAdult = tmdbPrefs.includeAdult,
+            hideUnreleasedDigital = tmdbPrefs.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        every { profileManager.activeProfileSession } returns activeProfileSession
+        every { profileManager.activeProfileId } returns activeProfileId
+        every { viewModel.profileManager } returns profileManager
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.syntheticHomeCatalogStore } returns syntheticHomeCatalogStore
+        every { viewModel.syntheticCatalogStoreMutex } returns Mutex()
+        every { viewModel.tmdbCatalogPreferences } returns tmdbPrefs
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedKitsuSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticIncludeAdult } returns null
+        every { viewModel.persistedTmdbSyntheticHideUnreleasedDigital } returns null
+        every { syntheticHomeCatalogStore.read(profileId = expectedProfileSession.profileId) } returns
+            SyntheticHomeCatalogStore.Snapshot()
+        every { syntheticHomeCatalogStore.write(any(), profileId = expectedProfileSession.profileId) } answers { Unit }
+        every { syntheticHomeCatalogStore.write(any(), profileId = newerProfileSession.profileId) } answers { Unit }
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.renewTmdbSyntheticSnapshotPipeline(
+                snapshot = tmdbSnapshot,
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        verify(exactly = 1) {
+            syntheticHomeCatalogStore.write(any(), profileId = expectedProfileSession.profileId)
+        }
+        verify(exactly = 0) {
+            syntheticHomeCatalogStore.write(any(), profileId = newerProfileSession.profileId)
+        }
+        verify(exactly = 0) { viewModel.persistedTmdbSyntheticGroups = any() }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -546,7 +820,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
-        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = listOf(fullRow)
             uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
         }
@@ -579,9 +853,16 @@ class HomeCatalogRefreshCoordinatorTest {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -603,6 +884,137 @@ class HomeCatalogRefreshCoordinatorTest {
                 telemetryEnabled = false,
                 onLog = any()
             )
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized settlement skips visible prefetch when session changes during visible hydration`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val uiState = MutableStateFlow(HomeUiState())
+        val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
+        val visiblePreview = preview(id = "tt-visible-session-race", poster = "poster").copy(
+            description = "Visible catalog payload",
+            releaseInfo = "2026"
+        )
+        val displayRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(visiblePreview),
+            hasMore = false
+        )
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns uiState
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
+        every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
+        every { viewModel.homeProfileGeneration } returns 1L
+        every { viewModel.profileBoundary.currentLanguageTag() } returns "en"
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
+            fullCatalogRows.value = listOf(displayRow)
+            uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
+        }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            onCatalogReady(
+                "addon_movie_popular",
+                displayRow,
+                CatalogItemDiff(addedOrChanged = displayRow.items, removed = emptyList())
+            )
+            onRawCatalogBatchComplete()
+            1
+        }
+        coEvery {
+            homeHydrationCoordinator.hydrate(any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            activeProfileSession.value = expectedProfileSession.copy(
+                profileId = 2,
+                sessionId = "new-session",
+                sessionOrdinal = 2L
+            )
+            null
+        }
+        coEvery {
+            coordinator.prefetchVisibleImagesOnly(any(), any(), any())
+        } returns Unit
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = visiblePreview,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 1L,
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+        coVerify(exactly = 0) {
+            coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         }
     }
 
@@ -681,9 +1093,16 @@ class HomeCatalogRefreshCoordinatorTest {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -778,7 +1197,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `visible prefetch only does not write metadata cache or resolve metadata`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
         val logs = mutableListOf<Pair<String, String?>>()
@@ -790,7 +1208,6 @@ class HomeCatalogRefreshCoordinatorTest {
         coordinator(
             catalogRepository = catalogRepository,
             metadataRouterFacade = metadataRouterFacade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).prefetchVisibleImagesOnly(
@@ -812,14 +1229,12 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 0) {
             metadataDiskCacheStore.writeHomeDisplayMetadata(any(), any(), any())
         }
-        coVerify(exactly = 0) { titleRatingOverrideRepository.enrichPreview(any(), any()) }
     }
 
     @Test
     fun `visible prefetch skips internal artwork refs`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
         val logs = mutableListOf<Pair<String, String?>>()
@@ -831,7 +1246,6 @@ class HomeCatalogRefreshCoordinatorTest {
         coordinator(
             catalogRepository = catalogRepository,
             metadataRouterFacade = metadataRouterFacade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).prefetchVisibleImagesOnly(
@@ -849,7 +1263,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `home refresh uses shared artwork projection and not legacy provider apply`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
         val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
         val artworkPreview = rawPreview.copy(poster = "nexio-artwork://decision/home")
@@ -863,14 +1276,17 @@ class HomeCatalogRefreshCoordinatorTest {
             items = listOf(rawPreview),
             hasMore = false
         )
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(seriesTvdbId = null)
+        )
         coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
-        every { posterRatingsUrlResolver.applyArtworkRef(rawPreview, any()) } returns artworkPreview
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } returns artworkPreview
 
         val hydratedRows = coordinator(
             catalogRepository = catalogRepository,
             tvMetadataRouter = tvMetadataRouter,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).hydrateAndPrefetchRows(
             rows = listOf(row),
@@ -880,7 +1296,12 @@ class HomeCatalogRefreshCoordinatorTest {
 
         assertEquals("nexio-artwork://decision/home", hydratedRows.single().items.single().poster)
         coVerify(exactly = 1) { posterRatingsUrlResolver.currentSettings() }
-        verify(exactly = 1) { posterRatingsUrlResolver.applyArtworkRef(rawPreview, any()) }
+        verify(exactly = 1) {
+            posterRatingsUrlResolver.applyArtworkRef(
+                match { it.id == rawPreview.id && it.poster == rawPreview.poster },
+                any()
+            )
+        }
         verify(exactly = 0) { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) }
     }
 
@@ -888,7 +1309,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `home refresh preserves compatible persisted internal poster before artwork projection`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
         val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
         val persistedPreview = rawPreview.copy(
@@ -906,7 +1326,11 @@ class HomeCatalogRefreshCoordinatorTest {
             hasMore = false
         )
         val existingRow = row.copy(items = listOf(persistedPreview))
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(seriesTvdbId = null)
+        )
         coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings(
             rpdbApiKey = "rpdb-key",
             selection = ArtworkProviderSelectionSettings(
@@ -918,7 +1342,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val hydratedRows = coordinator(
             catalogRepository = catalogRepository,
             tvMetadataRouter = tvMetadataRouter,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).hydrateAndPrefetchRows(
             rows = listOf(row),
@@ -941,7 +1364,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `home refresh does not preserve primary fallback when premium provider becomes active`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
         val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
         val persistedPreview = rawPreview.copy(
@@ -963,7 +1385,11 @@ class HomeCatalogRefreshCoordinatorTest {
             hasMore = false
         )
         val existingRow = row.copy(items = listOf(persistedPreview))
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(seriesTvdbId = null)
+        )
         coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings(
             rpdbApiKey = "rpdb-key",
             selection = ArtworkProviderSelectionSettings(
@@ -975,7 +1401,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val hydratedRows = coordinator(
             catalogRepository = catalogRepository,
             tvMetadataRouter = tvMetadataRouter,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).hydrateAndPrefetchRows(
             rows = listOf(row),
@@ -998,7 +1423,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `home refresh does not preserve premium poster after provider switches to default`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
         val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
         val persistedPreview = rawPreview.copy(
@@ -1020,14 +1444,17 @@ class HomeCatalogRefreshCoordinatorTest {
             hasMore = false
         )
         val existingRow = row.copy(items = listOf(persistedPreview))
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(seriesTvdbId = null)
+        )
         coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
         every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } returns primaryPreview
 
         val hydratedRows = coordinator(
             catalogRepository = catalogRepository,
             tvMetadataRouter = tvMetadataRouter,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).hydrateAndPrefetchRows(
             rows = listOf(row),
@@ -1088,13 +1515,9 @@ class HomeCatalogRefreshCoordinatorTest {
     private fun coordinator(
         catalogRepository: CatalogRepository,
         tvMetadataRouter: TvMetadataRouter,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository? = null,
         metadataDiskCacheStore: MetadataDiskCacheStore = mockk(relaxed = true),
         posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
     ): HomeCatalogRefreshCoordinator {
-        val ratingOverrides = titleRatingOverrideRepository ?: mockk<TitleRatingOverrideRepository>().also {
-            coEvery { it.enrichPreview(any()) } answers { firstArg() }
-        }
         val posterResolver = posterRatingsUrlResolver ?: mockk<PosterRatingsUrlResolver>(relaxed = true).also {
             coEvery { it.currentSettings() } returns ArtworkProviderSettings()
             every { it.applyArtworkRef(any(), any()) } answers { firstArg() }
@@ -1107,7 +1530,6 @@ class HomeCatalogRefreshCoordinatorTest {
 
         return HomeCatalogRefreshCoordinator(
             catalogRepository = catalogRepository,
-            titleRatingOverrideRepository = ratingOverrides,
             metadataDiskCacheStore = metadataDiskCacheStore,
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
@@ -1123,7 +1545,6 @@ class HomeCatalogRefreshCoordinatorTest {
     private fun coordinator(
         catalogRepository: CatalogRepository,
         metadataRouterFacade: MetadataRouterFacade,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver
     ): HomeCatalogRefreshCoordinator {
@@ -1135,7 +1556,6 @@ class HomeCatalogRefreshCoordinatorTest {
 
         return HomeCatalogRefreshCoordinator(
             catalogRepository = catalogRepository,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
@@ -1156,5 +1576,12 @@ class HomeCatalogRefreshCoordinatorTest {
         every { prefs.getInt(any(), any()) } returns 1
         return context
     }
+
+    private fun activeProfileSession() = ActiveProfileSession(
+        profileId = 1,
+        sessionId = "test-session",
+        sessionOrdinal = 1L,
+        startedAtMs = 1L
+    )
 
 }

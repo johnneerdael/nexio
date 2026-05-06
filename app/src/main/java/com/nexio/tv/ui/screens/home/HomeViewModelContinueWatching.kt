@@ -537,7 +537,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
         viewModelScope.launch {
             continueWatchingSnapshotService.removeShowOptimistically(targetId)
             runCatching {
-                watchProgressRepository.clearShowProgress(targetId)
+                watchProgressRepository.clearShowProgress(profileManager.activeProfileSession.value, targetId)
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
                 if (error is CancellationException) throw error
@@ -564,6 +564,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
         }
         runCatching {
             watchProgressRepository.removeProgress(
+                profileSession = profileManager.activeProfileSession.value,
                 contentId = contentId,
                 season = season,
                 episode = episode
@@ -644,7 +645,7 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                     progressPercent = 100f
                 )
             }
-            watchProgressRepository.markAsCompleted(progress)
+            watchProgressRepository.markAsCompleted(profileManager.activeProfileSession.value, progress)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {

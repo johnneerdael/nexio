@@ -2,6 +2,7 @@ package com.nexio.tv.data.trakt.outbox
 
 import android.content.Context
 import com.google.gson.JsonObject
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -254,6 +255,8 @@ class TraktMutationOutboxPolicyTest {
         return TraktMutationEnvelope(
             id = id,
             profileId = profileId,
+            provider = TrackingProvider.TRAKT,
+            credentialHash = "trakt-test-credential",
             adapterKey = "progress",
             mutationKind = "progress.history",
             priority = priority,

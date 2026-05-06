@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.TraktRecommendationRef
@@ -18,7 +19,7 @@ class TraktDiscoveryMutationAdapterTest {
     fun `dismiss recommendation envelope captures profile id`() {
         val envelope = TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(
             ref = recommendationRef(),
-            profileId = 42
+            session = testTraktSession(profileId = 42)
         )
 
         assertEquals(42, envelope.profileId)
@@ -34,7 +35,7 @@ class TraktDiscoveryMutationAdapterTest {
         )
         val envelope = TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(
             ref = recommendationRef(),
-            profileId = 42
+            session = testTraktSession(profileId = 42)
         )
         coEvery {
             provider.hideRecommendation(any(), any(), any())
@@ -44,7 +45,7 @@ class TraktDiscoveryMutationAdapterTest {
 
         coVerify(exactly = 1) {
             provider.hideRecommendation(
-                TrackingAuthSession(TrackingProvider.TRAKT, 42),
+                testTraktSession(profileId = 42),
                 "movies",
                 "fight-club-1999"
             )

@@ -281,6 +281,8 @@ class FieldResolver @Inject constructor(
             language = fields[ResolvedField.LANGUAGE] as? String,
             castMembers = (fields[ResolvedField.CAST] as? List<*>)
                 ?.filterIsInstance<com.nexio.tv.domain.model.MetaCastMember>() ?: emptyList(),
+            crewMembers = (fields[ResolvedField.CREW] as? List<*>)
+                ?.filterIsInstance<com.nexio.tv.domain.model.MetaCastMember>() ?: emptyList(),
             productionCompanies = (fields[ResolvedField.ORGANIZATION_LIST] as? List<*>)
                 ?.filterIsInstance<com.nexio.tv.domain.model.MetaCompany>()
                 ?.filter { it.kind == com.nexio.tv.domain.model.MetaCompanyKind.COMPANY } ?: emptyList(),

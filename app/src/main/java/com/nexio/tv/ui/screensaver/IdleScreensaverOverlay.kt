@@ -57,6 +57,7 @@ import coil.request.ImageRequest
 import coil.size.Dimension
 import coil.size.Size
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import kotlinx.coroutines.coroutineScope
@@ -290,10 +291,10 @@ fun IdleScreensaverOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            currentSlide.logoUrl?.let { logoUrl ->
+            currentSlide.logoArtwork.toCoilModelOrNull()?.let { logoModel ->
                 AsyncImage(
                     model = ImageRequest.Builder(context)
-                        .data(logoUrl)
+                        .data(logoModel)
                         .crossfade(false)
                         .build(),
                     contentDescription = currentSlide.title,
@@ -334,7 +335,7 @@ private fun ScreensaverBackgroundImage(
     decodeSize: Size,
     modifier: Modifier = Modifier
 ) {
-    var size by remember(layer.slide.backgroundUrl) { mutableStateOf(IntSize.Zero) }
+    var size by remember(layer.slide.backgroundArtwork) { mutableStateOf(IntSize.Zero) }
     val progress = layer.frozenProgress ?: layer.progress.value
     val scale = SCREENSAVER_START_SCALE + ((SCREENSAVER_END_SCALE - SCREENSAVER_START_SCALE) * progress)
     val motionFrame = screensaverMotionFrame(
@@ -345,10 +346,10 @@ private fun ScreensaverBackgroundImage(
     )
 
     AsyncImage(
-        model = remember(layer.slide.backgroundUrl, decodeSize) {
+        model = remember(layer.slide.backgroundArtwork, decodeSize) {
             buildScreensaverImageRequest(
                 context = context,
-                url = layer.slide.backgroundUrl,
+                model = layer.slide.backgroundArtwork.toCoilModelOrNull(),
                 decodeSize = decodeSize
             )
         },
@@ -610,15 +611,15 @@ internal fun screensaverMotionPresetFor(index: Int): ScreensaverMotionPreset {
 
 private fun buildScreensaverImageRequest(
     context: Context,
-    url: String,
+    model: Any?,
     decodeSize: Size
 ): ImageRequest {
     val width = (decodeSize.width as? Dimension.Pixels)?.px ?: SCREENSAVER_LOW_POWER_MAX_WIDTH
     val height = (decodeSize.height as? Dimension.Pixels)?.px ?: SCREENSAVER_LOW_POWER_MAX_HEIGHT
     return ImageRequest.Builder(context)
-        .data(url)
+        .data(model)
         .crossfade(false)
-        .memoryCacheKey("${url}_${width}x${height}")
+        .memoryCacheKey("${model}_${width}x${height}")
         .size(decodeSize)
         .build()
 }
@@ -653,14 +654,14 @@ private suspend fun preloadScreensaverSlide(
     context.imageLoader.enqueue(
         buildScreensaverImageRequest(
             context = context,
-            url = slide.backgroundUrl,
+            model = slide.backgroundArtwork.toCoilModelOrNull(),
             decodeSize = decodeSize
         )
     )
-    slide.logoUrl?.let { logoUrl ->
+    slide.logoArtwork.toCoilModelOrNull()?.let { logoModel ->
         context.imageLoader.enqueue(
             ImageRequest.Builder(context)
-                .data(logoUrl)
+                .data(logoModel)
                 .crossfade(false)
                 .build()
         )

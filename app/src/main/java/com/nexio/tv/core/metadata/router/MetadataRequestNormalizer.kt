@@ -28,7 +28,7 @@ class MetadataRequestNormalizer @Inject constructor(
 
         val parts = id.split(":")
         return when {
-            isProviderObjectId(id, parts) -> parts.take(3).joinToString(":")
+            isProviderObjectId(id, parts) -> id
             id.startsWith("imdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("kitsu:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("mal:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
@@ -55,10 +55,14 @@ class MetadataRequestNormalizer @Inject constructor(
     }
 
     private fun ContentType.toMetadataMediaKind(contentId: String): MetadataMediaKind =
-        when (this) {
-            ContentType.MOVIE -> MetadataMediaKind.MOVIE
-            ContentType.SERIES -> MetadataMediaKind.SERIES
-            ContentType.TV -> {
+        when {
+            contentId.startsWith("kitsu:", ignoreCase = true) ||
+                contentId.startsWith("mal:", ignoreCase = true) ||
+                contentId.startsWith("anilist:", ignoreCase = true) ||
+                contentId.startsWith("anidb:", ignoreCase = true) -> MetadataMediaKind.ANIME
+            this == ContentType.MOVIE -> MetadataMediaKind.MOVIE
+            this == ContentType.SERIES -> MetadataMediaKind.SERIES
+            this == ContentType.TV -> {
                 traceEvents.emitNormalizerWarning(
                     contentId = contentId,
                     reason = "TV_TYPE_COERCED_TO_SERIES"

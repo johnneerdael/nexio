@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
@@ -85,7 +87,7 @@ internal fun IdleTrailerScreensaverOverlay(
     sessionStart: IdleTrailerScreensaverSessionStart,
     onDismiss: () -> Unit,
     onOpenSlide: (IdleTrailerScreensaverCandidate) -> Unit,
-    resolvePlaybackSource: suspend (IdleTrailerScreensaverCandidate, String) -> com.nexio.tv.data.trailer.TrailerPlaybackSource?
+    resolvePlaybackSource: suspend (IdleTrailerScreensaverCandidate, TrailerPlaybackRef) -> com.nexio.tv.data.trailer.TrailerPlaybackSource?
 ) {
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
@@ -97,8 +99,8 @@ internal fun IdleTrailerScreensaverOverlay(
     var sessionMuted by remember(sessionId) { mutableStateOf(true) }
     var pendingOpen by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverCandidate?>(null) }
     var failedPlaybackKeys by remember(sessionId) { mutableStateOf<Set<String>>(emptySet()) }
-    var hasRenderedFirstFrame by remember(sessionId, currentPlayback.index, currentPlayback.trailerId) { mutableStateOf(false) }
-    var lastProgressMs by remember(sessionId, currentPlayback.index, currentPlayback.trailerId) { mutableStateOf(-1L) }
+    var hasRenderedFirstFrame by remember(sessionId, currentPlayback.index, currentPlayback.playbackRef) { mutableStateOf(false) }
+    var lastProgressMs by remember(sessionId, currentPlayback.index, currentPlayback.playbackRef) { mutableStateOf(-1L) }
     var advanceSignal by remember(sessionId) { mutableIntStateOf(0) }
     val brandingSpec = remember { idleTrailerBrandingPresentationSpec() }
     val brandingAlpha = remember(sessionId) { Animatable(1f) }
@@ -115,7 +117,7 @@ internal fun IdleTrailerScreensaverOverlay(
         currentOnOpenDetails(candidate)
     }
 
-    LaunchedEffect(sessionId, currentPlayback.trailerId, currentPlayback.index) {
+    LaunchedEffect(sessionId, currentPlayback.playbackRef, currentPlayback.index) {
         hasRenderedFirstFrame = false
         brandingAlpha.stop()
         brandingAlpha.snapTo(1f)
@@ -126,7 +128,7 @@ internal fun IdleTrailerScreensaverOverlay(
         )
     }
 
-    LaunchedEffect(sessionId, currentPlayback.index, currentPlayback.trailerId, sessionStart.candidates, failedPlaybackKeys) {
+    LaunchedEffect(sessionId, currentPlayback.index, currentPlayback.playbackRef, sessionStart.candidates, failedPlaybackKeys) {
         preparedNextPlayback = resolveNextIdleTrailerPlayback(
             candidates = sessionStart.candidates,
             currentIndex = currentPlayback.index,
@@ -138,12 +140,12 @@ internal fun IdleTrailerScreensaverOverlay(
     LaunchedEffect(
         sessionId,
         currentPlayback.index,
-        currentPlayback.trailerId,
+        currentPlayback.playbackRef,
         failedPlaybackKeys
     ) {
         val playbackKey = idleTrailerPlaybackKey(
             candidate = currentPlayback.candidate,
-            trailerId = currentPlayback.trailerId
+            playbackRef = currentPlayback.playbackRef
         )
         delay(TRAILER_SCREENSAVER_FIRST_FRAME_TIMEOUT_MS)
         if (
@@ -162,14 +164,14 @@ internal fun IdleTrailerScreensaverOverlay(
     LaunchedEffect(
         sessionId,
         currentPlayback.index,
-        currentPlayback.trailerId,
+        currentPlayback.playbackRef,
         hasRenderedFirstFrame,
         failedPlaybackKeys
     ) {
         if (!hasRenderedFirstFrame) return@LaunchedEffect
         val playbackKey = idleTrailerPlaybackKey(
             candidate = currentPlayback.candidate,
-            trailerId = currentPlayback.trailerId
+            playbackRef = currentPlayback.playbackRef
         )
         if (playbackKey in failedPlaybackKeys) return@LaunchedEffect
         lastProgressMs = -1L
@@ -262,9 +264,9 @@ internal fun IdleTrailerScreensaverOverlay(
             }
     ) {
         AsyncImage(
-            model = remember(currentPlayback.candidate.backgroundUrl) {
+            model = remember(currentPlayback.candidate.backgroundArtwork) {
                 ImageRequest.Builder(context)
-                    .data(currentPlayback.candidate.backgroundUrl)
+                    .data(currentPlayback.candidate.backgroundArtwork.toCoilModelOrNull())
                     .crossfade(false)
                     .build()
             },
@@ -300,7 +302,7 @@ internal fun IdleTrailerScreensaverOverlay(
             onError = {
                 val playbackKey = idleTrailerPlaybackKey(
                     candidate = currentPlayback.candidate,
-                    trailerId = currentPlayback.trailerId
+                    playbackRef = currentPlayback.playbackRef
                 )
                 if (playbackKey !in failedPlaybackKeys) {
                     failedPlaybackKeys = failedPlaybackKeys + playbackKey
@@ -337,10 +339,10 @@ internal fun IdleTrailerScreensaverOverlay(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = brandingSpec.contentAlignment
         ) {
-            currentPlayback.candidate.logoUrl?.let { logoUrl ->
+            currentPlayback.candidate.logoArtwork.toCoilModelOrNull()?.let { logoModel ->
                 AsyncImage(
                     model = ImageRequest.Builder(context)
-                        .data(logoUrl)
+                        .data(logoModel)
                         .crossfade(false)
                         .build(),
                     contentDescription = currentPlayback.candidate.title,

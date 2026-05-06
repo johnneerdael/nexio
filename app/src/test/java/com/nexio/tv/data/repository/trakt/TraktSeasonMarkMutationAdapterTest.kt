@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddNotFoundDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
@@ -47,7 +48,8 @@ class TraktSeasonMarkMutationAdapterTest {
                 showId = "show-1",
                 season = 2,
                 episodes = 1..3
-            )
+            ),
+            session = testTraktSession()
         )
 
         adapter.applyOptimistic(envelope)
@@ -106,7 +108,8 @@ class TraktSeasonMarkMutationAdapterTest {
                 showId = "show-1",
                 season = 2,
                 episodes = 1..3
-            )
+            ),
+            session = testTraktSession()
         )
         coEvery { executor.addHistory(any(), any()) } returns Response.success(
             TraktHistoryAddResponseDto(
@@ -147,7 +150,7 @@ class TraktSeasonMarkMutationAdapterTest {
                 season = 2,
                 episodes = 1..1
             ),
-            profileId = 42
+            session = testTraktSession(profileId = 42)
         )
         coEvery { executor.addHistory(any(), any()) } returns Response.success(TraktHistoryAddResponseDto())
 
@@ -155,7 +158,7 @@ class TraktSeasonMarkMutationAdapterTest {
 
         coVerify(exactly = 1) {
             executor.addHistory(
-                TrackingAuthSession(TrackingProvider.TRAKT, 42),
+                testTraktSession(profileId = 42),
                 any()
             )
         }
@@ -184,7 +187,8 @@ class TraktSeasonMarkMutationAdapterTest {
                 TraktEpisodeRef(episodeNumber = 5, traktId = 205),
                 TraktEpisodeRef(episodeNumber = 6, traktId = 206)
             ),
-            rollbackState = rollbackState
+            rollbackState = rollbackState,
+            session = testTraktSession()
         )
 
         adapter.rollbackToServerTruth(

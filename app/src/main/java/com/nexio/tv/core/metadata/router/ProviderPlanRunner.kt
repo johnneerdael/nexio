@@ -31,7 +31,13 @@ class ProviderPlanRunner @Inject constructor(
         )
 
         val stepResults = plan.steps.mapNotNull { step ->
-            val adapter = adapters.firstOrNull { it.provider == step.provider && it.supports(step) }
+            val adapter = adapters
+                .filter { it.provider == step.provider && it.supports(step) }
+                .sortedWith(
+                    compareByDescending<MetadataProviderAdapter> { it.priorityFor(step) }
+                        .thenBy { it::class.qualifiedName.orEmpty() }
+                )
+                .firstOrNull()
             when {
                 adapter != null -> adapter.execute(route = plan.route, step = step)
                 step.required -> throw MetadataRouteFailure.MissingPlanStepAdapter(step.apiShapeId)

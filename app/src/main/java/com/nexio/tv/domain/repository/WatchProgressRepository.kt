@@ -1,5 +1,6 @@
 package com.nexio.tv.domain.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
@@ -10,73 +11,86 @@ import kotlinx.coroutines.flow.Flow
  */
 interface WatchProgressRepository {
     
-    /**
-     * Get all watch progress items sorted by last watched (most recent first)
-     */
-    val allProgress: Flow<List<WatchProgress>>
-    
-    /**
-     * Get items currently in progress (not completed, suitable for "Continue Watching")
-     */
-    val continueWatching: Flow<List<WatchProgress>>
+    fun observeProgress(profileId: Int): Flow<List<WatchProgress>>
+
+    fun observeContinueWatching(profileId: Int): Flow<List<WatchProgress>>
     
     /**
      * Get watch progress for a specific content item (movie or series)
      */
-    fun getProgress(contentId: String): Flow<WatchProgress?>
+    fun getProgress(profileId: Int, contentId: String): Flow<WatchProgress?>
     
     /**
      * Get watch progress for a specific episode
      */
-    fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?>
+    fun getEpisodeProgress(profileId: Int, contentId: String, season: Int, episode: Int): Flow<WatchProgress?>
     
     /**
      * Get all episode progress for a series as a map of (season, episode) to progress
      */
-    fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
+    fun getAllEpisodeProgress(profileId: Int, contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
 
     /**
      * Returns whether the item is marked as watched/completed.
      * For series episodes pass both [season] and [episode].
      */
-    fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean>
+    fun isWatched(profileId: Int, contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean>
     
     /**
      * Save or update watch progress
      */
-    suspend fun saveProgress(progress: WatchProgress, syncRemote: Boolean = true)
+    suspend fun upsertProgress(
+        profileSession: ActiveProfileSession,
+        progress: WatchProgress,
+        syncRemote: Boolean = true
+    )
     
     /**
      * Remove watch progress (playback only, does not affect Trakt history)
      */
-    suspend fun removeProgress(contentId: String, season: Int? = null, episode: Int? = null)
+    suspend fun removeProgress(
+        profileSession: ActiveProfileSession,
+        contentId: String,
+        season: Int? = null,
+        episode: Int? = null
+    )
 
     /**
      * Remove from watch history (marks as unwatched on Trakt)
      */
-    suspend fun removeFromHistory(contentId: String, season: Int? = null, episode: Int? = null)
+    suspend fun removeFromHistory(
+        profileSession: ActiveProfileSession,
+        contentId: String,
+        season: Int? = null,
+        episode: Int? = null
+    )
 
     /**
      * Clear all watched/progress data for a full show.
      */
-    suspend fun clearShowProgress(contentId: String)
+    suspend fun clearShowProgress(profileSession: ActiveProfileSession, contentId: String)
 
     /**
      * Mark content as completed
      */
-    suspend fun markAsCompleted(progress: WatchProgress)
+    suspend fun markAsCompleted(profileSession: ActiveProfileSession, progress: WatchProgress)
 
     /**
      * Mark all [episodes] of [seasonNumber] in [meta] as watched using a single batched Trakt POST.
      * Applies an atomic optimistic CW update, handles partial not_found rollback, and forces a
      * snapshot refresh on success.
      */
-    suspend fun markAsCompletedBatch(meta: Meta, seasonNumber: Int, episodes: List<SeasonEpisodeMark>)
+    suspend fun markAsCompletedBatch(
+        profileSession: ActiveProfileSession,
+        meta: Meta,
+        seasonNumber: Int,
+        episodes: List<SeasonEpisodeMark>
+    )
     
     /**
      * Clear all watch progress
      */
-    suspend fun clearAll()
+    suspend fun clearAll(profileSession: ActiveProfileSession)
 
     /**
      * Clear hydrated localized metadata so it can rebuild for the current app language.

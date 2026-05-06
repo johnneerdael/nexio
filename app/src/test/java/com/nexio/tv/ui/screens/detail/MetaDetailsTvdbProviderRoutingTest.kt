@@ -119,7 +119,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(capture(enrichmentRequest)) }
         assertEquals("tt0944947", enrichmentRequest.captured.contentId)
         assertEquals(ContentType.SERIES, enrichmentRequest.captured.contentType)
-        assertEquals("eng", enrichmentRequest.captured.language)
+        assertEquals("en", enrichmentRequest.captured.language)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId("metadata-enrichment", any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }
@@ -152,7 +152,6 @@ class MetaDetailsTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
-        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "550"
         coEvery { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) } returns TmdbEnrichment(
             localizedTitle = "TMDB Movie",
             description = "TMDB movie overview",
@@ -178,7 +177,8 @@ class MetaDetailsTvdbProviderRoutingTest {
         )
 
         val viewModel = buildMetaDetailsViewModel(
-            meta = buildMovieMeta(),
+            meta = buildMovieMeta().copy(id = "tmdb:550"),
+            itemId = "tmdb:550",
             itemType = "movie",
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
@@ -199,8 +199,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         advanceUntilIdle()
 
         assertEquals("TMDB Movie", viewModel.uiState.value.meta?.name)
-        coVerify(atLeast = 1) { tmdbService.ensureTmdbId("tt0137523", "movie") }
-        coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
+        coVerify(atLeast = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
         coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
@@ -348,12 +347,12 @@ class MetaDetailsTvdbProviderRoutingTest {
         )
 
         val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        coEvery { titleRatingOverrideRepository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>()
         coEvery {
-            episodeRatingsSelectionRepository.getEpisodeRatings(any(), any(), any(), any())
-        } returns emptyMap()
+            episodeRatingsSelectionRepository.episodeRatingCandidates(any(), any(), any(), any())
+        } returns emptyList()
 
         buildMetaDetailsViewModel(
             meta = buildSeriesMeta().copy(id = "tvdb:121361"),
@@ -379,13 +378,13 @@ class MetaDetailsTvdbProviderRoutingTest {
         advanceUntilIdle()
 
         coVerify {
-            titleRatingOverrideRepository.enrichMeta(any(), "tt0944947", "series")
+            titleRatingOverrideRepository.titleRatingCandidates(any<Meta>(), "tt0944947", "series", any(), any())
         }
         coVerify {
             mdbListRepository.getRatingsForMeta(any(), "tt0944947", "series")
         }
         coVerify {
-            episodeRatingsSelectionRepository.getEpisodeRatings(any(), "tt0944947", "series", mapOf(1 to setOf(1)))
+            episodeRatingsSelectionRepository.episodeRatingCandidates(any(), "tt0944947", "series", mapOf(1 to setOf(1)))
         }
     }
 

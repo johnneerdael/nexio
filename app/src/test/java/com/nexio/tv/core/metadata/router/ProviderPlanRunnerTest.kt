@@ -51,6 +51,39 @@ class ProviderPlanRunnerTest {
         }
     }
 
+    @Test
+    fun `provider plan runner selects narrow adapter over broad adapter for same step`() = runTest {
+        val step = ProviderPlanStep(
+            apiShapeId = "tmdb.movie.reviews",
+            provider = MetadataPrimaryProvider.TMDB,
+            role = ProviderPlanRole.SECONDARY,
+            required = true
+        )
+        val runner = ProviderPlanRunner(
+            adapters = setOf(
+                BroadEmptyAdapter(MetadataPrimaryProvider.TMDB),
+                PrioritizedAdapter(
+                    supportedShape = step.apiShapeId,
+                    provider = MetadataPrimaryProvider.TMDB,
+                    title = "Narrow Adapter"
+                )
+            )
+        )
+
+        val result = runner.run(
+            ProviderExecutionPlan(
+                route = route(provider = MetadataPrimaryProvider.TMDB),
+                depth = MetadataDepth.DETAIL_SECONDARY,
+                steps = listOf(step)
+            )
+        )
+
+        assertEquals(
+            "Narrow Adapter",
+            result.stepResults.single().candidate?.fields?.get(ResolvedField.TITLE)?.value
+        )
+    }
+
     private fun route(provider: MetadataPrimaryProvider) = MetadataRoute(
         provider = provider,
         parentId = "tmdb:550",
@@ -76,5 +109,36 @@ class ProviderPlanRunnerTest {
                 )
             )
         }
+    }
+
+    private class BroadEmptyAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(provider = provider, fields = emptyMap())
+            )
+    }
+
+    private class PrioritizedAdapter(
+        private val supportedShape: String,
+        override val provider: MetadataPrimaryProvider,
+        private val title: String
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId == supportedShape
+
+        override fun priorityFor(step: ProviderPlanStep): Int = if (supports(step)) 100 else 0
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(ResolvedField.TITLE to FieldValue(title, FieldOwner.PRIMARY))
+                )
+            )
     }
 }

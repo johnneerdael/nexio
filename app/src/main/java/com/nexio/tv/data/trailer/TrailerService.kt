@@ -3,6 +3,7 @@ package com.nexio.tv.data.trailer
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TrailerService"
+internal fun buildYouTubeWatchUrl(videoId: String): String =
+    "https://www.youtube.com/watch?v=${videoId.trim()}"
+
 private fun trailerDebugLog(message: String) {
     if (!BuildConfig.DEBUG) return
     runCatching { Log.d(TAG, message) }
@@ -36,7 +40,7 @@ private fun trailerWarnLog(message: String) {
     runCatching { Log.w(TAG, message) }
 }
 
-private const val STREAILER_ADDON_ID = "org.streailer.trailer"
+internal const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
@@ -423,6 +427,55 @@ class TrailerService(
         ) {
             is TrailerResolutionResult.Playback -> result.source
             else -> null
+        }
+    }
+
+    suspend fun resolvePlaybackSource(
+        ref: TrailerPlaybackRef,
+        title: String? = null,
+        year: String? = null
+    ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        when (ref) {
+            is TrailerPlaybackRef.YouTubeId -> {
+                val videoId = ref.videoId.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                val youtubeUrl = buildYouTubeWatchUrl(videoId)
+                resolveYouTubeTrailer(
+                    youtubeUrl = youtubeUrl,
+                    title = title,
+                    year = year
+                ) ?: TrailerResolutionResult.External(youtubeUrl)
+            }
+            is TrailerPlaybackRef.ExternalUrl -> {
+                val url = ref.url.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                if (extractYouTubeVideoId(url) != null) {
+                    resolveYouTubeTrailer(
+                        youtubeUrl = url,
+                        title = title,
+                        year = year
+                    ) ?: TrailerResolutionResult.External(url)
+                } else {
+                    TrailerResolutionResult.External(url)
+                }
+            }
+            is TrailerPlaybackRef.InAppSource -> {
+                val videoUrl = ref.videoUrl.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(
+                        videoUrl = videoUrl,
+                        audioUrl = ref.audioUrl?.trim()?.takeIf { it.isNotBlank() },
+                        userAgent = ref.userAgent?.trim()?.takeIf { it.isNotBlank() }
+                    )
+                )
+            }
+            is TrailerPlaybackRef.ItemLookup -> resolveTrailer(
+                title = ref.title,
+                year = ref.year,
+                tmdbId = ref.stableIds.tmdb,
+                type = ref.type,
+                seasonNumber = ref.seasonNumber,
+                contentId = ref.contentId,
+                fallbackYtIds = ref.fallbackYtIds
+            )
         }
     }
 

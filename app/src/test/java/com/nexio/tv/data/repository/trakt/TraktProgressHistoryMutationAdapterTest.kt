@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
@@ -21,7 +22,8 @@ class TraktProgressHistoryMutationAdapterTest {
         val envelope = TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testTraktSession()
         )
 
         assertEquals("show:s1:e2", envelope.collapseKey)
@@ -37,7 +39,8 @@ class TraktProgressHistoryMutationAdapterTest {
             contentId = "show",
             season = null,
             episode = null,
-            removeShow = true
+            removeShow = true,
+            session = testTraktSession()
         )
 
         assertEquals("show:show", envelope.collapseKey)
@@ -58,7 +61,8 @@ class TraktProgressHistoryMutationAdapterTest {
         val envelope = TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testTraktSession()
         )
 
         adapter.applyOptimistic(envelope)
@@ -82,7 +86,8 @@ class TraktProgressHistoryMutationAdapterTest {
         val envelope = TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testTraktSession()
         )
 
         every {
@@ -112,7 +117,8 @@ class TraktProgressHistoryMutationAdapterTest {
             playbackId = 123L,
             contentId = "show",
             season = 1,
-            episode = 2
+            episode = 2,
+            session = testTraktSession()
         )
 
         coEvery {

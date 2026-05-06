@@ -34,7 +34,8 @@ class ResolverOrchestrator @Inject constructor(
             MetadataDepth.DETAIL_MEDIA -> {
                 networkResolvers += ResolverType.TRAILERS
             }
-            MetadataDepth.DETAIL_SECONDARY -> {
+            MetadataDepth.DETAIL_SECONDARY,
+            MetadataDepth.DETAIL_FULL -> {
                 localResolvers += ResolverType.RATING
                 localResolvers += ResolverType.ARTWORK
                 networkResolvers += ResolverType.REVIEWS
@@ -44,10 +45,9 @@ class ResolverOrchestrator @Inject constructor(
             MetadataDepth.SEASON -> {
                 localResolvers += ResolverType.RATING
             }
-            // SKIP_SEGMENTS is intentionally omitted (F-12-01). Player-skip latency requirements
-            // (sub-50ms from playback start) are incompatible with the resolver pipeline's
-            // identity-resolution + provider-plan overhead. SkipIntroRepository is the canonical
-            // surface — see SkipIntroRepositoryCanonicalSurfaceTest (added in Task 21).
+            // SKIP_SEGMENTS is intentionally omitted from the scheduled metadata pipeline.
+            // Player skip segments are resolved by SkipSegmentResolver, with SkipIntroRepository
+            // kept behind it as the low-level provider/cache adapter.
             MetadataDepth.PLAYER -> {
                 networkResolvers += ResolverType.TRACKING
             }

@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.simkl
 
+import com.nexio.tv.data.repository.testSimklSession
 import com.nexio.tv.data.repository.SimklProgressService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
@@ -20,7 +21,8 @@ class SimklProgressHistoryMutationAdapterTest {
         val envelope = SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testSimklSession()
         )
 
         assertEquals("show:s1:e2", envelope.collapseKey)
@@ -38,7 +40,8 @@ class SimklProgressHistoryMutationAdapterTest {
         val envelope = SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testSimklSession()
         )
 
         adapter.applyOptimistic(envelope)
@@ -59,7 +62,8 @@ class SimklProgressHistoryMutationAdapterTest {
         val envelope = SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
             progress = sampleProgress(),
             title = "Episode",
-            year = 2025
+            year = 2025,
+            session = testSimklSession()
         )
 
         coEvery { remote.addHistory(any()) } returns Response.success(Unit)
@@ -78,7 +82,8 @@ class SimklProgressHistoryMutationAdapterTest {
             playbackId = 123L,
             contentId = "show",
             season = 1,
-            episode = 2
+            episode = 2,
+            session = testSimklSession()
         )
 
         coEvery { remote.deletePlayback(any()) } returns Response.success(Unit)
@@ -96,7 +101,8 @@ class SimklProgressHistoryMutationAdapterTest {
         val envelope = SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
             contentId = "show",
             season = 1,
-            episode = 2
+            episode = 2,
+            session = testSimklSession()
         )
 
         adapter.reconcileSuccess(envelope)

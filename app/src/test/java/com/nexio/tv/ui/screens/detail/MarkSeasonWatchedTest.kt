@@ -113,9 +113,9 @@ class MarkSeasonWatchedTest {
                 )
             )
 
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any(), any()) } returns Unit
             val batchSlot = slot<List<SeasonEpisodeMark>>()
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), eq(1), capture(batchSlot)) } returns Unit
 
             val meta = buildSeriesMeta(id = "tt9999999", videos = emptyList())
             val viewModel = buildViewModel(
@@ -166,9 +166,9 @@ class MarkSeasonWatchedTest {
                 )
             )
 
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any(), any()) } returns Unit
             val batchSlot = slot<List<SeasonEpisodeMark>>()
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), eq(1), capture(batchSlot)) } returns Unit
 
             val meta = buildSeriesMeta(id = "tt9999999", videos = emptyList())
             val viewModel = buildViewModel(
@@ -210,7 +210,7 @@ class MarkSeasonWatchedTest {
             )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(3), capture(batchSlot)) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), eq(3), capture(batchSlot)) } returns Unit
 
             val meta = buildSeriesMeta(id = "tt1111111", videos = sparseVideos)
             val viewModel = buildViewModel(
@@ -264,7 +264,7 @@ class MarkSeasonWatchedTest {
             )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(2), capture(batchSlot)) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), eq(2), capture(batchSlot)) } returns Unit
 
             val viewModel = buildViewModel(
                 meta = buildSeriesMeta(),
@@ -311,7 +311,7 @@ class MarkSeasonWatchedTest {
             )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), eq(1), capture(batchSlot)) } returns Unit
 
             val viewModel = buildViewModel(
                 meta = buildSeriesMeta(),
@@ -324,11 +324,11 @@ class MarkSeasonWatchedTest {
             advanceUntilIdle()
 
             // Exactly one call with all 24 episodes
-            coVerify(exactly = 1) { watchProgressRepository.markAsCompletedBatch(any(), 1, any()) }
+            coVerify(exactly = 1) { watchProgressRepository.markAsCompletedBatch(any(), any(), 1, any()) }
             assertEquals(24, batchSlot.captured.size)
 
             // No direct single-episode addToHistory calls during this flow
-            coVerify(exactly = 0) { watchProgressRepository.markAsCompleted(any()) }
+            coVerify(exactly = 0) { watchProgressRepository.markAsCompleted(any(), any()) }
         }
 
     // ── Test 5: optimisticStateAppliedAtomically (M1, M3) ────────────────────
@@ -407,7 +407,7 @@ class MarkSeasonWatchedTest {
         }
         return ContinueWatchingSnapshotService(
             watchProgressRepository = mockk(relaxed = true) {
-                every { allProgress } returns flowOf(emptyList())
+                every { observeProgress(any()) } returns flowOf(emptyList())
             },
             trackingProgressService = traktProgressService,
             trackingProviderStateService = trackingProviderStateService,
@@ -466,6 +466,8 @@ class MarkSeasonWatchedTest {
             val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
                 every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
                 coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+                every { stateForProfile(any()) } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState(any()) } returns EffectiveTrackingProviderState(traktAuthenticated = true)
             }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
@@ -478,13 +480,15 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider(),
+                profileManager = defaultProfileManager()
             )
 
             val meta = buildSeriesMeta(id = showId)
             val episodes = (1..10).map(::seasonEpisodeMark)
 
-            repo.markAsCompletedBatch(meta, season, episodes)
+            repo.markAsCompletedBatch(defaultProfileManager().activeProfileSession.value, meta, season, episodes)
 
             val refsSlot = slot<List<TraktEpisodeRef>>()
             val rollbackSlot = slot<ContinueWatchingSnapshotService.EpisodeRollbackState>()
@@ -558,6 +562,8 @@ class MarkSeasonWatchedTest {
             val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
                 every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
                 coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+                every { stateForProfile(any()) } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState(any()) } returns EffectiveTrackingProviderState(traktAuthenticated = true)
             }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
@@ -570,13 +576,15 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider(),
+                profileManager = defaultProfileManager()
             )
 
             val meta = buildSeriesMeta(id = showId)
             val episodes = (1..8).map(::seasonEpisodeMark)
 
-            repo.markAsCompletedBatch(meta, season, episodes)
+            repo.markAsCompletedBatch(defaultProfileManager().activeProfileSession.value, meta, season, episodes)
 
             coVerify(exactly = 1) { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) }
             assertEquals(
@@ -593,7 +601,7 @@ class MarkSeasonWatchedTest {
     fun `singleEpisodeToggleRegression - toggleEpisodeWatched uses single markAsCompleted not batch`() =
         runTest(dispatcher) {
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
-            coEvery { watchProgressRepository.markAsCompleted(any()) } returns Unit
+            coEvery { watchProgressRepository.markAsCompleted(any(), any()) } returns Unit
 
             val video = buildVideo(season = 3, episode = 5)
             val meta = buildSeriesMeta(videos = listOf(video))
@@ -614,8 +622,8 @@ class MarkSeasonWatchedTest {
             advanceUntilIdle()
 
             // Single-episode path: markAsCompleted called once, batch NOT called
-            coVerify(exactly = 1) { watchProgressRepository.markAsCompleted(any()) }
-            coVerify(exactly = 0) { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) }
+            coVerify(exactly = 1) { watchProgressRepository.markAsCompleted(any(), any()) }
+            coVerify(exactly = 0) { watchProgressRepository.markAsCompletedBatch(any(), any(), any(), any()) }
         }
 
     // ── Test 8: markAsCompletedBatchFullRollbackOnThrow (N5) ─────────────────
@@ -670,6 +678,8 @@ class MarkSeasonWatchedTest {
             val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
                 every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
                 coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+                every { stateForProfile(any()) } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState(any()) } returns EffectiveTrackingProviderState(traktAuthenticated = true)
             }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
@@ -682,7 +692,9 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider(),
+                profileManager = defaultProfileManager()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -690,7 +702,7 @@ class MarkSeasonWatchedTest {
 
             var thrownException: Exception? = null
             try {
-                repo.markAsCompletedBatch(meta, season, episodes)
+                repo.markAsCompletedBatch(defaultProfileManager().activeProfileSession.value, meta, season, episodes)
             } catch (e: IOException) {
                 thrownException = e
             }
@@ -789,6 +801,8 @@ class MarkSeasonWatchedTest {
             val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
                 every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
                 coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+                every { stateForProfile(any()) } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState(any()) } returns EffectiveTrackingProviderState(traktAuthenticated = true)
             }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
@@ -801,7 +815,9 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider(),
+                profileManager = defaultProfileManager()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -809,7 +825,7 @@ class MarkSeasonWatchedTest {
 
             var thrownException: Exception? = null
             try {
-                repo.markAsCompletedBatch(meta, season, episodes)
+                repo.markAsCompletedBatch(defaultProfileManager().activeProfileSession.value, meta, season, episodes)
             } catch (e: IOException) {
                 thrownException = e
             }
@@ -859,6 +875,8 @@ class MarkSeasonWatchedTest {
                 )
                 every { this@mockk.state } returns flowOf(state)
                 coEvery { currentState() } returns state
+                every { stateForProfile(any()) } returns flowOf(state)
+                coEvery { currentState(any()) } returns state
             }
 
             val envelopeSlot = slot<TraktMutationEnvelope>()
@@ -875,11 +893,13 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider(),
+                profileManager = defaultProfileManager()
             )
 
             val meta = buildSeriesMeta(id = showId)
-            repo.markAsCompletedBatch(meta, season, episodes)
+            repo.markAsCompletedBatch(defaultProfileManager().activeProfileSession.value, meta, season, episodes)
 
             assertEquals(SimklSeasonMarkMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
             assertEquals(SimklSeasonMarkMutationAdapter.MUTATION_KIND, envelopeSlot.captured.mutationKind)
@@ -1017,13 +1037,13 @@ class MarkSeasonWatchedTest {
         metadataRouterFacade: MetadataRouterFacade? = null
     ): MetaDetailsViewModel {
         val wrappedWatchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
-        every { wrappedWatchProgressRepository.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-        every { wrappedWatchProgressRepository.getProgress(any()) } returns flowOf(null)
-        coEvery { wrappedWatchProgressRepository.markAsCompleted(any()) } coAnswers {
-            watchProgressRepository.markAsCompleted(firstArg())
+        every { wrappedWatchProgressRepository.getAllEpisodeProgress(any(), any()) } returns flowOf(emptyMap())
+        every { wrappedWatchProgressRepository.getProgress(any(), any()) } returns flowOf(null)
+        coEvery { wrappedWatchProgressRepository.markAsCompleted(any(), any()) } coAnswers {
+            watchProgressRepository.markAsCompleted(firstArg(), secondArg())
         }
-        coEvery { wrappedWatchProgressRepository.markAsCompletedBatch(any(), any(), any()) } coAnswers {
-            watchProgressRepository.markAsCompletedBatch(firstArg(), secondArg(), thirdArg())
+        coEvery { wrappedWatchProgressRepository.markAsCompletedBatch(any(), any(), any(), any()) } coAnswers {
+            watchProgressRepository.markAsCompletedBatch(firstArg(), secondArg(), thirdArg(), arg(3))
         }
 
         return buildMetaDetailsViewModel(

@@ -9,6 +9,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
@@ -182,6 +183,52 @@ class TraktAuthServiceTest {
 
         assertEquals("profile-two-user", traktAuthDataStore.stateForProfile(2).first().username)
         assertNull(traktAuthDataStore.stateForProfile(3).first().username)
+    }
+
+    @Test
+    fun `mutation account scope stays stable after first user settings hydration`() = runTest {
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
+        val profileManager = testProfileManager()
+        val traktAuthDataStore = TraktAuthDataStore(
+            factory = profileDataStoreFactoryForTest(),
+            profileManager = profileManager
+        )
+        traktAuthDataStore.saveToken(
+            TraktTokenResponseDto(
+                accessToken = "access",
+                tokenType = "Bearer",
+                expiresIn = 3600,
+                refreshToken = "refresh",
+                createdAt = System.currentTimeMillis() / 1000L
+            ),
+            clearAccountIdentity = true
+        )
+        coEvery {
+            traktIntegrationProvider.getUserSettings(any())
+        } returns Response.success(
+            TraktUserSettingsResponseDto(
+                user = TraktUserDto(
+                    username = "profile-two-user",
+                    ids = TraktIdsDto(slug = "profile-two")
+                )
+            )
+        )
+        val service = spyk(
+            TraktAuthService(
+                traktIntegrationProvider = lazyProvider(traktIntegrationProvider),
+                traktAuthDataStore = traktAuthDataStore,
+                requestGate = com.nexio.tv.data.remote.TraktRequestGate(),
+                profileManager = profileManager,
+                profileModeRouter = ProfileModeRouter(),
+                profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+            )
+        )
+
+        val first = service.mutationAccountScopedSession(TrackingAuthSession(TrackingProvider.TRAKT, 1))
+        val second = service.mutationAccountScopedSession(TrackingAuthSession(TrackingProvider.TRAKT, 1))
+
+        assertEquals(first.credentialHash, second.credentialHash)
+        assertEquals("profile-two", traktAuthDataStore.stateForProfile(1).first().userSlug)
     }
 
     private fun lazyProvider(

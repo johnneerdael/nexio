@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
@@ -10,11 +9,10 @@ import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 
 internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaverSlide? {
     val title = title?.takeIf { it.isNotBlank() } ?: return null
-    val backgroundUrl = preferredImage.toLegacyArtworkString() ?: return null
-    val fallbackArtworkUrls = listOfNotNull(
-        preferredImage.toLegacyArtworkString(),
-        artwork.backdrop.toLegacyArtworkString(),
-        artwork.poster.toLegacyArtworkString()
+    val fallbackArtwork = listOfNotNull(
+        preferredImage,
+        artwork.backdrop,
+        artwork.poster
     ).distinct()
 
     return IdleScreensaverSlide(
@@ -22,8 +20,8 @@ internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaver
         itemType = itemType,
         addonBaseUrl = "",
         title = title,
-        backgroundUrl = backgroundUrl,
-        logoUrl = artwork.logo.toLegacyArtworkString(),
+        backgroundArtwork = preferredImage,
+        logoArtwork = artwork.logo,
         genres = emptyList(),
         description = overview?.takeIf { it.isNotBlank() },
         releaseInfo = subtitle?.takeIf { it.isNotBlank() },
@@ -31,34 +29,34 @@ internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaver
         imdbRating = rating?.value?.toFloat(),
         tomatoesRating = null,
         modeData = IdleScreensaverModeData(
-            image = IdleScreensaverImageModeData(fallbackArtworkUrls = fallbackArtworkUrls)
+            image = IdleScreensaverImageModeData(fallbackArtwork = fallbackArtwork)
         )
     )
 }
 
 internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): IdleTrailerScreensaverCandidate? {
-    val imageUrl = artwork.backdrop.toLegacyArtworkString()
-        ?: artwork.poster.toLegacyArtworkString()
+    val backgroundArtwork = artwork.backdrop
+        ?: artwork.poster
         ?: return null
-    val fallbackArtworkUrls = listOfNotNull(
-        artwork.backdrop.toLegacyArtworkString(),
-        artwork.poster.toLegacyArtworkString()
+    val fallbackArtwork = listOfNotNull(
+        artwork.backdrop,
+        artwork.poster
     ).distinct()
     return IdleTrailerScreensaverCandidate(
         itemId = contentId,
         itemType = itemType,
         addonBaseUrl = "",
         title = title,
-        logoUrl = artwork.logo.toLegacyArtworkString(),
-        backgroundUrl = imageUrl,
-        fallbackArtworkUrls = fallbackArtworkUrls,
+        logoArtwork = artwork.logo,
+        backgroundArtwork = backgroundArtwork,
+        fallbackArtwork = fallbackArtwork,
         genres = emptyList(),
         description = overview?.takeIf { it.isNotBlank() },
         releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
         runtime = null,
         imdbRating = rating?.value?.toFloat(),
         tomatoesRating = null,
-        trailerYtIds = fallbackTrailerYtIds,
+        trailerState = trailerState,
         stableIds = stableIds
     )
 }

@@ -240,6 +240,24 @@ class HomeViewModelPresentationPipelineTest {
     }
 
     @Test
+    fun `catalog presentation uses resolver selected trailer fallback instead of raw sidecar`() {
+        val item = testPreview("tt123", "Movie").copy(
+            trailerYtIds = listOf("raw-sidecar")
+        )
+
+        val carouselItem = buildCatalogItem(
+            item = item,
+            row = testCatalogRow(item),
+            useLandscapePosters = true,
+            occurrence = 0,
+            selectedTrailerFallbackYtId = "resolver-selected"
+        )
+
+        val payload = carouselItem.payload as ModernPayload.Catalog
+        assertEquals("resolver-selected", payload.fallbackTrailerYtId)
+    }
+
+    @Test
     fun `continue watching runtime warm candidates only include episodic items missing runtime`() {
         val missingEpisode = ContinueWatchingItem.NextUp(
             NextUpInfo(
@@ -321,7 +339,27 @@ class HomeViewModelPresentationPipelineTest {
     }
 
     @Test
-    fun `mergeFocusedItemEnrichment carries external trailer ids into the preview`() {
+    fun `home trailer fallback is unavailable without a published preview url`() {
+        assertEquals(
+            false,
+            hasPublishedHomeTrailerPreview(
+                itemId = "tt15940132",
+                trailerPreviewUrls = emptyMap(),
+                trailerPreviewExternalUrls = emptyMap()
+            )
+        )
+        assertEquals(
+            true,
+            hasPublishedHomeTrailerPreview(
+                itemId = "tt15940132",
+                trailerPreviewUrls = emptyMap(),
+                trailerPreviewExternalUrls = mapOf("tt15940132" to "stremio:///detail/movie/tt15940132")
+            )
+        )
+    }
+
+    @Test
+    fun `mergeFocusedItemEnrichment does not promote external trailer ids into the preview`() {
         val preview = testPreview("tt15940132", "War Machine")
         val merged = mergeFocusedItemEnrichment(
             currentItem = preview,
@@ -350,7 +388,7 @@ class HomeViewModelPresentationPipelineTest {
             )
         )
 
-        assertEquals(listOf("dQw4w9WgXcQ"), merged.trailerYtIds)
+        assertEquals(emptyList<String>(), merged.trailerYtIds)
         assertEquals("Updated description", merged.description)
     }
 

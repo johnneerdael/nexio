@@ -33,7 +33,8 @@ class SimklScrobbleService @Inject constructor(
     private val watchingNowStateController: TraktWatchingNowStateController,
     private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
     private val profileManager: com.nexio.tv.core.profile.ProfileManager,
-    private val traceMetadataEvents: com.nexio.tv.core.trace.TraceMetadataEvents
+    private val traceMetadataEvents: com.nexio.tv.core.trace.TraceMetadataEvents,
+    private val accountScopeProvider: TrackingAccountScopeProvider
 ) {
     data class WatchingNowState(
         val active: Boolean = false,
@@ -215,7 +216,7 @@ class SimklScrobbleService @Inject constructor(
                     message = request.message,
                     rollbackState = rollbackState,
                     optimisticVersion = request.optimisticVersion,
-                    profileId = request.profileId
+                    session = accountSession(request.profileId)
                 )
             )
             SimklScrobbleMutationResult.Success
@@ -239,7 +240,7 @@ class SimklScrobbleService @Inject constructor(
                     progressPercent = clampedProgress,
                     rollbackState = rollbackState,
                     optimisticVersion = request.optimisticVersion,
-                    profileId = request.profileId
+                    session = accountSession(request.profileId)
                 )
             )
             stateFor(request.profileId).lastScrobbleStamp = ScrobbleStamp(
@@ -250,6 +251,13 @@ class SimklScrobbleService @Inject constructor(
             )
             SimklScrobbleMutationResult.Success
         }.getOrElse { SimklScrobbleMutationResult.Failed }
+    }
+
+    private suspend fun accountSession(profileId: Int): TrackingAuthSession {
+        return accountScopeProvider.accountScopedSession(
+            provider = com.nexio.tv.domain.model.TrackingProvider.SIMKL,
+            profileId = profileId
+        )
     }
 
     private fun stateFor(profileId: Int): ProfileScrobbleState =

@@ -60,6 +60,9 @@ import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -431,7 +434,9 @@ fun HomeScreen(
                             title = item.name,
                             releaseInfo = item.releaseInfo,
                             apiType = item.apiType,
-                            fallbackYtId = item.trailerYtIds.firstOrNull()
+                            fallbackYtId = viewModel.trailerSelectedFallbackYtIds[
+                                homeTrailerAvailabilityKey(item.id, item.apiType)
+                            ]
                         )
                     } else {
                         viewModel.requestTrailerPreview(item)
@@ -578,9 +583,19 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
+            val takeoverModel = pendingPosterTrailer.item.artwork?.backdrop.toCoilModelOrNull()
+                ?: pendingPosterTrailer.item.artwork?.poster.toCoilModelOrNull()
+                ?: pendingPosterTrailer.item.displayBackground.toLegacyArtworkCoilModelOrNull(
+                    "${pendingPosterTrailer.item.id}:backdrop",
+                    ArtworkType.BACKDROP
+                )
+                ?: pendingPosterTrailer.item.displayPoster.toLegacyArtworkCoilModelOrNull(
+                    "${pendingPosterTrailer.item.id}:poster",
+                    ArtworkType.POSTER
+                )
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(pendingPosterTrailer.item.displayBackground ?: pendingPosterTrailer.item.displayPoster)
+                    .data(takeoverModel)
                     .crossfade(true)
                     .build(),
                 contentDescription = null,

@@ -31,7 +31,6 @@ import com.nexio.tv.core.metadata.router.StableIdEvidence
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -56,10 +55,9 @@ import org.junit.Test
 
 class HomeHydrationCoordinatorTest {
     @Test
-    fun `visible hydration writes overlay with canonical fields and imdb rating enrichment`() = runTest {
+    fun `visible hydration writes overlay with canonical resolved fields`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         val aliasesSlot = slot<Set<String>>()
@@ -92,12 +90,9 @@ class HomeHydrationCoordinatorTest {
                 "movie:550"
             )
         } returns bundle
-        coEvery { ratings.enrichPreview(any(), bundle) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 8.8f, ratingSource = TitleRatingSource.IMDB)
-        }
         coEvery { store.upsert(capture(overlaySlot), capture(aliasesSlot)) } returns Unit
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -117,8 +112,8 @@ class HomeHydrationCoordinatorTest {
         assertEquals("poster.jpg", overlaySlot.captured.fields.poster)
         assertEquals(listOf("Canonical Genre"), overlaySlot.captured.fields.genres)
         assertEquals("1999-10-15", overlaySlot.captured.fields.releaseInfo)
-        assertEquals(8.8f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
-        assertEquals(TitleRatingSource.IMDB, overlaySlot.captured.fields.ratingSource)
+        assertEquals(8.4f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
+        assertEquals(TitleRatingSource.TMDB, overlaySlot.captured.fields.ratingSource)
         assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
         assertEquals("550", overlaySlot.captured.canonicalId)
         assertEquals("tt0137523", overlaySlot.captured.imdbId)
@@ -141,7 +136,6 @@ class HomeHydrationCoordinatorTest {
     fun `visible hydration preserves typed artwork in written overlay fields`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         val artwork = ArtworkBundle(
@@ -163,12 +157,9 @@ class HomeHydrationCoordinatorTest {
             )
         )
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
-        coEvery { ratings.enrichPreview(any(), any()) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 8.8f, ratingSource = TitleRatingSource.IMDB)
-        }
         coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
 
-        coordinator(facade, store, ratings, sink).hydrate(
+        coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -186,11 +177,10 @@ class HomeHydrationCoordinatorTest {
     fun `already stale generation is ignored before provider resolution`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         var applied = false
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -207,7 +197,6 @@ class HomeHydrationCoordinatorTest {
         assertFalse(applied)
         coVerify(exactly = 0) { facade.resolveRequest(any()) }
         coVerify(exactly = 0) { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) }
-        coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
         coVerify(exactly = 0) { store.upsert(any(), any()) }
         assertEquals(
             listOf("home.hydration_started", "home.hydration_ignored"),
@@ -219,7 +208,6 @@ class HomeHydrationCoordinatorTest {
     fun `generation mismatch after provider resolution avoids stable ids rating write and apply`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         var generation = 7L
         var applied = false
@@ -229,7 +217,7 @@ class HomeHydrationCoordinatorTest {
             resolutionResult()
         }
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -246,7 +234,6 @@ class HomeHydrationCoordinatorTest {
         assertFalse(applied)
         coVerify(exactly = 1) { facade.resolveRequest(any()) }
         coVerify(exactly = 0) { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) }
-        coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
         coVerify(exactly = 0) { store.upsert(any(), any()) }
         assertEquals(
             listOf("home.hydration_started", "home.hydration_ignored"),
@@ -258,15 +245,13 @@ class HomeHydrationCoordinatorTest {
     fun `late generation mismatch is ignored and does not write`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         var applied = false
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
-        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -292,20 +277,18 @@ class HomeHydrationCoordinatorTest {
     fun `generation change during store write is ignored and does not apply overlay`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>()
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         var generation = 7L
         var applied = false
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
-        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
         coEvery { store.upsert(any(), any()) } answers {
             generation = 8L
             Unit
         }
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -331,7 +314,6 @@ class HomeHydrationCoordinatorTest {
     fun `generation change during stable id resolution avoids rating enrichment write and apply`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         var generation = 7L
         var applied = false
@@ -341,9 +323,8 @@ class HomeHydrationCoordinatorTest {
             generation = 8L
             stableBundle("movie:550")
         }
-        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -358,7 +339,6 @@ class HomeHydrationCoordinatorTest {
 
         assertNull(result)
         assertFalse(applied)
-        coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
         coVerify(exactly = 0) { store.upsert(any(), any()) }
         assertEquals(
             listOf("home.hydration_started", "home.hydration_ignored"),
@@ -367,10 +347,9 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
-    fun `stable bundle failure still writes and applies canonical overlay with nullable rating enrichment`() = runTest {
+    fun `stable bundle failure still writes and applies canonical overlay`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         val aliasesSlot = slot<Set<String>>()
@@ -378,12 +357,9 @@ class HomeHydrationCoordinatorTest {
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } throws IllegalStateException("stable ids failed")
-        coEvery { ratings.enrichPreview(any(), null) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 7.7f, ratingSource = TitleRatingSource.IMDB)
-        }
         coEvery { store.upsert(capture(overlaySlot), capture(aliasesSlot)) } returns Unit
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(
                 id = "550",
                 title = "Preview title",
@@ -405,7 +381,7 @@ class HomeHydrationCoordinatorTest {
         assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
         assertEquals("550", overlaySlot.captured.canonicalId)
         assertEquals("tt0137523", overlaySlot.captured.imdbId)
-        assertEquals(7.7f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
+        assertEquals(8.4f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
         assertTrue(aliasesSlot.captured.containsAll(listOf("movie:550", "movie:imdb:tt0137523", "movie:tmdb:550")))
         assertEquals(
             listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
@@ -420,17 +396,15 @@ class HomeHydrationCoordinatorTest {
     fun `stable bundle failure uses route target id when document canonical id is missing`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         var applied: com.nexio.tv.domain.model.HydratedHomeOverlay? = null
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult(canonicalId = null)
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } throws IllegalStateException("stable ids failed")
-        coEvery { ratings.enrichPreview(any(), null) } answers { firstArg() }
         coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(
                 id = "550",
                 title = "Preview title",
@@ -462,13 +436,12 @@ class HomeHydrationCoordinatorTest {
     fun `hydration failure keeps preview path and does not write`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val sink = RecordingTraceSink()
         var applied = false
 
         coEvery { facade.resolveRequest(any()) } throws IllegalStateException("router failed")
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -484,7 +457,6 @@ class HomeHydrationCoordinatorTest {
         assertNull(result)
         assertFalse(applied)
         coVerify(exactly = 0) { store.upsert(any(), any()) }
-        coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
         assertEquals(
             listOf("home.hydration_started", "home.hydration_failed_using_preview"),
             sink.events.map { it.eventType }
@@ -495,7 +467,6 @@ class HomeHydrationCoordinatorTest {
     fun `identity resolution failure emits stable unobfuscated reason`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        val ratings = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val sink = RecordingTraceSink()
 
         coEvery {
@@ -505,7 +476,7 @@ class HomeHydrationCoordinatorTest {
             provider = MetadataPrimaryProvider.TVDB
         )
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(
                 id = "tmdb:321376",
                 title = "Preview series",
@@ -532,16 +503,14 @@ class HomeHydrationCoordinatorTest {
     fun `rejected applied overlay writes durable overlay but does not emit applied trace`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>()
-        val ratings = mockk<TitleRatingOverrideRepository>()
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
-        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
         coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
 
-        val result = coordinator(facade, store, ratings, sink).hydrate(
+        val result = coordinator(facade, store, sink).hydrate(
             item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -562,12 +531,10 @@ class HomeHydrationCoordinatorTest {
     private fun coordinator(
         facade: MetadataRouterFacade,
         store: HydratedHomeOverlayStore,
-        ratings: TitleRatingOverrideRepository,
         sink: RecordingTraceSink
     ) = HomeHydrationCoordinator(
         metadataRouterFacade = facade,
         overlayStore = store,
-        titleRatingOverrideRepository = ratings,
         traceEvents = TraceMetadataEvents(sink) { "home-test" }
     )
 

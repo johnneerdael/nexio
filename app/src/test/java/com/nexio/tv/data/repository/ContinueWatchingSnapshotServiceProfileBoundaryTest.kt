@@ -67,7 +67,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         }
         val service = ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { allProgress } returns MutableStateFlow(emptyList())
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(false)
@@ -123,7 +123,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
 
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { allProgress } returns progress
+                every { observeProgress(any()) } returns progress
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns remoteLoaded
@@ -180,7 +180,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         coEvery { ownershipService.upsertRailMembership(capture(capturedMembership)) } returns Unit
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { allProgress } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+                every { observeProgress(any()) } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
@@ -231,7 +231,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
 
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { allProgress } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+                every { observeProgress(any()) } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)

@@ -4,6 +4,9 @@ import android.view.KeyEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -214,8 +217,12 @@ class IdleScreensaverOverlayTest {
             itemType = "movie",
             addonBaseUrl = "https://api.example.com",
             title = "Example",
-            backgroundUrl = "https://image.example.com/background.jpg",
-            logoUrl = null,
+            backgroundArtwork = ArtworkDisplayRef.LegacyString(
+                value = "https://image.example.com/background.jpg",
+                imageType = ArtworkType.BACKDROP,
+                trace = ArtworkTrace.empty()
+            ),
+            logoArtwork = null,
             genres = genres,
             description = null,
             releaseInfo = null,

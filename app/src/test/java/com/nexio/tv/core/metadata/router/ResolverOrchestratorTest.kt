@@ -107,7 +107,7 @@ class ResolverOrchestratorTest {
         // After removal of the enum value, ResolverType.SKIP_SEGMENTS does not exist.
         // We assert no resolver type with that name is in the schedule.
         assertTrue(
-            "PLAYER schedule must not contain SKIP_SEGMENTS (player skip is owned by SkipIntroRepository)",
+            "PLAYER schedule must not contain SKIP_SEGMENTS (player skip is owned by SkipSegmentResolver)",
             (schedule.localResolvers + schedule.networkResolvers).none { it.name == "SKIP_SEGMENTS" }
         )
     }

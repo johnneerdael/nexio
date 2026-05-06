@@ -5,7 +5,9 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -20,6 +22,8 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.repository.MetadataDisplayRepository
+import com.nexio.tv.data.repository.DetailRatingDisplayRepository
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
@@ -31,6 +35,7 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -39,6 +44,7 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -69,11 +75,13 @@ fun buildMetaDetailsViewModel(
     tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(),
     kitsuMetadataService: KitsuMetadataService = mockk(relaxed = true),
     profileBoundary: ProfileBoundary = defaultProfileBoundary(),
+    profileManager: ProfileManager = defaultProfileManager(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository(),
     trailerService: TrailerService? = null,
     metadataRouterFacade: MetadataRouterFacade? = null,
+    metadataDisplayRepository: MetadataDisplayRepository? = null,
     addonRepository: AddonRepository? = null,
     mdbListRepository: MDBListRepository = mockk(relaxed = true),
     titleRatingOverrideRepository: TitleRatingOverrideRepository = defaultTitleRatingOverrideRepository(),
@@ -113,23 +121,29 @@ fun buildMetaDetailsViewModel(
         kitsuMetadataService = kitsuMetadataService
     )
 
+    val effectiveMetadataRouterFacade = metadataRouterFacade ?: testMetadataRouterFacade(
+        providerMetadataRouter = tvMetadataRouter,
+        metadataSecondaryRepository = metadataSecondaryRepository,
+        trailerService = effectiveTrailerService
+    )
+
     return MetaDetailsViewModel(
         context = context,
         metaRepository = metaRepository,
         traktAuthDataStore = traktAuthDataStore,
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
-        tmdbService = tmdbService,
-        metadataRouterFacade = metadataRouterFacade ?: testMetadataRouterFacade(
-            providerMetadataRouter = tvMetadataRouter,
-            metadataSecondaryRepository = metadataSecondaryRepository,
-            trailerService = effectiveTrailerService
+        metadataRouterFacade = effectiveMetadataRouterFacade,
+        metadataDisplayRepository = metadataDisplayRepository ?: MetadataDisplayRepository(
+            metadataRouterFacade = effectiveMetadataRouterFacade,
+            detailRatingDisplayRepository = DetailRatingDisplayRepository(
+                titleRatingOverrideRepository = titleRatingOverrideRepository,
+                mdbListRepository = mdbListRepository,
+                episodeRatingsSelectionRepository = episodeRatingsSelectionRepository
+            )
         ),
-        metadataSecondaryRepository = metadataSecondaryRepository,
         profileBoundary = profileBoundary,
-        mdbListRepository = mdbListRepository,
-        titleRatingOverrideRepository = titleRatingOverrideRepository,
-        episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
+        profileManager = profileManager,
         libraryRepository = libraryRepository,
         traktLibraryService = mockk(relaxed = true),
         watchProgressRepository = watchProgressRepository,
@@ -138,7 +152,6 @@ fun buildMetaDetailsViewModel(
         trackingScrobbleService = mockk<TrackingScrobbleService>(relaxed = true),
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
-        trailerService = effectiveTrailerService,
         animeSeasonDetailRepository = animeSeasonDetailRepository,
         savedStateHandle = SavedStateHandle(
             mapOf(
@@ -212,9 +225,24 @@ fun defaultProfileBoundary(): ProfileBoundary {
 
 fun defaultWatchProgressRepository(): WatchProgressRepository {
     val repo = mockk<WatchProgressRepository>(relaxed = true)
-    every { repo.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-    every { repo.getProgress(any()) } returns flowOf(null)
+    every { repo.getAllEpisodeProgress(any(), any()) } returns flowOf(emptyMap())
+    every { repo.getProgress(any(), any()) } returns flowOf(null)
+    every { repo.isWatched(any(), any(), any(), any()) } returns flowOf(false)
     return repo
+}
+
+fun defaultProfileManager(): ProfileManager {
+    val session = ActiveProfileSession(
+        profileId = 1,
+        sessionId = "session-1",
+        sessionOrdinal = 1L,
+        startedAtMs = 1_000L
+    )
+    return mockk {
+        every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        every { this@mockk.activeProfileSession } returns MutableStateFlow(session)
+        every { this@mockk.isPrimaryProfileActive } returns true
+    }
 }
 
 fun defaultLibraryRepository(): LibraryRepository {
@@ -228,6 +256,7 @@ fun defaultLibraryRepository(): LibraryRepository {
 
 fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
     return mockk<TitleRatingOverrideRepository>().also { repository ->
-        coEvery { repository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        coEvery { repository.titleRatingCandidates(any<MetaPreview>(), any(), any()) } returns emptyList()
+        coEvery { repository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
     }
 }

@@ -275,9 +275,12 @@ fun HomeViewModel.togglePosterMovieWatched(item: MetaPreview) {
         val currentlyWatched = _uiState.value.movieWatchedStatus[statusKey] == true
         runCatching {
             if (currentlyWatched) {
-                watchProgressRepository.removeFromHistory(item.id)
+                watchProgressRepository.removeFromHistory(profileManager.activeProfileSession.value, item.id)
             } else {
-                watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(item))
+                watchProgressRepository.markAsCompleted(
+                    profileManager.activeProfileSession.value,
+                    buildCompletedMovieProgress(item)
+                )
             }
         }.onFailure { error ->
             Log.w(HomeViewModel.TAG, "Failed to toggle poster watched status for ${item.id}: ${error.message}")

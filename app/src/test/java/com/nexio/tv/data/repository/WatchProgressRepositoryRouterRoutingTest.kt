@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -11,6 +13,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ResolverSchedule
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
@@ -23,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import javax.inject.Provider
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -139,6 +143,16 @@ class WatchProgressRepositoryRouterRoutingTest {
                 effectiveProvider = TrackingProvider.TRAKT,
                 simklAuthenticated = false
             )
+            every { stateForProfile(any()) } returns flowOf(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.TRAKT,
+                    simklAuthenticated = false
+                )
+            )
+            coEvery { currentState(any()) } returns EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                simklAuthenticated = false
+            )
         }
         return WatchProgressRepositoryImpl(
             watchProgressPreferences = mockk<WatchProgressPreferences>(relaxed = true),
@@ -159,8 +173,24 @@ class WatchProgressRepositoryRouterRoutingTest {
             snapshotServiceProvider = Provider {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
             },
-            metadataRouterFacade = facade
+            metadataRouterFacade = facade,
+            accountScopeProvider = TestTrackingAccountScopeProvider(),
+            profileManager = testProfileManager()
         )
+    }
+
+    private fun testProfileManager(): ProfileManager {
+        val session = ActiveProfileSession(
+            profileId = 1,
+            sessionId = "session-1",
+            sessionOrdinal = 1L,
+            startedAtMs = 1_000L
+        )
+        return mockk {
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+            every { this@mockk.activeProfileSession } returns MutableStateFlow(session)
+            every { this@mockk.isPrimaryProfileActive } returns true
+        }
     }
 
     private fun successResult() = MetadataResolutionResult(

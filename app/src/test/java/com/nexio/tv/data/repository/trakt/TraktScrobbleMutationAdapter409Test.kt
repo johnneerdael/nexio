@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -53,7 +54,8 @@ class TraktScrobbleMutationAdapter409Test {
             action = "stop",
             progressPercent = 95f,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 1L
+            optimisticVersion = 1L,
+            session = testTraktSession()
         )
 
         val result = adapter.execute(envelope)
@@ -76,7 +78,8 @@ class TraktScrobbleMutationAdapter409Test {
             action = "start",
             progressPercent = 5f,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 2L
+            optimisticVersion = 2L,
+            session = testTraktSession()
         )
 
         val result = adapter.execute(envelope)
@@ -99,7 +102,8 @@ class TraktScrobbleMutationAdapter409Test {
             item = movieItem(),
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 3L
+            optimisticVersion = 3L,
+            session = testTraktSession()
         )
 
         val result = adapter.execute(envelope)

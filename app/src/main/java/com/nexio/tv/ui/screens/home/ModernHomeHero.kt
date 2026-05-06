@@ -49,6 +49,8 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
@@ -85,7 +87,12 @@ internal fun ModernHeroMediaLayer(
     Box(modifier = modifier) {
         val imageModel = remember(localContext, stableBackdrop, requestWidthPx, requestHeightPx) {
             ImageRequest.Builder(localContext)
-                .data(stableBackdrop)
+                .data(
+                    stableBackdrop.toLegacyArtworkCoilModelOrNull(
+                        ownerKey = "modern-home-hero:backdrop",
+                        imageType = ArtworkType.BACKDROP
+                    )
+                )
                 .crossfade(true)
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
@@ -274,7 +281,12 @@ private fun HeroTitleContent(
     val logoModel = remember(context, preview.logo, logoMaxWidthPx, logoHeightPx) {
         preview.logo?.let {
             ImageRequest.Builder(context)
-                .data(it)
+                .data(
+                    it.toLegacyArtworkCoilModelOrNull(
+                        ownerKey = "${preview.title}:hero-logo",
+                        imageType = ArtworkType.LOGO
+                    )
+                )
                 .crossfade(false)
                 .size(width = logoMaxWidthPx, height = logoHeightPx)
                 .build()

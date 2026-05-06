@@ -4,8 +4,12 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -17,10 +21,10 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
-import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -35,7 +39,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.withPermit
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -239,50 +242,65 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List<CatalogRow>) {
-    if (!isNonPlaybackHomeWorkAllowed()) return
-
-    val catalogItems = rows
-        .asSequence()
+    val activeKeys = mutableSetOf<String>()
+    rows.asSequence()
         .flatMap { it.items.asSequence() }
-        .distinctBy { homeTrailerAvailabilityKey(it.id, it.apiType) }
-        .toList()
-
-    catalogItems.forEach { item ->
-        val availabilityKey = homeTrailerAvailabilityKey(item.id, item.apiType)
-        if (trailerMetadataAvailableState.containsKey(availabilityKey)) {
-            return@forEach
-        }
-        if (!trailerMetadataAvailabilityInFlightKeys.add(availabilityKey)) {
-            return@forEach
-        }
-
-        val job = viewModelScope.launch {
-            try {
-                trailerMetadataAvailabilitySemaphore.withPermit {
-                    if (!isNonPlaybackHomeWorkAllowed()) return@withPermit
-                    val tmdbId = if (shouldSkipTmdbTrailerIdLookup(item.id, item.apiType)) null else withContext(Dispatchers.IO) {
-                        runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }
-                            .getOrNull()
-                    }
-                    val available = trailerService.getTitleMediaAvailability(
-                        tmdbId = tmdbId,
-                        type = item.apiType,
-                        contentId = item.id,
-                        fallbackYtIds = item.trailerYtIds
-                    )
-                    trailerMetadataAvailableState[availabilityKey] = available
+        .forEach { item ->
+            val key = homeTrailerAvailabilityKey(item.id, item.apiType)
+            activeKeys += key
+            val resolution = metadataRouterFacade.resolveTrailer(
+                TrailerResolveRequest(
+                    itemKey = key,
+                    title = item.name,
+                    year = item.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                    stableIds = item.firstPaintStableIds,
+                    fallbackYtIds = item.trailerYtIds,
+                    surface = TrailerSurface.HOME,
+                    type = item.apiType,
+                    contentId = item.id
+                )
+            )
+            val selected = resolution.selected
+            if (selected != null) {
+                trailerMetadataAvailableState[key] = true
+                when (selected) {
+                    is TrailerPlaybackRef.YouTubeId -> trailerSelectedFallbackYtIdsState[key] = selected.videoId
+                    else -> trailerSelectedFallbackYtIdsState.remove(key)
                 }
-            } finally {
-                trailerMetadataAvailabilityInFlightKeys.remove(availabilityKey)
-                trailerMetadataAvailabilityJobs.remove(coroutineContext.job)
+                if (!hasPublishedHomeTrailerPreview(item.id, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
+                    trailerPreviewNegativeCache[item.id] = true
+                }
+            } else {
+                trailerMetadataAvailableState.remove(key)
+                trailerSelectedFallbackYtIdsState.remove(key)
             }
         }
-        trailerMetadataAvailabilityJobs.add(job)
+    trailerMetadataAvailableState.keys.retainAll(activeKeys)
+    trailerSelectedFallbackYtIdsState.keys.retainAll(activeKeys)
+}
+
+internal fun HomeViewModel.syncHomeTrailerAvailabilityFromResolvedItems(items: List<ResolvedDisplayItem>) {
+    val activeKeys = items.mapTo(mutableSetOf()) { it.itemKey }
+    items.forEach { item ->
+        val selected = item.trailer.selectedPlaybackRef
+        if (selected != null) {
+            trailerMetadataAvailableState[item.itemKey] = true
+            when (selected) {
+                is TrailerPlaybackRef.YouTubeId -> trailerSelectedFallbackYtIdsState[item.itemKey] = selected.videoId
+                else -> trailerSelectedFallbackYtIdsState.remove(item.itemKey)
+            }
+        } else {
+            trailerMetadataAvailableState.remove(item.itemKey)
+            trailerSelectedFallbackYtIdsState.remove(item.itemKey)
+        }
     }
+    trailerMetadataAvailableState.keys.retainAll(activeKeys)
+    trailerSelectedFallbackYtIdsState.keys.retainAll(activeKeys)
 }
 
 internal fun HomeViewModel.clearTrailerMetadataAvailabilityPipeline() {
     trailerMetadataAvailableState.clear()
+    trailerSelectedFallbackYtIdsState.clear()
     trailerMetadataAvailabilityInFlightKeys.clear()
     val jobs = synchronized(trailerMetadataAvailabilityJobs) {
         trailerMetadataAvailabilityJobs.toList().also { trailerMetadataAvailabilityJobs.clear() }
@@ -296,7 +314,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
         title = item.name,
         releaseInfo = item.releaseInfo,
         apiType = item.apiType,
-        fallbackYtId = item.trailerYtIds.firstOrNull()
+        fallbackYtId = trailerSelectedFallbackYtIdsState[homeTrailerAvailabilityKey(item.id, item.apiType)]
     )
 }
 
@@ -314,92 +332,19 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         activeTrailerPreviewItemId = itemId
         trailerPreviewRequestVersion++
     }
-
-    if (trailerPreviewNegativeCache.containsKey(itemId)) return
-    if (trailerPreviewUrlsState.containsKey(itemId) || trailerPreviewExternalUrlsState.containsKey(itemId)) return
-    if (trailerPreviewLoadingIds.put(itemId, true) != null) return
-
-    val requestVersion = trailerPreviewRequestVersion
-
-    trailerPreviewJob?.cancel()
-    trailerPreviewJob = viewModelScope.launch {
-        try {
-            if (!isNonPlaybackHomeWorkAllowed()) return@launch
-            val tmdbId = if (shouldSkipTmdbTrailerIdLookup(itemId, apiType)) {
-                null
-            } else {
-                runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
-            }
-            if (!isNonPlaybackHomeWorkAllowed()) return@launch
-            if (forceRefresh) {
-                trailerService.invalidateLookupCache(
-                    title = title,
-                    year = extractYear(releaseInfo),
-                    tmdbId = tmdbId,
-                    type = apiType,
-                    contentId = itemId,
-                    fallbackYtIds = listOfNotNull(fallbackYtId)
-                )
-            }
-            val trailerResult = trailerService.resolveTrailer(
-                title = title,
-                year = extractYear(releaseInfo),
-                tmdbId = tmdbId,
-                type = apiType,
-                contentId = itemId,
-                fallbackYtIds = listOfNotNull(fallbackYtId)
-            )
-
-            val isLatestFocusedItem =
-                activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
-            if (!isLatestFocusedItem) {
-                trailerPreviewLoadingIds.remove(itemId)
-                return@launch
-            }
-
-            when (trailerResult) {
-                is TrailerResolutionResult.Playback -> {
-                    trailerPreviewNegativeCache.remove(itemId)
-                    trailerPreviewExternalUrlsState.remove(itemId)
-                    trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
-                    trailerResult.source.userAgent
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { trailerPreviewUserAgentsState[itemId] = it }
-                        ?: trailerPreviewUserAgentsState.remove(itemId)
-                    val audioUrl = trailerResult.source.audioUrl
-                    if (audioUrl.isNullOrBlank()) {
-                        trailerPreviewAudioUrlsState.remove(itemId)
-                    } else {
-                        trailerPreviewAudioUrlsState[itemId] = audioUrl
-                    }
-                }
-
-                is TrailerResolutionResult.External -> {
-                    trailerPreviewNegativeCache.remove(itemId)
-                    trailerPreviewUrlsState.remove(itemId)
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                    trailerPreviewUserAgentsState.remove(itemId)
-                    trailerPreviewExternalUrlsState[itemId] = trailerResult.url
-                }
-
-                null -> {
-                    trailerPreviewNegativeCache[itemId] = true
-                    trailerPreviewUrlsState.remove(itemId)
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                    trailerPreviewUserAgentsState.remove(itemId)
-                    trailerPreviewExternalUrlsState.remove(itemId)
-                }
-            }
-
-            trailerPreviewLoadingIds.remove(itemId)
-        } finally {
-            trailerPreviewLoadingIds.remove(itemId)
-            if (trailerPreviewJob?.isActive == false) {
-                trailerPreviewJob = null
-            }
-        }
+    trailerPreviewLoadingIds.remove(itemId)
+    if (!hasPublishedHomeTrailerPreview(itemId, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
+        trailerPreviewNegativeCache[itemId] = true
     }
 }
+
+internal fun hasPublishedHomeTrailerPreview(
+    itemId: String,
+    trailerPreviewUrls: Map<String, String>,
+    trailerPreviewExternalUrls: Map<String, String>
+): Boolean =
+    !trailerPreviewUrls[itemId].isNullOrBlank() ||
+        !trailerPreviewExternalUrls[itemId].isNullOrBlank()
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     // Rail-preview-first hydration: RAIL_PREVIEW items are routed through the same
@@ -433,6 +378,9 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     setEnrichingItemId(item.id)
 
     pendingTmdbEnrichItemId = itemKey
+    val expectedGeneration = homeProfileGeneration
+    val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     tmdbEnrichFocusJob?.cancel()
     tmdbEnrichFocusJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
@@ -460,8 +408,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return@launch
 
             focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
-            val expectedGeneration = homeProfileGeneration
-            val expectedLanguageTag = profileBoundary.currentLanguageTag()
             var overlayApplied = false
             val overlay = try {
                 homeHydrationCoordinator.hydrate(
@@ -476,6 +422,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
                             expectedLanguageTag = expectedLanguageTag,
+                            expectedProfileSession = expectedProfileSession,
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                         if (overlayApplied) {
@@ -519,6 +466,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
     focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
     val expectedGeneration = homeProfileGeneration
     val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     viewModelScope.launch {
         var overlayApplied = false
         val overlay = try {
@@ -534,6 +482,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
                         overlay = appliedOverlay,
                         expectedGeneration = expectedGeneration,
                         expectedLanguageTag = expectedLanguageTag,
+                        expectedProfileSession = expectedProfileSession,
                         trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                     )
                     if (overlayApplied) {
@@ -582,6 +531,9 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (pendingTmdbEnrichItemId == itemKey || pendingAdjacentPrefetchItemId == itemKey) return
 
     pendingAdjacentPrefetchItemId = itemKey
+    val expectedGeneration = homeProfileGeneration
+    val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     adjacentItemPrefetchJob?.cancel()
     adjacentItemPrefetchJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
@@ -591,8 +543,6 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
 
         try {
             if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
-                val expectedGeneration = homeProfileGeneration
-                val expectedLanguageTag = profileBoundary.currentLanguageTag()
                 homeHydrationCoordinator.hydrate(
                     item = item,
                     trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
@@ -605,6 +555,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
                             expectedLanguageTag = expectedLanguageTag,
+                            expectedProfileSession = expectedProfileSession,
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                         if (overlayApplied) {
@@ -686,11 +637,6 @@ internal fun mergeFocusedItemEnrichment(
             description = externalMeta.description ?: merged.description,
             imdbRating = externalMeta.imdbRating ?: merged.imdbRating,
             genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres,
-            trailerYtIds = if (externalMeta.trailerYtIds.isNotEmpty()) {
-                externalMeta.trailerYtIds
-            } else {
-                merged.trailerYtIds
-            },
             language = externalMeta.language ?: merged.language
         )
     }
@@ -722,12 +668,20 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     items: List<MetaPreview>,
-    settings: TmdbSettings
+    settings: TmdbSettings,
+    expectedGeneration: Long = homeProfileGeneration,
+    expectedLanguageTag: String = profileBoundary.currentLanguageTag(),
+    expectedProfileSession: ActiveProfileSession? = null
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
 
-    val expectedGeneration = homeProfileGeneration
-    val languageTag = profileBoundary.currentLanguageTag()
+    val profileSessionForPublish = expectedProfileSession ?: runCatching {
+        profileManager.activeProfileSession.value
+    }.getOrNull()
+
+    if (!isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
+        return items
+    }
     return items
         .distinctBy { it.homeOverlayItemKey() }
         .associate { item ->
@@ -736,19 +690,24 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     item = item,
                     trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
                     priority = HomeHydrationPriority.HERO,
-                    languageTag = languageTag,
+                    languageTag = expectedLanguageTag,
                     expectedGeneration = expectedGeneration,
                     currentGeneration = { homeProfileGeneration },
                     onOverlayApplied = { appliedOverlay ->
-                        applyHydratedHomeOverlayFromCoordinator(
-                            overlay = appliedOverlay,
-                            expectedGeneration = expectedGeneration,
-                            expectedLanguageTag = languageTag,
-                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
-                        )
+                        if (profileSessionForPublish != null) {
+                            applyHydratedHomeOverlayFromCoordinator(
+                                overlay = appliedOverlay,
+                                expectedGeneration = expectedGeneration,
+                                expectedLanguageTag = expectedLanguageTag,
+                                expectedProfileSession = profileSessionForPublish,
+                                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
+                            )
+                        } else {
+                            isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)
+                        }
                     }
                 )
-                if (isCurrentHomeHydrationScope(expectedGeneration, languageTag)) {
+                if (isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
                     overlay?.fields?.applyToHeroItem(item, settings) ?: item
                 } else {
                     item

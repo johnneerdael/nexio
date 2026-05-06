@@ -41,7 +41,10 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
@@ -144,16 +147,19 @@ fun GridContentCard(
             ) {
                 val context = LocalContext.current
                 val displayPoster = item.displayPoster
-                val imageModel = remember(displayPoster, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+                val coilModel = item.artwork?.poster.toCoilModelOrNull()
+                    ?: displayPoster.toLegacyArtworkCoilModelOrNull("${item.id}:poster", ArtworkType.POSTER)
+                val imageModel = remember(coilModel, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+                    val modelKey = coilModel?.toString()
                     ImageRequest.Builder(context)
-                        .data(displayPoster)
+                        .data(coilModel)
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
-                        .memoryCacheKey("${displayPoster}_${requestWidthPx}x${requestHeightPx}")
-                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, displayPoster))
+                        .memoryCacheKey("${modelKey}_${requestWidthPx}x${requestHeightPx}")
+                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, modelKey))
                         .build()
                 }
-                if (displayPoster.isNullOrBlank()) {
+                if (coilModel == null) {
                     MonochromePosterPlaceholder()
                 } else {
                     AsyncImage(

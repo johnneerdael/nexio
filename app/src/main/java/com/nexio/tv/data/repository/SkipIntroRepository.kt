@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.metadata.router.resolver.SkipIntroRepositoryPort
 import com.nexio.tv.data.integration.skip.AniSkipIntegrationProvider
 import com.nexio.tv.data.integration.skip.AnimeSkipIntegrationProvider
 import com.nexio.tv.data.integration.skip.ArmIntegrationProvider
@@ -17,30 +18,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.firstOrNull
 
 private const val PROVIDER_THEINTRODB = "theintrodb"
-
-internal enum class SkipProviderRoute {
-    THEINTRODB,
-    ANIME_PRIMARY
-}
-
-internal object SkipProviderArbiter {
-    fun resolve(
-        contentType: String?,
-        effectiveId: String?,
-        fallbackId: String?
-    ): SkipProviderRoute {
-        val normalizedType = contentType?.trim()?.lowercase().orEmpty()
-        val normalizedEffectiveId = effectiveId?.trim()?.lowercase().orEmpty()
-        val normalizedFallbackId = fallbackId?.trim()?.lowercase().orEmpty()
-
-        return when {
-            normalizedEffectiveId.startsWith("mal:") || normalizedEffectiveId.startsWith("kitsu:") -> SkipProviderRoute.ANIME_PRIMARY
-            normalizedType == "anime" -> SkipProviderRoute.ANIME_PRIMARY
-            ":anime:" in normalizedEffectiveId || ":anime:" in normalizedFallbackId -> SkipProviderRoute.ANIME_PRIMARY
-            else -> SkipProviderRoute.THEINTRODB
-        }
-    }
-}
 
 data class SkipInterval(
     val startTime: Double, // seconds
@@ -102,17 +79,17 @@ class SkipIntroRepository @Inject constructor(
     private val armProvider: ArmIntegrationProvider,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore
-) {
+) : SkipIntroRepositoryPort {
     private val cache = ConcurrentHashMap<String, List<SkipInterval>>()
     private val malIdCache = ConcurrentHashMap<String, String>()
     private val animeSkipShowIdCache = ConcurrentHashMap<String, String>()
     private val introDbConfigured = BuildConfig.INTRODB_API_URL.isNotEmpty()
 
-    fun clearCachedIntervals() {
+    override fun clearCachedIntervals() {
         cache.clear()
     }
 
-    suspend fun getSkipIntervals(contentId: String?, season: Int?, episode: Int?): List<SkipInterval> {
+    override suspend fun getSkipIntervals(contentId: String?, season: Int?, episode: Int?): List<SkipInterval> {
         if (contentId.isNullOrBlank()) return emptyList()
         val cacheKey = "$contentId:$season:$episode"
         cache[cacheKey]?.let { return it }
@@ -121,7 +98,7 @@ class SkipIntroRepository @Inject constructor(
         return result.also { cache[cacheKey] = it }
     }
 
-    suspend fun getAnimePrimarySkipIntervals(imdbId: String?, season: Int, episode: Int): List<SkipInterval> {
+    override suspend fun getAnimePrimarySkipIntervals(imdbId: String?, season: Int, episode: Int): List<SkipInterval> {
         if (imdbId.isNullOrBlank()) return emptyList()
         val cacheKey = "anime:$imdbId:$season:$episode"
         cache[cacheKey]?.let { return it }
@@ -145,7 +122,7 @@ class SkipIntroRepository @Inject constructor(
         return emptyList<SkipInterval>().also { cache[cacheKey] = it }
     }
 
-    suspend fun getSkipIntervalsForMal(malId: String, episode: Int): List<SkipInterval> {
+    override suspend fun getSkipIntervalsForMal(malId: String, episode: Int): List<SkipInterval> {
         val cacheKey = "mal:$malId:$episode"
         cache[cacheKey]?.let { return it }
 
@@ -176,7 +153,7 @@ class SkipIntroRepository @Inject constructor(
         return emptyList<SkipInterval>().also { cache[cacheKey] = it }
     }
 
-    suspend fun getSkipIntervalsForKitsu(kitsuId: String, episode: Int): List<SkipInterval> {
+    override suspend fun getSkipIntervalsForKitsu(kitsuId: String, episode: Int): List<SkipInterval> {
         val cacheKey = "kitsu:$kitsuId:$episode"
         cache[cacheKey]?.let { return it }
 

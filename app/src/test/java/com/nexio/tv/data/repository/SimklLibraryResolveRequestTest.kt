@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -120,7 +121,8 @@ class SimklLibraryResolveRequestTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = mockk(relaxed = true),
             snapshotStore = snapshotStore,
-            metadataRouterFacade = facade
+            metadataRouterFacade = facade,
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
     }
 

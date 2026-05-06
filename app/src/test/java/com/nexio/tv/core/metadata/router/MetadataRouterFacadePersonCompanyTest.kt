@@ -1,8 +1,10 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.integration.metadata.TmdbOrganizationPersonAdapter
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PersonDetail
 import io.mockk.coEvery
@@ -21,23 +23,57 @@ import org.junit.Test
  *  1. Fire the canonical `metadata.route_decision` (and at least one
  *     `metadata.field_selected`) trace events via the resolve pipeline at depth
  *     `DETAIL_SECONDARY`.
- *  2. Return the underlying [MetadataSecondaryRepository] result unchanged.
- *
- * Facade-level pin for Task 17 of the cluster-A facade-bypass migration:
- * `MetaDetailsViewModel` secondary navigation-target hydration path no longer calls the
- * secondary repository directly for actor / company id resolution, so trace
- * observability (audit's primary goal) is restored. `fetchPersonDetail` is also
- * exposed on the facade for the cast-detail path.
+ *  2. Return compatibility projections from provider-plan organization/person candidates.
  */
 class MetadataRouterFacadePersonCompanyTest {
 
     @Test
-    fun `findPersonIdByExactName delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `findPersonIdByExactName returns provider-plan canonical id and emits canonical trace events`() = runTest {
+        val sink = RecordingTraceSink()
+        val facade = newFacade(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(
+                provider = MetadataPrimaryProvider.TMDB,
+                resolverType = ResolverType.ORGANIZATION_PERSON,
+                fields = mapOf(
+                    ResolvedField.CANONICAL_ID to FieldValue("tmdb:person:608", FieldOwner.ORGANIZATION_PERSON)
+                )
+            )
+        )
+
+        val result = facade.findPersonIdByExactName(
+            metadataRequest = personLookupRequest(name = "Hayao Miyazaki"),
+            name = "Hayao Miyazaki"
+        )
+
+        assertEquals(608, result)
+        assertCanonicalTraceEvents(sink)
+    }
+
+    @Test
+    fun `findPersonIdByExactName real adapter receives raw name`() = runTest {
         val sink = RecordingTraceSink()
         val secondaryRepo = mockk<MetadataSecondaryRepository>()
+        val person = PersonDetail(
+            tmdbId = 608,
+            name = "Hayao Miyazaki",
+            biography = null,
+            birthday = null,
+            deathday = null,
+            placeOfBirth = null,
+            profilePhoto = null,
+            knownFor = null,
+            movieCredits = emptyList(),
+            tvCredits = emptyList()
+        )
         coEvery { secondaryRepo.findPersonIdByExactName("Hayao Miyazaki") } returns 608
+        coEvery { secondaryRepo.fetchPersonDetail(608, false) } returns person
 
-        val facade = newFacade(sink, secondaryRepo)
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+            extraAdapter = TmdbOrganizationPersonAdapter(secondaryRepo)
+        )
 
         val result = facade.findPersonIdByExactName(
             metadataRequest = personLookupRequest(name = "Hayao Miyazaki"),
@@ -46,16 +82,43 @@ class MetadataRouterFacadePersonCompanyTest {
 
         assertEquals(608, result)
         coVerify(exactly = 1) { secondaryRepo.findPersonIdByExactName("Hayao Miyazaki") }
+        coVerify(exactly = 0) { secondaryRepo.findPersonIdByExactName("person:Hayao Miyazaki") }
+    }
+
+    @Test
+    fun `findCompanyIdByExactName returns provider-plan organization id and emits canonical trace events`() = runTest {
+        val sink = RecordingTraceSink()
+        val facade = newFacade(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(
+                provider = MetadataPrimaryProvider.TMDB,
+                resolverType = ResolverType.ORGANIZATION_PERSON,
+                fields = mapOf(
+                    ResolvedField.ORGANIZATION_LIST to FieldValue(listOf(10342), FieldOwner.ORGANIZATION_PERSON)
+                )
+            )
+        )
+
+        val result = facade.findCompanyIdByExactName(
+            metadataRequest = companyLookupRequest(name = "Studio Ghibli"),
+            name = "Studio Ghibli"
+        )
+
+        assertEquals(10342, result)
         assertCanonicalTraceEvents(sink)
     }
 
     @Test
-    fun `findCompanyIdByExactName delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `findCompanyIdByExactName real adapter receives raw name`() = runTest {
         val sink = RecordingTraceSink()
         val secondaryRepo = mockk<MetadataSecondaryRepository>()
         coEvery { secondaryRepo.findCompanyIdByExactName("Studio Ghibli") } returns 10342
 
-        val facade = newFacade(sink, secondaryRepo)
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+            extraAdapter = TmdbOrganizationPersonAdapter(secondaryRepo)
+        )
 
         val result = facade.findCompanyIdByExactName(
             metadataRequest = companyLookupRequest(name = "Studio Ghibli"),
@@ -64,16 +127,22 @@ class MetadataRouterFacadePersonCompanyTest {
 
         assertEquals(10342, result)
         coVerify(exactly = 1) { secondaryRepo.findCompanyIdByExactName("Studio Ghibli") }
-        assertCanonicalTraceEvents(sink)
+        coVerify(exactly = 0) { secondaryRepo.findCompanyIdByExactName("company:Studio Ghibli") }
     }
 
     @Test
-    fun `findPersonIdByExactName propagates null misses unchanged`() = runTest {
+    fun `findPersonIdByExactName returns null when provider-plan output has no id`() = runTest {
         val sink = RecordingTraceSink()
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-        coEvery { secondaryRepo.findPersonIdByExactName("Nobody Knows") } returns null
-
-        val facade = newFacade(sink, secondaryRepo)
+        val facade = newFacade(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(
+                provider = MetadataPrimaryProvider.TMDB,
+                resolverType = ResolverType.ORGANIZATION_PERSON,
+                fields = mapOf(
+                    ResolvedField.TITLE to FieldValue("Nobody Knows", FieldOwner.PRIMARY)
+                )
+            )
+        )
 
         val result = facade.findPersonIdByExactName(
             metadataRequest = personLookupRequest(name = "Nobody Knows"),
@@ -81,14 +150,12 @@ class MetadataRouterFacadePersonCompanyTest {
         )
 
         assertNull(result)
-        coVerify(exactly = 1) { secondaryRepo.findPersonIdByExactName("Nobody Knows") }
         assertCanonicalTraceEvents(sink)
     }
 
     @Test
-    fun `fetchPersonDetail delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `fetchPersonDetail returns provider-plan person detail and emits canonical trace events`() = runTest {
         val sink = RecordingTraceSink()
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
         val canned = PersonDetail(
             tmdbId = 608,
             name = "Hayao Miyazaki",
@@ -101,41 +168,80 @@ class MetadataRouterFacadePersonCompanyTest {
             movieCredits = emptyList(),
             tvCredits = emptyList()
         )
-        coEvery { secondaryRepo.fetchPersonDetail(608, false) } returns canned
 
-        val facade = newFacade(sink, secondaryRepo)
+        val facade = newFacade(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(
+                provider = MetadataPrimaryProvider.TMDB,
+                resolverType = ResolverType.ORGANIZATION_PERSON,
+                fields = mapOf(
+                    ResolvedField.CAST to FieldValue(canned, FieldOwner.ORGANIZATION_PERSON)
+                )
+            )
+        )
 
         val result = facade.fetchPersonDetail(
-            metadataRequest = personLookupRequest(name = "Hayao Miyazaki"),
+            metadataRequest = personDetailRequest(personId = 608),
             personId = 608
         )
 
         assertEquals(canned, result)
-        coVerify(exactly = 1) { secondaryRepo.fetchPersonDetail(608, false) }
         assertCanonicalTraceEvents(sink)
     }
 
     @Test
-    fun `fetchPersonDetail forwards preferCrewCredits flag`() = runTest {
+    fun `fetchPersonDetail routes preferCrewCredits through combined credits provider step`() = runTest {
         val sink = RecordingTraceSink()
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-        coEvery { secondaryRepo.fetchPersonDetail(608, true) } returns null
+        var observedShape: String? = null
+        val crewDetail = PersonDetail(
+            tmdbId = 608,
+            name = "Hayao Miyazaki",
+            biography = null,
+            birthday = null,
+            deathday = null,
+            placeOfBirth = null,
+            profilePhoto = null,
+            knownFor = "Writing",
+            movieCredits = emptyList(),
+            tvCredits = emptyList()
+        )
+        val adapter = object : MetadataProviderAdapter {
+            override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
+            override fun supports(step: ProviderPlanStep): Boolean = true
+            override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+                observedShape = step.apiShapeId
+                return ProviderStepResult(
+                    step = step,
+                    candidate = MetadataCandidate(
+                        provider = MetadataPrimaryProvider.TMDB,
+                        resolverType = ResolverType.ORGANIZATION_PERSON,
+                        fields = mapOf(
+                            ResolvedField.CREW to FieldValue(crewDetail, FieldOwner.ORGANIZATION_PERSON)
+                        )
+                    )
+                )
+            }
+        }
 
-        val facade = newFacade(sink, secondaryRepo)
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+            extraAdapter = adapter
+        )
 
-        facade.fetchPersonDetail(
-            metadataRequest = personLookupRequest(name = "Hayao Miyazaki"),
+        val result = facade.fetchPersonDetail(
+            metadataRequest = personDetailRequest(personId = 608),
             personId = 608,
             preferCrewCredits = true
         )
 
-        coVerify(exactly = 1) { secondaryRepo.fetchPersonDetail(608, true) }
+        assertEquals(crewDetail, result)
+        assertEquals(TmdbApiShapes.PERSON_COMBINED_CREDITS, observedShape)
     }
 
     @Test
     fun `fetchPersonDetail with tvdb prefix returns TVDB adapter's PersonDetail and skips TMDB repo`() = runTest {
         val sink = RecordingTraceSink()
-        val secondaryRepo = mockk<MetadataSecondaryRepository>(relaxed = true)
         val tvdbPerson = PersonDetail(
             tmdbId = 0,
             name = "Mark Hamill",
@@ -157,7 +263,7 @@ class MetadataRouterFacadePersonCompanyTest {
 
         val facade = newFacadeWithExtraAdapter(
             sink = sink,
-            secondaryRepo = secondaryRepo,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
             extraAdapter = CannedCandidateAdapter(MetadataPrimaryProvider.TVDB, tvdbCandidate)
         )
 
@@ -178,7 +284,6 @@ class MetadataRouterFacadePersonCompanyTest {
 
         assertNotNull(result)
         assertSame(tvdbPerson, result)
-        coVerify(exactly = 0) { secondaryRepo.fetchPersonDetail(any(), any()) }
     }
 
     private fun assertCanonicalTraceEvents(sink: RecordingTraceSink) {
@@ -210,26 +315,31 @@ class MetadataRouterFacadePersonCompanyTest {
         depth = MetadataDepth.DETAIL_SECONDARY
     )
 
+    private fun personDetailRequest(personId: Int) = MetadataRequest(
+        contentId = "tmdb:person:$personId",
+        contentType = ContentType.MOVIE,
+        sourceContext = MetadataSourceContext(),
+        language = "eng",
+        depth = MetadataDepth.DETAIL_SECONDARY
+    )
+
     private fun newFacade(
         sink: RecordingTraceSink,
-        secondaryRepo: MetadataSecondaryRepository
-    ): MetadataRouterFacade = newFacadeWithExtraAdapter(sink, secondaryRepo, extraAdapter = null)
+        tmdbCandidate: MetadataCandidate
+    ): MetadataRouterFacade = newFacadeWithExtraAdapter(sink, tmdbCandidate, extraAdapter = null)
 
     private fun newFacadeWithExtraAdapter(
         sink: RecordingTraceSink,
-        secondaryRepo: MetadataSecondaryRepository,
+        tmdbCandidate: MetadataCandidate,
         extraAdapter: MetadataProviderAdapter?
     ): MetadataRouterFacade {
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
-        val tmdbCandidate = MetadataCandidate(
-            provider = MetadataPrimaryProvider.TMDB,
-            fields = mapOf(
-                ResolvedField.TITLE to FieldValue("Spirited Away", FieldOwner.PRIMARY)
-            )
-        )
         val adapters: Set<MetadataProviderAdapter> = buildSet {
-            add(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
-            if (extraAdapter != null) add(extraAdapter)
+            if (extraAdapter != null) {
+                add(extraAdapter)
+            } else {
+                add(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
+            }
         }
         return MetadataRouterFacade(
             router = MetadataRouter(
@@ -247,8 +357,7 @@ class MetadataRouterFacadePersonCompanyTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(adapters),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
     }
 

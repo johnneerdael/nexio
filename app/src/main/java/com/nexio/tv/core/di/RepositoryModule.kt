@@ -1,5 +1,6 @@
 package com.nexio.tv.core.di
 
+import com.nexio.tv.core.metadata.router.resolver.SkipIntroRepositoryPort
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.integration.imdb.ImdbTitleSearchIntegrationRepository
 import com.nexio.tv.data.repository.AddonRepositoryImpl
@@ -7,16 +8,20 @@ import com.nexio.tv.data.repository.CatalogRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
 import com.nexio.tv.data.repository.MetaRepositoryImpl
 import com.nexio.tv.data.repository.OpenSubtitlesSourceImpl
+import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
 import com.nexio.tv.data.repository.DefaultTrackingProgressService
 import com.nexio.tv.data.repository.DefaultTrackingScrobbleService
+import com.nexio.tv.data.repository.DefaultTrackingAccountScopeProvider
 import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.repository.KitsuDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
+import com.nexio.tv.data.repository.TrackingAccountScopeProvider
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
@@ -82,11 +87,21 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindSkipIntroRepositoryPort(impl: SkipIntroRepository): SkipIntroRepositoryPort
+
+    @Binds
+    @Singleton
     abstract fun bindTrackingProgressService(impl: DefaultTrackingProgressService): TrackingProgressService
 
     @Binds
     @Singleton
     abstract fun bindTrackingScrobbleService(impl: DefaultTrackingScrobbleService): TrackingScrobbleService
+
+    @Binds
+    @Singleton
+    abstract fun bindTrackingAccountScopeProvider(
+        impl: DefaultTrackingAccountScopeProvider
+    ): TrackingAccountScopeProvider
 
     @Binds
     @Singleton
@@ -110,11 +125,13 @@ abstract class RepositoryModule {
         @Provides
         @Singleton
         fun provideSeasonMarkBatcher(
-            providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
+            providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
+            traktAuthService: TraktAuthService
         ): SeasonMarkBatcher {
             return SeasonMarkBatcher(
-                providerMutationOutboxCoordinator,
-                Dispatchers.IO
+                traktMutationOutboxCoordinator = providerMutationOutboxCoordinator,
+                traktAuthService = traktAuthService,
+                ioDispatcher = Dispatchers.IO
             )
         }
     }

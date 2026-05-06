@@ -53,7 +53,11 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 )
             }
         )
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = TrackingAuthSession(
+            provider = envelope.provider,
+            profileId = envelope.profileId,
+            credentialHash = envelope.credentialHash
+        )
         val response = traktProgressMutationExecutor.addHistory(session, body)
             ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
 
@@ -122,7 +126,7 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
             seasonNumber: Int,
             episodes: List<TraktEpisodeRef>,
             rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_SHOW_CONTENT_ID, showContentId)
@@ -137,7 +141,11 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 })
             }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -208,6 +216,7 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 progressPercent = 100f
             )
         }
+
     }
 }
 

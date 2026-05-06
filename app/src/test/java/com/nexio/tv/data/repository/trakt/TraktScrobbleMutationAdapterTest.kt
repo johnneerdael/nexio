@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthState
@@ -32,7 +33,8 @@ class TraktScrobbleMutationAdapterTest {
                 title = "Server truth",
                 contentType = "movie"
             ),
-            optimisticVersion = 7L
+            optimisticVersion = 7L,
+            session = testTraktSession()
         )
 
         assertEquals("scrobble:${movieItem("Arrival").itemKey}", envelope.collapseKey)
@@ -61,7 +63,8 @@ class TraktScrobbleMutationAdapterTest {
             item = movieItem("Arrival"),
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = controller.nextOptimisticVersion()
+            optimisticVersion = controller.nextOptimisticVersion(),
+            session = testTraktSession()
         )
 
         adapter.rollbackToServerTruth(
@@ -88,8 +91,9 @@ class TraktScrobbleMutationAdapterTest {
             item = movieItem("Arrival"),
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 1L
-        ).copy(profileId = 2)
+            optimisticVersion = 1L,
+            session = testTraktSession(profileId = 2)
+        )
 
         val sessionSlot = io.mockk.slot<TrackingAuthSession>()
         coEvery {
