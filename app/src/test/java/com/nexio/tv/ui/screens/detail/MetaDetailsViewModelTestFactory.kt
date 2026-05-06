@@ -23,6 +23,8 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MetadataDisplayRepository
+import com.nexio.tv.data.repository.DetailRatingDisplayRepository
+import com.nexio.tv.data.repository.DetailSecondaryDisplayRepository
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
@@ -132,7 +134,17 @@ fun buildMetaDetailsViewModel(
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         metadataRouterFacade = effectiveMetadataRouterFacade,
-        metadataDisplayRepository = metadataDisplayRepository ?: MetadataDisplayRepository(effectiveMetadataRouterFacade),
+        metadataDisplayRepository = metadataDisplayRepository ?: MetadataDisplayRepository(
+            metadataRouterFacade = effectiveMetadataRouterFacade,
+            detailRatingDisplayRepository = DetailRatingDisplayRepository(
+                titleRatingOverrideRepository = titleRatingOverrideRepository,
+                mdbListRepository = mdbListRepository,
+                episodeRatingsSelectionRepository = episodeRatingsSelectionRepository
+            ),
+            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository(
+                metadataSecondaryRepository = metadataSecondaryRepository
+            )
+        ),
         profileBoundary = profileBoundary,
         profileManager = profileManager,
         libraryRepository = libraryRepository,
@@ -248,5 +260,6 @@ fun defaultLibraryRepository(): LibraryRepository {
 fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
     return mockk<TitleRatingOverrideRepository>().also { repository ->
         coEvery { repository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        coEvery { repository.enrichMeta(any(), any(), any(), any()) } answers { firstArg() }
     }
 }

@@ -18,7 +18,9 @@ data class ResolvedDetailDisplayDocument(
     val recommendations: List<MetaPreview>,
     val collection: List<MetaPreview>,
     val sourceTrace: List<HydratedHomeFieldTrace>,
-    val localization: LocalizationDisplayState
+    val localization: LocalizationDisplayState,
+    val advanced: DetailAdvancedMetadata = DetailAdvancedMetadata(),
+    val ratings: ResolvedDetailRatingDisplay = ResolvedDetailRatingDisplay()
 )
 
 @Immutable
@@ -47,4 +49,32 @@ data class LocalizationDisplayState(
     val requestedLanguage: String?,
     val selectedLanguage: String?,
     val fallbackReason: String?
+)
+
+@Immutable
+data class DetailAdvancedMetadata(
+    val ageRating: String? = null,
+    val countries: List<String> = emptyList(),
+    val language: String? = null,
+    val productionCompanies: List<MetaCompany> = emptyList(),
+    val networks: List<MetaCompany> = emptyList(),
+    val airsTime: String? = null,
+    val originalCountry: String? = null,
+    val originalNetwork: String? = null,
+    val latestNetwork: String? = null,
+    val platformName: String? = null
+)
+
+@Immutable
+data class ResolvedDetailRatingDisplay(
+    val mdbListRatings: MDBListRatings? = null,
+    val showMdbListImdb: Boolean = false,
+    val episodeRatings: Map<Pair<Int, Int>, ResolvedEpisodeRating> = emptyMap(),
+    val episodeRatingsError: String? = null
+)
+
+@Immutable
+data class ResolvedEpisodeRating(
+    val value: Double,
+    val source: String
 )

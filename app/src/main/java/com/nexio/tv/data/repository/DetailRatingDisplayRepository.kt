@@ -1,0 +1,81 @@
+package com.nexio.tv.data.repository
+
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
+import com.nexio.tv.domain.model.ResolvedEpisodeRating
+import javax.inject.Inject
+
+data class DetailRatingDisplayResolution(
+    val meta: Meta,
+    val display: ResolvedDetailRatingDisplay
+)
+
+class DetailRatingDisplayRepository private constructor(
+    private val deps: Deps?
+) {
+    private data class Deps(
+        val titleRatingOverrideRepository: TitleRatingOverrideRepository,
+        val mdbListRepository: MDBListRepository,
+        val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository
+    )
+
+    @Inject
+    constructor(
+        titleRatingOverrideRepository: TitleRatingOverrideRepository,
+        mdbListRepository: MDBListRepository,
+        episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository
+    ) : this(
+        Deps(
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            mdbListRepository = mdbListRepository,
+            episodeRatingsSelectionRepository = episodeRatingsSelectionRepository
+        )
+    )
+
+    suspend fun resolve(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        providerIds: ProviderIds,
+        episodesBySeason: Map<Int, Set<Int>>
+    ): DetailRatingDisplayResolution {
+        val ratingFallbackItemId = providerIds.imdb?.takeIf { it.isNotBlank() } ?: fallbackItemId
+        val enrichedMeta = deps?.titleRatingOverrideRepository?.enrichMeta(
+            meta = meta,
+            fallbackItemId = ratingFallbackItemId,
+            fallbackItemType = fallbackItemType
+        ) ?: meta
+
+        val mdbListResult = deps?.mdbListRepository?.getRatingsForMeta(
+            meta = enrichedMeta,
+            fallbackItemId = ratingFallbackItemId,
+            fallbackItemType = fallbackItemType
+        )
+        val episodeRatings = deps?.episodeRatingsSelectionRepository?.getEpisodeRatings(
+            meta = enrichedMeta,
+            fallbackItemId = ratingFallbackItemId,
+            fallbackItemType = fallbackItemType,
+            episodesBySeason = episodesBySeason
+        ).orEmpty()
+
+        return DetailRatingDisplayResolution(
+            meta = enrichedMeta,
+            display = ResolvedDetailRatingDisplay(
+                mdbListRatings = mdbListResult?.ratings,
+                showMdbListImdb = mdbListResult?.hasImdbRating == true,
+                episodeRatings = episodeRatings.mapValues { (_, rating) ->
+                    ResolvedEpisodeRating(
+                        value = rating.value,
+                        source = rating.source.name
+                    )
+                }
+            )
+        )
+    }
+
+    companion object {
+        fun noOp(): DetailRatingDisplayRepository =
+            DetailRatingDisplayRepository(deps = null)
+    }
+}

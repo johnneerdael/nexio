@@ -46,6 +46,7 @@ fun testMetadataRouterFacade(
                     TestMetadataProviderAdapter(
                         provider = provider,
                         providerMetadataRouter = providerMetadataRouter,
+                        metadataSecondaryRepository = metadataSecondaryRepository,
                         enrichmentCache = enrichmentCache,
                         callFetchEnrichmentForMovieRoutes = callFetchEnrichmentForMovieRoutes
                     )
@@ -60,12 +61,21 @@ fun testMetadataRouterFacade(
 private class TestMetadataProviderAdapter(
     override val provider: MetadataPrimaryProvider,
     private val providerMetadataRouter: ProviderMetadataRouter,
+    private val metadataSecondaryRepository: MetadataSecondaryRepository?,
     private val enrichmentCache: MutableMap<String, com.nexio.tv.core.tvdb.TvMetadataDecision<TvMetadataEnrichment>>,
     private val callFetchEnrichmentForMovieRoutes: Boolean = true
 ) : MetadataProviderAdapter {
     override fun supports(step: ProviderPlanStep): Boolean = true
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+        exactTmdbLookupCandidate(route)?.let { candidate ->
+            return ProviderStepResult(
+                step = step,
+                candidate = candidate,
+                episodeMetadata = emptyMap()
+            )
+        }
+
         val coreEnrichment = when {
             route.seasonNumber == null && step.role == ProviderPlanRole.PRIMARY_CORE
                     // When metadataSecondaryRepository is configured (detail path):
@@ -154,6 +164,34 @@ private class TestMetadataProviderAdapter(
             ),
             episodeMetadata = episodeMetadata
         )
+    }
+
+    private suspend fun exactTmdbLookupCandidate(route: MetadataRoute): MetadataCandidate? {
+        if (provider != MetadataPrimaryProvider.TMDB) return null
+        val parentId = route.parentId
+        return when {
+            parentId.startsWith("tmdb:person:", ignoreCase = true) -> {
+                val name = parentId.substringAfter("tmdb:person:").trim()
+                val personId = metadataSecondaryRepository?.findPersonIdByExactName(name) ?: return null
+                MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(
+                        ResolvedField.CANONICAL_ID to FieldValue("tmdb:person:$personId", FieldOwner.PRIMARY)
+                    )
+                )
+            }
+            parentId.startsWith("tmdb:company:", ignoreCase = true) -> {
+                val name = parentId.substringAfter("tmdb:company:").trim()
+                val companyId = metadataSecondaryRepository?.findCompanyIdByExactName(name) ?: return null
+                MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(
+                        ResolvedField.CANONICAL_ID to FieldValue("tmdb:company:$companyId", FieldOwner.PRIMARY)
+                    )
+                )
+            }
+            else -> null
+        }
     }
 
     private fun TvMetadataEnrichment.toResolvedFields(): Map<ResolvedField, FieldValue> =
