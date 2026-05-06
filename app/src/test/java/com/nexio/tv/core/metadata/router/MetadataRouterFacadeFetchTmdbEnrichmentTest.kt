@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
@@ -71,6 +72,7 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
             )
         )
 
+        val observedShapes = mutableListOf<String>()
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -87,7 +89,13 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(
-                setOf(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
+                setOf(
+                    CannedCandidateAdapter(
+                        provider = MetadataPrimaryProvider.TMDB,
+                        candidate = tmdbCandidate,
+                        observedShapes = observedShapes
+                    )
+                )
             ),
             fieldResolver = FieldResolver(events)
         )
@@ -105,6 +113,14 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
         )
 
         assertEquals(expected, result)
+        assertTrue(
+            "expected DETAIL_SECONDARY plan to include TMDB reviews, got $observedShapes",
+            TmdbApiShapes.MOVIE_REVIEWS in observedShapes
+        )
+        assertTrue(
+            "expected DETAIL_SECONDARY plan to include TMDB recommendations, got $observedShapes",
+            TmdbApiShapes.MOVIE_RECOMMENDATIONS in observedShapes
+        )
 
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
@@ -120,15 +136,18 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
 
     private class CannedCandidateAdapter(
         override val provider: MetadataPrimaryProvider,
-        private val candidate: MetadataCandidate
+        private val candidate: MetadataCandidate,
+        private val observedShapes: MutableList<String>
     ) : MetadataProviderAdapter {
         override fun supports(step: ProviderPlanStep): Boolean = true
 
-        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
-            ProviderStepResult(
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            observedShapes += step.apiShapeId
+            return ProviderStepResult(
                 step = step,
                 candidate = candidate,
                 episodeMetadata = emptyMap()
             )
+        }
     }
 }
