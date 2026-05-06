@@ -6,6 +6,10 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
+import com.nexio.tv.core.metadata.router.AnimeIdScheme
+import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.MetadataIdParser
+import com.nexio.tv.core.metadata.router.MetadataParentIdNormalizer
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
 import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
@@ -40,7 +44,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val serviceWrapSessionFactory: ServiceWrapSessionFactory,
-    private val addonStreamRequestCanceller: AddonStreamRequestCanceller
+    private val addonStreamRequestCanceller: AddonStreamRequestCanceller,
+    private val animeIdentityIndex: AnimeIdentityIndex
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -63,6 +68,13 @@ class StreamRepositoryImpl @Inject constructor(
             // Filter addons that support streams for this type
             val streamAddons = addons.filter { addon ->
                 addon.supportsStreamResource(type)
+            }
+            val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
+            val parsedContentId = MetadataIdParser.parse(parentContentId)
+            val contentIsAnime = if (parsedContentId.scheme == AnimeIdScheme.UNKNOWN) {
+                false
+            } else {
+                animeIdentityIndex.isAnime(parsedContentId)
             }
 
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()
@@ -113,7 +125,8 @@ class StreamRepositoryImpl @Inject constructor(
                                     emittedAddonStreams = AddonStreams(
                                         addonName = addon.displayName,
                                         addonLogo = addon.logo,
-                                        streams = streamsResult.data
+                                        streams = streamsResult.data,
+                                        isAnimeBucket = addon.isAnime && contentIsAnime
                                     )
                                 }
                                 is NetworkResult.Error -> {
@@ -177,7 +190,8 @@ class StreamRepositoryImpl @Inject constructor(
                                 accumulatedResults[addonStreams.addonName] = AddonStreams(
                                     addonName = addonStreams.addonName,
                                     addonLogo = addonStreams.addonLogo,
-                                    streams = visibleStreams
+                                    streams = visibleStreams,
+                                    isAnimeBucket = addonStreams.isAnimeBucket
                                 )
                                 emit(NetworkResult.Success(accumulatedResults.values.toList()))
                                 Log.d(
@@ -201,7 +215,8 @@ class StreamRepositoryImpl @Inject constructor(
                             accumulatedResults[batch.addonName] = AddonStreams(
                                 addonName = batch.addonName,
                                 addonLogo = batch.addonLogo ?: existing?.addonLogo,
-                                streams = mergedStreams
+                                streams = mergedStreams,
+                                isAnimeBucket = existing?.isAnimeBucket ?: false
                             )
                             emit(NetworkResult.Success(accumulatedResults.values.toList()))
                         }

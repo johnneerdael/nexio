@@ -1,0 +1,378 @@
+package com.nexio.tv.data.repository
+
+import android.util.Log
+import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.ParsedMetadataId
+import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
+import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
+import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.remote.dto.StreamDto
+import com.nexio.tv.data.remote.dto.StreamResponseDto
+import com.nexio.tv.data.repository.servicewrap.ResolvedServiceWrapStream
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapProvider
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolutionBatch
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapRequestContext
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapSessionFactory
+import com.nexio.tv.data.repository.servicewrap.WrapCandidate
+import com.nexio.tv.data.repository.servicewrap.WrapCandidateExtractor
+import com.nexio.tv.data.repository.servicewrap.WrappedStreamBuilder
+import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.AddonStreams
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.repository.AddonRepository
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class StreamRepositoryImplAnimeBucketTest {
+
+    @Test
+    fun `bucket is true only when both addon isAnime and contentIsAnime`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon, genericAddon),
+            animeIdentityIndex = index
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21")
+
+        assertTrue(buckets.single { it.addonName == "Anime Addon" }.isAnimeBucket)
+        assertFalse(buckets.single { it.addonName == "Generic Addon" }.isAnimeBucket)
+        assertEquals(listOf("21"), index.lookups.map { it.value })
+    }
+
+    @Test
+    fun `bucket is false when content is not anime even if addon is tagged`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = false)
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21")
+
+        assertFalse(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `unparseable videoId leaves bucket false`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = ThrowingAnimeIdentityIndex
+        )
+
+        val buckets = repository.successBuckets(videoId = "garbage-id")
+
+        assertFalse(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `kitsu_episode_id_routes_to_anime_bucket`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = index
+        )
+
+        val buckets = repository.successBuckets(videoId = "kitsu:7442:1:1")
+
+        assertEquals(listOf("7442"), index.lookups.map { it.value })
+        assertTrue(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `imdb_episode_id_routes_to_anime_bucket_when_parent_imdb_is_anime`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = index
+        )
+
+        val buckets = repository.successBuckets(videoId = "tt12343534:1:1")
+
+        assertEquals(listOf("tt12343534"), index.lookups.map { it.value })
+        assertTrue(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `mal_episode_id_routes_to_anime_bucket`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = index
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21:1:1")
+
+        assertEquals(listOf("21"), index.lookups.map { it.value })
+        assertTrue(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `imdb_one_to_many_anime_id_sets_contentIsAnime_without_selecting_single_kitsu_record`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = object : AnimeIdentityIndex {
+                override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+                    error("resolveKitsuId should not be used for stream bucket classification")
+                }
+
+                override suspend fun isAnime(id: ParsedMetadataId): Boolean = true
+            }
+        )
+
+        val buckets = repository.successBuckets(videoId = "tt12343534:1:1")
+
+        assertTrue(buckets.single().isAnimeBucket)
+    }
+
+    @Test
+    fun `anime_tagged_addon_empty_generic_addons_still_selected`() = runTest {
+        val animeAddon = streamAddon(
+            baseUrl = "https://anime.example",
+            displayName = "Anime Addon",
+            isAnime = true,
+            returnedStreams = emptyList()
+        )
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val repository = repository(
+            addons = listOf(animeAddon, genericAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = true)
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21")
+
+        assertTrue(buckets.single { it.addonName == "Anime Addon" }.isAnimeBucket)
+        assertTrue(buckets.single { it.addonName == "Anime Addon" }.streams.isEmpty())
+        assertFalse(buckets.single { it.addonName == "Generic Addon" }.isAnimeBucket)
+        assertEquals(1, buckets.single { it.addonName == "Generic Addon" }.streams.size)
+    }
+
+    @Test
+    fun `bucket flag is preserved when service-wrap processing rebuilds AddonStreams`() = runTest {
+        val hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        val animeAddon = streamAddon(
+            baseUrl = "https://anime.example",
+            displayName = "Anime Addon",
+            isAnime = true,
+            returnedStreams = listOf(
+                streamDto(
+                    name = "P2P Candidate",
+                    url = null,
+                    infoHash = hash,
+                    description = "Movie.2024.2160p.REMUX"
+                )
+            )
+        )
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = true),
+            playerSettings = PlayerSettings(serviceWrapEnabled = true),
+            serviceWrapSessionFactory = ServiceWrapSessionFactory(
+                extractor = WrapCandidateExtractor(),
+                resolver = object : ServiceWrapResolver {
+                    override suspend fun resolve(
+                        candidate: WrapCandidate,
+                        requestContext: ServiceWrapRequestContext
+                    ): List<ResolvedServiceWrapStream> = error("progressive path should be used")
+
+                    override fun resolveProgressively(
+                        candidate: WrapCandidate,
+                        requestContext: ServiceWrapRequestContext
+                    ): Flow<ServiceWrapResolutionBatch> = flow {
+                        emit(
+                            ServiceWrapResolutionBatch(
+                                streams = listOf(resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)),
+                                isTerminal = true
+                            )
+                        )
+                    }
+                },
+                wrappedStreamBuilder = WrappedStreamBuilder()
+            )
+        )
+
+        val emissions = repository.getStreamsFromAllAddons(
+            type = "movie",
+            videoId = "mal:21",
+            requestOrigin = "test_anime_bucket_service_wrap",
+            requestId = "request-anime-bucket-service-wrap"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList()
+
+        assertTrue(emissions.first().data.single().isAnimeBucket)
+        assertTrue(emissions.last().data.single().isAnimeBucket)
+        assertEquals(setOf("RD"), emissions.last().data.single().streams.mapNotNull { it.wrappedProviderId }.toSet())
+    }
+
+    private fun repository(
+        addons: List<Addon>,
+        animeIdentityIndex: AnimeIdentityIndex,
+        playerSettings: PlayerSettings = PlayerSettings(),
+        serviceWrapSessionFactory: ServiceWrapSessionFactory = mockk(relaxed = true)
+    ): StreamRepositoryImpl {
+        mockAndroidLog()
+
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(addons)
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
+        addons.forEach { addon ->
+            coEvery {
+                addonStreamIntegrationProvider.getStreams(
+                    addon.id,
+                    match { it.contains(addon.host) },
+                    any()
+                )
+            } returns NetworkResult.Success(
+                StreamResponseDto(streams = addonReturnedStreams.getValue(addon.id))
+            )
+        }
+
+        return StreamRepositoryImpl(
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = animeIdentityIndex
+        )
+    }
+
+    private suspend fun StreamRepositoryImpl.successBuckets(videoId: String): List<AddonStreams> {
+        return getStreamsFromAllAddons(
+            type = "movie",
+            videoId = videoId,
+            requestOrigin = "test_anime_bucket",
+            requestId = "request-anime-bucket"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+    }
+
+    private fun mockAndroidLog() {
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>(), any<Throwable>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
+    private fun streamAddon(
+        baseUrl: String,
+        displayName: String,
+        isAnime: Boolean = false,
+        returnedStreams: List<StreamDto> = listOf(streamDto(displayName))
+    ): Addon {
+        val addon = Addon(
+            id = displayName.lowercase().replace(" ", "_"),
+            name = displayName,
+            displayName = displayName,
+            version = "1.0.0",
+            description = null,
+            logo = null,
+            baseUrl = baseUrl,
+            catalogs = emptyList(),
+            types = listOf(ContentType.MOVIE),
+            resources = listOf(
+                AddonResource(
+                    name = "stream",
+                    types = listOf("movie"),
+                    idPrefixes = null
+                )
+            ),
+            isAnime = isAnime
+        )
+        addonReturnedStreams[addon.id] = returnedStreams
+        return addon
+    }
+
+    private fun streamDto(
+        name: String,
+        url: String? = "https://cdn.example/$name.m3u8",
+        infoHash: String? = null,
+        description: String? = null
+    ): StreamDto {
+        return StreamDto(
+            name = name,
+            description = description,
+            url = url,
+            infoHash = infoHash
+        )
+    }
+
+    private fun resolvedStream(
+        provider: ServiceWrapProvider,
+        hash: String
+    ): ResolvedServiceWrapStream {
+        return ResolvedServiceWrapStream(
+            provider = provider,
+            normalizedInfoHash = hash,
+            playbackUrl = "https://${provider.providerId.lowercase()}.example/$hash",
+            selectedFileIndex = 0,
+            filename = "Movie.2024.2160p.REMUX.mkv",
+            folderName = "Movie",
+            sizeBytes = 4_000_000_000L,
+            durationMs = 3_600_000L,
+            bitrate = 8_000_000L,
+            width = 3840,
+            height = 2160
+        )
+    }
+
+    private val addonReturnedStreams = mutableMapOf<String, List<StreamDto>>()
+
+    private val Addon.host: String
+        get() = baseUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
+
+    private class RecordingAnimeIdentityIndex(
+        private val contentIsAnime: Boolean
+    ) : AnimeIdentityIndex {
+        val lookups = mutableListOf<ParsedMetadataId>()
+
+        override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+            error("resolveKitsuId should not be used for stream bucket classification")
+        }
+
+        override suspend fun isAnime(id: ParsedMetadataId): Boolean {
+            lookups += id
+            return contentIsAnime
+        }
+    }
+
+    private object ThrowingAnimeIdentityIndex : AnimeIdentityIndex {
+        override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+            error("AnimeIdentityIndex should not be called for unknown content ids")
+        }
+
+        override suspend fun isAnime(id: ParsedMetadataId): Boolean {
+            error("AnimeIdentityIndex should not be called for unknown content ids")
+        }
+    }
+}
