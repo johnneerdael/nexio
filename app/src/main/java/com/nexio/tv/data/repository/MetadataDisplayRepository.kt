@@ -31,6 +31,8 @@ import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
+import com.nexio.tv.data.trailer.rankedTmdbTrailerPlaybackRefs
+import com.nexio.tv.data.trailer.rankedTmdbTrailerYoutubeIds
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.DetailAdvancedMetadata
@@ -622,9 +624,16 @@ class MetadataDisplayRepository @Inject constructor(
             is TrailerResolutionResult.External -> listOfNotNull(value.url.youtubeIdFromUrl())
             is TrailerResolutionResult.Playback -> emptyList()
             is TrailerPlaybackSource -> emptyList()
-            is TmdbVideoResult -> listOfNotNull(value.key?.trim()?.takeIf { it.isNotBlank() })
+            is TmdbVideoResult -> rankedTmdbTrailerYoutubeIds(listOf(value))
             is String -> listOfNotNull(value.youtubeIdFromUrl() ?: value.trim().takeIf { it.isNotBlank() })
-            is Collection<*> -> value.flatMap(::youtubeIdsFromTrailerValue)
+            is Collection<*> -> {
+                val tmdbVideos = value.filterIsInstance<TmdbVideoResult>()
+                if (tmdbVideos.size == value.size) {
+                    rankedTmdbTrailerYoutubeIds(tmdbVideos)
+                } else {
+                    value.flatMap(::youtubeIdsFromTrailerValue)
+                }
+            }
             else -> emptyList()
         }
 
@@ -633,14 +642,19 @@ class MetadataDisplayRepository @Inject constructor(
             is TrailerResolutionResult.External -> listOf(TrailerPlaybackRef.ExternalUrl(value.url))
             is TrailerResolutionResult.Playback -> listOf(value.source.toTrailerPlaybackRef())
             is TrailerPlaybackSource -> listOf(value.toTrailerPlaybackRef())
-            is TmdbVideoResult -> listOfNotNull(
-                value.key?.trim()?.takeIf { it.isNotBlank() }?.let(TrailerPlaybackRef::YouTubeId)
-            )
+            is TmdbVideoResult -> rankedTmdbTrailerPlaybackRefs(listOf(value))
             is String -> listOfNotNull(
                 (value.youtubeIdFromUrl() ?: value.trim().takeIf { it.isNotBlank() })
                     ?.let(TrailerPlaybackRef::YouTubeId)
             )
-            is Collection<*> -> value.flatMap(::trailerPlaybackRefsFrom)
+            is Collection<*> -> {
+                val tmdbVideos = value.filterIsInstance<TmdbVideoResult>()
+                if (tmdbVideos.size == value.size) {
+                    rankedTmdbTrailerPlaybackRefs(tmdbVideos)
+                } else {
+                    value.flatMap(::trailerPlaybackRefsFrom)
+                }
+            }
             else -> emptyList()
         }
 
