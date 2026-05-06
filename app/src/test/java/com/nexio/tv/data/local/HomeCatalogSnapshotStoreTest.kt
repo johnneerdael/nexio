@@ -143,7 +143,7 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
-    fun `read rejects active poster provider snapshots with untagged posters`() {
+    fun `read accepts active poster provider snapshots with untagged primary fallback posters`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -156,6 +156,31 @@ class HomeCatalogSnapshotStoreTest {
         )
 
         store.write(sampleSnapshot(), "RPDB:12345")
+
+        assertEquals(sampleSnapshot(), store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `read rejects active poster provider snapshots with mismatched poster tags`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val row = sampleRow("addon", "movies", posterProviderTag = "top_posters")
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+
+        store.write(snapshot, "RPDB:12345")
 
         assertNull(store.read("RPDB:12345"))
     }
