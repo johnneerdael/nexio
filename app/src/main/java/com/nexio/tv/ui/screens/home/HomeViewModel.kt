@@ -20,7 +20,6 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
@@ -57,7 +56,6 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -71,7 +69,6 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -121,11 +118,8 @@ class HomeViewModel @Inject constructor(
     internal val tmdbDiscoveryService: TmdbDiscoveryService,
     internal val kitsuDiscoveryService: KitsuDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
-    internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
-    internal val tmdbService: TmdbService,
     internal val metadataRouterFacade: MetadataRouterFacade,
     internal val providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
-    internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,

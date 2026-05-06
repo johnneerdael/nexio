@@ -213,7 +213,6 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
         return HomeCatalogRefreshCoordinator(
             catalogRepository = mockk<CatalogRepository>(relaxed = true),
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(

@@ -20,7 +20,6 @@ import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
-import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -35,7 +34,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.withPermit
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -239,46 +237,13 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List<CatalogRow>) {
-    if (!isNonPlaybackHomeWorkAllowed()) return
-
-    val catalogItems = rows
+    rows
         .asSequence()
         .flatMap { it.items.asSequence() }
-        .distinctBy { homeTrailerAvailabilityKey(it.id, it.apiType) }
-        .toList()
-
-    catalogItems.forEach { item ->
-        val availabilityKey = homeTrailerAvailabilityKey(item.id, item.apiType)
-        if (trailerMetadataAvailableState.containsKey(availabilityKey)) {
-            return@forEach
+        .filter { item -> item.trailerYtIds.isNotEmpty() }
+        .forEach { item ->
+            trailerMetadataAvailableState[homeTrailerAvailabilityKey(item.id, item.apiType)] = true
         }
-        if (!trailerMetadataAvailabilityInFlightKeys.add(availabilityKey)) {
-            return@forEach
-        }
-
-        val job = viewModelScope.launch {
-            try {
-                trailerMetadataAvailabilitySemaphore.withPermit {
-                    if (!isNonPlaybackHomeWorkAllowed()) return@withPermit
-                    val tmdbId = if (shouldSkipTmdbTrailerIdLookup(item.id, item.apiType)) null else withContext(Dispatchers.IO) {
-                        runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }
-                            .getOrNull()
-                    }
-                    val available = trailerService.getTitleMediaAvailability(
-                        tmdbId = tmdbId,
-                        type = item.apiType,
-                        contentId = item.id,
-                        fallbackYtIds = item.trailerYtIds
-                    )
-                    trailerMetadataAvailableState[availabilityKey] = available
-                }
-            } finally {
-                trailerMetadataAvailabilityInFlightKeys.remove(availabilityKey)
-                trailerMetadataAvailabilityJobs.remove(coroutineContext.job)
-            }
-        }
-        trailerMetadataAvailabilityJobs.add(job)
-    }
 }
 
 internal fun HomeViewModel.clearTrailerMetadataAvailabilityPipeline() {
@@ -314,90 +279,9 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         activeTrailerPreviewItemId = itemId
         trailerPreviewRequestVersion++
     }
-
-    if (trailerPreviewNegativeCache.containsKey(itemId)) return
-    if (trailerPreviewUrlsState.containsKey(itemId) || trailerPreviewExternalUrlsState.containsKey(itemId)) return
-    if (trailerPreviewLoadingIds.put(itemId, true) != null) return
-
-    val requestVersion = trailerPreviewRequestVersion
-
-    trailerPreviewJob?.cancel()
-    trailerPreviewJob = viewModelScope.launch {
-        try {
-            if (!isNonPlaybackHomeWorkAllowed()) return@launch
-            val tmdbId = if (shouldSkipTmdbTrailerIdLookup(itemId, apiType)) {
-                null
-            } else {
-                runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
-            }
-            if (!isNonPlaybackHomeWorkAllowed()) return@launch
-            if (forceRefresh) {
-                trailerService.invalidateLookupCache(
-                    title = title,
-                    year = extractYear(releaseInfo),
-                    tmdbId = tmdbId,
-                    type = apiType,
-                    contentId = itemId,
-                    fallbackYtIds = listOfNotNull(fallbackYtId)
-                )
-            }
-            val trailerResult = trailerService.resolveTrailer(
-                title = title,
-                year = extractYear(releaseInfo),
-                tmdbId = tmdbId,
-                type = apiType,
-                contentId = itemId,
-                fallbackYtIds = listOfNotNull(fallbackYtId)
-            )
-
-            val isLatestFocusedItem =
-                activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
-            if (!isLatestFocusedItem) {
-                trailerPreviewLoadingIds.remove(itemId)
-                return@launch
-            }
-
-            when (trailerResult) {
-                is TrailerResolutionResult.Playback -> {
-                    trailerPreviewNegativeCache.remove(itemId)
-                    trailerPreviewExternalUrlsState.remove(itemId)
-                    trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
-                    trailerResult.source.userAgent
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { trailerPreviewUserAgentsState[itemId] = it }
-                        ?: trailerPreviewUserAgentsState.remove(itemId)
-                    val audioUrl = trailerResult.source.audioUrl
-                    if (audioUrl.isNullOrBlank()) {
-                        trailerPreviewAudioUrlsState.remove(itemId)
-                    } else {
-                        trailerPreviewAudioUrlsState[itemId] = audioUrl
-                    }
-                }
-
-                is TrailerResolutionResult.External -> {
-                    trailerPreviewNegativeCache.remove(itemId)
-                    trailerPreviewUrlsState.remove(itemId)
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                    trailerPreviewUserAgentsState.remove(itemId)
-                    trailerPreviewExternalUrlsState[itemId] = trailerResult.url
-                }
-
-                null -> {
-                    trailerPreviewNegativeCache[itemId] = true
-                    trailerPreviewUrlsState.remove(itemId)
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                    trailerPreviewUserAgentsState.remove(itemId)
-                    trailerPreviewExternalUrlsState.remove(itemId)
-                }
-            }
-
-            trailerPreviewLoadingIds.remove(itemId)
-        } finally {
-            trailerPreviewLoadingIds.remove(itemId)
-            if (trailerPreviewJob?.isActive == false) {
-                trailerPreviewJob = null
-            }
-        }
+    trailerPreviewLoadingIds.remove(itemId)
+    if (fallbackYtId.isNullOrBlank()) {
+        trailerPreviewNegativeCache[itemId] = true
     }
 }
 
@@ -686,11 +570,6 @@ internal fun mergeFocusedItemEnrichment(
             description = externalMeta.description ?: merged.description,
             imdbRating = externalMeta.imdbRating ?: merged.imdbRating,
             genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres,
-            trailerYtIds = if (externalMeta.trailerYtIds.isNotEmpty()) {
-                externalMeta.trailerYtIds
-            } else {
-                merged.trailerYtIds
-            },
             language = externalMeta.language ?: merged.language
         )
     }

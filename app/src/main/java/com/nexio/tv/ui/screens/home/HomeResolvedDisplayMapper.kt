@@ -3,6 +3,8 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
@@ -101,3 +103,59 @@ internal object HomeResolvedDisplayMapper {
         }
     }
 }
+
+internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
+    val fields = this.fields
+    val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
+
+    return ResolvedDisplayItem(
+        itemKey = itemKey,
+        contentId = canonicalId,
+        parentId = canonicalId,
+        itemType = contentType,
+        mediaKind = contentType.toMetadataMediaKind(),
+        canonicalProvider = canonicalProvider.name,
+        canonicalId = canonicalId,
+        imdbId = imdbId,
+        stableIds = stableIdsFromCanonical(),
+        display = ResolvedDisplayFields(
+            title = fields.title,
+            originalTitle = null,
+            year = fields.releaseInfo?.take(4)?.toIntOrNull(),
+            releaseDate = fields.releaseInfo,
+            overview = fields.description,
+            genres = fields.genres,
+            runtimeText = fields.runtime
+        ),
+        artwork = fields.artwork ?: ArtworkBundle(),
+        rating = fields.imdbRating?.let { value -> TitleRating(value.toDouble(), ratingSource) },
+        trailer = TrailerDisplayState(),
+        hydrationState = if (state == HomeItemHydrationState.STALE_READY) {
+            HydrationState.STALE_READY
+        } else {
+            HydrationState.CANONICAL_READY
+        },
+        sourceTrace = fieldTrace,
+        updatedAtMs = updatedAtMs
+    )
+}
+
+private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
+    when (this) {
+        ContentType.MOVIE -> MetadataMediaKind.MOVIE
+        ContentType.SERIES,
+        ContentType.TV -> MetadataMediaKind.SERIES
+        else -> MetadataMediaKind.UNKNOWN
+    }
+
+private fun HydratedHomeOverlay.stableIdsFromCanonical(): ProviderIds =
+    when (canonicalProvider) {
+        ProviderId.TMDB -> ProviderIds(tmdb = canonicalId, imdb = imdbId)
+        ProviderId.TVDB -> ProviderIds(tvdb = canonicalId, imdb = imdbId)
+        ProviderId.IMDB -> ProviderIds(imdb = canonicalId)
+        ProviderId.TRAKT -> ProviderIds(trakt = canonicalId, imdb = imdbId)
+        ProviderId.SIMKL -> ProviderIds(simkl = canonicalId, imdb = imdbId)
+        ProviderId.KITSU -> ProviderIds(kitsu = canonicalId, imdb = imdbId)
+        ProviderId.ADDON,
+        ProviderId.MDBLIST -> ProviderIds(imdb = imdbId)
+    }

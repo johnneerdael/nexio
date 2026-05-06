@@ -14,7 +14,7 @@ import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
+import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
@@ -23,7 +23,6 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
-import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -42,7 +41,7 @@ enum class HomeHydrationPriority {
 class HomeHydrationCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val overlayStore: HydratedHomeOverlayStore,
-    private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
+    private val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
     private val traceEvents: TraceMetadataEvents
 ) {
     suspend fun hydrate(
@@ -124,6 +123,10 @@ class HomeHydrationCoordinator @Inject constructor(
                 )
                 return null
             }
+            resolvedDisplaySurfaceRepository.publishResolvedItems(
+                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                items = listOf(overlay.toResolvedDisplayItem())
+            )
             traceEvents.emitHomeHydrationOverlayWritten(
                 itemKey = itemKey,
                 canonicalProvider = overlay.canonicalProvider.name,
@@ -169,13 +172,8 @@ class HomeHydrationCoordinator @Inject constructor(
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
-        val enrichedPreview = titleRatingOverrideRepository.enrichPreview(
-            displayMetadata.applyTo(item),
-            bundle
-        )
-        val enrichedFields = enrichedPreview.toHomeDisplayMetadata()
-        val fields = enrichedFields.copy(
-            artwork = displayMetadata.artwork ?: enrichedFields.artwork
+        val fields = displayMetadata.copy(
+            artwork = displayMetadata.artwork ?: item.artwork
         )
         val nowMs = System.currentTimeMillis()
 

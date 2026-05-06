@@ -12,9 +12,7 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
-import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -24,7 +22,6 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.mergeFallback
-import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -86,7 +83,6 @@ private data class SerialRefreshEntry(
 @Singleton
 class HomeCatalogRefreshCoordinator @Inject constructor(
     private val catalogRepository: CatalogRepository,
-    private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val metadataRouterFacade: MetadataRouterFacade,
     private val providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
@@ -162,10 +158,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     externalMeta = null
                 )
                 val localized = overlayProviderLocalizedMetadata(merged, onLog)
-                // This path can hydrate every refreshed row item, so keep stable-bundle routing
-                // in the existing visible/focused hydration paths where work is bounded.
-                val enriched = titleRatingOverrideRepository.enrichPreview(localized)
-                posterRatingsUrlResolver.apply(enriched, activePosterProvider)
+                posterRatingsUrlResolver.apply(localized, activePosterProvider)
             }
             row.copy(items = hydratedItems)
         }
@@ -466,19 +459,4 @@ internal fun shouldReusePersistedHomeItem(
     persistedFallback: MetaPreview?
 ): Boolean {
     return !itemChanged && persistedFallback?.tomatoesRating != null
-}
-
-internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {
-    return copy(
-        name = enrichment.localizedTitle?.takeIf { it.isNotBlank() } ?: name,
-        description = enrichment.description?.takeIf { it.isNotBlank() } ?: description,
-        genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else genres,
-        releaseInfo = enrichment.releaseInfo ?: releaseInfo,
-        runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.let { "$it min" } ?: runtime,
-        imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
-        ratingSource = if (enrichment.rating != null) enrichment.ratingSource.orDefault() else ratingSource.orDefault(),
-        background = enrichment.backdrop ?: background,
-        logo = enrichment.logo ?: logo,
-        poster = enrichment.poster ?: poster
-    )
 }
