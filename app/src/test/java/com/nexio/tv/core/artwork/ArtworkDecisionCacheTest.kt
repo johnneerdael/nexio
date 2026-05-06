@@ -2,9 +2,11 @@ package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -234,6 +236,54 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable cache restores valid decisions when one persisted decision is malformed`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+        file.writeText(file.readText().replace("],\"previewLinks\"", ",{}],\"previewLinks\""))
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+        val restored = restarted.get(decision.decisionKey)
+
+        assertEquals(decision.decisionKey, restored?.decisionKey)
+        val load = traceSink.events.single { event -> event.eventType == "artwork.decision_store_load" }
+        val payload = load.payload as Map<*, *>
+        assertEquals(true, payload["success"])
+        assertEquals(1, payload["decisionCount"])
+        assertEquals(1, payload["droppedDecisionCount"])
+    }
+
+    @Test
+    fun `durable cache emits put and write trace events`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val traceSink = RecordingTraceSink()
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+        val decision = durableRpdbDecision()
+
+        cache.put(decision)
+
+        val putPayload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_put" }
+            .payload as Map<*, *>
+        assertEquals(decision.decisionKey.value, putPayload["decisionKey"])
+        assertEquals("RPDB", putPayload["provider"])
+        assertEquals("POSTER", putPayload["imageType"])
+        assertEquals(1, putPayload["rejectedCount"])
+
+        val writePayload = traceSink.events
+            .last { event -> event.eventType == "artwork.decision_store_write" }
+            .payload as Map<*, *>
+        assertEquals(true, writePayload["success"])
+        assertEquals(1, writePayload["decisionCount"])
+        assertEquals(0, writePayload["linkCount"])
+    }
+
+    @Test
     fun `durable cache remove deletes persisted decision`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -307,7 +357,12 @@ class ArtworkDecisionCacheTest {
     fun `durable cache keeps in-memory decision when persistence fails`() {
         val temp = TemporaryFolder().also { it.create() }
         val unwritableTarget = temp.newFolder("artwork-decisions.json")
-        val cache = DurableArtworkDecisionCache(file = unwritableTarget, gson = Gson())
+        val traceSink = RecordingTraceSink()
+        val cache = DurableArtworkDecisionCache(
+            file = unwritableTarget,
+            gson = Gson(),
+            traceSink = traceSink
+        )
         val decision = durableRpdbDecision()
 
         try {
@@ -317,6 +372,11 @@ class ArtworkDecisionCacheTest {
         }
 
         assertEquals(decision, cache.get(decision.decisionKey))
+        val writePayload = traceSink.events
+            .last { event -> event.eventType == "artwork.decision_store_write" }
+            .payload as Map<*, *>
+        assertEquals(false, writePayload["success"])
+        assertNotNull(writePayload["errorClass"])
     }
 
     @Test

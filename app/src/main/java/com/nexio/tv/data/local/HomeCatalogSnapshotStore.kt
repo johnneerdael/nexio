@@ -13,12 +13,16 @@ import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +33,8 @@ class HomeCatalogSnapshotStore private constructor(
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val artworkDecisionCache: ArtworkDecisionCache,
     private val activeProfileId: () -> Int,
-    private val identityResolver: RailMediaIdentityResolver
+    private val identityResolver: RailMediaIdentityResolver,
+    private val traceSink: RuntimeTraceSink
 ) {
     @Inject
     constructor(
@@ -38,28 +43,32 @@ class HomeCatalogSnapshotStore private constructor(
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
         artworkDecisionCache: ArtworkDecisionCache,
         profileManager: ProfileManager,
-        identityResolver: RailMediaIdentityResolver
+        identityResolver: RailMediaIdentityResolver,
+        traceSink: RuntimeTraceSink
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
         artworkDecisionCache = artworkDecisionCache,
         activeProfileId = { profileManager.activeProfileId.value },
-        identityResolver = identityResolver
+        identityResolver = identityResolver,
+        traceSink = traceSink
     )
 
     constructor(
         context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        artworkDecisionCache: ArtworkDecisionCache = InMemoryArtworkDecisionCache()
+        artworkDecisionCache: ArtworkDecisionCache = InMemoryArtworkDecisionCache(),
+        traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
         artworkDecisionCache = artworkDecisionCache,
         activeProfileId = { 1 },
-        identityResolver = RailMediaIdentityResolver()
+        identityResolver = RailMediaIdentityResolver(),
+        traceSink = traceSink
     )
 
     companion object {
@@ -69,6 +78,7 @@ class HomeCatalogSnapshotStore private constructor(
         private const val SCHEMA_VERSION = 4
         private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
         private const val LEGACY_INTEGRATION_POSTER_PREFIX = "integration-poster://"
+        private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
         private val PREMIUM_PROVIDER_URL_PREFIXES = listOf(
             "https://api.ratingposterdb.com/",
             "https://api.top-posters.com/"
@@ -76,6 +86,7 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private val gson = Gson()
+    private val traceSequence = AtomicLong(0L)
 
     suspend fun currentPosterProviderToken(): String {
         val provider = posterRatingsUrlResolver.getActiveProvider() ?: return "native"
@@ -95,13 +106,61 @@ class HomeCatalogSnapshotStore private constructor(
     ): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() } ?: return null
+            val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() }
+                ?: run {
+                    traceSnapshot(
+                        eventType = "home.snapshot_read",
+                        payload = mapOf(
+                            "success" to true,
+                            "profileId" to profileId,
+                            "snapshotFound" to false,
+                            "reason" to "missing_snapshot"
+                        )
+                    )
+                    return null
+                }
             val requiredPosterProviderTag = requiredPosterProviderTag(posterProviderToken)
-            decodeSnapshot(raw, posterProviderToken)
-                ?.sanitize()
-                ?.takeIf { it.hasValidPosterProviderTags(requiredPosterProviderTag) }
+            val decoded = decodeSnapshot(raw, posterProviderToken)
+                ?: run {
+                    traceSnapshot(
+                        eventType = "home.snapshot_read",
+                        payload = mapOf(
+                            "success" to false,
+                            "profileId" to profileId,
+                            "snapshotFound" to true,
+                            "reason" to "decode_or_policy_rejected"
+                        )
+                    )
+                    return null
+                }
+            val sanitized = decoded.sanitize()
+            val restored = sanitized.takeIf { it.hasValidPosterProviderTags(requiredPosterProviderTag) }
+            traceSnapshot(
+                eventType = "home.snapshot_read",
+                payload = mapOf(
+                    "success" to (restored != null),
+                    "profileId" to profileId,
+                    "snapshotFound" to true,
+                    "catalogRowCount" to sanitized.catalogRows.size,
+                    "fullCatalogRowCount" to sanitized.fullCatalogRows.size,
+                    "heroItemCount" to sanitized.heroItems.size,
+                    "requiredPosterProviderTag" to requiredPosterProviderTag,
+                    "reason" to if (restored == null) "poster_provider_tag_mismatch" else null
+                )
+            )
+            restored
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
+            traceSnapshot(
+                eventType = "home.snapshot_read",
+                payload = mapOf(
+                    "success" to false,
+                    "profileId" to profileId,
+                    "snapshotFound" to true,
+                    "reason" to "exception",
+                    "errorClass" to error.javaClass.simpleName
+                )
+            )
             clear(profileId)
         }.getOrNull()
     }
@@ -128,9 +187,27 @@ class HomeCatalogSnapshotStore private constructor(
                 add("heroItems", gson.toJsonTree(sanitizedSnapshot.heroItems))
                 add("orderedGroupKeys", gson.toJsonTree(sanitizedSnapshot.orderedGroupKeys))
             }
-            prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
+            val success = prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
+            traceSnapshot(
+                eventType = "home.snapshot_write",
+                payload = mapOf(
+                    "success" to success,
+                    "profileId" to profileId,
+                    "catalogRowCount" to sanitizedSnapshot.catalogRows.size,
+                    "fullCatalogRowCount" to sanitizedSnapshot.fullCatalogRows.size,
+                    "heroItemCount" to sanitizedSnapshot.heroItems.size
+                )
+            )
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist home snapshot", error)
+            traceSnapshot(
+                eventType = "home.snapshot_write",
+                payload = mapOf(
+                    "success" to false,
+                    "profileId" to profileId,
+                    "errorClass" to error.javaClass.simpleName
+                )
+            )
         }
     }
 
@@ -297,20 +374,36 @@ class HomeCatalogSnapshotStore private constructor(
             if (item == null) {
                 Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
             }
-            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot()
+            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot("$label[$index]")
         }
     }
 
-    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(): MetaPreview {
+    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(scope: String): MetaPreview {
         val posterRef = poster?.trim().orEmpty()
-        if (posterRef.isBlank() || !shouldClearPosterRef(posterRef)) {
+        val reason = clearReasonForPosterRef(posterRef)
+        if (posterRef.isBlank() || reason == null) {
             return this
         }
+        traceSnapshot(
+            eventType = "home.snapshot_sanitize_artwork",
+            payload = mapOf(
+                "scope" to scope,
+                "reason" to reason,
+                "posterKind" to posterKind(posterRef),
+                "posterProviderTag" to posterProviderTag,
+                "decisionFound" to if (isDecisionRef(posterRef)) hasDurableDecision(posterRef) else null
+            )
+        )
         return copy(poster = null, posterProviderTag = null)
     }
 
-    private fun shouldClearPosterRef(ref: String): Boolean {
-        return isRawPremiumProviderUrl(ref) || isLegacyIntegrationPosterRef(ref) || isMissingDecisionRef(ref)
+    private fun clearReasonForPosterRef(ref: String): String? {
+        return when {
+            isRawPremiumProviderUrl(ref) -> "raw_premium_url"
+            isLegacyIntegrationPosterRef(ref) -> "legacy_integration_ref"
+            isMissingDecisionRef(ref) -> "missing_decision"
+            else -> null
+        }
     }
 
     private fun isRawPremiumProviderUrl(ref: String): Boolean {
@@ -324,7 +417,21 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun isMissingDecisionRef(ref: String): Boolean {
-        return ref.startsWith(ARTWORK_DECISION_PREFIX) && !hasDurableDecision(ref)
+        return isDecisionRef(ref) && !hasDurableDecision(ref)
+    }
+
+    private fun isDecisionRef(ref: String): Boolean {
+        return ref.startsWith(ARTWORK_DECISION_PREFIX)
+    }
+
+    private fun posterKind(ref: String): String {
+        return when {
+            isDecisionRef(ref) -> "decision"
+            isRawPremiumProviderUrl(ref) -> "raw_premium"
+            isLegacyIntegrationPosterRef(ref) -> "legacy_integration"
+            ref.startsWith("http://", ignoreCase = true) || ref.startsWith("https://", ignoreCase = true) -> "remote"
+            else -> "other"
+        }
     }
 
     private fun hasDurableDecision(ref: String): Boolean {
@@ -335,5 +442,22 @@ class HomeCatalogSnapshotStore private constructor(
         return runCatching {
             artworkDecisionCache.get(ArtworkDecisionKey(keyValue)) != null
         }.getOrDefault(false)
+    }
+
+    private fun traceSnapshot(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = traceSink.activeTraceSessionId() ?: LOGCAT_ONLY_TRACE_SESSION_ID,
+                sequence = traceSequence.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = payload
+            )
+        )
     }
 }

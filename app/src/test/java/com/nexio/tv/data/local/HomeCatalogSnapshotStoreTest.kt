@@ -9,6 +9,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.PersistedArtworkCandidate
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -296,6 +297,43 @@ class HomeCatalogSnapshotStoreTest {
 
         val restored = store.read("RPDB:12345")
         assertClearedPosterFields(restored)
+    }
+
+    @Test
+    fun `read logs missing decision ref sanitization`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = InMemoryArtworkDecisionCache()
+        val decisionKey = ArtworkDecisionKey("missing-decision-for-trace")
+        cache.put(sampleArtworkDecision(decisionKey))
+        val traceSink = RecordingTraceSink()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache,
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/missing-decision-for-trace",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+        cache.remove(decisionKey)
+        store.read("RPDB:12345")
+
+        val sanitizeEvents = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_sanitize_artwork" }
+        assertEquals(3, sanitizeEvents.size)
+        val payload = sanitizeEvents.first().payload as Map<*, *>
+        assertEquals("missing_decision", payload["reason"])
+        assertEquals("decision", payload["posterKind"])
+        assertEquals("rpdb", payload["posterProviderTag"])
+        assertEquals(false, payload["decisionFound"])
     }
 
     @Test

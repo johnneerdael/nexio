@@ -3,19 +3,25 @@ package com.nexio.tv.core.artwork
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.atomic.AtomicLong
 
 class DurableArtworkDecisionCache(
     private val file: File,
-    private val gson: Gson
+    private val gson: Gson,
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
 ) : ArtworkDecisionCache {
     private val lock = Any()
     private var loaded = false
     private val decisions = linkedMapOf<ArtworkDecisionKey, ArtworkDecision>()
     private val previewToCanonical = linkedMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
+    private val traceSequence = AtomicLong(0L)
 
     override fun get(key: ArtworkDecisionKey): ArtworkDecision? = synchronized(lock) {
         ensureLoadedLocked()
@@ -25,6 +31,20 @@ class DurableArtworkDecisionCache(
     override fun put(decision: ArtworkDecision) = synchronized(lock) {
         ensureLoadedLocked()
         decisions[decision.decisionKey] = decision
+        traceArtwork(
+            eventType = "artwork.decision_put",
+            payload = mapOf(
+                "decisionKey" to decision.decisionKey.value,
+                "provider" to decision.selectedCandidate.provider?.key,
+                "imageType" to decision.imageType.name,
+                "sourceRole" to decision.selectedCandidate.sourceRole.name,
+                "rejectedCount" to decision.rejectedCandidates.size,
+                "hasFallbackCandidate" to decision.rejectedCandidates.any { candidate ->
+                    candidate.provider != null &&
+                        candidate.sourceRole in FALLBACK_SOURCE_ROLES
+                }
+            )
+        )
         persistLocked()
     }
 
@@ -79,23 +99,88 @@ class DurableArtworkDecisionCache(
     private fun ensureLoadedLocked() {
         if (loaded) return
         loaded = true
-        if (!file.isFile) return
+        if (!file.isFile) {
+            traceDecisionStoreLoad(
+                success = true,
+                decisionCount = 0,
+                linkCount = 0,
+                droppedDecisionCount = 0,
+                filePresent = false
+            )
+            return
+        }
 
         runCatching {
-            val raw = file.readText().takeIf { it.isNotBlank() } ?: return
-            val dto = gson.fromJson(raw, StoreDto::class.java) ?: return
-            if (dto.schemaVersion != SCHEMA_VERSION) return
+            val raw = file.readText()
+            if (raw.isBlank()) {
+                traceDecisionStoreLoad(
+                    success = true,
+                    decisionCount = 0,
+                    linkCount = 0,
+                    droppedDecisionCount = 0,
+                    filePresent = true
+                )
+                return
+            }
+            val dto = gson.fromJson(raw, StoreDto::class.java)
+            if (dto == null) {
+                traceDecisionStoreLoad(
+                    success = false,
+                    decisionCount = 0,
+                    linkCount = 0,
+                    droppedDecisionCount = 0,
+                    filePresent = true,
+                    reason = "null_store"
+                )
+                return
+            }
+            if (dto.schemaVersion != SCHEMA_VERSION) {
+                traceDecisionStoreLoad(
+                    success = false,
+                    decisionCount = 0,
+                    linkCount = 0,
+                    droppedDecisionCount = dto.decisions.orEmpty().size,
+                    filePresent = true,
+                    reason = "schema_version_mismatch",
+                    schemaVersion = dto.schemaVersion
+                )
+                return
+            }
 
+            var droppedDecisionCount = 0
             dto.decisions.orEmpty()
-                .map { decision -> requireNotNull(decision.toDomainOrNull()) }
+                .mapNotNull { decision ->
+                    decision.toDomainOrNull().also { restored ->
+                        if (restored == null) droppedDecisionCount += 1
+                    }
+                }
                 .forEach { decision -> decisions[decision.decisionKey] = decision }
             dto.previewLinks.orEmpty().forEach { link ->
-                previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
-                    ArtworkDecisionKey(link.canonicalKey)
+                runCatching {
+                    previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
+                        ArtworkDecisionKey(link.canonicalKey)
+                }.onFailure {
+                    // Broken preview links are non-authoritative; decisions remain usable.
+                }
             }
-        }.onFailure {
+            traceDecisionStoreLoad(
+                success = true,
+                decisionCount = decisions.size,
+                linkCount = previewToCanonical.size,
+                droppedDecisionCount = droppedDecisionCount,
+                filePresent = true
+            )
+        }.onFailure { error ->
             decisions.clear()
             previewToCanonical.clear()
+            traceDecisionStoreLoad(
+                success = false,
+                decisionCount = 0,
+                linkCount = 0,
+                droppedDecisionCount = 0,
+                filePresent = true,
+                errorClass = error.javaClass.simpleName
+            )
         }
     }
 
@@ -121,6 +206,7 @@ class DurableArtworkDecisionCache(
     }
 
     private fun persistLocked() {
+        var tempFile: File? = null
         try {
             val parent = file.parentFile
             if (parent != null && !parent.exists()) parent.mkdirs()
@@ -135,7 +221,7 @@ class DurableArtworkDecisionCache(
                     )
                 }
             )
-            val tempFile = File(parent ?: File("."), "${file.name}.tmp")
+            tempFile = File(parent ?: File("."), "${file.name}.tmp")
             tempFile.writeText(gson.toJson(dto))
             try {
                 Files.move(
@@ -151,9 +237,71 @@ class DurableArtworkDecisionCache(
                     StandardCopyOption.REPLACE_EXISTING
                 )
             }
-        } catch (_: Exception) {
-            // Disk persistence is a best-effort cache; callers still observe the in-memory mutation.
+            traceDecisionStoreWrite(success = true)
+        } catch (error: Exception) {
+            tempFile?.delete()
+            traceDecisionStoreWrite(
+                success = false,
+                errorClass = error.javaClass.simpleName
+            )
         }
+    }
+
+    private fun traceDecisionStoreLoad(
+        success: Boolean,
+        decisionCount: Int,
+        linkCount: Int,
+        droppedDecisionCount: Int,
+        filePresent: Boolean,
+        reason: String? = null,
+        schemaVersion: Int? = null,
+        errorClass: String? = null
+    ) {
+        traceArtwork(
+            eventType = "artwork.decision_store_load",
+            payload = mapOf(
+                "success" to success,
+                "filePresent" to filePresent,
+                "decisionCount" to decisionCount,
+                "linkCount" to linkCount,
+                "droppedDecisionCount" to droppedDecisionCount,
+                "reason" to reason,
+                "schemaVersion" to schemaVersion,
+                "errorClass" to errorClass
+            )
+        )
+    }
+
+    private fun traceDecisionStoreWrite(
+        success: Boolean,
+        errorClass: String? = null
+    ) {
+        traceArtwork(
+            eventType = "artwork.decision_store_write",
+            payload = mapOf(
+                "success" to success,
+                "decisionCount" to decisions.size,
+                "linkCount" to previewToCanonical.size,
+                "errorClass" to errorClass
+            )
+        )
+    }
+
+    private fun traceArtwork(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = traceSink.activeTraceSessionId() ?: LOGCAT_ONLY_TRACE_SESSION_ID,
+                sequence = traceSequence.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = payload
+            )
+        )
     }
 
     private data class StoreDto(
@@ -446,5 +594,12 @@ class DurableArtworkDecisionCache(
 
     companion object {
         private const val SCHEMA_VERSION = 1
+        private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
+        private val FALLBACK_SOURCE_ROLES = setOf(
+            ArtworkSourceRole.PRIMARY,
+            ArtworkSourceRole.RAIL_PREVIEW,
+            ArtworkSourceRole.ADDON_PREVIEW,
+            ArtworkSourceRole.FALLBACK
+        )
     }
 }

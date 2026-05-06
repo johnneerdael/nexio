@@ -166,6 +166,30 @@ class LogcatRuntimeTraceSink(
         "artwork.decision_missing" -> linkedMapOf(
             "decisionKey" to payload["decisionKey"]
         )
+        "artwork.decision_put" -> linkedMapOf(
+            "decisionKey" to payload["decisionKey"],
+            "provider" to payload["provider"],
+            "imageType" to payload["imageType"],
+            "sourceRole" to payload["sourceRole"],
+            "rejectedCount" to payload["rejectedCount"],
+            "hasFallbackCandidate" to payload["hasFallbackCandidate"]
+        )
+        "artwork.decision_store_load" -> linkedMapOf(
+            "success" to payload["success"],
+            "filePresent" to payload["filePresent"],
+            "decisionCount" to payload["decisionCount"],
+            "linkCount" to payload["linkCount"],
+            "droppedDecisionCount" to payload["droppedDecisionCount"],
+            "reason" to payload["reason"],
+            "schemaVersion" to payload["schemaVersion"],
+            "errorClass" to payload["errorClass"]
+        )
+        "artwork.decision_store_write" -> linkedMapOf(
+            "success" to payload["success"],
+            "decisionCount" to payload["decisionCount"],
+            "linkCount" to payload["linkCount"],
+            "errorClass" to payload["errorClass"]
+        )
         "artwork.asset_materialized" -> linkedMapOf(
             "decisionKey" to payload["decisionKey"],
             "assetKey" to payload["assetKey"],
@@ -179,6 +203,32 @@ class LogcatRuntimeTraceSink(
             "decisionKey" to payload["decisionKey"],
             "fallbackProvider" to payload["fallbackProvider"],
             "assetKey" to payload["assetKey"]
+        )
+        "home.snapshot_read" -> linkedMapOf(
+            "success" to payload["success"],
+            "profileId" to payload["profileId"],
+            "snapshotFound" to payload["snapshotFound"],
+            "catalogRowCount" to payload["catalogRowCount"],
+            "fullCatalogRowCount" to payload["fullCatalogRowCount"],
+            "heroItemCount" to payload["heroItemCount"],
+            "requiredPosterProviderTag" to payload["requiredPosterProviderTag"],
+            "reason" to payload["reason"],
+            "errorClass" to payload["errorClass"]
+        )
+        "home.snapshot_write" -> linkedMapOf(
+            "success" to payload["success"],
+            "profileId" to payload["profileId"],
+            "catalogRowCount" to payload["catalogRowCount"],
+            "fullCatalogRowCount" to payload["fullCatalogRowCount"],
+            "heroItemCount" to payload["heroItemCount"],
+            "errorClass" to payload["errorClass"]
+        )
+        "home.snapshot_sanitize_artwork" -> linkedMapOf(
+            "scope" to payload["scope"],
+            "reason" to payload["reason"],
+            "posterKind" to payload["posterKind"],
+            "posterProviderTag" to payload["posterProviderTag"],
+            "decisionFound" to payload["decisionFound"]
         )
         "runtime.operation_start" -> linkedMapOf(
             "provider" to payload["provider"],
