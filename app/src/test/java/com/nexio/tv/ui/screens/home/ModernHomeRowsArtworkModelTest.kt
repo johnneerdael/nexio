@@ -122,6 +122,44 @@ class ModernHomeRowsArtworkModelTest {
         assertFalse((model as LegacyRemoteArtworkModel).key.contains("secret"))
     }
 
+    @Test
+    fun `portrait fallback model uses raw poster when typed poster is primary`() {
+        val typedArtwork = ArtworkBundle(
+            poster = artworkRef("posterDecision", ArtworkType.POSTER)
+        )
+        val baseItem = carouselItem(
+            artwork = typedArtwork,
+            poster = "https://image.tmdb.org/t/p/w500/raw-poster.jpg?token=secret"
+        )
+        val item = baseItem.copy(
+            imageUrl = "nexio-artwork://decision/posterDecision",
+            heroPreview = baseItem.heroPreview.copy(
+                poster = "nexio-artwork://decision/posterDecision",
+                imageUrl = "nexio-artwork://decision/posterDecision"
+            )
+        )
+
+        val primary = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.imageUrl
+        )
+        val fallback = resolveModernCarouselCardFallbackArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false
+        )
+
+        assertEquals("nexio-artwork://asset/posterDecision", primary)
+        assertTrue(fallback is LegacyRemoteArtworkModel)
+        assertFalse(fallback is String)
+        assertFalse(fallback.toString().contains("https://"))
+        assertFalse((fallback as LegacyRemoteArtworkModel).key.contains("secret"))
+    }
+
     private fun carouselItem(
         artwork: ArtworkBundle?,
         poster: String = "https://image.tmdb.org/t/p/w500/raw-poster.jpg",
