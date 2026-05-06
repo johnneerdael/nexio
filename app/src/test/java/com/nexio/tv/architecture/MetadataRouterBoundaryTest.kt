@@ -30,6 +30,13 @@ class MetadataRouterBoundaryTest {
                 "/com/nexio/tv/data/integration/metadata/TmdbTrailerMetadataAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbOrganizationPersonAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TvdbTrailerMetadataAdapter.kt",
+                // Approved shared-owner adapter boundaries: these classes may adapt legacy
+                // metadata services, but callers must reach them through ProviderPlanRunner,
+                // RatingResolver, or TrailerResolver rather than directly from UI/home/player.
+                "/com/nexio/tv/data/integration/metadata/MetadataSecondaryRepository.kt",
+                "/com/nexio/tv/data/repository/EpisodeRatingsSelectionRepository.kt",
+                "/com/nexio/tv/data/trailer/SeasonTrailerRefResolver.kt",
+                "/com/nexio/tv/data/trailer/TrailerService.kt",
                 // The service files themselves define the class names the regex matches on; they are
                 // the canonical homes for TmdbMetadataService / KitsuMetadataService / TvdbMetadataService
                 // and must remain allowlisted so the scan ignores their own class declarations.

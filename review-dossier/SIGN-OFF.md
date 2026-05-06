@@ -5,6 +5,15 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Shared Resolution Open Findings Closed
+
+The refreshed 2026-05-06 shared resolution bypass audit has been remediated on this branch.
+
+- P0 profile/account blockers were fixed: account mutation envelopes are account-scoped, WatchProgress/Continue Watching writes are profile-session scoped, and detail UI no longer performs direct TMDB identity bridging.
+- P1/P2 shared-resolution bypasses were migrated to canonical owner systems for metadata, detail/home display, ratings, trailers, skip segments, artwork, localization, and screensaver display data.
+- Remaining provider service usage is limited to approved adapters, transport, test, fixture, and temporary compatibility projection boundaries documented in `shared-resolution-bypass-audit.md`.
+- Final sign-off passed the focused architecture/resolver Gradle sweep and static scans on this branch.
+
 ## Cluster I landed — F2-T13-A poster pipeline completion (FINAL audit-remediation cluster)
 
 The 1 deferred finding from cluster H (F2-T13-A) has been remediated. The audit-remediation effort is now COMPLETE.
