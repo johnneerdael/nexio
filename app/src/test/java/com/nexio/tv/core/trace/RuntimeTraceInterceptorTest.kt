@@ -4,8 +4,10 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.RecordingTraceSink
+import java.net.InetAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
@@ -69,6 +71,60 @@ class RuntimeTraceInterceptorTest {
         @Suppress("UNCHECKED_CAST")
         val headers = payload["headers"] as Map<String, String>
         assertEquals("<redacted>", headers["Authorization"])
+
+        server.shutdown()
+    }
+
+    @Test
+    fun `provider path credential is redacted in http request trace`() {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setResponseCode(200).setBody("ok"))
+        }
+        server.start()
+        val sink = RecordingTraceSink()
+        val client = OkHttpClient.Builder()
+            .dns(
+                object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> =
+                        if (hostname == "api.ratingposterdb.com") {
+                            listOf(InetAddress.getByName("127.0.0.1"))
+                        } else {
+                            Dns.SYSTEM.lookup(hostname)
+                        }
+                }
+            )
+            .addInterceptor(
+                RuntimeTraceInterceptor(
+                    sink = sink,
+                    redactor = TraceRedactor(),
+                    modeProvider = fixedMode(TraceMode.INCLUDE_HTTP_SUMMARY),
+                    unscopedGuard = UnscopedNetworkPolicyGuard(
+                        sink,
+                        sessionId = { "s1" },
+                        isInternalBuild = false
+                    )
+                )
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("http://api.ratingposterdb.com:${server.port}/rpdb-secret/imdb/poster-default/tt0137523.jpg")
+            .tag(
+                RuntimeTraceContext::class.java,
+                ctx(opId = "rpdb_path_redaction").copy(
+                    provider = IntegrationProvider.RPDB,
+                    apiShapeId = "rpdb.poster_template"
+                )
+            )
+            .build()
+
+        client.newCall(request).execute().close()
+
+        val req = sink.events.first { it.eventType == "http.request" }
+        val payload = req.payload as Map<*, *>
+        val url = payload["url"] as String
+        assertTrue("provider credential path segment must be redacted: $url", url.contains("/<redacted>/imdb/"))
+        assertFalse("provider credential must not appear in trace URL: $url", url.contains("rpdb-secret"))
 
         server.shutdown()
     }
