@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -76,7 +77,14 @@ private class TestMetadataProviderAdapter(
             )
         }
 
-        val coreEnrichment = when {
+        val coreFields = when {
+            route.seasonNumber == null &&
+                step.role == ProviderPlanRole.PRIMARY_CORE &&
+                route.provider == MetadataPrimaryProvider.TMDB &&
+                route.mediaKind == MetadataMediaKind.MOVIE &&
+                metadataSecondaryRepository != null -> {
+                tmdbMovieEnrichment(route)
+            }
             route.seasonNumber == null && step.role == ProviderPlanRole.PRIMARY_CORE
                     // When metadataSecondaryRepository is configured (detail path):
                     // - Skip fetchEnrichment for MOVIE routes (movie enrichment comes from TMDB service).
@@ -98,7 +106,7 @@ private class TestMetadataProviderAdapter(
                 val cacheKey = "${route.provider}:${route.parentId}"
                 val cached = enrichmentCache[cacheKey]
                 if (cached != null) {
-                    cached.value
+                    cached.value?.toResolvedFields()
                 } else {
                     val decision = providerMetadataRouter.fetchEnrichment(
                         TvMetadataRequest(
@@ -116,7 +124,7 @@ private class TestMetadataProviderAdapter(
                     if (canonicalTvdbId != null) {
                         enrichmentCache["${route.provider}:tvdb:$canonicalTvdbId"] = decision
                     }
-                    decision.value
+                    decision.value?.toResolvedFields()
                 }
             }
             else -> null
@@ -158,12 +166,24 @@ private class TestMetadataProviderAdapter(
             step = step,
             candidate = MetadataCandidate(
                 provider = route.provider,
-                fields = coreEnrichment?.toResolvedFields() ?: mapOf(
+                fields = coreFields ?: mapOf(
                     ResolvedField.TITLE to FieldValue("Test title", FieldOwner.PRIMARY)
                 )
             ),
             episodeMetadata = episodeMetadata
         )
+    }
+
+    private suspend fun tmdbMovieEnrichment(route: MetadataRoute): Map<ResolvedField, FieldValue>? {
+        val tmdbId = route.targetIds[MetadataPrimaryProvider.TMDB]
+            ?.removeProviderPrefix("tmdb")
+            ?: route.parentId
+                .removeProviderPrefix("tmdb")
+                .takeIf { route.parentId.startsWith("tmdb:", ignoreCase = true) }
+            ?: return null
+        return metadataSecondaryRepository
+            ?.fetchTmdbEnrichment(tmdbId, ContentType.MOVIE)
+            ?.toResolvedFields()
     }
 
     private suspend fun exactTmdbLookupCandidate(route: MetadataRoute): MetadataCandidate? {
@@ -225,6 +245,34 @@ private class TestMetadataProviderAdapter(
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
             }
         }
+
+    private fun TmdbEnrichment.toResolvedFields(): Map<ResolvedField, FieldValue> =
+        buildMap {
+            localizedTitle?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
+            description?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
+            poster?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            backdrop?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
+            rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            releaseInfo?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
+            ageRating?.let { put(ResolvedField.AGE_RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            if (genres.isNotEmpty()) put(ResolvedField.GENRES, FieldValue(genres, FieldOwner.PRIMARY))
+            countries?.takeIf { it.isNotEmpty() }?.let {
+                put(ResolvedField.COUNTRIES, FieldValue(it, FieldOwner.PRIMARY))
+            }
+            language?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            if (castMembers.isNotEmpty()) {
+                put(ResolvedField.CAST, FieldValue(castMembers, FieldOwner.PRIMARY))
+            }
+            val allOrgs = productionCompanies + networks
+            if (allOrgs.isNotEmpty()) {
+                put(ResolvedField.ORGANIZATION_LIST, FieldValue(allOrgs, FieldOwner.PRIMARY))
+            }
+        }
+
+    private fun String.removeProviderPrefix(provider: String): String =
+        if (startsWith("$provider:", ignoreCase = true)) substringAfter(":") else this
 
     private fun MetadataMediaKind.toContentType(): ContentType =
         when (this) {

@@ -7,6 +7,7 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
@@ -313,6 +314,172 @@ class MetadataDisplayRepositoryTest {
                 episodesBySeason = emptyMap()
             )
         }
+    }
+
+    @Test
+    fun `resolveDetailDisplay projects resolved string artwork into detail artwork`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val repository = MetadataDisplayRepository(routerFacade)
+        val request = MetadataRequest(
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "tvdb:121361",
+                title = "TVDB Title",
+                overview = null,
+                poster = "https://image.tvdb.test/poster.jpg",
+                backdrop = "https://image.tvdb.test/backdrop.jpg",
+                logo = "https://image.tvdb.test/logo.png",
+                rating = null,
+                runtimeMinutes = null,
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview"),
+            trace = emptyList()
+        )
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("https://image.tvdb.test/poster.jpg", document.artwork.poster.toLegacyArtworkString())
+        assertEquals("https://image.tvdb.test/backdrop.jpg", document.artwork.backdrop.toLegacyArtworkString())
+        assertEquals("https://image.tvdb.test/logo.png", document.artwork.logo.toLegacyArtworkString())
+    }
+
+    @Test
+    fun `resolveDetailDisplay derives rating context when preview context is unavailable`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val ratingRepository = mockk<DetailRatingDisplayRepository>()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = ratingRepository,
+            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+        )
+        val request = MetadataRequest(
+            contentId = "tt0944947",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+        val ratings = ResolvedDetailRatingDisplay(
+            titleRating = TitleRating(8.8, TitleRatingSource.IMDB),
+            mdbListRatings = MDBListRatings(imdb = 8.8),
+            showMdbListImdb = true
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "imdb:tt0944947",
+                title = "Game of Thrones",
+                overview = "Seven noble families fight for control of Westeros.",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = 9.2,
+                runtimeMinutes = 57,
+                releaseDate = "2011-04-17",
+                remoteIds = mapOf("imdb" to setOf("tt0944947")),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview"),
+            trace = emptyList()
+        )
+        coEvery {
+            ratingRepository.resolve(
+                meta = match { it.id == "tt0944947" && it.name == "Game of Thrones" },
+                fallbackItemId = "tt0944947",
+                fallbackItemType = "series",
+                providerIds = any(),
+                episodesBySeason = emptyMap()
+            )
+        } returns ratings
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals(ratings, document.ratings)
+        assertEquals(8.8, document.rating?.value ?: 0.0, 0.0)
+        coVerify(exactly = 1) {
+            ratingRepository.resolve(
+                meta = match { it.id == "tt0944947" && it.name == "Game of Thrones" },
+                fallbackItemId = "tt0944947",
+                fallbackItemType = "series",
+                providerIds = any(),
+                episodesBySeason = emptyMap()
+            )
+        }
+    }
+
+    @Test
+    fun `resolveDetailDisplay degrades when optional rating display fails`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val ratingRepository = mockk<DetailRatingDisplayRepository>()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = ratingRepository,
+            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+        )
+        val request = MetadataRequest(
+            contentId = "tt0944947",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "imdb:tt0944947",
+                title = "Game of Thrones",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = 9.2,
+                runtimeMinutes = null,
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview"),
+            trace = emptyList()
+        )
+        coEvery {
+            ratingRepository.resolve(any(), any(), any(), any(), any())
+        } throws IllegalStateException("ratings unavailable")
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("Game of Thrones", document.fields.title)
+        assertEquals(ResolvedDetailRatingDisplay(), document.ratings)
+        assertEquals(9.2, document.rating?.value ?: 0.0, 0.0)
     }
 
     private fun minimalRatingsMeta(id: String): Meta =

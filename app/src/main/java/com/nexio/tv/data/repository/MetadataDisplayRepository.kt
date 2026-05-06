@@ -1,6 +1,11 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkDisplayHints
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
@@ -11,6 +16,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ProviderPlanRunResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedProductionCompany
 import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
@@ -25,11 +31,14 @@ import com.nexio.tv.domain.model.LocalizationDisplayState
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.PeopleDisplay
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.ReviewPaginationDisplayState
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.ResolvedDisplayFields
@@ -60,15 +69,8 @@ class MetadataDisplayRepository @Inject constructor(
         val result = metadataRouterFacade.resolveRequest(request)
         val resolvedDocument = result.resolvedDocument
         val identity = result.toContentIdentity()
-        val ratings = ratingContext?.let { context ->
-            detailRatingDisplayRepository.resolve(
-                meta = context.meta,
-                fallbackItemId = context.fallbackItemId,
-                fallbackItemType = context.fallbackItemType,
-                providerIds = identity.providerIds,
-                episodesBySeason = context.episodesBySeason
-            )
-        }
+        val effectiveRatingContext = ratingContext ?: resolvedDocument.toRatingDisplayContext(request, identity)
+        val ratings = resolveRatings(effectiveRatingContext, identity)
         val kitsuBridge = result.fetchKitsuBridgeDetail(request, identity)
         val cast = kitsuBridge?.castMembers?.takeIf { it.isNotEmpty() } ?: resolvedDocument.castMembers
         val crew = resolvedDocument.crewMembers
@@ -81,7 +83,7 @@ class MetadataDisplayRepository @Inject constructor(
             .ifEmpty { kitsuBridge?.recommendations.orEmpty() }
         val reviews = result.providerRunResult.toFieldValues(ResolvedField.REVIEWS)
             .flatMap(::reviewsFrom)
-            .ifEmpty { kitsuBridge?.reviews.orEmpty() }
+            .ifEmpty { kitsuBridge?.reviewsPage?.reviews.orEmpty() }
 
         return ResolvedDetailDisplayDocument(
             route = result.route,
@@ -106,8 +108,29 @@ class MetadataDisplayRepository @Inject constructor(
                 productionCompanies = productionCompanies,
                 networks = networks
             ),
-            ratings = ratings ?: ResolvedDetailRatingDisplay()
+            ratings = ratings ?: ResolvedDetailRatingDisplay(),
+            reviewPagination = kitsuBridge?.reviewsPage.toReviewPaginationDisplayState(MetadataPrimaryProvider.KITSU)
         )
+    }
+
+    private suspend fun resolveRatings(
+        context: DetailRatingDisplayContext?,
+        identity: ContentIdentity
+    ): ResolvedDetailRatingDisplay? {
+        val effectiveContext = context ?: return null
+        return try {
+            detailRatingDisplayRepository.resolve(
+                meta = effectiveContext.meta,
+                fallbackItemId = effectiveContext.fallbackItemId,
+                fallbackItemType = effectiveContext.fallbackItemType,
+                providerIds = identity.providerIds,
+                episodesBySeason = effectiveContext.episodesBySeason
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            ResolvedDetailRatingDisplay()
+        }
     }
 
     private fun MetadataResolutionResult.toContentIdentity(): ContentIdentity {
@@ -238,6 +261,65 @@ class MetadataDisplayRepository @Inject constructor(
             platformName = platformName
         )
 
+    private fun ResolvedMetadataDocument.toRatingDisplayContext(
+        request: MetadataRequest,
+        identity: ContentIdentity
+    ): DetailRatingDisplayContext? {
+        val fallbackItemId = identity.providerIds.imdb
+            ?: identity.canonicalId
+            ?: request.contentId.trim().takeIf { it.isNotBlank() }
+            ?: return null
+        val itemType = request.sourceContext.itemType
+            ?: request.contentType.toApiString()
+        return DetailRatingDisplayContext(
+            meta = toRatingMeta(
+                id = fallbackItemId,
+                contentType = request.contentType,
+                itemType = itemType
+            ),
+            fallbackItemId = fallbackItemId,
+            fallbackItemType = itemType,
+            episodesBySeason = emptyMap()
+        )
+    }
+
+    private fun ResolvedMetadataDocument.toRatingMeta(
+        id: String,
+        contentType: ContentType,
+        itemType: String
+    ): Meta =
+        Meta(
+            id = id,
+            type = contentType,
+            rawType = itemType,
+            name = title ?: id,
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = backdrop,
+            logo = logo,
+            description = overview,
+            releaseInfo = releaseDate,
+            imdbRating = when (val resolvedRating = rating) {
+                is Number -> resolvedRating.toFloat()
+                is String -> resolvedRating.toFloatOrNull()
+                else -> null
+            },
+            genres = genres,
+            runtime = runtimeMinutes?.toString(),
+            director = emptyList(),
+            cast = emptyList(),
+            castMembers = castMembers,
+            videos = emptyList(),
+            productionCompanies = productionCompanies,
+            networks = networks,
+            ageRating = ageRating,
+            country = countries.joinToString(", ").takeIf { it.isNotBlank() },
+            awards = null,
+            language = language,
+            links = emptyList(),
+            artwork = artwork.takeUnless { it.isEmpty() }
+        )
+
     private fun String?.parseYearPrefix(): Int? {
         val value = this ?: return null
         if (value.length < 4) return null
@@ -250,9 +332,15 @@ class MetadataDisplayRepository @Inject constructor(
     private fun MetadataResolutionResult.displayArtwork(): ArtworkBundle {
         val fallbackArtwork = displayMetadata.artwork
         val merged = ArtworkBundle(
-            poster = resolvedDocument.artwork.poster ?: fallbackArtwork?.poster,
-            backdrop = resolvedDocument.artwork.backdrop ?: fallbackArtwork?.backdrop,
-            logo = resolvedDocument.artwork.logo ?: fallbackArtwork?.logo,
+            poster = resolvedDocument.artwork.poster
+                ?: resolvedDocument.poster.toLegacyArtworkRef(ArtworkType.POSTER)
+                ?: fallbackArtwork?.poster,
+            backdrop = resolvedDocument.artwork.backdrop
+                ?: resolvedDocument.backdrop.toLegacyArtworkRef(ArtworkType.BACKDROP)
+                ?: fallbackArtwork?.backdrop,
+            logo = resolvedDocument.artwork.logo
+                ?: resolvedDocument.logo.toLegacyArtworkRef(ArtworkType.LOGO)
+                ?: fallbackArtwork?.logo,
             thumbnail = resolvedDocument.artwork.thumbnail ?: fallbackArtwork?.thumbnail
         )
 
@@ -261,6 +349,22 @@ class MetadataDisplayRepository @Inject constructor(
 
     private fun ArtworkBundle.hasArtwork(): Boolean =
         poster != null || backdrop != null || logo != null || thumbnail != null
+
+    private fun ArtworkBundle.isEmpty(): Boolean =
+        poster == null && backdrop == null && logo == null && thumbnail == null
+
+    private fun String?.toLegacyArtworkRef(imageType: ArtworkType): ArtworkDisplayRef? {
+        val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return ArtworkDisplayRef.LegacyString(
+            value = value,
+            imageType = imageType,
+            trace = ArtworkTrace(
+                sourceRole = ArtworkSourceRole.LEGACY_STRING_COMPAT.name,
+                reason = "resolved_metadata_string_artwork"
+            ),
+            displayHints = ArtworkDisplayHints()
+        )
+    }
 
     private fun MetadataResolutionResult.toTitleRating(): TitleRating? {
         val value = when (val rating = resolvedDocument.rating) {
@@ -313,6 +417,29 @@ class MetadataDisplayRepository @Inject constructor(
     private fun MetadataLocalizationFieldTrace.toFallbackReason(): String =
         "${field.name} fell back to $selectedLanguage via ${selectedProvider.name} (${fallbackRole.name})"
 
+    private fun ReviewsPage?.toReviewPaginationDisplayState(
+        provider: MetadataPrimaryProvider
+    ): ReviewPaginationDisplayState {
+        val page = this ?: return ReviewPaginationDisplayState()
+        return ReviewPaginationDisplayState(
+            provider = provider.toProviderId(),
+            hasMore = page.hasMore,
+            nextPage = page.nextPage,
+            pageSize = 20
+        )
+    }
+
+    private fun MetadataPrimaryProvider.toProviderId(): ProviderId? =
+        when (this) {
+            MetadataPrimaryProvider.TMDB -> ProviderId.TMDB
+            MetadataPrimaryProvider.TVDB -> ProviderId.TVDB
+            MetadataPrimaryProvider.KITSU -> ProviderId.KITSU
+            MetadataPrimaryProvider.IMDB -> ProviderId.IMDB
+            MetadataPrimaryProvider.TRAKT -> ProviderId.TRAKT
+            MetadataPrimaryProvider.SIMKL -> ProviderId.SIMKL
+            else -> null
+        }
+
     private fun ProviderPlanRunResult?.toFieldValues(field: ResolvedField): List<Any?> =
         this?.stepResults
             ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(field)?.value }
@@ -329,7 +456,7 @@ class MetadataDisplayRepository @Inject constructor(
         val castMembers: List<MetaCastMember>,
         val productionCompanies: List<MetaCompany>,
         val recommendations: List<MetaPreview>,
-        val reviews: List<com.nexio.tv.domain.model.MetaReview>
+        val reviewsPage: ReviewsPage?
     )
 
     private suspend fun MetadataResolutionResult.fetchKitsuBridgeDetail(
@@ -357,25 +484,27 @@ class MetadataDisplayRepository @Inject constructor(
         } catch (_: Exception) {
             null
         }
-        val reviews = try {
+        val reviewPage = request.pagination?.page ?: 1
+        val reviewLimit = request.pagination?.limit ?: 20
+        val reviewsPage = try {
             detailSecondaryDisplayRepository.fetchKitsuReviews(
                 rawId = rawId,
                 mediaKind = mediaKind,
-                page = 1,
-                limit = 20
+                page = reviewPage,
+                limit = reviewLimit
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            emptyList()
+            null
         }
-        if (advanced == null && reviews.isEmpty()) return null
+        if (advanced == null && reviewsPage?.reviews.orEmpty().isEmpty()) return null
 
         return KitsuBridgeDetail(
             castMembers = advanced?.characters.orEmpty().map { it.toCastMember() },
             productionCompanies = advanced?.productionCompanies.orEmpty().map { it.toCompany() },
             recommendations = advanced?.relatedTitles.orEmpty().map { it.toPreview() },
-            reviews = reviews
+            reviewsPage = reviewsPage
         )
     }
 

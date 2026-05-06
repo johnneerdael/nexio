@@ -1,9 +1,9 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.anime.ContentMediaKind
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
-import com.nexio.tv.domain.model.MetaReview
 import javax.inject.Inject
 
 class DetailSecondaryDisplayRepository private constructor(
@@ -34,13 +34,13 @@ class DetailSecondaryDisplayRepository private constructor(
         mediaKind: ContentMediaKind,
         page: Int,
         limit: Int
-    ): List<MetaReview> =
+    ): ReviewsPage? =
         deps?.metadataSecondaryRepository?.fetchKitsuReviews(
             rawId = rawId,
             mediaKind = mediaKind,
             page = page,
             limit = limit
-        )?.reviews.orEmpty()
+        )
 
     suspend fun findPersonIdByExactName(name: String): Int? =
         deps?.metadataSecondaryRepository?.findPersonIdByExactName(name)
