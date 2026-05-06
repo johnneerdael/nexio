@@ -101,6 +101,8 @@ class AccountConfigSyncContractTest {
         assertTrue(migration.contains("coalesce((entry->>'is_anime')::boolean, false)"))
         assertTrue(migration.contains("'is_anime', coalesce(is_anime, false)"))
         assertTrue(migration.contains("not in (1, 2, 5, 6, 7, 8, 9)"))
+        assertTrue(migration.contains("if coalesce(p_contract_version, 1) not in (1, 2, 5, 6, 7, 9) then"))
+        assertTrue(migration.contains("if v_contract_version not in (1, 2, 5, 6, 7, 9) then"))
     }
 
     @Test
