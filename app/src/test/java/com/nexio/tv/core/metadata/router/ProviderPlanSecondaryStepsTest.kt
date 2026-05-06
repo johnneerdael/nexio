@@ -44,6 +44,11 @@ class ProviderPlanSecondaryStepsTest {
 
         assertStep(plan, TmdbApiShapes.TV_VIDEOS, MetadataPrimaryProvider.TMDB, ProviderPlanRole.MEDIA)
         assertStep(plan, TmdbApiShapes.SEASON_VIDEOS, MetadataPrimaryProvider.TMDB, ProviderPlanRole.MEDIA)
+        assertTrue(
+            "expected season videos before TV videos in ${plan.steps.map { it.apiShapeId }}",
+            plan.steps.indexOfFirst { it.apiShapeId == TmdbApiShapes.SEASON_VIDEOS } <
+                plan.steps.indexOfFirst { it.apiShapeId == TmdbApiShapes.TV_VIDEOS }
+        )
     }
 
     @Test
