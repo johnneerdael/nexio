@@ -31,6 +31,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
+import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -52,10 +53,22 @@ class MetadataDisplayRepository @Inject constructor(
         detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
     )
 
-    suspend fun resolveDetailDisplay(request: MetadataRequest): ResolvedDetailDisplayDocument {
+    suspend fun resolveDetailDisplay(
+        request: MetadataRequest,
+        ratingContext: DetailRatingDisplayContext? = null
+    ): ResolvedDetailDisplayDocument {
         val result = metadataRouterFacade.resolveRequest(request)
         val resolvedDocument = result.resolvedDocument
         val identity = result.toContentIdentity()
+        val ratings = ratingContext?.let { context ->
+            detailRatingDisplayRepository.resolve(
+                meta = context.meta,
+                fallbackItemId = context.fallbackItemId,
+                fallbackItemType = context.fallbackItemType,
+                providerIds = identity.providerIds,
+                episodesBySeason = context.episodesBySeason
+            )
+        }
         val kitsuBridge = result.fetchKitsuBridgeDetail(request, identity)
         val cast = kitsuBridge?.castMembers?.takeIf { it.isNotEmpty() } ?: resolvedDocument.castMembers
         val crew = resolvedDocument.crewMembers
@@ -75,7 +88,7 @@ class MetadataDisplayRepository @Inject constructor(
             identity = identity,
             fields = resolvedDocument.toResolvedDisplayFields(),
             artwork = result.displayArtwork(),
-            rating = result.toTitleRating(),
+            rating = ratings?.titleRating ?: result.toTitleRating(),
             trailer = result.toTrailerDisplayState(),
             seasons = emptyList(),
             people = PeopleDisplay(cast = cast, crew = crew)
@@ -92,23 +105,8 @@ class MetadataDisplayRepository @Inject constructor(
             advanced = resolvedDocument.toDetailAdvancedMetadata(
                 productionCompanies = productionCompanies,
                 networks = networks
-            )
-        )
-    }
-
-    suspend fun resolveDetailRatingDisplay(
-        meta: com.nexio.tv.domain.model.Meta,
-        fallbackItemId: String,
-        fallbackItemType: String,
-        providerIds: ProviderIds,
-        episodesBySeason: Map<Int, Set<Int>>
-    ): DetailRatingDisplayResolution {
-        return detailRatingDisplayRepository.resolve(
-            meta = meta,
-            fallbackItemId = fallbackItemId,
-            fallbackItemType = fallbackItemType,
-            providerIds = providerIds,
-            episodesBySeason = episodesBySeason
+            ),
+            ratings = ratings ?: ResolvedDetailRatingDisplay()
         )
     }
 

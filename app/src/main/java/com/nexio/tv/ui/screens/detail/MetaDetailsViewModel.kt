@@ -30,6 +30,7 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.DetailRatingDisplayContext
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
@@ -592,12 +593,27 @@ class MetaDetailsViewModel @Inject constructor(
             loadingSeasonAvailability.clear()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
+            val initialAddonMeta = if (preferredAddonBaseUrl?.isNotBlank() == true) {
+                runCatching {
+                    metaRepository.getMeta(
+                        addonBaseUrl = preferredAddonBaseUrl,
+                        type = itemType,
+                        id = metaLookupId,
+                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                        origin = detailMetaOrigin
+                    ).first { it !is NetworkResult.Loading }
+                }.getOrNull()
+                    ?.let { it as? NetworkResult.Success }
+                    ?.data
+            } else {
+                null
+            }
 
             val resolvedDetail = try {
                 loadResolvedDetailDocument(
                     contentId = metaLookupId,
                     contentType = ContentType.fromString(itemType),
-                    previewMeta = _uiState.value.meta
+                    previewMeta = initialAddonMeta ?: _uiState.value.meta
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -617,19 +633,10 @@ class MetaDetailsViewModel @Inject constructor(
                 // correct before async TVDB episode enrichment completes.
                 if (preferredAddonBaseUrl?.isNotBlank() == true &&
                     (meta.videos.isEmpty() || meta.links.isEmpty())) {
-                    val addonResult = runCatching {
-                        metaRepository.getMeta(
-                            addonBaseUrl = preferredAddonBaseUrl,
-                            type = itemType,
-                            id = metaLookupId,
-                            cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                            origin = detailMetaOrigin
-                        ).first { it !is NetworkResult.Loading }
-                    }.getOrNull()
-                    if (addonResult is NetworkResult.Success) {
+                    if (initialAddonMeta != null) {
                         meta = meta.copy(
-                            videos = meta.videos.ifEmpty { addonResult.data.videos },
-                            links = meta.links.ifEmpty { addonResult.data.links }
+                            videos = meta.videos.ifEmpty { initialAddonMeta.videos },
+                            links = meta.links.ifEmpty { initialAddonMeta.links }
                         )
                     }
                 }
@@ -688,7 +695,7 @@ class MetaDetailsViewModel @Inject constructor(
         previewMeta: Meta?
     ): ResolvedDetailDisplayDocument =
         metadataDisplayRepository.resolveDetailDisplay(
-            MetadataRequest(
+            request = MetadataRequest(
                 contentId = contentId,
                 contentType = contentType,
                 sourceContext = MetadataSourceContext(
@@ -698,7 +705,15 @@ class MetaDetailsViewModel @Inject constructor(
                 ),
                 language = profileBoundary.currentLanguageTag(),
                 depth = MetadataDepth.DETAIL_FULL
-            )
+            ),
+            ratingContext = previewMeta?.let { meta ->
+                DetailRatingDisplayContext(
+                    meta = meta,
+                    fallbackItemId = resolveRatingsFallbackItemId(meta, null),
+                    fallbackItemType = itemType.ifBlank { contentType.toApiString() },
+                    episodesBySeason = meta.episodesBySeason()
+                )
+            }
         )
 
     private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
@@ -1363,23 +1378,10 @@ class MetaDetailsViewModel @Inject constructor(
                 isTvContent = isTvContent
             )
         }
-        val ratingResolution = detailDocument?.let { document ->
-            metadataDisplayRepository.resolveDetailRatingDisplay(
-                meta = updated,
-                fallbackItemId = resolveRatingsFallbackItemId(updated, tvEnrichment),
-                fallbackItemType = itemType,
-                providerIds = document.identity.providerIds,
-                episodesBySeason = updated.episodesBySeason()
-            )
-        }
-        if (ratingResolution != null) {
-            updated = ratingResolution.meta
-        }
-
         return DetailMetadataEnrichment(
             meta = updated,
             resolvedDetail = detailDocument,
-            ratingDisplay = ratingResolution?.display ?: detailDocument?.ratings ?: ResolvedDetailRatingDisplay(),
+            ratingDisplay = detailDocument?.ratings ?: ResolvedDetailRatingDisplay(),
             tvEnrichment = tvEnrichment,
             animeRelated = animeRelated,
             isAnimeDetail = isKitsuAnimeByProvider,

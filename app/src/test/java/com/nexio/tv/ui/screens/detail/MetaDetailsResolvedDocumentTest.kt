@@ -8,7 +8,6 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
-import com.nexio.tv.data.repository.DetailRatingDisplayResolution
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
@@ -68,18 +67,6 @@ class MetaDetailsResolvedDocumentTest {
                     request.language == "nl-NL"
             })
         } returns document
-        coEvery {
-            displayRepository.resolveDetailRatingDisplay(any(), any(), any(), any(), any())
-        } answers {
-            DetailRatingDisplayResolution(
-                meta = firstArg(),
-                display = ResolvedDetailRatingDisplay(
-                    mdbListRatings = MDBListRatings(imdb = 9.2, trakt = 91.0),
-                    showMdbListImdb = true
-                )
-            )
-        }
-
         val viewModel = buildMetaDetailsViewModel(
             meta = minimalSeriesMeta().copy(id = "tmdb:1399"),
             itemId = "tmdb:1399",
@@ -162,6 +149,10 @@ class MetaDetailsResolvedDocumentTest {
                 requestedLanguage = "nl-NL",
                 selectedLanguage = "en-US",
                 fallbackReason = "provider_language_fallback"
+            ),
+            ratings = ResolvedDetailRatingDisplay(
+                mdbListRatings = MDBListRatings(imdb = 9.2, trakt = 91.0),
+                showMdbListImdb = true
             )
         )
 
