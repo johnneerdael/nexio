@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.data.local.KitsuCatalogPreferences
@@ -432,19 +433,28 @@ internal fun HomeViewModel.invalidateHydratedHomeOverlayScope(scheduleRows: Bool
 
 internal fun HomeViewModel.isCurrentHomeHydrationScope(
     expectedGeneration: Long,
-    expectedLanguageTag: String
+    expectedLanguageTag: String,
+    expectedProfileSession: ActiveProfileSession? = null
 ): Boolean {
-    return homeHydrationScopeMismatchReason(expectedGeneration, expectedLanguageTag) == null
+    return homeHydrationScopeMismatchReason(
+        expectedGeneration = expectedGeneration,
+        expectedLanguageTag = expectedLanguageTag,
+        expectedProfileSession = expectedProfileSession
+    ) == null
 }
 
 internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
     overlay: HydratedHomeOverlay,
     expectedGeneration: Long,
     expectedLanguageTag: String,
+    expectedProfileSession: ActiveProfileSession,
     trigger: StableIdResolutionTrigger
 ): Boolean {
-    val profileSessionForSurface = profileManager.activeProfileSession.value
-    val mismatchReason = homeHydrationScopeMismatchReason(expectedGeneration, expectedLanguageTag)
+    val mismatchReason = homeHydrationScopeMismatchReason(
+        expectedGeneration = expectedGeneration,
+        expectedLanguageTag = expectedLanguageTag,
+        expectedProfileSession = expectedProfileSession
+    )
     if (mismatchReason != null) {
         traceEvents.emitHomeHydrationIgnored(
             itemKey = overlay.itemKey,
@@ -469,7 +479,7 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
     }
     resolvedDisplaySurfaceRepository.publishResolvedItems(
         surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
-        profileSession = profileSessionForSurface,
+        profileSession = expectedProfileSession,
         items = listOf(overlay.toResolvedDisplayItem()),
         replace = false
     )
@@ -478,8 +488,12 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
 
 private fun HomeViewModel.homeHydrationScopeMismatchReason(
     expectedGeneration: Long,
-    expectedLanguageTag: String
+    expectedLanguageTag: String,
+    expectedProfileSession: ActiveProfileSession? = null
 ): String? {
+    if (expectedProfileSession != null && profileManager.activeProfileSession.value != expectedProfileSession) {
+        return "profile_session_changed"
+    }
     if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
         return "generation_mismatch"
     }
@@ -499,6 +513,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     if (uniqueItems.isEmpty()) return
 
     val languageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     uniqueItems.forEach { item ->
         if (!isNonPlaybackHomeWorkAllowed()) return
         val itemKey = item.homeOverlayItemKey()
@@ -518,6 +533,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
                         overlay = overlay,
                         expectedGeneration = expectedGeneration,
                         expectedLanguageTag = languageTag,
+                        expectedProfileSession = expectedProfileSession,
                         trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
                     )
                 }
@@ -1012,9 +1028,10 @@ internal fun HomeViewModel.loadDisabledHomeCatalogPreferencePipeline() {
             disabledHomeCatalogKeys = newKeys
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_disabled_home_catalogs")
+            val profileSessionForUpdate = profileManager.activeProfileSession.value
             catalogUpdateJob?.cancel()
             catalogUpdateJob = viewModelScope.launch {
-                updateCatalogRowsPipeline()
+                updateCatalogRowsPipeline(profileSessionForUpdate)
             }
             if (addonsCache.isNotEmpty()) {
                 val blockNetworkRefresh = shouldBlockProfileSwitchDiskSnapshotRefresh("observe_disabled_home_catalogs")
@@ -1076,8 +1093,15 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
     }
 }
 
-internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration: Long, reason: String) {
-    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
+    expectedGeneration: Long,
+    expectedProfileSession: ActiveProfileSession,
+    reason: String
+) {
+    if (
+        !isCurrentHomeProfileGeneration(expectedGeneration) ||
+        profileManager.activeProfileSession.value != expectedProfileSession
+    ) {
         Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh generation=$expectedGeneration")
         return
     }
@@ -1451,9 +1475,12 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
     // Recompute rows once at the end so Home settles on the renewed merged snapshot.
     runCatching {
         lastCatalogComputationSignature = null
-        updateCatalogRowsPipeline()
+        updateCatalogRowsPipeline(expectedProfileSession)
     }
-    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+    if (
+        !isCurrentHomeProfileGeneration(expectedGeneration) ||
+        profileManager.activeProfileSession.value != expectedProfileSession
+    ) {
         Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible hydration generation=$expectedGeneration")
         return
     }
@@ -2256,9 +2283,8 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
     }
 }
 
-internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
+internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSurface: ActiveProfileSession) {
     catalogRowsComputationMutex.withLock {
-    val profileSessionForSurface = profileManager.activeProfileSession.value
     val orderedKeys = catalogOrder.toList()
     val catalogSnapshot = catalogsMap.toMap()
     val heroCatalogKeys = currentHeroCatalogKeys

@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationOwnershipService
@@ -728,9 +729,14 @@ class HomeViewModel @Inject constructor(
             return
         }
         val capturedGeneration = homeProfileGeneration
+        val capturedProfileSession = profileManager.activeProfileSession.value
         deferredStartupRefreshJob = viewModelScope.launch {
             var nextReason: String? = reason
-            while (nextReason != null && isCurrentHomeProfileGeneration(capturedGeneration)) {
+            while (
+                nextReason != null &&
+                isCurrentHomeProfileGeneration(capturedGeneration) &&
+                profileManager.activeProfileSession.value == capturedProfileSession
+            ) {
                 val currentReason = nextReason
                 if (!isNonPlaybackHomeWorkAllowed()) {
                     startupRefreshPending = false
@@ -742,16 +748,26 @@ class HomeViewModel @Inject constructor(
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
                 logStartupPerf("catalog_refresh_start", "reason=$currentReason")
-                runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration, reason = currentReason)
+                runSerializedPostStartupRefresh(
+                    expectedGeneration = capturedGeneration,
+                    expectedProfileSession = capturedProfileSession,
+                    reason = currentReason
+                )
                 logStartupPerf("catalog_refresh_end", "reason=$currentReason")
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
-                nextReason = if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+                nextReason = if (
+                    isCurrentHomeProfileGeneration(capturedGeneration) &&
+                    profileManager.activeProfileSession.value == capturedProfileSession
+                ) {
                     pendingSerializedHomeRefreshReason
                 } else {
                     null
                 }
             }
-            if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+            if (
+                isCurrentHomeProfileGeneration(capturedGeneration) &&
+                profileManager.activeProfileSession.value == capturedProfileSession
+            ) {
                 runDeferredFocusedItemEnrichmentIfReady()
             }
         }
@@ -838,6 +854,7 @@ class HomeViewModel @Inject constructor(
         if (shouldSuppressIncrementalHomeSnapshotPublish()) {
             return
         }
+        val profileSessionForUpdate = profileManager.activeProfileSession.value
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
             val debounceMs = when {
@@ -853,7 +870,7 @@ class HomeViewModel @Inject constructor(
                 else -> 50L
             }
             delay(debounceMs)
-            updateCatalogRows()
+            updateCatalogRows(profileSessionForUpdate)
         }
     }
 
@@ -863,12 +880,16 @@ class HomeViewModel @Inject constructor(
         }
         catalogUpdateJob?.cancel()
         hasRenderedFirstCatalog = true
-        updateCatalogRows()
+        updateCatalogRows(profileManager.activeProfileSession.value)
     }
 
-    private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
-    private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long, reason: String) =
-        runSerializedPostStartupRefreshPipeline(expectedGeneration, reason)
+    private suspend fun updateCatalogRows(profileSessionForUpdate: ActiveProfileSession) =
+        updateCatalogRowsPipeline(profileSessionForUpdate)
+    private suspend fun runSerializedPostStartupRefresh(
+        expectedGeneration: Long,
+        expectedProfileSession: ActiveProfileSession,
+        reason: String
+    ) = runSerializedPostStartupRefreshPipeline(expectedGeneration, expectedProfileSession, reason)
 
     internal var posterStatusReconcileJob: Job? = null
 

@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.content.Context
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.metadata.router.MetadataDepth
@@ -27,6 +28,9 @@ import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -308,6 +312,101 @@ class HomeViewModelFocusHydrationTest {
                 onOverlayApplied = any()
             )
         }
+    }
+
+    @Test
+    fun `visible home hydration rejects overlay when active session changes before callback`() = runTest(testDispatcher) {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Boolean>()
+        val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val overlay = overlay(
+            itemKey = "movie:${visible.id}",
+            fields = HomeDisplayMetadata(title = "Old Profile Canonical")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = visible,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = capture(callbacks)
+            )
+        } coAnswers {
+            activeSession.value = profileSession(profileId = 2, sessionId = "session-b")
+            callbacks.last().invoke(overlay)
+            overlay
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession
+        )
+        viewModel.homeProfileGeneration = 7L
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible),
+            expectedGeneration = 7L
+        )
+        advanceUntilIdle()
+
+        assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 1).isEmpty())
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 2).isEmpty())
+    }
+
+    @Test
+    fun `scheduled catalog publish does not write old rows into new active session`() = runTest(testDispatcher) {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(railPreviewMetaPreview().copy(id = "tt-old-profile", name = "Old Profile Row")),
+            hasMore = false
+        )
+        val key = homeCatalogGlobalKey(row)
+        viewModel.addonsCache = listOf(
+            Addon(
+                id = "addon",
+                name = "Addon",
+                version = "1.0.0",
+                description = null,
+                logo = null,
+                baseUrl = "https://addon.example",
+                catalogs = listOf(CatalogDescriptor(type = ContentType.MOVIE, id = "popular", name = "Popular")),
+                types = listOf(ContentType.MOVIE),
+                resources = listOf(AddonResource(name = "catalog", types = listOf("movie"), idPrefixes = null))
+            )
+        )
+        viewModel.catalogsMap[key] = row
+        viewModel.catalogOrder.clear()
+        viewModel.catalogOrder.add(key)
+        viewModel.installedAddonsObserved = true
+        viewModel.traktDiscoveryObserved = true
+        viewModel.simklDiscoveryObserved = true
+        viewModel.mdbListDiscoveryObserved = true
+        viewModel.tmdbDiscoveryObserved = true
+        viewModel.kitsuDiscoveryObserved = true
+
+        viewModel.scheduleUpdateCatalogRows()
+        activeSession.value = profileSession(profileId = 2, sessionId = "session-b")
+        advanceUntilIdle()
+
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 1).isEmpty())
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 2).isEmpty())
     }
 
     @Test
@@ -881,7 +980,10 @@ class HomeViewModelFocusHydrationTest {
         homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true),
         currentLanguageTagProvider: () -> String = { "en" },
         traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null },
-        premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier()
+        premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),
+        profileSessionFlow: MutableStateFlow<ActiveProfileSession> = MutableStateFlow(
+            profileSession(profileId = 1, sessionId = "test-session")
+        )
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -907,14 +1009,6 @@ class HomeViewModelFocusHydrationTest {
 
         // ProfileManager with profileSwitched SharedFlow so observeProfileSwitches()
         // in init doesn't NPE when it accesses profileManager.profileSwitched.
-        val profileSessionFlow = MutableStateFlow(
-            com.nexio.tv.core.integration.ActiveProfileSession(
-                profileId = 1,
-                sessionId = "test-session",
-                sessionOrdinal = 1L,
-                startedAtMs = 1L
-            )
-        )
         val profileManagerWithSwitch = mockk<com.nexio.tv.core.profile.ProfileManager>(relaxed = true) {
             every { activeProfileId } returns MutableStateFlow(1)
             every { activeProfileSession } returns profileSessionFlow
@@ -1005,5 +1099,17 @@ class HomeViewModelFocusHydrationTest {
         override fun eventsWritten(): Long = events.size.toLong()
 
         override fun eventsDropped(): Long = 0L
+    }
+
+    private companion object {
+        fun profileSession(
+            profileId: Int,
+            sessionId: String
+        ) = ActiveProfileSession(
+            profileId = profileId,
+            sessionId = sessionId,
+            sessionOrdinal = profileId.toLong(),
+            startedAtMs = 1_000L + profileId
+        )
     }
 }
