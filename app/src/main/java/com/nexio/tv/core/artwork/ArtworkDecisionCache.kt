@@ -3,6 +3,7 @@ package com.nexio.tv.core.artwork
 interface ArtworkDecisionCache {
     fun get(key: ArtworkDecisionKey): ArtworkDecision?
     fun put(decision: ArtworkDecision)
+    fun remove(key: ArtworkDecisionKey)
     fun linkPreviewToCanonical(
         previewKey: ArtworkDecisionKey,
         canonicalKey: ArtworkDecisionKey
@@ -25,6 +26,18 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
     @Synchronized
     override fun put(decision: ArtworkDecision) {
         decisions[decision.decisionKey] = decision
+    }
+
+    @Synchronized
+    override fun remove(key: ArtworkDecisionKey) {
+        decisions.remove(key)
+        val links = previewToCanonical.iterator()
+        while (links.hasNext()) {
+            val (previewKey, canonicalKey) = links.next()
+            if (previewKey == key || canonicalKey == key) {
+                links.remove()
+            }
+        }
     }
 
     @Synchronized

@@ -2,6 +2,7 @@ package com.nexio.tv.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.google.gson.Gson
 import com.nexio.tv.core.artwork.ArtworkAssetDiskCache
 import com.nexio.tv.core.artwork.ArtworkByteLoader
 import com.nexio.tv.core.artwork.ArtworkCredentialResolver
@@ -11,7 +12,7 @@ import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.artwork.DefaultArtworkByteLoader
 import com.nexio.tv.core.artwork.DefaultArtworkPosterTransport
-import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
+import com.nexio.tv.core.artwork.DurableArtworkDecisionCache
 import com.nexio.tv.core.artwork.PosterRatingsArtworkCredentialResolver
 import com.nexio.tv.core.artwork.PosterRatingsArtworkProviderSettingsSource
 import com.nexio.tv.core.integration.DefaultIntegrationRuntime
@@ -37,6 +38,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
 import javax.inject.Singleton
 
 @Module
@@ -96,7 +98,14 @@ object IntegrationRuntimeModule {
 
     @Provides
     @Singleton
-    fun provideArtworkDecisionCache(): ArtworkDecisionCache = InMemoryArtworkDecisionCache()
+    fun provideArtworkDecisionCache(
+        @ApplicationContext context: Context,
+        gson: Gson
+    ): ArtworkDecisionCache =
+        DurableArtworkDecisionCache(
+            file = File(context.filesDir, "artwork-decisions-v1.json"),
+            gson = gson
+        )
 
     @Provides
     @Singleton
