@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.net.Uri
 import android.util.Log
+import com.nexio.tv.core.metadata.router.resolver.SkipSegmentRequest
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
@@ -379,7 +380,7 @@ internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
 
             if (isAnimePrimarySkipPath()) return@collectLatest
 
-            skipIntroRepository.clearCachedIntervals()
+            skipSegmentResolver.clearCachedIntervals()
             skipIntroFetchedKey = null
             skipIntervals = emptyList()
 
@@ -465,58 +466,27 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     if (!skipIntroEnabled) return
     if (id.isNullOrBlank()) return
 
-    // Prefer videoId over contentId — videoId carries the season/episode-specific ID
-    val effectiveId = currentVideoId?.takeIf { it.isNotBlank() } ?: id
-
-    // MAL ID format: "mal:57658:1" (malId:episode)
-    if (effectiveId.startsWith("mal:")) {
-        val parts = effectiveId.split(":")
-        val malId = parts.getOrNull(1) ?: return
-        val malEpisode = parts.getOrNull(2)?.toIntOrNull() ?: episode ?: return
-        val key = "mal:$malId:$malEpisode"
-        if (skipIntroFetchedKey == key) return
-        skipIntroFetchedKey = key
-        scope.launch {
-            skipIntervals = skipIntroRepository.getSkipIntervalsForMal(malId, malEpisode)
-        }
-        return
-    }
-
-    // Kitsu ID format: "kitsu:12345:1" (kitsuId:episode)
-    if (effectiveId.startsWith("kitsu:")) {
-        val parts = effectiveId.split(":")
-        val kitsuId = parts.getOrNull(1) ?: return
-        val kitsuEpisode = parts.getOrNull(2)?.toIntOrNull() ?: episode ?: return
-        val key = "kitsu:$kitsuId:$kitsuEpisode"
-        if (skipIntroFetchedKey == key) return
-        skipIntroFetchedKey = key
-        scope.launch {
-            skipIntervals = skipIntroRepository.getSkipIntervalsForKitsu(kitsuId, kitsuEpisode)
-        }
-        return
-    }
-
-    val canonicalId = effectiveId.split(":").firstOrNull() ?: return
-    if (!canonicalId.startsWith("tt") && canonicalId.toIntOrNull() == null) return
-
-    val key = "$canonicalId:$season:$episode"
+    val request = buildSkipSegmentRequest(id, season, episode)
+    val key = skipSegmentResolver.cacheKeyFor(request) ?: return
     if (skipIntroFetchedKey == key) return
     skipIntroFetchedKey = key
 
     scope.launch {
-        val intervals = if (
-            isAnimePrimarySkipPath() &&
-            canonicalId.startsWith("tt") &&
-            season != null &&
-            episode != null
-        ) {
-            skipIntroRepository.getAnimePrimarySkipIntervals(canonicalId, season, episode)
-        } else {
-            skipIntroRepository.getSkipIntervals(canonicalId, season, episode)
-        }
-        skipIntervals = intervals
+        skipIntervals = skipSegmentResolver.resolveSkipSegments(request)
     }
 }
+
+internal fun PlayerRuntimeController.buildSkipSegmentRequest(
+    id: String? = contentId,
+    season: Int? = currentSeason,
+    episode: Int? = currentEpisode
+): SkipSegmentRequest = SkipSegmentRequest(
+    contentId = id,
+    currentVideoId = currentVideoId,
+    season = season,
+    episode = episode,
+    contentType = contentType
+)
 
 internal fun PlayerRuntimeController.tryApplyPendingResumeProgress(player: Player) {
     val saved = pendingResumeProgress ?: return
