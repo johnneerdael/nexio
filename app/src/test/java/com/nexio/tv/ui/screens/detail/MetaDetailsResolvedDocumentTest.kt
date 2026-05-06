@@ -8,6 +8,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
@@ -100,7 +101,12 @@ class MetaDetailsResolvedDocumentTest {
         assertEquals("2011-04-17", state.meta?.releaseInfo)
         assertEquals(9.2f, state.meta?.imdbRating)
         assertEquals(TitleRatingSource.TMDB, state.meta?.ratingSource)
-        assertEquals(document.trailer, state.trailerState)
+        assertEquals(listOf("abc123"), state.trailerState.fallbackTrailerYtIds)
+        assertEquals(TrailerPlaybackRef.YouTubeId("abc123"), state.trailerState.selectedPlaybackRef)
+        assertEquals("fallback_youtube_id", state.trailerState.availabilityReason)
+        assertEquals("detail", state.trailerState.surface)
+        assertEquals(document.trailer.resolverSource, state.trailerState.resolverSource)
+        assertEquals(document.trailer.lastResolvedAtMs, state.trailerState.lastResolvedAtMs)
         assertEquals("provider_language_fallback", state.localizationFallbackReason)
         assertEquals(MDBListRatings(imdb = 9.2, trakt = 91.0), state.mdbListRatings)
         assertEquals(true, state.showMdbListImdb)
