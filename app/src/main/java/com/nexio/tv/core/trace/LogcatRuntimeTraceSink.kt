@@ -159,6 +159,27 @@ class LogcatRuntimeTraceSink(
             "trailerSource" to payload["trailerSource"],
             "fallbackYouTubeIdsOnly" to payload["fallbackYouTubeIdsOnly"]
         )
+        "artwork.decision_lookup" -> linkedMapOf(
+            "decisionKey" to payload["decisionKey"],
+            "found" to payload["found"]
+        )
+        "artwork.decision_missing" -> linkedMapOf(
+            "decisionKey" to payload["decisionKey"]
+        )
+        "artwork.asset_materialized" -> linkedMapOf(
+            "decisionKey" to payload["decisionKey"],
+            "assetKey" to payload["assetKey"],
+            "provider" to payload["provider"],
+            "imageType" to payload["imageType"],
+            "cacheDecision" to payload["cacheDecision"],
+            "networkExecuted" to payload["networkExecuted"],
+            "success" to payload["success"]
+        )
+        "artwork.fallback_materialized" -> linkedMapOf(
+            "decisionKey" to payload["decisionKey"],
+            "fallbackProvider" to payload["fallbackProvider"],
+            "assetKey" to payload["assetKey"]
+        )
         "runtime.operation_start" -> linkedMapOf(
             "provider" to payload["provider"],
             "operationKey" to payload["operationKey"],
