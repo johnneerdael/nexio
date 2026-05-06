@@ -100,6 +100,7 @@ class AccountConfigSyncContractTest {
         assertTrue(migration.contains("add column if not exists is_anime boolean not null default false"))
         assertTrue(migration.contains("coalesce((entry->>'is_anime')::boolean, false)"))
         assertTrue(migration.contains("'is_anime', coalesce(is_anime, false)"))
+        assertTrue(migration.contains("not in (1, 2, 5, 6, 7, 8, 9)"))
     }
 
     @Test

@@ -86,7 +86,7 @@ declare
   v_integrations jsonb := '{}'::jsonb;
   v_legacy_gemini_enabled jsonb := 'false'::jsonb;
 begin
-  if v_contract_version not in (1, 2, 5, 6, 7, 8) then
+  if v_contract_version not in (1, 2, 5, 6, 7, 8, 9) then
     raise exception 'Unsupported account settings contract version: %', v_contract_version
       using errcode = '22023';
   end if;
@@ -97,7 +97,7 @@ begin
   where user_id = v_user_id;
 
   v_settings := case
-    when v_contract_version in (2, 5, 6, 7, 8) then public.account_settings_v2_snapshot_payload(v_settings)
+    when v_contract_version in (2, 5, 6, 7, 8, 9) then public.account_settings_v2_snapshot_payload(v_settings)
     else public.account_settings_v1_snapshot_payload(v_settings)
   end;
 
@@ -139,7 +139,7 @@ begin
     v_settings := jsonb_set(v_settings, '{integrations}', v_integrations, true);
   end if;
 
-  if v_contract_version in (5, 6, 7, 8) then
+  if v_contract_version in (5, 6, 7, 8, 9) then
     v_settings := jsonb_set(v_settings, '{schemaVersion}', to_jsonb(least(v_contract_version, 7)), true);
   end if;
 
