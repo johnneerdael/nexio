@@ -409,6 +409,13 @@ class StreamScreenViewModel @Inject constructor(
                             addonStreamGroups,
                             installedAddonOrder
                         )
+                        val addonPriorityRanks = if (orderedAddonStreams.any { it.isAnimeBucket }) {
+                            orderedAddonStreams
+                                .mapIndexed { index, addonStreams -> addonStreams.addonName to index }
+                                .toMap()
+                        } else {
+                            emptyMap()
+                        }
                         val allStreams = orderedAddonStreams.flatMap { it.streams }
                         val availableAddons = orderedAddonStreams
                             .filter { it.streams.isNotEmpty() }
@@ -441,7 +448,8 @@ class StreamScreenViewModel @Inject constructor(
                             selectedAddonFilter = selectedFilter,
                             flags = streamFeatureFlags,
                             requestContext = buildStreamRequestContext(),
-                            parserCache = streamParserCache
+                            parserCache = streamParserCache,
+                            addonPriorityRanks = addonPriorityRanks
                         )
                         val deviceSnapshot = deviceCapabilityRepository.snapshotForAutoplay()
                         val manualBitrateCapMbps = playerSettings.manualBitrateLimitMbps

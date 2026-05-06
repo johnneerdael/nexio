@@ -91,6 +91,7 @@ data class ShadowParsedStreamFacts(
 
 data class ShadowStreamDecision(
     val streamKey: String,
+    val addonPriorityRank: Int = Int.MAX_VALUE,
     val parsed: ShadowParsedStreamFacts = ShadowParsedStreamFacts(),
     val provider: DebridBenchmarkProvider,
     val transport: DebridBenchmarkTransportMode,
@@ -389,6 +390,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         return EitherSuccessOrReject.success(
             ShadowStreamDecision(
                 streamKey = item.shadowStreamKey(),
+                addonPriorityRank = item.addonPriorityRank,
                 parsed = item.shadowParsedFacts(request),
                 provider = provider,
                 transport = transportOption.transport,
@@ -476,6 +478,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         return EitherSuccessOrReject.success(
             ShadowStreamDecision(
                 streamKey = item.shadowStreamKey(),
+                addonPriorityRank = item.addonPriorityRank,
                 parsed = item.shadowParsedFacts(request),
                 provider = provider,
                 transport = DebridBenchmarkTransportMode.DIRECT,
@@ -769,19 +772,28 @@ private fun applyViableBitrateBucket(
     ranked: List<ShadowStreamDecision>
 ): List<ShadowStreamDecision> {
     if (ranked.isEmpty()) return ranked
-    val highestViableBitrate = ranked.maxOfOrNull { it.breakdown.averageBitrateMbps } ?: return ranked
+    val rankedForBucket = ranked.topPriorityRankBucket()
+    val highestViableBitrate = rankedForBucket.maxOfOrNull { it.breakdown.averageBitrateMbps } ?: return ranked
     val bitrateFloor = highestViableBitrate * VIABLE_BUCKET_FRACTION
-    val bitrateBucket = ranked.filter { candidate ->
+    val bitrateBucket = rankedForBucket.filter { candidate ->
         candidate.breakdown.averageBitrateMbps >= bitrateFloor
     }
-    val expandedBucket = if (bitrateBucket.size < VIABLE_BUCKET_MIN_STREAMS && ranked.size > bitrateBucket.size) {
-        val sortedByBitrate = ranked.sortedByDescending { it.breakdown.averageBitrateMbps }
-        sortedByBitrate.take(VIABLE_BUCKET_MIN_STREAMS.coerceAtMost(ranked.size))
+    val expandedBucket = if (bitrateBucket.size < VIABLE_BUCKET_MIN_STREAMS && rankedForBucket.size > bitrateBucket.size) {
+        val sortedByBitrate = rankedForBucket.sortedByDescending { it.breakdown.averageBitrateMbps }
+        sortedByBitrate.take(VIABLE_BUCKET_MIN_STREAMS.coerceAtMost(rankedForBucket.size))
     } else {
         bitrateBucket
     }
     val resolutionCollapsed = collapseResolutionBucket(expandedBucket)
     return resolutionCollapsed.sortedWith(baseDecisionComparator())
+}
+
+private fun List<ShadowStreamDecision>.topPriorityRankBucket(): List<ShadowStreamDecision> {
+    val topFiniteRank = map { it.addonPriorityRank }
+        .filter { it != Int.MAX_VALUE }
+        .minOrNull()
+        ?: return this
+    return filter { it.addonPriorityRank == topFiniteRank }
 }
 
 private fun collapseResolutionBucket(
@@ -820,7 +832,8 @@ private fun movieResolutionPoolRank(resolutionTier: String): Int {
 }
 
 private fun baseDecisionComparator(): Comparator<ShadowStreamDecision> {
-    return compareByDescending<ShadowStreamDecision> { it.finalScore }
+    return compareBy<ShadowStreamDecision> { it.addonPriorityRank }
+        .thenByDescending { it.finalScore }
         .thenByDescending { it.contentQualityScore }
         .thenByDescending { it.breakdown.averageBitrateMbps }
         .thenByDescending { it.safeBudgetMbps }

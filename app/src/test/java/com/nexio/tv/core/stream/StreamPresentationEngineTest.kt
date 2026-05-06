@@ -822,6 +822,67 @@ class StreamPresentationEngineTest {
         )
     }
 
+    @Test
+    fun `grouped sorting uses addon priority rank before cache resolution and size when supplied`() {
+        val anime = stream(
+            filename = "Show.S01E01.720p.WEB-DL.x265.AnimePriority.mkv",
+            addonName = "Anime Addon",
+            name = "download RD",
+            videoSizeBytes = 1L * 1024L * 1024L * 1024L
+        )
+        val generic = stream(
+            filename = "Show.S01E01.2160p.WEB-DL.x265.GenericHigh.mkv",
+            addonName = "Generic Addon",
+            name = "⚡ RD",
+            videoSizeBytes = 25L * 1024L * 1024L * 1024L
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(generic, anime),
+            availableAddons = listOf("Generic Addon", "Anime Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "series"),
+            addonPriorityRanks = mapOf("Anime Addon" to 0, "Generic Addon" to 1)
+        )
+
+        assertEquals(
+            listOf("Anime Addon", "Generic Addon"),
+            result.items.map { it.stream.addonName }
+        )
+        assertEquals(listOf(0, 1), result.items.map { it.addonPriorityRank })
+    }
+
+    @Test
+    fun `grouped sorting keeps cache and quality order without addon priority ranks`() {
+        val anime = stream(
+            filename = "Show.S01E01.720p.WEB-DL.x265.AnimePriority.mkv",
+            addonName = "Anime Addon",
+            name = "download RD",
+            videoSizeBytes = 1L * 1024L * 1024L * 1024L
+        )
+        val generic = stream(
+            filename = "Show.S01E01.2160p.WEB-DL.x265.GenericHigh.mkv",
+            addonName = "Generic Addon",
+            name = "⚡ RD",
+            videoSizeBytes = 25L * 1024L * 1024L * 1024L
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(generic, anime),
+            availableAddons = listOf("Generic Addon", "Anime Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "series")
+        )
+
+        assertEquals(
+            listOf("Generic Addon", "Anime Addon"),
+            result.items.map { it.stream.addonName }
+        )
+        assertEquals(listOf(Int.MAX_VALUE, Int.MAX_VALUE), result.items.map { it.addonPriorityRank })
+    }
+
     private fun organize(stream: Stream) = StreamPresentationEngine.organize(
         streams = listOf(stream),
         availableAddons = listOf(stream.addonName),

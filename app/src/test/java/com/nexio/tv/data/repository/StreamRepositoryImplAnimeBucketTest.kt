@@ -34,6 +34,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
@@ -291,6 +292,49 @@ class StreamRepositoryImplAnimeBucketTest {
     }
 
     @Test
+    fun `anime content defers generic progressive success until anime tagged addon finishes`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val repository = repository(
+            addons = listOf(animeAddon, genericAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = true),
+            addonDelayMs = mapOf(animeAddon.id to 100L, genericAddon.id to 0L)
+        )
+
+        val emissions = repository.getStreamsFromAllAddons(
+            type = "movie",
+            videoId = "mal:21",
+            requestOrigin = "test_anime_bucket_progressive_gate",
+            requestId = "request-anime-bucket-progressive-gate"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList()
+
+        assertTrue(emissions.isNotEmpty())
+        assertTrue(emissions.first().data.any { it.addonName == "Anime Addon" })
+        assertTrue(emissions.first().data.single { it.addonName == "Anime Addon" }.isAnimeBucket)
+    }
+
+    @Test
+    fun `non anime content still emits faster generic result progressively`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val repository = repository(
+            addons = listOf(animeAddon, genericAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = false),
+            addonDelayMs = mapOf(animeAddon.id to 100L, genericAddon.id to 0L)
+        )
+
+        val emissions = repository.getStreamsFromAllAddons(
+            type = "movie",
+            videoId = "mal:21",
+            requestOrigin = "test_anime_bucket_non_anime_progressive",
+            requestId = "request-anime-bucket-non-anime-progressive"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList()
+
+        assertEquals(listOf("Generic Addon"), emissions.first().data.map { it.addonName })
+        assertFalse(emissions.first().data.single().isAnimeBucket)
+    }
+
+    @Test
     fun `bucket flag is preserved when service-wrap processing rebuilds AddonStreams`() = runTest {
         val hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
         val animeAddon = streamAddon(
@@ -351,7 +395,8 @@ class StreamRepositoryImplAnimeBucketTest {
         animeIdentityIndex: AnimeIdentityIndex,
         playerSettings: PlayerSettings = PlayerSettings(),
         serviceWrapSessionFactory: ServiceWrapSessionFactory = mockk(relaxed = true),
-        traceMetadataEvents: TraceMetadataEvents = mockk(relaxed = true)
+        traceMetadataEvents: TraceMetadataEvents = mockk(relaxed = true),
+        addonDelayMs: Map<String, Long> = emptyMap()
     ): StreamRepositoryImpl {
         mockAndroidLog()
 
@@ -366,14 +411,15 @@ class StreamRepositoryImplAnimeBucketTest {
         every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
         addons.forEach { addon ->
             coEvery {
-                addonStreamIntegrationProvider.getStreams(
-                    addon.id,
-                    match { it.contains(addon.host) },
-                    any()
-                )
-            } returns NetworkResult.Success(
-                StreamResponseDto(streams = addonReturnedStreams.getValue(addon.id))
+            addonStreamIntegrationProvider.getStreams(
+                addon.id,
+                match { it.contains(addon.host) },
+                any()
             )
+        } coAnswers {
+            addonDelayMs[addon.id]?.takeIf { it > 0L }?.let { delay(it) }
+            NetworkResult.Success(StreamResponseDto(streams = addonReturnedStreams.getValue(addon.id)))
+        }
         }
 
         return StreamRepositoryImpl(
