@@ -117,6 +117,30 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TMDB series media depths include season videos when seasonNumber is present`() {
+        listOf(MetadataDepth.DETAIL_MEDIA, MetadataDepth.DETAIL_SECONDARY).forEach { depth ->
+            val plan = executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TMDB,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    seasonNumber = 2
+                ),
+                depth = depth
+            )
+
+            assertTrue(
+                "expected $depth plan to include TV_VIDEOS fallback, got ${plan.apiShapeIds()}",
+                TmdbApiShapes.TV_VIDEOS in plan.apiShapeIds()
+            )
+            assertTrue(
+                "expected $depth plan to include SEASON_VIDEOS, got ${plan.apiShapeIds()}",
+                TmdbApiShapes.SEASON_VIDEOS in plan.apiShapeIds()
+            )
+            assertAllShapesCovered(plan)
+        }
+    }
+
+    @Test
     fun `TMDB series DETAIL_SECONDARY uses route media kind for TV secondary shapes`() {
         val plan = executor.buildPlan(
             route = route(
