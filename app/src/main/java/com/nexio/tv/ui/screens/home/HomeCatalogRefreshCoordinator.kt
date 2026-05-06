@@ -16,6 +16,8 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -166,7 +168,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 // in the existing visible/focused hydration paths where work is bounded.
                 val enriched = titleRatingOverrideRepository.enrichPreview(localized)
                 posterRatingsUrlResolver.applyArtworkRef(
-                    enriched.withPersistedInternalPoster(persistedFallback),
+                    enriched.withCompatiblePersistedInternalPoster(
+                        persistedFallback = persistedFallback,
+                        artworkProviderSettings = artworkProviderSettings
+                    ),
                     artworkProviderSettings
                 )
             }
@@ -409,12 +414,22 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
 
-    private fun MetaPreview.withPersistedInternalPoster(persistedFallback: MetaPreview?): MetaPreview {
+    private fun MetaPreview.withCompatiblePersistedInternalPoster(
+        persistedFallback: MetaPreview?,
+        artworkProviderSettings: ArtworkProviderSettings
+    ): MetaPreview {
         val persistedPoster = persistedFallback?.poster?.takeIf(::isInternalArtworkRef) ?: return this
+        val persistedTag = persistedFallback.posterProviderTag
+        val activeProvider = artworkProviderSettings.selection.posterProvider
+        val preserve = when (activeProvider) {
+            ArtworkProviderChoiceKey.DEFAULT -> persistedTag == null
+            else -> persistedTag == activeProvider.value
+        }
+        if (!preserve) return this
         if (poster == persistedPoster) return this
         return copy(
             poster = persistedPoster,
-            posterProviderTag = persistedFallback.posterProviderTag
+            posterProviderTag = persistedTag
         )
     }
 

@@ -464,6 +464,38 @@ class PosterRatingsUrlResolverTest {
     }
 
     @Test
+    fun `meta preview raw premium provider url is not persisted as fallback`() {
+        val cache = CountingArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(
+            id = "source-item",
+            poster = "https://api.ratingposterdb.com/secret/imdb/poster-default/tt15940132.jpg"
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, ArtworkProviderSettings())
+
+        assertNull(resolved.poster)
+        assertNull(resolved.posterProviderTag)
+        assertEquals(0, cache.putCount)
+    }
+
+    @Test
+    fun `meta preview raw top posters provider url is not persisted as fallback`() {
+        val cache = CountingArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(
+            id = "source-item",
+            poster = "https://api.top-posters.com/secret/imdb/poster/tt15940132.jpg"
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, ArtworkProviderSettings())
+
+        assertNull(resolved.poster)
+        assertNull(resolved.posterProviderTag)
+        assertEquals(0, cache.putCount)
+    }
+
+    @Test
     fun `blank stable ids do not suppress derived preview id`() {
         val cache = InMemoryArtworkDecisionCache()
         val resolver = resolver(cache)
