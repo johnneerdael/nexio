@@ -40,6 +40,15 @@ sealed interface TrailerPlaybackRef {
         val audioUrl: String? = null,
         val userAgent: String? = null
     ) : TrailerPlaybackRef
+    data class ItemLookup(
+        val title: String,
+        val year: String? = null,
+        val stableIds: ProviderIds = ProviderIds(),
+        val type: String? = null,
+        val seasonNumber: Int? = null,
+        val contentId: String? = null,
+        val fallbackYtIds: List<String> = emptyList()
+    ) : TrailerPlaybackRef
 }
 
 data class TrailerResolution(
@@ -73,12 +82,18 @@ class TrailerResolver @Inject constructor(
                     ?.let(TrailerPlaybackRef::YouTubeId)
             }
             .distinct()
-        val candidates = (providerCandidates + fallbackCandidates).distinct()
+        val itemLookupCandidates = if (providerCandidates.isEmpty() && fallbackCandidates.isEmpty()) {
+            listOfNotNull(request.toItemLookupRef())
+        } else {
+            emptyList()
+        }
+        val candidates = (providerCandidates + fallbackCandidates + itemLookupCandidates).distinct()
         val selected = candidates.firstOrNull()
         val reason = when {
             selected == null -> "missing_candidates"
             selected in providerCandidates -> "provider_candidate"
             selected in fallbackCandidates -> "fallback_youtube_id"
+            selected in itemLookupCandidates -> "item_lookup"
             else -> "selected"
         }
 
@@ -155,5 +170,40 @@ class TrailerResolver @Inject constructor(
                     userAgent = ref.userAgent?.trim()?.takeIf { it.isNotBlank() }
                 )
             }
+            is TrailerPlaybackRef.ItemLookup -> {
+                val title = ref.title.trim().takeIf { it.isNotBlank() } ?: return null
+                TrailerPlaybackRef.ItemLookup(
+                    title = title,
+                    year = ref.year?.trim()?.takeIf { it.isNotBlank() },
+                    stableIds = ref.stableIds,
+                    type = ref.type?.trim()?.takeIf { it.isNotBlank() },
+                    seasonNumber = ref.seasonNumber,
+                    contentId = ref.contentId?.trim()?.takeIf { it.isNotBlank() },
+                    fallbackYtIds = ref.fallbackYtIds.mapNotNull { id ->
+                        id.trim().takeIf { it.isNotBlank() }
+                    }
+                )
+            }
         }
+
+    private fun TrailerResolveRequest.toItemLookupRef(): TrailerPlaybackRef.ItemLookup? {
+        if (surface != TrailerSurface.SCREENSAVER) return null
+        val hasStableId = listOf(
+            stableIds.tvdb,
+            stableIds.tmdb,
+            stableIds.imdb,
+            stableIds.kitsu
+        ).any { !it.isNullOrBlank() }
+        val normalizedContentId = contentId?.trim()?.takeIf { it.isNotBlank() }
+        if (!hasStableId && normalizedContentId == null) return null
+        return TrailerPlaybackRef.ItemLookup(
+            title = title,
+            year = year,
+            stableIds = stableIds,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = normalizedContentId ?: itemKey,
+            fallbackYtIds = fallbackYtIds
+        )
+    }
 }

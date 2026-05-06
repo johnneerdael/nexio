@@ -467,6 +467,15 @@ class TrailerService(
                     )
                 )
             }
+            is TrailerPlaybackRef.ItemLookup -> resolveTrailer(
+                title = ref.title,
+                year = ref.year,
+                tmdbId = ref.stableIds.tmdb,
+                type = ref.type,
+                seasonNumber = ref.seasonNumber,
+                contentId = ref.contentId,
+                fallbackYtIds = ref.fallbackYtIds
+            )
         }
     }
 

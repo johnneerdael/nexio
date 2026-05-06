@@ -284,6 +284,39 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `idle trailer sentinel is selected as item lookup ref when explicit trailer ids are absent`() = runBlocking {
+        val candidate = buildTrailerCandidate(
+            itemId = "source:breaking-bad",
+            trailerIds = emptyList(),
+            stableIds = ProviderIds(tvdb = "81189", tmdb = "1396", imdb = "tt0903747")
+        )
+        val resolver = com.nexio.tv.core.metadata.router.resolver.TrailerResolver(
+            com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.integration.RecordingTraceSink(),
+                sessionId = { "screensaver" }
+            )
+        )
+        val playbackRefs = mutableListOf<TrailerPlaybackRef>()
+
+        val source = resolveIdleTrailerScreensaverPlaybackSource(
+            candidate = candidate,
+            trailerId = RESOLVE_TRAILER_BY_ITEM_SENTINEL,
+            resolveTrailer = resolver::resolveTrailer,
+            resolvePlaybackSource = { ref ->
+                playbackRefs += ref
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(videoUrl = "https://video.example.com/by-item.m3u8")
+                )
+            }
+        )
+
+        assertEquals("https://video.example.com/by-item.m3u8", source?.videoUrl)
+        assertEquals(1, playbackRefs.size)
+        assertTrue(playbackRefs.single().toString().contains("1396"))
+        assertFalse(playbackRefs.single() is TrailerPlaybackRef.YouTubeId)
+    }
+
+    @Test
     fun `idle trailer resolver passes explicit fallback youtube id without building a youtube url`() = runBlocking {
         val candidate = buildTrailerCandidate(
             itemId = "source:movie",

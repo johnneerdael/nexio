@@ -5,6 +5,7 @@ import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
@@ -37,6 +38,7 @@ import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.data.trailer.rankedTmdbTrailerPlaybackRefs
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaCompany
@@ -422,7 +424,7 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs() + seasonTrailerRefs
+                providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs() + seasonTrailerRefs
             )
         ).availability.available
 
@@ -481,7 +483,7 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs()
+                providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs()
             )
         )
         providerSelection.selected?.let { selected ->
@@ -1194,6 +1196,13 @@ class MetadataRouterFacade(
         toFieldValues(ResolvedField.TRAILERS)
             .flatMap(::trailerPlaybackRefsFrom)
 
+    private fun ProviderPlanRunResult?.toSeasonTrailerPlaybackRefs(): List<TrailerPlaybackRef> =
+        this?.stepResults
+            ?.filter { stepResult -> stepResult.step.apiShapeId == TmdbApiShapes.SEASON_VIDEOS }
+            ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(ResolvedField.TRAILERS)?.value }
+            ?.flatMap(::trailerPlaybackRefsFrom)
+            .orEmpty()
+
     private fun seasonTrailerResolveRequest(
         metadataRequest: MetadataRequest,
         title: String,
@@ -1254,6 +1263,7 @@ class MetadataRouterFacade(
                 userAgent = userAgent
             )
             is TrailerPlaybackRef.ExternalUrl,
+            is TrailerPlaybackRef.ItemLookup,
             is TrailerPlaybackRef.YouTubeId -> null
         }
 
@@ -1324,9 +1334,16 @@ class MetadataRouterFacade(
         when (value) {
             is TrailerResolutionResult -> listOf(value.toTrailerPlaybackRef())
             is TrailerPlaybackSource -> listOf(value.toTrailerPlaybackRef())
-            is TmdbVideoResult -> listOfNotNull(value.toTrailerPlaybackRef())
+            is TmdbVideoResult -> rankedTmdbTrailerPlaybackRefs(listOf(value))
             is String -> listOfNotNull(value.toTrailerPlaybackRef())
-            is Collection<*> -> value.flatMap(::trailerPlaybackRefsFrom)
+            is Collection<*> -> {
+                val tmdbVideos = value.filterIsInstance<TmdbVideoResult>()
+                if (tmdbVideos.size == value.size) {
+                    rankedTmdbTrailerPlaybackRefs(tmdbVideos)
+                } else {
+                    value.flatMap(::trailerPlaybackRefsFrom)
+                }
+            }
             else -> emptyList()
         }
 
@@ -1342,12 +1359,6 @@ class MetadataRouterFacade(
             audioUrl = audioUrl,
             userAgent = userAgent
         )
-
-    private fun TmdbVideoResult.toTrailerPlaybackRef(): TrailerPlaybackRef? {
-        if (!(site ?: "").equals("YouTube", ignoreCase = true)) return null
-        val youtubeId = key?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return TrailerPlaybackRef.YouTubeId(youtubeId)
-    }
 
     private fun String.toTrailerPlaybackRef(): TrailerPlaybackRef? {
         val normalized = trim().takeIf { it.isNotBlank() } ?: return null
