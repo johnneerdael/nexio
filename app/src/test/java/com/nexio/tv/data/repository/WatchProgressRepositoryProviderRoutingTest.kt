@@ -8,6 +8,7 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
+import com.nexio.tv.data.repository.trakt.TraktProgressHistoryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.TrackingProvider
@@ -115,6 +116,59 @@ class WatchProgressRepositoryProviderRoutingTest {
                 }
             )
         }
+    }
+
+    @Test
+    fun `markAsCompleted scopes simkl mutation envelope to captured profile session`() = runTest {
+        val secondarySession = profileSession.copy(
+            profileId = 2,
+            sessionId = "session-2",
+            sessionOrdinal = 2L
+        )
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopeSlot = slot<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.SIMKL,
+                simklAuthenticated = true
+            ),
+            outbox = outbox,
+            profileManager = testProfileManager(secondarySession)
+        )
+
+        repo.markAsCompleted(secondarySession, sampleEpisodeProgress())
+
+        assertEquals(2, envelopeSlot.captured.profileId)
+        assertEquals("simkl-test-credential", envelopeSlot.captured.credentialHash)
+    }
+
+    @Test
+    fun `markAsCompleted scopes trakt mutation envelope to captured profile session`() = runTest {
+        val secondarySession = profileSession.copy(
+            profileId = 2,
+            sessionId = "session-2",
+            sessionOrdinal = 2L
+        )
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopeSlot = slot<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true
+            ),
+            outbox = outbox,
+            profileManager = testProfileManager(secondarySession)
+        )
+
+        repo.markAsCompleted(secondarySession, sampleEpisodeProgress())
+
+        assertEquals(TraktProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
+        assertEquals(2, envelopeSlot.captured.profileId)
+        assertEquals("trakt-test-credential", envelopeSlot.captured.credentialHash)
     }
 
     @Test

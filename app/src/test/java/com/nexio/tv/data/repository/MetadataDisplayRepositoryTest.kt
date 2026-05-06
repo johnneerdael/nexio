@@ -461,8 +461,7 @@ class MetadataDisplayRepositoryTest {
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
-            detailRatingDisplayRepository = ratingRepository,
-            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+            detailRatingDisplayRepository = ratingRepository
         )
         val request = MetadataRequest(
             contentId = "tt0944947",
@@ -589,8 +588,7 @@ class MetadataDisplayRepositoryTest {
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
-            detailRatingDisplayRepository = ratingRepository,
-            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+            detailRatingDisplayRepository = ratingRepository
         )
         val request = MetadataRequest(
             contentId = "tt0944947",
@@ -665,8 +663,7 @@ class MetadataDisplayRepositoryTest {
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
-            detailRatingDisplayRepository = ratingRepository,
-            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+            detailRatingDisplayRepository = ratingRepository
         )
         val request = MetadataRequest(
             contentId = "tt0944947",

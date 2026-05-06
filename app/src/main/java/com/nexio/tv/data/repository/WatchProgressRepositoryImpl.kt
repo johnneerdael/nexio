@@ -315,12 +315,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!isAuthenticated) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
+        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
@@ -368,12 +363,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
+        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
@@ -411,12 +401,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
+        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
         val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
             contentId = contentId,
             season = null,
@@ -492,12 +477,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
+        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
                 TrackingProvider.SIMKL ->
@@ -542,12 +522,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) return
         if (episodes.isEmpty()) return
-        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
+        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
 
         val showContentId = meta.id
 
@@ -623,7 +598,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 seasonNumber = seasonNumber,
                 episodes = traktRefs,
                 rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys),
-                profileId = profileId
+                profileId = session.profileId
             )
         } catch (e: Exception) {
             snapshotService.rollbackEpisodes(rollbackState)
@@ -693,11 +668,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private suspend fun accountSessionFor(
         provider: com.nexio.tv.domain.model.TrackingProvider,
-        profileId: Int
+        profileSession: ActiveProfileSession
     ): TrackingAuthSession {
         return accountScopeProvider.accountScopedSession(
             provider = provider,
-            profileId = profileId
+            profileId = profileSession.profileId
         )
     }
 

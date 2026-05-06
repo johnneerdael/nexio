@@ -6,7 +6,6 @@ import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -25,9 +24,6 @@ import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
-import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
-import com.nexio.tv.core.tvdb.KitsuAdvancedProductionCompany
-import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
@@ -38,9 +34,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.DetailAdvancedMetadata
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.LocalizationDisplayState
-import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
-import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
@@ -63,13 +57,11 @@ import javax.inject.Singleton
 @Singleton
 class MetadataDisplayRepository @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
-    private val detailRatingDisplayRepository: DetailRatingDisplayRepository,
-    private val detailSecondaryDisplayRepository: DetailSecondaryDisplayRepository
+    private val detailRatingDisplayRepository: DetailRatingDisplayRepository
 ) {
     constructor(metadataRouterFacade: MetadataRouterFacade) : this(
         metadataRouterFacade = metadataRouterFacade,
-        detailRatingDisplayRepository = DetailRatingDisplayRepository.noOp(),
-        detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+        detailRatingDisplayRepository = DetailRatingDisplayRepository.noOp()
     )
 
     suspend fun resolveDetailDisplay(
@@ -91,19 +83,15 @@ class MetadataDisplayRepository @Inject constructor(
                 ?.copy(primaryProviderTitleRatingCandidate = primaryTitleRatingCandidate)
         }
         val ratings = resolveRatings(effectiveRatingContext, identity)
-        val kitsuBridge = result.fetchKitsuBridgeDetail(request, identity)
-        val cast = kitsuBridge?.castMembers?.takeIf { it.isNotEmpty() } ?: resolvedDocument.castMembers
+        val cast = resolvedDocument.castMembers
         val crew = resolvedDocument.crewMembers
-        val productionCompanies = kitsuBridge?.productionCompanies
-            ?.takeIf { it.isNotEmpty() }
-            ?: resolvedDocument.productionCompanies
+        val productionCompanies = resolvedDocument.productionCompanies
         val networks = resolvedDocument.networks
         val recommendations = result.providerRunResult.toFieldValues(ResolvedField.RECOMMENDATIONS)
             .flatMap(::recommendationsFrom)
-            .ifEmpty { kitsuBridge?.recommendations.orEmpty() }
         val reviews = result.providerRunResult.toFieldValues(ResolvedField.REVIEWS)
             .flatMap(::reviewsFrom)
-            .ifEmpty { kitsuBridge?.reviewsPage?.reviews.orEmpty() }
+        val reviewsPage = result.providerRunResult.toReviewsPage()
         val selectedLocalizationTrace = resolvedDocument.selectedLocalizationTrace()
 
         return ResolvedDetailDisplayDocument(
@@ -132,7 +120,7 @@ class MetadataDisplayRepository @Inject constructor(
                 networks = networks
             ),
             ratings = ratings ?: ResolvedDetailRatingDisplay(),
-            reviewPagination = kitsuBridge?.reviewsPage.toReviewPaginationDisplayState(MetadataPrimaryProvider.KITSU)
+            reviewPagination = reviewsPage.toReviewPaginationDisplayState(result.route?.provider ?: MetadataPrimaryProvider.KITSU)
         )
     }
 
@@ -531,107 +519,27 @@ class MetadataDisplayRepository @Inject constructor(
             ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(field)?.value }
             .orEmpty()
 
-    private fun reviewsFrom(value: Any?): List<com.nexio.tv.domain.model.MetaReview> =
+    private fun reviewsFrom(value: Any?): List<MetaReview> =
         when (value) {
-            is com.nexio.tv.domain.model.MetaReview -> listOf(value)
-            is Collection<*> -> value.filterIsInstance<com.nexio.tv.domain.model.MetaReview>()
+            is ReviewsPage -> value.reviews
+            is MetaReview -> listOf(value)
+            is Collection<*> -> value.filterIsInstance<MetaReview>()
             else -> emptyList()
         }
 
-    private data class KitsuBridgeDetail(
-        val castMembers: List<MetaCastMember>,
-        val productionCompanies: List<MetaCompany>,
-        val recommendations: List<MetaPreview>,
-        val reviewsPage: ReviewsPage?
-    )
-
-    private suspend fun MetadataResolutionResult.fetchKitsuBridgeDetail(
-        request: MetadataRequest,
-        identity: ContentIdentity
-    ): KitsuBridgeDetail? {
-        if (route?.provider != MetadataPrimaryProvider.KITSU) return null
-        val rawId = identity.providerIds.kitsu
-            ?.takeIf { it.isNotBlank() }
-            ?.let { "kitsu:$it" }
-            ?: request.sourceContext.previewSourceItemId?.takeIf { it.isNotBlank() }
-            ?: request.contentId
-        val mediaKind = when (request.contentType) {
-            ContentType.MOVIE -> ContentMediaKind.MOVIE
-            else -> ContentMediaKind.SERIES
-        }
-        val advanced = try {
-            detailSecondaryDisplayRepository.fetchKitsuAdvancedDetail(
-                rawId = rawId,
-                mediaKind = mediaKind,
-                preferredLanguageCode = resolvedDocument.language ?: request.language
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        val reviewPage = request.pagination?.page ?: 1
-        val reviewLimit = request.pagination?.limit ?: 20
-        val reviewsPage = try {
-            detailSecondaryDisplayRepository.fetchKitsuReviews(
-                rawId = rawId,
-                mediaKind = mediaKind,
-                page = reviewPage,
-                limit = reviewLimit
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        if (advanced == null && reviewsPage?.reviews.orEmpty().isEmpty()) return null
-
-        return KitsuBridgeDetail(
-            castMembers = advanced?.characters.orEmpty().map { it.toCastMember() },
-            productionCompanies = advanced?.productionCompanies.orEmpty().map { it.toCompany() },
-            recommendations = advanced?.relatedTitles.orEmpty().map { it.toPreview() },
-            reviewsPage = reviewsPage
-        )
-    }
-
-    private fun KitsuAdvancedAnimeCharacter.toCastMember(): MetaCastMember =
-        MetaCastMember(
-            name = characterName,
-            character = actorName ?: role,
-            photo = characterImage,
-            provider = "kitsu",
-            providerId = characterId
-        )
-
-    private fun KitsuAdvancedProductionCompany.toCompany(): MetaCompany =
-        MetaCompany(
-            name = producerName,
-            kind = MetaCompanyKind.COMPANY,
-            provider = "kitsu",
-            providerId = producerId
-        )
-
-    private fun KitsuAdvancedRelatedTitle.toPreview(): MetaPreview =
-        MetaPreview(
-            id = "kitsu:$mediaId",
-            type = if (mediaType.equals("movie", ignoreCase = true)) ContentType.MOVIE else ContentType.SERIES,
-            name = title,
-            poster = displayPoster,
-            posterShape = PosterShape.POSTER,
-            background = null,
-            logo = null,
-            description = synopsis,
-            releaseInfo = releaseInfo,
-            imdbRating = null,
-            genres = emptyList()
-        )
-
-    private fun recommendationsFrom(value: Any?): List<com.nexio.tv.domain.model.MetaPreview> =
+    private fun recommendationsFrom(value: Any?): List<MetaPreview> =
         when (value) {
-            is com.nexio.tv.domain.model.MetaPreview -> listOf(value)
-            is Collection<*> -> value.filterIsInstance<com.nexio.tv.domain.model.MetaPreview>()
+            is MetaPreview -> listOf(value)
+            is Collection<*> -> value.filterIsInstance<MetaPreview>()
             else -> emptyList()
         }
+
+    private fun reviewsPageFrom(value: Any?): ReviewsPage? =
+        value as? ReviewsPage
+
+    private fun ProviderPlanRunResult?.toReviewsPage(): ReviewsPage? =
+        toFieldValues(ResolvedField.REVIEWS)
+            .firstNotNullOfOrNull(::reviewsPageFrom)
 
     private fun youtubeIdsFromTrailerValue(value: Any?): List<String> =
         when (value) {

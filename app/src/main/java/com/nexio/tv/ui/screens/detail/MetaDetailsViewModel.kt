@@ -77,8 +77,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -213,7 +211,6 @@ class MetaDetailsViewModel @Inject constructor(
     private var collectionJob: Job? = null
     private var episodeMetadataJob: Job? = null
     private var episodeRatingsJob: Job? = null
-    private var secondaryNavigationHydrationJob: Job? = null
     private var nextToWatchJob: Job? = null
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
@@ -996,7 +993,6 @@ class MetaDetailsViewModel @Inject constructor(
         enrichment.resolvedDetail?.let(::applyResolvedDetailState)
         applyMeta(enrichment.meta)
         applyRatingDisplay(enrichment.meta.id, enrichment.ratingDisplay)
-        hydrateSecondaryNavigationTargetsAsync(enrichment.meta)
         if (preferredSeason != null) {
             _uiState.update { state ->
                 if (preferredSeason !in state.seasons || state.selectedSeason == preferredSeason) {
@@ -1673,114 +1669,6 @@ class MetaDetailsViewModel @Inject constructor(
     private fun extractImdbIdForRatings(rawId: String?): String? {
         if (rawId.isNullOrBlank()) return null
         return Regex("tt\\d+").find(rawId)?.value
-    }
-
-    private fun hydrateSecondaryNavigationTargetsAsync(meta: Meta) {
-        secondaryNavigationHydrationJob?.cancel()
-
-        val actorNamesNeedingIds = meta.castMembers
-            .filter { it.provider.equals("kitsu", ignoreCase = true) && it.tmdbId == null }
-            .mapNotNull { it.character?.trim()?.takeIf { name -> name.isNotBlank() } }
-            .distinct()
-        val companyNamesNeedingIds = meta.productionCompanies
-            .filter { !it.provider.equals("tmdb", ignoreCase = true) && it.tmdbId == null }
-            .map { it.name.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-        val networkNamesNeedingIds = meta.networks
-            .filter { !it.provider.equals("tmdb", ignoreCase = true) && it.tmdbId == null }
-            .map { it.name.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-        val organizationNamesNeedingIds = (companyNamesNeedingIds + networkNamesNeedingIds).distinct()
-
-        if (actorNamesNeedingIds.isEmpty() && organizationNamesNeedingIds.isEmpty()) return
-
-        val expectedMetaId = meta.id
-        secondaryNavigationHydrationJob = viewModelScope.launch {
-            val tmdbPersonIdsByActorName = coroutineScope {
-                actorNamesNeedingIds.associateWith { actorName ->
-                    async {
-                        metadataRouterFacade.findPersonIdByExactName(
-                            metadataRequest = MetadataRequest(
-                                contentId = "tmdb:person:$actorName",
-                                contentType = ContentType.MOVIE,
-                                sourceContext = MetadataSourceContext(),
-                                language = currentTvdbLanguageTag(),
-                                depth = MetadataDepth.DETAIL_SECONDARY
-                            ),
-                            name = actorName
-                        )
-                    }
-                }.mapValues { (_, deferred) -> deferred.await() }
-            }
-            val tmdbCompanyIdsByName = coroutineScope {
-                organizationNamesNeedingIds.associateWith { companyName ->
-                    async {
-                        metadataRouterFacade.findCompanyIdByExactName(
-                            metadataRequest = MetadataRequest(
-                                contentId = "tmdb:company:$companyName",
-                                contentType = ContentType.MOVIE,
-                                sourceContext = MetadataSourceContext(),
-                                language = currentTvdbLanguageTag(),
-                                depth = MetadataDepth.DETAIL_SECONDARY
-                            ),
-                            name = companyName
-                        )
-                    }
-                }.mapValues { (_, deferred) -> deferred.await() }
-            }
-
-            _uiState.update { state ->
-                val currentMeta = state.meta ?: return@update state
-                if (currentMeta.id != expectedMetaId) return@update state
-
-                val updatedCastMembers = currentMeta.castMembers.map { member ->
-                    val actorName = member.character?.trim()
-                    val tmdbId = actorName?.let { tmdbPersonIdsByActorName[it] }?.takeIf { it > 0 }
-                    if (tmdbId == null || member.tmdbId == tmdbId) {
-                        member
-                    } else {
-                        member.copy(tmdbId = tmdbId)
-                    }
-                }
-                val updatedProductionCompanies = currentMeta.productionCompanies.map { company ->
-                    val tmdbId = tmdbCompanyIdsByName[company.name.trim()]?.takeIf { it > 0 }
-                    if (tmdbId == null || company.tmdbId == tmdbId) {
-                        company
-                    } else {
-                        company.copy(tmdbId = tmdbId)
-                    }
-                }
-                val updatedNetworks = currentMeta.networks.map { network ->
-                    val tmdbId = tmdbCompanyIdsByName[network.name.trim()]?.takeIf { it > 0 }
-                    if (tmdbId == null || network.tmdbId == tmdbId) {
-                        network
-                    } else {
-                        network.copy(tmdbId = tmdbId)
-                    }
-                }
-                if (
-                    updatedCastMembers == currentMeta.castMembers &&
-                    updatedProductionCompanies == currentMeta.productionCompanies &&
-                    updatedNetworks == currentMeta.networks
-                ) {
-                    state
-                } else {
-                    state.copy(
-                        meta = currentMeta.copy(
-                            castMembers = updatedCastMembers,
-                            productionCompanies = updatedProductionCompanies,
-                            networks = updatedNetworks
-                        ),
-                        episodesForSeason = buildEpisodesForSeason(
-                            currentMeta.videos,
-                            state.selectedSeason
-                        )
-                    )
-                }
-            }
-        }
     }
 
     private suspend fun expandAnimeAddonSeasons(meta: Meta): Meta {

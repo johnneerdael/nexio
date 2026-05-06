@@ -24,7 +24,6 @@ import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.DetailRatingDisplayRepository
-import com.nexio.tv.data.repository.DetailSecondaryDisplayRepository
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
@@ -141,9 +140,6 @@ fun buildMetaDetailsViewModel(
                 titleRatingOverrideRepository = titleRatingOverrideRepository,
                 mdbListRepository = mdbListRepository,
                 episodeRatingsSelectionRepository = episodeRatingsSelectionRepository
-            ),
-            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository(
-                metadataSecondaryRepository = metadataSecondaryRepository
             )
         ),
         profileBoundary = profileBoundary,

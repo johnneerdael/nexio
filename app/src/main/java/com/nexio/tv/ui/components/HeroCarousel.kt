@@ -50,6 +50,8 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
@@ -190,7 +192,12 @@ private fun HeroCarouselSlide(
     val displayLogo = item.displayLogo
     val backgroundModel = remember(context, displayBackground, requestWidthPx, requestHeightPx) {
         ImageRequest.Builder(context)
-            .data(displayBackground)
+            .data(
+                displayBackground.toLegacyArtworkCoilModelOrNull(
+                    ownerKey = "${item.id}:hero-backdrop",
+                    imageType = ArtworkType.BACKDROP
+                )
+            )
             .crossfade(false)
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
@@ -198,7 +205,12 @@ private fun HeroCarouselSlide(
     val logoModel = remember(context, displayLogo, requestWidthPx, logoRequestHeightPx) {
         displayLogo?.let {
             ImageRequest.Builder(context)
-                .data(it)
+                .data(
+                    it.toLegacyArtworkCoilModelOrNull(
+                        ownerKey = "${item.id}:hero-logo",
+                        imageType = ArtworkType.LOGO
+                    )
+                )
                 .crossfade(false)
                 .size(width = requestWidthPx, height = logoRequestHeightPx)
                 .build()
