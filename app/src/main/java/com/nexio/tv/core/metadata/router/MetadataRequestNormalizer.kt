@@ -28,7 +28,7 @@ class MetadataRequestNormalizer @Inject constructor(
 
         val parts = id.split(":")
         return when {
-            isProviderObjectId(id, parts) -> parts.take(3).joinToString(":")
+            isProviderObjectId(id, parts) -> id
             id.startsWith("imdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("kitsu:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("mal:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
