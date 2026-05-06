@@ -760,7 +760,7 @@ class MetaDetailsViewModel @Inject constructor(
         }
         _uiState.update { state -> state.withRefreshedMeta(meta) }
         trailerHasPlayed = false
-        applyTitleTrailerAvailabilityFromResolvedDocument()
+        preloadTitleTrailerAvailability(meta)
 
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
@@ -1916,7 +1916,46 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun preloadTitleTrailerAvailability(meta: Meta) {
-        applyTitleTrailerAvailabilityFromResolvedDocument()
+        val fallbackYtIds = _uiState.value.trailerState.fallbackTrailerYtIds.ifEmpty { meta.trailerYtIds }
+        if (fallbackYtIds.any { it.isNotBlank() }) {
+            applyTitleTrailerAvailabilityFromResolvedDocument()
+            return
+        }
+
+        viewModelScope.launch {
+            val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
+            val tmdbId = if (isTvContent) null else {
+                _uiState.value.resolvedDetail?.identity?.providerIds?.tmdb
+                    ?: parseContentIds(meta.id).tmdb?.toString()
+                    ?: parseContentIds(itemId).tmdb?.toString()
+            }
+            val available = metadataRouterFacade.fetchTitleMediaAvailability(
+                metadataRequest = MetadataRequest(
+                    contentId = if (!tmdbId.isNullOrBlank()) "tmdb:$tmdbId" else meta.id,
+                    contentType = resolveTmdbContentType(meta),
+                    sourceContext = MetadataSourceContext(itemType = meta.apiType),
+                    language = currentTvdbLanguageTag(),
+                    depth = MetadataDepth.DETAIL_MEDIA
+                ),
+                tmdbId = tmdbId,
+                type = meta.apiType,
+                contentId = meta.id,
+                fallbackYtIds = fallbackYtIds
+            )
+            _uiState.update { state ->
+                state.copy(
+                    titleHasPlayableTrailerMedia = available,
+                    trailerResolutionStatus = when {
+                        state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
+                            TrailerResolutionStatus.RESOLVING
+                        !state.trailerUrl.isNullOrBlank() || !state.trailerExternalUrl.isNullOrBlank() ->
+                            TrailerResolutionStatus.READY
+                        available -> TrailerResolutionStatus.IDLE
+                        else -> TrailerResolutionStatus.FAILED
+                    }
+                )
+            }
+        }
     }
 
     private fun preloadAllSeasonMediaAvailability(meta: Meta) {
@@ -1936,10 +1975,20 @@ class MetaDetailsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                val seasonAvailability = metadataRouterFacade.fetchSeasonMediaAvailability(
+                    metadataRequest = seasonMediaMetadataRequest(meta, season),
+                    tmdbId = null,
+                    type = meta.apiType,
+                    seasonNumber = season,
+                    contentId = meta.id
+                )
                 _uiState.update { state ->
                     state.withSeasonMediaAvailability(
                         season,
-                        state.seasonMediaAvailabilityBySeason[season] ?: SeasonMediaActionAvailability()
+                        SeasonMediaActionAvailability(
+                            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
+                            hasRecap = seasonAvailability.hasRecap
+                        )
                     )
                 }
             } finally {
@@ -1962,12 +2011,32 @@ class MetaDetailsViewModel @Inject constructor(
             return cached
         }
 
-        val resolvedAvailability = SeasonMediaActionAvailability()
+        val seasonAvailability = metadataRouterFacade.fetchSeasonMediaAvailability(
+            metadataRequest = seasonMediaMetadataRequest(meta, season),
+            tmdbId = null,
+            type = meta.apiType,
+            seasonNumber = season,
+            contentId = meta.id
+        )
+        val resolvedAvailability = SeasonMediaActionAvailability(
+            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
+            hasRecap = seasonAvailability.hasRecap
+        )
         _uiState.update { state ->
             state.withSeasonMediaAvailability(season, resolvedAvailability)
         }
         return resolvedAvailability
     }
+
+    private fun seasonMediaMetadataRequest(meta: Meta, season: Int): MetadataRequest =
+        MetadataRequest(
+            contentId = meta.id,
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = meta.apiType),
+            language = currentTvdbLanguageTag(),
+            seasonNumber = season,
+            depth = MetadataDepth.DETAIL_MEDIA
+        )
 
     internal fun setSelectedSeasonProgrammatically(season: Int) {
         _uiState.update { it.withProgrammaticSeasonSelection(season) }

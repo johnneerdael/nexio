@@ -9,6 +9,10 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFieldTrace
+import com.nexio.tv.core.metadata.router.MetadataLocalizationRejectedCandidate
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -79,6 +83,23 @@ class MetadataDisplayRepositoryTest {
                     ResolvedField.OVERVIEW to FieldOwner.PRIMARY
                 ),
                 ignoredOverwrites = emptyList(),
+                localization = mapOf(
+                    ResolvedField.TITLE to MetadataLocalizationFieldTrace(
+                        field = ResolvedField.TITLE,
+                        selectedProvider = MetadataPrimaryProvider.TVDB,
+                        selectedLanguage = "en",
+                        fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
+                        sourceApiShapeId = "tvdb.series.translation",
+                        rejectedCandidates = listOf(
+                            MetadataLocalizationRejectedCandidate(
+                                provider = MetadataPrimaryProvider.TVDB,
+                                language = "nl",
+                                fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+                                reason = "empty localized title"
+                            )
+                        )
+                    )
+                ),
                 sourceRoles = mapOf(
                     ResolvedField.TITLE to SourceRole.PRIMARY,
                     ResolvedField.RATING to SourceRole.RATING
@@ -134,6 +155,10 @@ class MetadataDisplayRepositoryTest {
         assertTrue(document.people?.crew?.isEmpty() == true)
         assertEquals("nl", document.localization.requestedLanguage)
         assertEquals("en", document.localization.selectedLanguage)
+        assertEquals(
+            "TITLE fell back to en via TVDB (LANGUAGE_FALLBACK)",
+            document.localization.fallbackReason
+        )
         assertEquals(
             listOf("TITLE:TMDB:PRIMARY", "RATING:TMDB_RATING:RATING"),
             document.sourceTrace.map { "${it.field}:${it.selectedProvider}:${it.sourceRole}" }
