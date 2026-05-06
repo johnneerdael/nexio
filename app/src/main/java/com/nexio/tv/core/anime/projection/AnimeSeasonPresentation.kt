@@ -14,4 +14,5 @@ data class AnimeSeasonPresentation(
     val selectedSeason: Int,
     val source: SeasonPresentationSource,
     val confidence: CoordinateConfidence,
+    val fallbackReason: FallbackReason? = null,
 )

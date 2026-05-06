@@ -1,145 +1,85 @@
 package com.nexio.tv.core.anime.projection
 
-import com.nexio.tv.core.anime.AnimeIdMapAsset
-import com.nexio.tv.core.anime.AnimeIdMapRecord
+import com.nexio.tv.core.anime.AnimeIdMapAssetJsonAdapter
 import com.nexio.tv.core.anime.AnimeIdMappingService
-import com.nexio.tv.core.anime.ContentMediaKind
-import com.nexio.tv.core.anime.KitsuMetadataService
-import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
-import com.nexio.tv.core.tvdb.TvEpisodeMetadata
-import io.mockk.coEvery
+import com.squareup.moshi.Moshi
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DefaultAnimeSeasonProjectionResolverPresentationTest {
 
-    @Test
-    fun `MHA Season 3 click defaults selectedSeason to 3 not 1`() = runBlocking {
-        val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf(
-                "11469" to series("11469"),
-                "13881" to series("13881"),
-            )
-        )
-        val mapping = AnimeIdMappingService(assetProvider = { asset })
-        val kitsu = mockk<KitsuMetadataService>()
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:11469", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..13).associate { (1 to it) to kitsuEp(season = 1, ep = it) }
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:13881", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..25).associate { (3 to it) to kitsuEp(season = 3, ep = it) }
-
-        val resolver = DefaultAnimeSeasonProjectionResolver(
-            idMappingService = mapping,
-            kitsuMetadataService = kitsu,
-            store = InMemoryAnimeEpisodeCoordinateStore(),
-            traceEvents = mockk(relaxed = true),
-            presentationCache = InMemoryAnimeSeasonPresentationCache(),
-        )
-
-        val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
-        val presentation = resolver.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = null)
-
-        assertEquals(3, presentation.selectedSeason)
-        assertEquals(SeasonPresentationSource.KITSU_SEASON_NUMBERS, presentation.source)
-        assertEquals("11469", presentation.seasons.first { it.seasonNumber == 1 }.episodesKitsuMemberId)
-        assertEquals("13881", presentation.seasons.first { it.seasonNumber == 3 }.episodesKitsuMemberId)
+    private fun fixtureService(): AnimeIdMappingService {
+        val json = javaClass.getResource("/fixtures/nexio-anime-map-v1-test.json")!!.readText()
+        val asset = AnimeIdMapAssetJsonAdapter(Moshi.Builder().build()).fromJson(json)!!
+        return AnimeIdMappingService(assetProvider = { asset })
     }
 
-    @Test
-    fun `flat Kitsu One Piece presents single season with KITSU_FLAT_FALLBACK`() = runBlocking {
-        val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf("12" to series("12", tvdb = "81797", imdb = "tt0388629"))
-        )
-        val mapping = AnimeIdMappingService(assetProvider = { asset })
-        val kitsu = mockk<KitsuMetadataService>()
-        // One Piece: Kitsu reports all episodes under season 1 (flat-franchise model)
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:12", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..1050).associate { (1 to it) to kitsuEp(season = 1, ep = it) }
-
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = mapping, kitsuMetadataService = kitsu, store = InMemoryAnimeEpisodeCoordinateStore(), traceEvents = mockk(relaxed = true), presentationCache = InMemoryAnimeSeasonPresentationCache())
-        val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "12", animeStremioId = null))
-        val presentation = resolver.resolveSeasonPresentation(work, sourceKitsuId = "12", requestedSeason = null)
-
-        assertEquals(1, presentation.selectedSeason)
-        assertEquals(SeasonPresentationSource.KITSU_FLAT_FALLBACK, presentation.source)
-        assertEquals(1, presentation.seasons.size)
-        assertEquals(true, presentation.seasons.first().isFlatFallback)
-    }
-
-    @Test
-    fun `resolveSeasonPresentation returns cached result without calling fetchEpisodeEnrichment again`() = runBlocking {
-        val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf("13881" to series("13881", tvdb = "305074"))
-        )
-        val mapping = AnimeIdMappingService(assetProvider = { asset })
-        val kitsu = mockk<KitsuMetadataService>()
-        var callCount = 0
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:13881", ContentMediaKind.SERIES, emptyList()) } answers {
-            callCount++
-            (1..25).associate { (3 to it) to kitsuEp(season = 3, ep = it) }
-        }
-        val resolver = DefaultAnimeSeasonProjectionResolver(
-            idMappingService = mapping,
-            kitsuMetadataService = kitsu,
-            store = InMemoryAnimeEpisodeCoordinateStore(),
-            traceEvents = mockk(relaxed = true),
-            presentationCache = InMemoryAnimeSeasonPresentationCache(),
-        )
-        val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
-
-        resolver.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = null)
-        resolver.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = null)
-
-        assertEquals("fetchEpisodeEnrichment must be called exactly once", 1, callCount)
-    }
-
-    @Test
-    fun `resolveSeasonPresentation cache hit with non-null requestedSeason overrides selectedSeason`() = runBlocking {
-        val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf(
-                "11469" to series("11469"),
-                "13881" to series("13881"),
-            )
-        )
-        val mapping = AnimeIdMappingService(assetProvider = { asset })
-        val kitsu = mockk<KitsuMetadataService>()
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:11469", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..13).associate { (1 to it) to kitsuEp(season = 1, ep = it) }
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:13881", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..25).associate { (3 to it) to kitsuEp(season = 3, ep = it) }
-        val resolver = DefaultAnimeSeasonProjectionResolver(
-            idMappingService = mapping,
-            kitsuMetadataService = kitsu,
-            store = InMemoryAnimeEpisodeCoordinateStore(),
-            traceEvents = mockk(relaxed = true),
-            presentationCache = InMemoryAnimeSeasonPresentationCache(),
-        )
-        val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
-        resolver.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = null)
-
-        val presentation = resolver.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = 1)
-
-        assertEquals(1, presentation.selectedSeason)
-        assertEquals(SeasonPresentationSource.KITSU_SEASON_NUMBERS, presentation.source)
-    }
-
-    private fun series(kitsu: String, tvdb: String = "305074", imdb: String = "tt5626028") =
-        AnimeIdMapRecord(kitsu = kitsu, tvdb = tvdb, imdb = imdb, mediaType = "series", sourceType = "TV")
-
-    private fun kitsuEp(season: Int, ep: Int) = TvEpisodeMetadata(
-        providerEpisodeId = "kitsu:ep$season-$ep",
-        seasonNumber = season,
-        episodeNumber = ep,
-        title = "S${season}E$ep",
-        overview = null,
-        thumbnail = null,
-        airDate = null,
-        runtimeMinutes = 24,
+    private fun resolver(): DefaultAnimeSeasonProjectionResolver = DefaultAnimeSeasonProjectionResolver(
+        mappingService = fixtureService(),
+        store = InMemoryAnimeEpisodeCoordinateStore(),
+        traceEvents = mockk(relaxed = true),
     )
+
+    @Test
+    fun `MHA presentation uses CURATED_PER_RESOURCE and includes seasons 1 and 3`() = runBlocking {
+        val r = resolver()
+        val work = r.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
+        val presentation = r.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = null)
+
+        assertEquals(SeasonPresentationSource.CURATED_PER_RESOURCE, presentation.source)
+        assertEquals(CoordinateConfidence.HIGH, presentation.confidence)
+        val seasons = presentation.seasons.map { it.seasonNumber }.toSet()
+        assertTrue("expected season 1 in tabs but got $seasons", 1 in seasons)
+        assertTrue("expected season 3 in tabs but got $seasons", 3 in seasons)
+        // member id of season 3 tab should be the source kitsu id 13881
+        assertEquals("13881", presentation.seasons.first { it.seasonNumber == 3 }.episodesKitsuMemberId)
+        assertEquals("11469", presentation.seasons.first { it.seasonNumber == 1 }.episodesKitsuMemberId)
+    }
+
+    @Test
+    fun `One Piece presentation uses CURATED_RANGE_RULES with TVDB seasons`() = runBlocking {
+        val r = resolver()
+        val work = r.resolveWork(AnimeSourceIdentity(sourceKitsuId = "12", animeStremioId = null))
+        val presentation = r.resolveSeasonPresentation(work, sourceKitsuId = "12", requestedSeason = null)
+
+        assertEquals(SeasonPresentationSource.CURATED_RANGE_RULES, presentation.source)
+        assertEquals(CoordinateConfidence.HIGH, presentation.confidence)
+        val seasons = presentation.seasons.map { it.seasonNumber }
+        // fixture has TVDB ranges for seasons 1, 21, 22, 23
+        assertEquals(listOf(1, 21, 22, 23), seasons)
+    }
+
+    @Test
+    fun `unmapped Kitsu returns fallbackReason KITSU_NOT_IN_PACK`() = runBlocking {
+        val r = resolver()
+        val work = r.resolveWork(AnimeSourceIdentity(sourceKitsuId = "88888", animeStremioId = null))
+        val presentation = r.resolveSeasonPresentation(work, sourceKitsuId = "88888", requestedSeason = null)
+
+        assertEquals(FallbackReason.KITSU_NOT_IN_PACK, presentation.fallbackReason)
+        assertEquals(CoordinateConfidence.LOW, presentation.confidence)
+        assertTrue("seasons must be empty for unresolved", presentation.seasons.isEmpty())
+    }
+
+    @Test
+    fun `requestedSeason is honored when present in tabs`() = runBlocking {
+        val r = resolver()
+        val work = r.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
+        val presentation = r.resolveSeasonPresentation(work, sourceKitsuId = "13881", requestedSeason = 1)
+
+        assertEquals(1, presentation.selectedSeason)
+    }
+
+    @Test
+    fun `record without curated season returns NO_CURATED_SEASON`() = runBlocking {
+        val r = resolver()
+        // 99999 is the fixture record with no tvdb/anidb at all
+        val work = r.resolveWork(AnimeSourceIdentity(sourceKitsuId = "99999", animeStremioId = null))
+        val presentation = r.resolveSeasonPresentation(work, sourceKitsuId = "99999", requestedSeason = null)
+
+        assertEquals(FallbackReason.NO_CURATED_SEASON, presentation.fallbackReason)
+        assertEquals(CoordinateConfidence.LOW, presentation.confidence)
+    }
 }

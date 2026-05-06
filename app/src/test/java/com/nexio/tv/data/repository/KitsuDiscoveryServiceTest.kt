@@ -112,10 +112,14 @@ class KitsuDiscoveryServiceTest {
     @Test
     fun `franchise grouping collapses MHA S1 and S3 sharing tvdb into one card`() = runTest {
         val mhaAsset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf(
+            schemaVersion = 2,
+            identityRecordsByKitsu = mapOf(
                 "11469" to AnimeIdMapRecord(kitsu = "11469", tvdb = "305074", mediaType = "series", sourceType = "TV"),
                 "13881" to AnimeIdMapRecord(kitsu = "13881", tvdb = "305074", mediaType = "series", sourceType = "TV"),
+            ),
+            indexes = com.nexio.tv.core.anime.AnimeIdMapIndexes(
+                byKitsu = mapOf("11469" to "11469", "13881" to "13881"),
+                byTvdb = mapOf("305074" to listOf("11469", "13881")),
             )
         )
         val grouper = KitsuRailFranchiseGrouper(AnimeIdMappingService(assetProvider = { mhaAsset }))

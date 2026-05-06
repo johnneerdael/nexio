@@ -151,9 +151,15 @@ class KitsuRailFranchiseGrouperTest {
     // --- helpers ---
 
     private fun grouperWith(vararg records: AnimeIdMapRecord): KitsuRailFranchiseGrouper {
+        val byTvdb = records.filter { !it.tvdb.isNullOrBlank() }
+            .groupBy({ it.tvdb!! }, { it.kitsu })
         val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = records.associateBy { it.kitsu }
+            schemaVersion = 2,
+            identityRecordsByKitsu = records.associateBy { it.kitsu },
+            indexes = com.nexio.tv.core.anime.AnimeIdMapIndexes(
+                byKitsu = records.associate { it.kitsu to it.kitsu },
+                byTvdb = byTvdb,
+            )
         )
         return KitsuRailFranchiseGrouper(AnimeIdMappingService(assetProvider = { asset }))
     }
