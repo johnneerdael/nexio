@@ -75,10 +75,12 @@ class SimklLibraryMutationAdapter @Inject constructor(
             listKey: String,
             body: SimklAddToListRequestDto,
             rollbackState: SimklLibraryService.LibraryRollbackState,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireSimklCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_ADD_TO_LIST,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -91,10 +93,12 @@ class SimklLibraryMutationAdapter @Inject constructor(
         fun buildRemoveEnvelope(
             body: SimklHistoryRemoveRequestDto,
             rollbackState: SimklLibraryService.LibraryRollbackState,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireSimklCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -118,9 +122,17 @@ class SimklLibraryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.session(): TrackingAuthSession =
             TrackingAuthSession(
-                provider = TrackingProvider.SIMKL,
-                profileId = profileId
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
             )
+
+        private fun requireSimklCredentialHash(session: TrackingAuthSession): String {
+            return requireNotNull(session.credentialHash) {
+                "SIMKL mutation envelopes require account-scoped credentialHash"
+            }
+        }
+
     }
 }
 

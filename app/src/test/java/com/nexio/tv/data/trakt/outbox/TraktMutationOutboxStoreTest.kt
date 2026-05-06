@@ -2,6 +2,7 @@ package com.nexio.tv.data.trakt.outbox
 
 import android.content.Context
 import com.google.gson.JsonObject
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -61,6 +62,8 @@ class TraktMutationOutboxStoreTest {
             items = listOf(
                 TraktMutationEnvelope(
                     id = "simkl-queued-1",
+                    provider = TrackingProvider.SIMKL,
+                    credentialHash = "simkl-test-credential",
                     adapterKey = "simkl.library",
                     mutationKind = "simkl.library.addToList",
                     priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -120,7 +123,7 @@ class TraktMutationOutboxStoreTest {
     }
 
     @Test
-    fun `legacy persisted mutation defaults to profile one`() = runTest {
+    fun `legacy persisted mutation without account scope defaults to profile one and quarantines`() = runTest {
         val prefs = InMemorySharedPreferences()
         prefs.edit().putString(
             "snapshot",
@@ -151,7 +154,42 @@ class TraktMutationOutboxStoreTest {
         ).commit()
         val store = TraktMutationOutboxStore(context = mockContext(prefs))
 
-        assertEquals(1, store.read().items.single().profileId)
+        val restored = store.read().items.single()
+        assertEquals(1, restored.profileId)
+        assertEquals(TraktMutationLifecycleState.TERMINAL_FAILED, restored.state)
+        assertEquals("MISSING_ACCOUNT_SCOPE", restored.lastError)
+    }
+
+    @Test
+    fun `legacy envelopes without account scope are quarantined instead of executed`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs)
+        val store = TraktMutationOutboxStore(context = context)
+        val legacyEnvelope = JsonObject().apply {
+            addProperty("id", "legacy")
+            addProperty("profileId", 1)
+            addProperty("adapterKey", "progress-history")
+            addProperty("mutationKind", "progress.history.add")
+            addProperty("priority", "WATCHED")
+            add("payload", JsonObject())
+            add("metadata", JsonObject())
+            addProperty("state", "QUEUED")
+        }
+        val root = JsonObject().apply {
+            addProperty("schemaVersion", 1)
+            add("snapshot", JsonObject().apply {
+                add("items", com.google.gson.JsonArray().apply { add(legacyEnvelope) })
+                addProperty("nextWritableAtMs", 0L)
+                addProperty("updatedAtMs", 0L)
+            })
+        }
+        prefs.edit().putString("snapshot", root.toString()).commit()
+
+        val snapshot = store.read(profileId = 1)
+
+        assertEquals(1, snapshot.items.size)
+        assertEquals(TraktMutationLifecycleState.TERMINAL_FAILED, snapshot.items.single().state)
+        assertEquals("MISSING_ACCOUNT_SCOPE", snapshot.items.single().lastError)
     }
 
     @Test
@@ -168,6 +206,8 @@ class TraktMutationOutboxStoreTest {
                     "id": "queued-1",
                     "adapterKey": "season-batch",
                     "mutationKind": "progress.history.batchAdd",
+                    "provider": "TRAKT",
+                    "credentialHash": "trakt-test-credential",
                     "priority": "WATCHED",
                     "collapseKey": "show-1:season:1",
                     "payload": {
@@ -226,6 +266,8 @@ class TraktMutationOutboxStoreTest {
                     "id": "queued-2",
                     "adapterKey": "simkl.season-batch",
                     "mutationKind": "simkl.progress.history.batchAdd",
+                    "provider": "SIMKL",
+                    "credentialHash": "simkl-test-credential",
                     "priority": "WATCHED",
                     "collapseKey": "show-2:season:2",
                     "payload": {
@@ -280,6 +322,8 @@ class TraktMutationOutboxStoreTest {
                     "id": "valid",
                     "adapterKey": "progress",
                     "mutationKind": "history_add",
+                    "provider": "TRAKT",
+                    "credentialHash": "trakt-test-credential",
                     "priority": "WATCHED",
                     "payload": {},
                     "metadata": {},
@@ -325,6 +369,8 @@ class TraktMutationOutboxStoreTest {
         return TraktMutationEnvelope(
             id = id,
             profileId = profileId,
+            provider = TrackingProvider.TRAKT,
+            credentialHash = "trakt-test-credential",
             adapterKey = "progress",
             mutationKind = "history_add",
             priority = TraktMutationPriorityBucket.WATCHED,

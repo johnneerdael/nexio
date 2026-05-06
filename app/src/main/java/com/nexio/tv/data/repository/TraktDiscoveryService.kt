@@ -26,6 +26,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
@@ -435,7 +436,9 @@ class TraktDiscoveryService @Inject constructor(
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(
                     ref = ref,
-                    profileId = traktIntegrationProvider.currentTraktProfileId()
+                    session = traktAuthService.mutationAccountScopedSession(
+                        TrackingAuthSession(TrackingProvider.TRAKT, traktIntegrationProvider.currentTraktProfileId())
+                    )
                 )
             )
         }.onFailure { error ->

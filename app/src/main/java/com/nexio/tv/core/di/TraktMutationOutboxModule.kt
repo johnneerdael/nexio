@@ -1,6 +1,8 @@
 package com.nexio.tv.core.di
 
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
+import com.nexio.tv.data.trakt.outbox.DefaultProviderMutationAccountScopeValidator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationAccountScopeValidator
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxPolicy
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxStore
@@ -18,6 +20,11 @@ abstract class TraktMutationOutboxBindingsModule {
 
     @Multibinds
     abstract fun bindTraktMutationAdapters(): Set<TraktMutationAdapter>
+
+    @dagger.Binds
+    abstract fun bindProviderMutationAccountScopeValidator(
+        impl: DefaultProviderMutationAccountScopeValidator
+    ): ProviderMutationAccountScopeValidator
 }
 
 @Module
@@ -46,11 +53,13 @@ object TraktMutationOutboxModule {
     @Singleton
     fun provideProviderMutationOutboxCoordinator(
         worker: TraktMutationOutboxWorker,
-        adapters: Set<@JvmSuppressWildcards TraktMutationAdapter>
+        adapters: Set<@JvmSuppressWildcards TraktMutationAdapter>,
+        accountScopeValidator: ProviderMutationAccountScopeValidator
     ): ProviderMutationOutboxCoordinator {
         return ProviderMutationOutboxCoordinator(
             worker = worker,
-            adapters = adapters
+            adapters = adapters,
+            accountScopeValidator = accountScopeValidator
         )
     }
 }

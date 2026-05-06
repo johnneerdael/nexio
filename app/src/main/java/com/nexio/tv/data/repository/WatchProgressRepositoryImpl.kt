@@ -50,7 +50,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
     //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
     private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>,
-    private val metadataRouterFacade: MetadataRouterFacade
+    private val metadataRouterFacade: MetadataRouterFacade,
+    private val accountScopeProvider: TrackingAccountScopeProvider
 ) : WatchProgressRepository {
     companion object {
         private const val TAG = "WatchProgressRepo"
@@ -302,6 +303,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             1
         }
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
@@ -312,7 +314,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 playbackId = playbackId,
                                 contentId = contentId,
                                 season = season,
-                                episode = episode
+                                episode = episode,
+                                session = session
                             )
                         com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
                             TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
@@ -320,7 +323,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 contentId = contentId,
                                 season = season,
                                 episode = episode,
-                                profileId = profileId
+                                session = session
                             )
                     }
                     traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -347,6 +350,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             1
         }
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
@@ -354,14 +358,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
                     SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = season,
-                        episode = episode
+                        episode = episode,
+                        session = session
                     )
                 com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = season,
                         episode = episode,
-                        profileId = profileId
+                        session = session
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -387,6 +392,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             1
         }
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
             contentId = contentId,
             season = null,
@@ -402,7 +408,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             contentId = contentId,
                             season = null,
                             episode = null,
-                            clearShow = true
+                            clearShow = true,
+                            session = session
                         )
                     com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
                         TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
@@ -411,7 +418,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             season = null,
                             episode = null,
                             clearShow = true,
-                            profileId = profileId
+                            session = session
                         )
                 }
                 traktMutationOutboxCoordinator.enqueueAndDrain(deleteEnvelope)
@@ -422,7 +429,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         contentId = contentId,
                         season = null,
                         episode = null,
-                        removeShow = true
+                        removeShow = true,
+                        session = session
                     )
                 com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
@@ -430,7 +438,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         season = null,
                         episode = null,
                         removeShow = true,
-                        profileId = profileId
+                        session = session
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(removeEnvelope)
@@ -457,6 +465,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             1
         }
         val now = System.currentTimeMillis()
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         val duration = progress.duration.takeIf { it > 0L } ?: 1L
         val completed = progress.copy(
             position = duration,
@@ -470,14 +479,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
                     SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
                         progress = completed,
                         title = completed.name.takeIf { it.isNotBlank() },
-                        year = null
+                        year = null,
+                        session = session
                     )
                 com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
                         progress = completed,
                         title = completed.name.takeIf { it.isNotBlank() },
                         year = null,
-                        profileId = profileId
+                        session = session
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -510,6 +520,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             1
         }
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
 
         val showContentId = meta.id
 
@@ -541,7 +552,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         isAnime = meta.rawType.equals("anime", ignoreCase = true),
                         seasonNumber = seasonNumber,
                         episodeNumbers = episodeNumbers,
-                        rollbackState = rollbackState
+                        rollbackState = rollbackState,
+                        session = session
                     )
                 )
             } catch (e: Exception) {
@@ -650,5 +662,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!candidateIsPlayback && existingIsPlayback) return false
 
         return false
+    }
+
+    private suspend fun accountSessionFor(
+        provider: com.nexio.tv.domain.model.TrackingProvider,
+        profileId: Int
+    ): TrackingAuthSession {
+        return accountScopeProvider.accountScopedSession(
+            provider = provider,
+            profileId = profileId
+        )
     }
 }

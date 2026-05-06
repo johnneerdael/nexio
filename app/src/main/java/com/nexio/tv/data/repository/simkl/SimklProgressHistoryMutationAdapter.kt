@@ -11,11 +11,13 @@ import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
 import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.repository.SimklProgressService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import dagger.Binds
 import dagger.Module
@@ -41,9 +43,9 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val response = when (envelope.mutationKind) {
-            MUTATION_KIND_HISTORY_ADD -> remote.addHistory(envelope.historyAddBody())
-            MUTATION_KIND_HISTORY_REMOVE -> remote.removeFromHistoryAndLists(envelope.historyRemoveBody())
-            MUTATION_KIND_PLAYBACK_DELETE -> remote.deletePlayback(envelope.playbackId())
+            MUTATION_KIND_HISTORY_ADD -> remote.addHistory(envelope.historyAddBody(), envelope.session())
+            MUTATION_KIND_HISTORY_REMOVE -> remote.removeFromHistoryAndLists(envelope.historyRemoveBody(), envelope.session())
+            MUTATION_KIND_PLAYBACK_DELETE -> remote.deletePlayback(envelope.playbackId(), envelope.session())
             else -> null
         } ?: return TraktMutationExecutionResult.Failure(httpStatusCode = 400, reason = "Unsupported SIMKL progress mutation ${envelope.mutationKind}")
 
@@ -104,7 +106,8 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
         fun buildHistoryAddEnvelope(
             progress: WatchProgress,
             title: String?,
-            year: Int?
+            year: Int?,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 add(PAYLOAD_PROGRESS, gson.toJsonTree(progress))
@@ -115,6 +118,11 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
             }
             val collapseKey = buildCollapseKey(progress.contentId, progress.season, progress.episode)
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "SIMKL mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_ADD,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -128,7 +136,8 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
             contentId: String,
             season: Int?,
             episode: Int?,
-            removeShow: Boolean = false
+            removeShow: Boolean = false,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_CONTENT_ID, contentId)
@@ -137,6 +146,11 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
                 if (removeShow) addProperty(PAYLOAD_REMOVE_SHOW, true)
             }
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "SIMKL mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -150,7 +164,8 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
             contentId: String,
             season: Int?,
             episode: Int?,
-            clearShow: Boolean = false
+            clearShow: Boolean = false,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_PLAYBACK_ID, playbackId)
@@ -160,6 +175,11 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
                 if (clearShow) addProperty(PAYLOAD_CLEAR_SHOW, true)
             }
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "SIMKL mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_PLAYBACK_DELETE,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -199,6 +219,13 @@ class SimklProgressHistoryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.clearShow(): Boolean =
             payload.get(PAYLOAD_CLEAR_SHOW)?.asBoolean ?: false
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession =
+            TrackingAuthSession(
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
+            )
 
         private fun TraktMutationEnvelope.historyAddBody(): SimklHistoryAddRequestDto {
             val progress = progress()

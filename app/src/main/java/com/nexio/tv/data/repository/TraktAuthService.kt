@@ -131,6 +131,26 @@ class TraktAuthService @Inject constructor(
         )
     }
 
+    suspend fun mutationAccountScopedSession(session: TrackingAuthSession = currentAuthSession()): TrackingAuthSession {
+        val state = getAuthState(session)
+        val accountMaterial = stableMutationAccountMaterial(state)
+            ?: run {
+                fetchUserSettings(session)
+                stableMutationAccountMaterial(getAuthState(session))
+            }
+            ?: throw IllegalStateException("Trakt mutation scope requires provider account identity")
+        return session.copy(
+            credentialHash = integrationCredentialHash(IntegrationProvider.TRAKT, "account:$accountMaterial"),
+            accountIdHash = integrationCredentialHash(IntegrationProvider.TRAKT, accountMaterial)
+        )
+    }
+
+    private fun stableMutationAccountMaterial(state: TraktAuthState): String? {
+        return state.userSlug
+            ?.takeIf { it.isNotBlank() }
+            ?: state.username?.takeIf { it.isNotBlank() }
+    }
+
     suspend fun startDeviceAuth(): Result<TraktDeviceCodeResponseDto> {
         if (!hasRequiredCredentials()) {
             return Result.failure(IllegalStateException("Missing TRAKT credentials"))

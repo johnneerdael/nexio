@@ -269,11 +269,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         fun buildCreateListEnvelope(
             provisionalKey: String,
-            body: TraktCreateOrUpdateListRequestDto
+            body: TraktCreateOrUpdateListRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildCreateListEnvelope(
                 provisionalKey = provisionalKey,
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
@@ -281,9 +283,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
         fun buildCreateListEnvelope(
             provisionalKey: String,
             body: TraktCreateOrUpdateListRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_CREATE_LIST,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -296,11 +302,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         fun buildUpdateListEnvelope(
             listId: String,
-            body: TraktCreateOrUpdateListRequestDto
+            body: TraktCreateOrUpdateListRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildUpdateListEnvelope(
                 listId = listId,
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
@@ -308,9 +316,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
         fun buildUpdateListEnvelope(
             listId: String,
             body: TraktCreateOrUpdateListRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_UPDATE_LIST,
                 priority = TraktMutationPriorityBucket.LISTS,
@@ -323,18 +335,26 @@ class TraktLibraryMutationAdapter @Inject constructor(
             )
         }
 
-        fun buildDeleteListEnvelope(listId: String): TraktMutationEnvelope {
+        fun buildDeleteListEnvelope(
+            listId: String,
+            session: TrackingAuthSession
+        ): TraktMutationEnvelope {
             return buildDeleteListEnvelope(
                 listId = listId,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
 
         fun buildDeleteListEnvelope(
             listId: String,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_DELETE_LIST,
                 priority = TraktMutationPriorityBucket.LISTS,
@@ -347,19 +367,25 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
 
         fun buildReorderListsEnvelope(
-            rank: List<Long>
+            rank: List<Long>,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildReorderListsEnvelope(
                 rank = rank,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
 
         fun buildReorderListsEnvelope(
             rank: List<Long>,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_REORDER_LISTS,
                 priority = TraktMutationPriorityBucket.LISTS,
@@ -372,44 +398,52 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
 
         fun buildWatchlistAddEnvelope(
-            body: TraktListItemsMutationRequestDto
+            body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildWatchlistAddEnvelope(
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
 
         fun buildWatchlistAddEnvelope(
             body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_ADD, "library:watchlist", body, rollbackState = rollbackState)
+            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_ADD, "library:watchlist", body, session, rollbackState = rollbackState)
         }
 
         fun buildWatchlistRemoveEnvelope(
-            body: TraktListItemsMutationRequestDto
+            body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildWatchlistRemoveEnvelope(
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
 
         fun buildWatchlistRemoveEnvelope(
             body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_REMOVE, "library:watchlist", body, rollbackState = rollbackState)
+            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_REMOVE, "library:watchlist", body, session, rollbackState = rollbackState)
         }
 
         fun buildListAddEnvelope(
             listId: String,
-            body: TraktListItemsMutationRequestDto
+            body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildListAddEnvelope(
                 listId = listId,
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
@@ -417,18 +451,21 @@ class TraktLibraryMutationAdapter @Inject constructor(
         fun buildListAddEnvelope(
             listId: String,
             body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_LIST_ADD, "library:list:$listId", body, rollbackState, listId)
+            return buildItemEnvelope(MUTATION_KIND_LIST_ADD, "library:list:$listId", body, session, rollbackState, listId)
         }
 
         fun buildListRemoveEnvelope(
             listId: String,
-            body: TraktListItemsMutationRequestDto
+            body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return buildListRemoveEnvelope(
                 listId = listId,
                 body = body,
+                session = session,
                 rollbackState = TraktLibraryService.LibraryRollbackState()
             )
         }
@@ -436,15 +473,20 @@ class TraktLibraryMutationAdapter @Inject constructor(
         fun buildListRemoveEnvelope(
             listId: String,
             body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_LIST_REMOVE, "library:list:$listId", body, rollbackState, listId)
+            return buildItemEnvelope(MUTATION_KIND_LIST_REMOVE, "library:list:$listId", body, session, rollbackState, listId)
         }
 
         fun buildCollectionAddEnvelope(
-            body: TraktCollectionAddRequestDto
+            body: TraktCollectionAddRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_COLLECTION_ADD,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -454,9 +496,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
 
         fun buildCollectionRemoveEnvelope(
-            body: TraktCollectionRemoveRequestDto
+            body: TraktCollectionRemoveRequestDto,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_COLLECTION_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -469,10 +515,14 @@ class TraktLibraryMutationAdapter @Inject constructor(
             kind: String,
             collapseKey: String,
             body: TraktListItemsMutationRequestDto,
+            session: TrackingAuthSession,
             rollbackState: TraktLibraryService.LibraryRollbackState,
             listId: String? = null
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireTraktCredentialHash(session),
                 adapterKey = ADAPTER_KEY,
                 mutationKind = kind,
                 priority = if (kind.contains("watchlist")) TraktMutationPriorityBucket.WATCHLIST else TraktMutationPriorityBucket.LISTS,
@@ -528,9 +578,16 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.session(): TrackingAuthSession {
             return TrackingAuthSession(
-                provider = TrackingProvider.TRAKT,
-                profileId = profileId
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
             )
+        }
+
+        private fun requireTraktCredentialHash(session: TrackingAuthSession): String {
+            return requireNotNull(session.credentialHash) {
+                "Trakt mutation envelopes require account-scoped credentialHash"
+            }
         }
 
         private const val ME_PATH = "me"

@@ -12,11 +12,14 @@ import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
 import com.nexio.tv.data.repository.DefaultTrackingProgressService
 import com.nexio.tv.data.repository.DefaultTrackingScrobbleService
+import com.nexio.tv.data.repository.DefaultTrackingAccountScopeProvider
 import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.repository.KitsuDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
+import com.nexio.tv.data.repository.TrackingAccountScopeProvider
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
@@ -90,6 +93,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindTrackingAccountScopeProvider(
+        impl: DefaultTrackingAccountScopeProvider
+    ): TrackingAccountScopeProvider
+
+    @Binds
+    @Singleton
     abstract fun bindServiceWrapResolver(impl: DebridAvailabilityResolver): ServiceWrapResolver
 
     @Binds
@@ -110,11 +119,13 @@ abstract class RepositoryModule {
         @Provides
         @Singleton
         fun provideSeasonMarkBatcher(
-            providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
+            providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
+            traktAuthService: TraktAuthService
         ): SeasonMarkBatcher {
             return SeasonMarkBatcher(
-                providerMutationOutboxCoordinator,
-                Dispatchers.IO
+                traktMutationOutboxCoordinator = providerMutationOutboxCoordinator,
+                traktAuthService = traktAuthService,
+                ioDispatcher = Dispatchers.IO
             )
         }
     }

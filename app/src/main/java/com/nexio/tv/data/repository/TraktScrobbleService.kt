@@ -180,9 +180,11 @@ class TraktScrobbleService @Inject constructor(
         return true
     }
 
-    private suspend fun authSession(ownerProfileId: Int?): TrackingAuthSession =
-        ownerProfileId?.let { TrackingAuthSession(com.nexio.tv.domain.model.TrackingProvider.TRAKT, it) }
+    private suspend fun authSession(ownerProfileId: Int?): TrackingAuthSession {
+        val base = ownerProfileId?.let { TrackingAuthSession(com.nexio.tv.domain.model.TrackingProvider.TRAKT, it) }
             ?: traktAuthService.currentAuthSession()
+        return traktAuthService.mutationAccountScopedSession(base)
+    }
 
     private suspend fun submitMutation(request: WatchingMutationRequest): MutationResult {
         val result = CompletableDeferred<MutationResult>()
@@ -257,7 +259,7 @@ class TraktScrobbleService @Inject constructor(
                     message = request.message,
                     rollbackState = rollbackState,
                     optimisticVersion = request.optimisticVersion,
-                    profileId = request.profileId
+                    session = authSession(request.profileId)
                 )
             )
             MutationResult.Success
@@ -283,7 +285,7 @@ class TraktScrobbleService @Inject constructor(
                     progressPercent = clampedProgress,
                     rollbackState = rollbackState,
                     optimisticVersion = request.optimisticVersion,
-                    profileId = request.profileId
+                    session = authSession(request.profileId)
                 )
             )
             stateFor(request.profileId).lastScrobbleStamp = ScrobbleStamp(

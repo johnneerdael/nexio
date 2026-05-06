@@ -10,6 +10,7 @@ import com.nexio.tv.data.remote.dto.simkl.SimklPinResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklPinStatusResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklUserDto
 import com.nexio.tv.data.remote.dto.simkl.SimklUserSettingsResponseDto
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
@@ -81,5 +82,44 @@ class SimklAuthServiceTest {
 
         assertEquals("profile-two-user", simklAuthDataStore.stateForProfile(2).first().username)
         assertNull(simklAuthDataStore.stateForProfile(3).first().username)
+    }
+
+    @Test
+    fun `mutation account scope stays stable after first user settings hydration`() = runTest {
+        val simklAuthIntegrationProvider = mockk<SimklAuthIntegrationProvider>()
+        val profileManager = testProfileManager()
+        val simklAuthDataStore = SimklAuthDataStore(
+            factory = profileDataStoreFactoryForTest(),
+            profileManager = profileManager
+        )
+        simklAuthDataStore.saveAccessToken(
+            accessToken = "access",
+            clearAccountIdentity = true
+        )
+        coEvery {
+            simklAuthIntegrationProvider.getUserSettings(any(), any())
+        } returns Response.success(
+            SimklUserSettingsResponseDto(
+                user = SimklUserDto(name = "profile-two-user"),
+                account = SimklAccountDto(id = 2L, type = "standard")
+            )
+        )
+
+        val service = spyk(
+            SimklAuthService(
+                simklAuthIntegrationProvider = simklAuthIntegrationProvider,
+                simklAuthDataStore = simklAuthDataStore,
+                requestGate = SimklRequestGate(),
+                profileManager = profileManager,
+                profileModeRouter = ProfileModeRouter(),
+                profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+            )
+        )
+
+        val first = service.mutationAccountScopedSession(TrackingAuthSession(TrackingProvider.SIMKL, 1))
+        val second = service.mutationAccountScopedSession(TrackingAuthSession(TrackingProvider.SIMKL, 1))
+
+        assertEquals(first.credentialHash, second.credentialHash)
+        assertEquals(2L, simklAuthDataStore.stateForProfile(1).first().accountId)
     }
 }

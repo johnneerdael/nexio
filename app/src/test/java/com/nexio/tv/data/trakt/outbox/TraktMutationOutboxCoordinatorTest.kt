@@ -2,6 +2,7 @@ package com.nexio.tv.data.trakt.outbox
 
 import android.content.Context
 import com.google.gson.JsonObject
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -71,7 +72,8 @@ class TraktMutationOutboxCoordinatorTest {
 
         val coordinator = TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
 
         val settled = awaitTerminalState(coordinator, envelope.id)
@@ -107,7 +109,8 @@ class TraktMutationOutboxCoordinatorTest {
 
         val coordinator = TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
 
         val settled = awaitTerminalState(coordinator, envelope.id, profileId = 2)
@@ -123,6 +126,8 @@ class TraktMutationOutboxCoordinatorTest {
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
         val envelope = TraktMutationEnvelope(
             id = "simkl-persisted",
+            provider = TrackingProvider.SIMKL,
+            credentialHash = "simkl-test-credential",
             adapterKey = "simkl.progress-history",
             mutationKind = "simkl.progress.history.add",
             priority = TraktMutationPriorityBucket.WATCHED,
@@ -145,7 +150,8 @@ class TraktMutationOutboxCoordinatorTest {
 
         val coordinator = TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
 
         val settled = awaitTerminalState(coordinator, envelope.id)
@@ -171,6 +177,8 @@ class TraktMutationOutboxCoordinatorTest {
         )
         val coordinator = buildCoordinator(adapter)
         val envelope = TraktMutationEnvelope(
+            provider = TrackingProvider.SIMKL,
+            credentialHash = "simkl-test-credential",
             adapterKey = "simkl.library",
             mutationKind = "simkl.library.addToList",
             priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -201,6 +209,8 @@ class TraktMutationOutboxCoordinatorTest {
         )
         val coordinator = buildCoordinator(adapter)
         val envelope = TraktMutationEnvelope(
+            provider = TrackingProvider.SIMKL,
+            credentialHash = "simkl-test-credential",
             adapterKey = "simkl.library",
             mutationKind = "simkl.library.addToList",
             priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -225,6 +235,8 @@ class TraktMutationOutboxCoordinatorTest {
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
         val envelope = TraktMutationEnvelope(
             id = "simkl-persisted-terminal",
+            provider = TrackingProvider.SIMKL,
+            credentialHash = "simkl-test-credential",
             adapterKey = "simkl.library",
             mutationKind = "simkl.library.addToList",
             priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -250,7 +262,8 @@ class TraktMutationOutboxCoordinatorTest {
 
         val coordinator = TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
 
         val settled = awaitTerminalState(coordinator, envelope.id)
@@ -266,6 +279,8 @@ class TraktMutationOutboxCoordinatorTest {
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
         val envelope = TraktMutationEnvelope(
             id = "simkl-persisted-retry",
+            provider = TrackingProvider.SIMKL,
+            credentialHash = "simkl-test-credential",
             adapterKey = "simkl.progress-history",
             mutationKind = "simkl.progress.history.add",
             priority = TraktMutationPriorityBucket.WATCHED,
@@ -296,7 +311,8 @@ class TraktMutationOutboxCoordinatorTest {
 
         val coordinator = TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
 
         val settled = awaitTerminalState(coordinator, envelope.id, maxPolls = 900)
@@ -337,12 +353,15 @@ class TraktMutationOutboxCoordinatorTest {
         )
         return TraktMutationOutboxCoordinator(
             worker = worker,
-            adapters = setOf(adapter)
+            adapters = setOf(adapter),
+            accountScopeValidator = AcceptingValidator
         )
     }
 
     private fun sampleEnvelope(): TraktMutationEnvelope {
         return TraktMutationEnvelope(
+            provider = TrackingProvider.TRAKT,
+            credentialHash = "trakt-test-credential",
             adapterKey = "progress",
             mutationKind = "history:add",
             priority = TraktMutationPriorityBucket.WATCHED,
@@ -351,6 +370,11 @@ class TraktMutationOutboxCoordinatorTest {
             rollbackPayload = JsonObject(),
             metadata = JsonObject()
         )
+    }
+
+    private object AcceptingValidator : ProviderMutationAccountScopeValidator {
+        override suspend fun validateForEnqueue(envelope: TraktMutationEnvelope) = Unit
+        override suspend fun validateForExecute(envelope: TraktMutationEnvelope) = Unit
     }
 
     private fun mockContext(prefs: InMemorySharedPreferences): Context {

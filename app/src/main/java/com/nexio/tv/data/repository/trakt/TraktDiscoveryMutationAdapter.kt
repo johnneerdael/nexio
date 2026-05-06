@@ -34,7 +34,11 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
     }
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = TrackingAuthSession(
+            provider = envelope.provider,
+            profileId = envelope.profileId,
+            credentialHash = envelope.credentialHash
+        )
         val response = traktIntegrationProvider.hideRecommendation(
             session = session,
             type = envelope.recommendationType(),
@@ -77,7 +81,7 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
 
         fun buildDismissRecommendationEnvelope(
             ref: TraktRecommendationRef,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_RECOMMENDATION_KEY, ref.recommendationKey)
@@ -85,7 +89,11 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
                 addProperty(PAYLOAD_PATH_ID, ref.pathId)
             }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.LISTS,
@@ -109,6 +117,7 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
             return payload.get(PAYLOAD_PATH_ID)?.asString
                 ?: error("Missing Trakt path id payload")
         }
+
     }
 }
 

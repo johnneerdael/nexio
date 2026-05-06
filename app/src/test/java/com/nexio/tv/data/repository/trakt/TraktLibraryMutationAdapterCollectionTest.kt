@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
@@ -33,7 +34,7 @@ class TraktLibraryMutationAdapterCollectionTest {
     @Test
     fun `buildCollectionAddEnvelope creates envelope with correct mutation kind`() {
         val body = addBody()
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = body)
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = body, session = testTraktSession())
 
         assertEquals(TraktLibraryMutationAdapter.MUTATION_KIND_COLLECTION_ADD, envelope.mutationKind)
     }
@@ -41,21 +42,21 @@ class TraktLibraryMutationAdapterCollectionTest {
     @Test
     fun `buildCollectionRemoveEnvelope creates envelope with correct mutation kind`() {
         val body = removeBody()
-        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = body)
+        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = body, session = testTraktSession())
 
         assertEquals(TraktLibraryMutationAdapter.MUTATION_KIND_COLLECTION_REMOVE, envelope.mutationKind)
     }
 
     @Test
     fun `buildCollectionAddEnvelope uses ADAPTER_KEY`() {
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
 
         assertEquals(TraktLibraryMutationAdapter.ADAPTER_KEY, envelope.adapterKey)
     }
 
     @Test
     fun `buildCollectionRemoveEnvelope uses ADAPTER_KEY`() {
-        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody(), session = testTraktSession())
 
         assertEquals(TraktLibraryMutationAdapter.ADAPTER_KEY, envelope.adapterKey)
     }
@@ -68,7 +69,7 @@ class TraktLibraryMutationAdapterCollectionTest {
             TraktCollectionAddResponseDto(added = TraktCollectionWriteCountsDto(movies = 1))
         )
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Success)
@@ -80,7 +81,7 @@ class TraktLibraryMutationAdapterCollectionTest {
             TraktCollectionAddResponseDto(added = TraktCollectionWriteCountsDto(movies = 1))
         )
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
         val result = adapter.execute(envelope) as TraktMutationExecutionResult.Success
 
         assertEquals(201, result.httpStatusCode)
@@ -90,7 +91,7 @@ class TraktLibraryMutationAdapterCollectionTest {
     fun `executeCollectionAdd returns Failure when provider returns HttpError`() = runBlocking {
         coEvery { executor.addToCollection(any()) } returns IntegrationCallResult.HttpError(statusCode = 422)
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Failure)
@@ -101,7 +102,7 @@ class TraktLibraryMutationAdapterCollectionTest {
     fun `executeCollectionAdd returns Failure when provider returns Missing`() = runBlocking {
         coEvery { executor.addToCollection(any()) } returns IntegrationCallResult.Missing
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Failure)
@@ -113,7 +114,7 @@ class TraktLibraryMutationAdapterCollectionTest {
             throwable = RuntimeException("timeout")
         )
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionAddEnvelope(body = addBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Failure)
@@ -127,7 +128,7 @@ class TraktLibraryMutationAdapterCollectionTest {
             TraktCollectionRemoveResponseDto(deleted = TraktCollectionWriteCountsDto(movies = 1))
         )
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Success)
@@ -137,7 +138,7 @@ class TraktLibraryMutationAdapterCollectionTest {
     fun `executeCollectionRemove returns Failure when provider returns Missing`() = runBlocking {
         coEvery { executor.removeFromCollection(any()) } returns IntegrationCallResult.Missing
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Failure)
@@ -147,7 +148,7 @@ class TraktLibraryMutationAdapterCollectionTest {
     fun `executeCollectionRemove returns Failure when provider returns HttpError`() = runBlocking {
         coEvery { executor.removeFromCollection(any()) } returns IntegrationCallResult.HttpError(statusCode = 404)
 
-        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody())
+        val envelope = TraktLibraryMutationAdapter.buildCollectionRemoveEnvelope(body = removeBody(), session = testTraktSession())
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Failure)

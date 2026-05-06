@@ -478,7 +478,8 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -570,7 +571,8 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -682,7 +684,8 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -801,7 +804,8 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider()
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -875,7 +879,8 @@ class MarkSeasonWatchedTest {
                     every { currentTraktProfileId() } returns 1
                 },
                 snapshotServiceProvider = Provider { snapshotService },
-                metadataRouterFacade = mockk(relaxed = true)
+                metadataRouterFacade = mockk(relaxed = true),
+                accountScopeProvider = com.nexio.tv.data.repository.TestTrackingAccountScopeProvider()
             )
 
             val meta = buildSeriesMeta(id = showId)

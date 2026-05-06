@@ -72,7 +72,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
 
     private suspend fun executeCheckin(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val requestBody = envelope.buildCheckinRequestBody()
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = envelope.session()
         val logApi = isScrobbleApiLoggingEnabled()
         if (logApi) {
             logTraktScrobbleRequest(
@@ -103,7 +103,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
 
     private suspend fun executeScrobble(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val requestBody = envelope.buildScrobbleRequestBody()
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = envelope.session()
         val action = envelope.scrobbleAction()
         val endpoint = "POST /scrobble/$action"
         val logApi = isScrobbleApiLoggingEnabled()
@@ -218,7 +218,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             progressPercent: Float,
             rollbackState: TraktWatchingNowStateController.Snapshot,
             optimisticVersion: Long,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
@@ -226,7 +226,11 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 addProperty(PAYLOAD_PROGRESS, progressPercent.coerceIn(0f, 100f))
             }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_SCROBBLE,
                 priority = TraktMutationPriorityBucket.SCROBBLE,
@@ -241,14 +245,18 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             message: String?,
             rollbackState: TraktWatchingNowStateController.Snapshot,
             optimisticVersion: Long,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
                 message?.let { addProperty(PAYLOAD_MESSAGE, it) }
             }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_CHECKIN,
                 priority = TraktMutationPriorityBucket.SCROBBLE,
@@ -389,6 +397,15 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 )
             }
         }
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession {
+            return TrackingAuthSession(
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
+            )
+        }
+
     }
 }
 
