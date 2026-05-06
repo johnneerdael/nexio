@@ -9,13 +9,6 @@ enum class EpisodeProjectionTarget {
     CONTINUE_WATCHING,
 }
 
-enum class FallbackReason {
-    NO_TVDB_MAPPING,
-    NO_TMDB_MAPPING,
-    LOW_CONFIDENCE_FLAT_KITSU,
-    OVERLAY_MISSING,
-}
-
 data class AnimeEpisodeProjection(
     val sourceKitsuId: String,
     val sourceKitsuCoordinate: EpisodeCoordinate,
