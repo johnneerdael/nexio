@@ -11,6 +11,7 @@ import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.MetadataIdParser
 import com.nexio.tv.core.metadata.router.MetadataParentIdNormalizer
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
 import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
 import com.nexio.tv.data.mapper.toDomain
@@ -45,7 +46,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val serviceWrapSessionFactory: ServiceWrapSessionFactory,
     private val addonStreamRequestCanceller: AddonStreamRequestCanceller,
-    private val animeIdentityIndex: AnimeIdentityIndex
+    private val animeIdentityIndex: AnimeIdentityIndex,
+    private val traceMetadataEvents: TraceMetadataEvents
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -69,10 +71,10 @@ class StreamRepositoryImpl @Inject constructor(
             val streamAddons = addons.filter { addon ->
                 addon.supportsStreamResource(type)
             }
+            val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
             val contentIsAnime = if (streamAddons.none { it.isAnime }) {
                 false
             } else {
-                val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
                 val parsedContentId = MetadataIdParser.parse(parentContentId)
                 if (parsedContentId.scheme == AnimeIdScheme.UNKNOWN) {
                     false
@@ -87,6 +89,12 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
             }
+            traceMetadataEvents.emitStreamRequestClassified(
+                contentId = videoId,
+                parentId = parentContentId,
+                contentIsAnime = contentIsAnime,
+                evidence = "AnimeIdentityIndex"
+            )
 
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()
             val addonDiagnostics = mutableListOf<AddonFetchDiagnostic>()
@@ -133,11 +141,18 @@ class StreamRepositoryImpl @Inject constructor(
                                 is NetworkResult.Success -> {
                                     streamCount = streamsResult.data.size
                                     outcome = if (streamCount > 0) "success_non_empty" else "success_empty"
+                                    val isAnimeBucket = addon.isAnime && contentIsAnime
                                     emittedAddonStreams = AddonStreams(
                                         addonName = addon.displayName,
                                         addonLogo = addon.logo,
                                         streams = streamsResult.data,
-                                        isAnimeBucket = addon.isAnime && contentIsAnime
+                                        isAnimeBucket = isAnimeBucket
+                                    )
+                                    traceMetadataEvents.emitStreamAddonBucketed(
+                                        addonIdHash = addonIdHash(addon.id),
+                                        addonIsAnime = addon.isAnime,
+                                        contentIsAnime = contentIsAnime,
+                                        isAnimeBucket = isAnimeBucket
                                     )
                                 }
                                 is NetworkResult.Error -> {
@@ -397,3 +412,9 @@ private data class AddonFetchDiagnostic(
     val httpCode: Int?,
     val durationMs: Long
 )
+
+private fun addonIdHash(addonId: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(addonId.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+        .take(12)

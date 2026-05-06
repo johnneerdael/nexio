@@ -4,6 +4,9 @@ import android.util.Log
 import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
 import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -59,6 +62,38 @@ class StreamRepositoryImplAnimeBucketTest {
         assertTrue(buckets.single { it.addonName == "Anime Addon" }.isAnimeBucket)
         assertFalse(buckets.single { it.addonName == "Generic Addon" }.isAnimeBucket)
         assertEquals(listOf("21"), index.lookups.map { it.value })
+    }
+
+    @Test
+    fun `stream classification trace events include normalized parent and addon bucket`() = runTest {
+        val sink = RecordingTraceSink()
+        val traceMetadataEvents = TraceMetadataEvents(sink, sessionId = { "trace-stream" })
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = true),
+            traceMetadataEvents = traceMetadataEvents
+        )
+
+        repository.successBuckets(videoId = "kitsu:7442:1:1")
+
+        val requestEvents = sink.events.filter { it.eventType == "stream.request_classified" }
+        assertEquals(1, requestEvents.size)
+        val requestPayload = requestEvents.single().payload as Map<*, *>
+        assertEquals("kitsu:7442:1:1", requestPayload["contentId"])
+        assertEquals("kitsu:7442", requestPayload["parentId"])
+        assertEquals(true, requestPayload["contentIsAnime"])
+        assertEquals("AnimeIdentityIndex", requestPayload["evidence"])
+
+        val bucketEvents = sink.events.filter { it.eventType == "stream.addon_bucketed" }
+        assertEquals(1, bucketEvents.size)
+        val bucketPayload = bucketEvents.single().payload as Map<*, *>
+        val addonIdHash = bucketPayload["addonIdHash"] as String
+        assertEquals(12, addonIdHash.length)
+        assertFalse(addonIdHash == animeAddon.id)
+        assertEquals(true, bucketPayload["addonIsAnime"])
+        assertEquals(true, bucketPayload["contentIsAnime"])
+        assertEquals(true, bucketPayload["isAnimeBucket"])
     }
 
     @Test
@@ -147,7 +182,8 @@ class StreamRepositoryImplAnimeBucketTest {
                 override suspend fun isAnime(id: ParsedMetadataId): Boolean {
                     throw CancellationException("cancelled")
                 }
-            }
+            },
+            traceMetadataEvents = mockk(relaxed = true)
         )
         var thrown: CancellationException? = null
 
@@ -314,7 +350,8 @@ class StreamRepositoryImplAnimeBucketTest {
         addons: List<Addon>,
         animeIdentityIndex: AnimeIdentityIndex,
         playerSettings: PlayerSettings = PlayerSettings(),
-        serviceWrapSessionFactory: ServiceWrapSessionFactory = mockk(relaxed = true)
+        serviceWrapSessionFactory: ServiceWrapSessionFactory = mockk(relaxed = true),
+        traceMetadataEvents: TraceMetadataEvents = mockk(relaxed = true)
     ): StreamRepositoryImpl {
         mockAndroidLog()
 
@@ -346,7 +383,8 @@ class StreamRepositoryImplAnimeBucketTest {
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
             addonStreamRequestCanceller = addonStreamRequestCanceller,
-            animeIdentityIndex = animeIdentityIndex
+            animeIdentityIndex = animeIdentityIndex,
+            traceMetadataEvents = traceMetadataEvents
         )
     }
 
@@ -457,5 +495,17 @@ class StreamRepositoryImplAnimeBucketTest {
         override suspend fun isAnime(id: ParsedMetadataId): Boolean {
             error("AnimeIdentityIndex should not be called for unknown content ids")
         }
+    }
+
+    private class RecordingTraceSink : RuntimeTraceSink {
+        val events = mutableListOf<TraceEventEnvelope<*>>()
+
+        override fun emit(event: TraceEventEnvelope<*>) {
+            events += event
+        }
+
+        override fun eventsWritten(): Long = events.size.toLong()
+
+        override fun eventsDropped(): Long = 0L
     }
 }
