@@ -23,7 +23,8 @@ data class Addon(
     val types: List<ContentType>,
     val rawTypes: List<String> = types.map { it.toApiString() },
     val resources: List<AddonResource>,
-    val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+    val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+    val isAnime: Boolean = false,
 )
 
 @Immutable
