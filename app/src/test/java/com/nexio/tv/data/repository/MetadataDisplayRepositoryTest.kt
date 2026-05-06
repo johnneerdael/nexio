@@ -41,6 +41,7 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -53,7 +54,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay maps router result into resolved detail document`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
         val request = MetadataRequest(
             contentId = "tmdb:1399",
@@ -183,7 +184,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay selected language comes from localization trace before advanced language`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
         val request = MetadataRequest(
             contentId = "tvdb:121361",
@@ -238,13 +239,6 @@ class MetadataDisplayRepositoryTest {
             trace = emptyList()
         )
 
-        coEvery { routerFacade.resolveTrailer(any()) } returns TrailerResolution(
-            availability = TrailerAvailability(available = false, reason = "no_candidates"),
-            candidates = emptyList(),
-            selected = null,
-            trace = emptyList()
-        )
-
         val document = repository.resolveDetailDisplay(request)
 
         assertEquals("eng", document.localization.selectedLanguage)
@@ -257,7 +251,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay keeps selected language and fallback reason from same localization trace`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
         val request = MetadataRequest(
             contentId = "tvdb:121361",
@@ -319,13 +313,6 @@ class MetadataDisplayRepositoryTest {
             trace = emptyList()
         )
 
-        coEvery { routerFacade.resolveTrailer(any()) } returns TrailerResolution(
-            availability = TrailerAvailability(available = false, reason = "no_candidates"),
-            candidates = emptyList(),
-            selected = null,
-            trace = emptyList()
-        )
-
         val document = repository.resolveDetailDisplay(request)
 
         assertEquals("eng", document.localization.selectedLanguage)
@@ -336,8 +323,81 @@ class MetadataDisplayRepositoryTest {
     }
 
     @Test
+    fun `resolveDetailDisplay reports visible title fallback when overview is localized`() = runTest {
+        val routerFacade = mockRouterFacade()
+        val repository = MetadataDisplayRepository(routerFacade)
+        val request = MetadataRequest(
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(),
+            language = "nl",
+            depth = MetadataDepth.DETAIL_CORE
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_CORE,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "tvdb:121361",
+                title = "English TVDB title",
+                overview = "Nederlandse TVDB overview",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                fieldOwners = mapOf(
+                    ResolvedField.TITLE to FieldOwner.PRIMARY,
+                    ResolvedField.OVERVIEW to FieldOwner.PRIMARY
+                ),
+                ignoredOverwrites = emptyList(),
+                localization = linkedMapOf(
+                    ResolvedField.OVERVIEW to MetadataLocalizationFieldTrace(
+                        field = ResolvedField.OVERVIEW,
+                        selectedProvider = MetadataPrimaryProvider.TVDB,
+                        selectedLanguage = "nld",
+                        fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+                        sourceApiShapeId = "tvdb.series.translation",
+                        rejectedCandidates = emptyList()
+                    ),
+                    ResolvedField.TITLE to MetadataLocalizationFieldTrace(
+                        field = ResolvedField.TITLE,
+                        selectedProvider = MetadataPrimaryProvider.TVDB,
+                        selectedLanguage = "eng",
+                        fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
+                        sourceApiShapeId = "tvdb.series.translation",
+                        rejectedCandidates = listOf(
+                            MetadataLocalizationRejectedCandidate(
+                                provider = MetadataPrimaryProvider.TVDB,
+                                language = "nld",
+                                fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+                                reason = "missing_or_placeholder"
+                            )
+                        )
+                    )
+                )
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview title"),
+            trace = emptyList()
+        )
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("eng", document.localization.selectedLanguage)
+        assertEquals(
+            "TITLE fell back to eng via TVDB (LANGUAGE_FALLBACK)",
+            document.localization.fallbackReason
+        )
+    }
+
+    @Test
     fun `resolveDetailDisplay fills missing provider ids from route target ids`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
         val request = MetadataRequest(
             contentId = "tt0944947",
@@ -397,7 +457,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay carries detail rating display state in resolved document`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
@@ -482,7 +542,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay projects resolved string artwork into detail artwork`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
         val request = MetadataRequest(
             contentId = "tvdb:121361",
@@ -525,7 +585,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay derives rating context when preview context is unavailable`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
@@ -601,7 +661,7 @@ class MetadataDisplayRepositoryTest {
 
     @Test
     fun `resolveDetailDisplay keeps primary rating when optional rating display fails`() = runTest {
-        val routerFacade = mockk<MetadataRouterFacade>()
+        val routerFacade = mockRouterFacade()
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
             metadataRouterFacade = routerFacade,
@@ -686,6 +746,16 @@ class MetadataDisplayRepositoryTest {
             sourceProvider = sourceProvider,
             confidence = Confidence.MEDIUM
         )
+
+    private fun mockRouterFacade(): MetadataRouterFacade =
+        mockk<MetadataRouterFacade>().also { routerFacade ->
+            every { routerFacade.resolveTrailer(any()) } returns TrailerResolution(
+                availability = TrailerAvailability(available = false, reason = "no_candidates"),
+                candidates = emptyList(),
+                selected = null,
+                trace = emptyList()
+            )
+        }
 
     private fun artworkRef(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =
         ArtworkDisplayRef.RuntimeAsset(

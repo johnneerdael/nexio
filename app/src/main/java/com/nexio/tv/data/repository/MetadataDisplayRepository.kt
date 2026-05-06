@@ -484,10 +484,17 @@ class MetadataDisplayRepository @Inject constructor(
         }
     }
 
-    private fun ResolvedMetadataDocument.selectedLocalizationTrace(): MetadataLocalizationFieldTrace? =
-        localization[ResolvedField.OVERVIEW]
-            ?: localization[ResolvedField.TITLE]
+    private fun ResolvedMetadataDocument.selectedLocalizationTrace(): MetadataLocalizationFieldTrace? {
+        val visibleTextTraces = listOfNotNull(
+            localization[ResolvedField.OVERVIEW],
+            localization[ResolvedField.TITLE]
+        )
+
+        return visibleTextTraces.firstOrNull { trace ->
+            trace.fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED
+        } ?: visibleTextTraces.firstOrNull()
             ?: localization.values.firstOrNull()
+    }
 
     private fun MetadataLocalizationFieldTrace.localizationFallbackReason(): String? =
         takeIf { fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED }
