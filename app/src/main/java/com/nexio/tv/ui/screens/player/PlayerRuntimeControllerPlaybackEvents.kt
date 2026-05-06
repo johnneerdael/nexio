@@ -267,7 +267,16 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
     )
 
     scope.launch {
-        watchProgressRepository.saveProgress(progress, syncRemote = syncRemote)
+        watchProgressRepository.upsertProgress(
+            profileSession = com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = playbackOwnerContext.ownerProfileId,
+                sessionId = playbackOwnerContext.ownerSessionId,
+                sessionOrdinal = 1L,
+                startedAtMs = playbackOwnerContext.startedAtEpochMs
+            ),
+            progress = progress,
+            syncRemote = syncRemote
+        )
     }
 }
 

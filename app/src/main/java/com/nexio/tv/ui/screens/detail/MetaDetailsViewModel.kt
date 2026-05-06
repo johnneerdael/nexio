@@ -27,6 +27,7 @@ import com.nexio.tv.core.metadata.router.ProviderPlanRunner
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -186,6 +187,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val metadataSecondaryRepository: MetadataSecondaryRepository,
     private val profileBoundary: ProfileBoundary,
+    private val profileManager: ProfileManager,
     private val mdbListRepository: MDBListRepository,
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
@@ -466,8 +468,10 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            effectiveContentId.flatMapLatest { contentId ->
-                watchProgressRepository.getAllEpisodeProgress(contentId)
+            profileManager.activeProfileId.flatMapLatest { profileId ->
+                effectiveContentId.flatMapLatest { contentId ->
+                    watchProgressRepository.getAllEpisodeProgress(profileId, contentId)
+                }
             }
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
@@ -493,8 +497,10 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            effectiveContentId.flatMapLatest { contentId ->
-                watchProgressRepository.getAllEpisodeProgress(contentId)
+            profileManager.activeProfileId.flatMapLatest { profileId ->
+                effectiveContentId.flatMapLatest { contentId ->
+                    watchProgressRepository.getAllEpisodeProgress(profileId, contentId)
+                }
             }
                 .map { progressMap ->
                     progressMap
@@ -533,8 +539,10 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
         viewModelScope.launch {
-            effectiveContentId.flatMapLatest { contentId ->
-                watchProgressRepository.isWatched(contentId)
+            profileManager.activeProfileId.flatMapLatest { profileId ->
+                effectiveContentId.flatMapLatest { contentId ->
+                    watchProgressRepository.isWatched(profileId, contentId)
+                }
             }
                 .distinctUntilChanged()
                 .collectLatest { watched ->
@@ -1496,8 +1504,9 @@ class MetaDetailsViewModel @Inject constructor(
                 null
             } else {
                 if (!settings.isActive) return result(meta)
-                val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
-                    ?: tmdbService.ensureTmdbId(itemId, itemType)
+                val tmdbId = listOf(meta.id, itemId)
+                    .firstNotNullOfOrNull { id -> parseContentIds(id).tmdb }
+                    ?.toString()
                     ?: return result(meta)
                 metadataRouterFacade.fetchTmdbEnrichment(
                     metadataRequest = MetadataRequest(
@@ -2260,7 +2269,9 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             if (!isSeries) {
                 // For movies, check if there's an in-progress watch
-                val progress = watchProgressRepository.getProgress(itemId).firstOrNull()
+                val progress = watchProgressRepository
+                    .getProgress(profileManager.activeProfileId.value, itemId)
+                    .firstOrNull()
                 val nextToWatch = if (progress != null && shouldResumeProgress(progress)) {
                     NextToWatch(
                         watchProgress = progress,
@@ -2499,10 +2510,13 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isMovieWatchedPending = true) }
             runCatching {
                 if (_uiState.value.isMovieWatched) {
-                    watchProgressRepository.removeFromHistory(progressContentId)
+                    watchProgressRepository.removeFromHistory(profileManager.activeProfileSession.value, progressContentId)
                     showMessage(context.getString(R.string.detail_movie_marked_unwatched))
                 } else {
-                    watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta, progressContentId))
+                    watchProgressRepository.markAsCompleted(
+                        profileManager.activeProfileSession.value,
+                        buildCompletedMovieProgress(meta, progressContentId)
+                    )
                     showMessage(context.getString(R.string.detail_movie_marked_watched))
                 }
             }.onFailure { error ->
@@ -2534,10 +2548,18 @@ class MetaDetailsViewModel @Inject constructor(
             applyEpisodeWatchOverride(setOf(episodeKey), watched = !isWatched)
             runCatching {
                 if (isWatched) {
-                    watchProgressRepository.removeFromHistory(progressContentId, season, episode)
+                    watchProgressRepository.removeFromHistory(
+                        profileManager.activeProfileSession.value,
+                        progressContentId,
+                        season,
+                        episode
+                    )
                     showMessage(context.getString(R.string.detail_episode_marked_unwatched))
                 } else {
-                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video, progressContentId))
+                    watchProgressRepository.markAsCompleted(
+                        profileManager.activeProfileSession.value,
+                        buildCompletedEpisodeProgress(meta, video, progressContentId)
+                    )
                     showMessage(context.getString(R.string.detail_episode_marked_watched))
                 }
             }.onFailure { error ->
@@ -2639,7 +2661,12 @@ class MetaDetailsViewModel @Inject constructor(
                     it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
                 }
                 applyEpisodeWatchOverride(episodeKeys, watched = true)
-                watchProgressRepository.markAsCompletedBatch(meta, season, seasonEpisodes)
+                watchProgressRepository.markAsCompletedBatch(
+                    profileManager.activeProfileSession.value,
+                    meta,
+                    season,
+                    seasonEpisodes
+                )
                 showMessage(context.getString(R.string.detail_marked_episodes_watched, seasonEpisodes.size))
             } catch (e: CancellationException) {
                 throw e
@@ -2697,7 +2724,12 @@ class MetaDetailsViewModel @Inject constructor(
                 val episodeNumber = video.episode ?: continue
                 val episodeKey = seasonNumber to episodeNumber
                 runCatching {
-                    watchProgressRepository.removeFromHistory(progressContentId, seasonNumber, episodeNumber)
+                    watchProgressRepository.removeFromHistory(
+                        profileManager.activeProfileSession.value,
+                        progressContentId,
+                        seasonNumber,
+                        episodeNumber
+                    )
                     unmarked++
                 }.onFailure { error ->
                     if (error is CancellationException) throw error
@@ -2745,7 +2777,10 @@ class MetaDetailsViewModel @Inject constructor(
                 val key = episodePendingKey(ep)
                 val episodeKey = ep.season!! to ep.episode!!
                 runCatching {
-                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep, progressContentId))
+                    watchProgressRepository.markAsCompleted(
+                        profileManager.activeProfileSession.value,
+                        buildCompletedEpisodeProgress(meta, ep, progressContentId)
+                    )
                     marked++
                 }.onFailure { error ->
                     if (error is CancellationException) throw error
@@ -3293,7 +3328,12 @@ class MetaDetailsViewModel @Inject constructor(
             val episodeKey = season to episode
             applyEpisodeWatchOverride(setOf(episodeKey), watched = false)
             runCatching {
-                watchProgressRepository.removeFromHistory(progressContentId, season, episode)
+                watchProgressRepository.removeFromHistory(
+                    profileManager.activeProfileSession.value,
+                    progressContentId,
+                    season,
+                    episode
+                )
                 showMessage(context.getString(R.string.cw_action_clear_progress))
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->

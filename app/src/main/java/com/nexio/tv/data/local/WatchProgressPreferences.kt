@@ -8,28 +8,23 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-@OptIn(ExperimentalCoroutinesApi::class)
 class WatchProgressPreferences @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    private val factory: ProfileDataStoreFactory
 ) {
     companion object {
         private const val TAG = "WatchProgressPrefs"
         private const val FEATURE = "watch_progress_preferences"
     }
 
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
+    private fun store(profileId: Int) =
         factory.get(profileId, FEATURE)
 
     private val gson = Gson()
@@ -47,33 +42,14 @@ class WatchProgressPreferences @Inject constructor(
      * For series, only returns the series-level entry (not individual episode entries)
      * to avoid duplicates in continue watching.
      */
-    val allProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { profileId ->
-        store(profileId).data.map { preferences ->
-            val json = preferences[watchProgressKey] ?: "{}"
-            val allItems = parseProgressMap(json)
-
-            val contentLevelEntries = allItems.entries
-                .filter { (key, progress) -> key == progress.contentId }
-                .associate { it.value.contentId to it.value }
-                .toMutableMap()
-
-            val latestEpisodeFallbacks = allItems.values
-                .groupBy { it.contentId }
-                .mapValues { (_, items) -> items.maxByOrNull { it.lastWatched } }
-
-            latestEpisodeFallbacks.forEach { (contentId, latest) ->
-                if (contentLevelEntries[contentId] == null && latest != null) {
-                    contentLevelEntries[contentId] = latest
-                }
-            }
-
-            contentLevelEntries.values
-                .sortedByDescending { it.lastWatched }
+    fun observeProgress(profileId: Int): Flow<List<WatchProgress>> {
+        return store(profileId).data.map { preferences ->
+            contentLevelProgress(preferences)
         }
     }
 
-    val allRawProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { profileId ->
-        store(profileId).data.map { preferences ->
+    fun observeRawProgress(profileId: Int): Flow<List<WatchProgress>> {
+        return store(profileId).data.map { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             parseProgressMap(json)
                 .values
@@ -81,37 +57,55 @@ class WatchProgressPreferences @Inject constructor(
         }
     }
 
-    /**
-     * Get items that are in progress (not completed)
-     */
-    val continueWatching: Flow<List<WatchProgress>> = allProgress.map { list ->
-        list.filter { it.isInProgress() }
+    fun observeContinueWatching(profileId: Int): Flow<List<WatchProgress>> {
+        return observeProgress(profileId).map { list ->
+            list.filter { it.isInProgress() }
+        }
+    }
+
+    private fun contentLevelProgress(preferences: Preferences): List<WatchProgress> {
+        val json = preferences[watchProgressKey] ?: "{}"
+        val allItems = parseProgressMap(json)
+
+        val contentLevelEntries = allItems.entries
+            .filter { (key, progress) -> key == progress.contentId }
+            .associate { it.value.contentId to it.value }
+            .toMutableMap()
+
+        val latestEpisodeFallbacks = allItems.values
+            .groupBy { it.contentId }
+            .mapValues { (_, items) -> items.maxByOrNull { it.lastWatched } }
+
+        latestEpisodeFallbacks.forEach { (contentId, latest) ->
+            if (contentLevelEntries[contentId] == null && latest != null) {
+                contentLevelEntries[contentId] = latest
+            }
+        }
+
+        return contentLevelEntries.values
+            .sortedByDescending { it.lastWatched }
     }
 
     /**
      * Get watch progress for a specific content item
      */
-    fun getProgress(contentId: String): Flow<WatchProgress?> {
-        return profileManager.activeProfileId.flatMapLatest { profileId ->
-            store(profileId).data.map { preferences ->
-                val json = preferences[watchProgressKey] ?: "{}"
-                val map = parseProgressMap(json)
-                map[contentId]
-            }
+    fun getProgress(profileId: Int, contentId: String): Flow<WatchProgress?> {
+        return store(profileId).data.map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            val map = parseProgressMap(json)
+            map[contentId]
         }
     }
 
     /**
      * Get watch progress for a specific episode
      */
-    fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
-        return profileManager.activeProfileId.flatMapLatest { profileId ->
-            store(profileId).data.map { preferences ->
-                val json = preferences[watchProgressKey] ?: "{}"
-                val map = parseProgressMap(json)
-                map.values.find {
-                    it.contentId == contentId && it.season == season && it.episode == episode
-                }
+    fun getEpisodeProgress(profileId: Int, contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
+        return store(profileId).data.map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            val map = parseProgressMap(json)
+            map.values.find {
+                it.contentId == contentId && it.season == season && it.episode == episode
             }
         }
     }
@@ -119,23 +113,21 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Get all episode progress for a series
      */
-    fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        return profileManager.activeProfileId.flatMapLatest { profileId ->
-            store(profileId).data.map { preferences ->
-                val json = preferences[watchProgressKey] ?: "{}"
-                val map = parseProgressMap(json)
-                map.values
-                    .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                    .associateBy { (it.season!! to it.episode!!) }
-            }
+    fun getAllEpisodeProgress(profileId: Int, contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+        return store(profileId).data.map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            val map = parseProgressMap(json)
+            map.values
+                .filter { it.contentId == contentId && it.season != null && it.episode != null }
+                .associateBy { (it.season!! to it.episode!!) }
         }
     }
 
     /**
      * Save or update watch progress
      */
-    suspend fun saveProgress(progress: WatchProgress) {
-        store().edit { preferences ->
+    suspend fun saveProgress(profileId: Int, progress: WatchProgress) {
+        store(profileId).edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val map = parseProgressMap(json).toMutableMap()
             
@@ -159,8 +151,8 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Remove watch progress for a specific item
      */
-    suspend fun removeProgress(contentId: String, season: Int? = null, episode: Int? = null) {
-        store().edit { preferences ->
+    suspend fun removeProgress(profileId: Int, contentId: String, season: Int? = null, episode: Int? = null) {
+        store(profileId).edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val map = parseProgressMap(json).toMutableMap()
 
@@ -194,19 +186,19 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Mark content as completed
      */
-    suspend fun markAsCompleted(progress: WatchProgress) {
+    suspend fun markAsCompleted(profileId: Int, progress: WatchProgress) {
         val completedProgress = progress.copy(
             position = progress.duration,
             lastWatched = System.currentTimeMillis()
         )
-        saveProgress(completedProgress)
+        saveProgress(profileId, completedProgress)
     }
 
     /**
      * Returns the raw key→WatchProgress map from DataStore (for sync push).
      */
-    suspend fun getAllRawEntries(): Map<String, WatchProgress> {
-        val preferences = store().data.first()
+    suspend fun getAllRawEntries(profileId: Int): Map<String, WatchProgress> {
+        val preferences = store(profileId).data.first()
         val json = preferences[watchProgressKey] ?: "{}"
         return parseProgressMap(json)
     }
@@ -214,9 +206,9 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Merges remote entries into local storage. Newer lastWatched wins per key.
      */
-    suspend fun mergeRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
+    suspend fun mergeRemoteEntries(profileId: Int, remoteEntries: Map<String, WatchProgress>) {
         Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries")
-        store().edit { preferences ->
+        store(profileId).edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val local = parseProgressMap(json).toMutableMap()
             Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${local.size} existing local entries")
@@ -246,9 +238,9 @@ class WatchProgressPreferences @Inject constructor(
         }
     }
 
-    suspend fun replaceWithRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
+    suspend fun replaceWithRemoteEntries(profileId: Int, remoteEntries: Map<String, WatchProgress>) {
         Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${remoteEntries.size} remote entries")
-        store().edit { preferences ->
+        store(profileId).edit { preferences ->
             val currentJson = preferences[watchProgressKey] ?: "{}"
             val current = parseProgressMap(currentJson)
             if (remoteEntries.isEmpty() && current.isNotEmpty()) {
@@ -264,8 +256,8 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Clear all watch progress
      */
-    suspend fun clearAll() {
-        store().edit { preferences ->
+    suspend fun clearAll(profileId: Int) {
+        store(profileId).edit { preferences ->
             preferences.remove(watchProgressKey)
         }
     }

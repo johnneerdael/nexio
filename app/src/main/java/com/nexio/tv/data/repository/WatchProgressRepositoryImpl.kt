@@ -1,10 +1,13 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.integration.ActiveProfileSession
+import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
@@ -15,6 +18,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.SeasonEpisodeMark
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import javax.inject.Provider
@@ -51,7 +55,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
     private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>,
     private val metadataRouterFacade: MetadataRouterFacade,
-    private val accountScopeProvider: TrackingAccountScopeProvider
+    private val accountScopeProvider: TrackingAccountScopeProvider,
+    private val profileManager: ProfileManager
 ) : WatchProgressRepository {
     companion object {
         private const val TAG = "WatchProgressRepo"
@@ -182,8 +187,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
     }
 
-    override val allProgress: Flow<List<WatchProgress>>
-        get() = trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
+    override fun observeProgress(profileId: Int): Flow<List<WatchProgress>> {
+        return trackingProviderStateService.stateForProfile(profileId).map { it.hasAuthenticatedProvider }
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
@@ -194,7 +199,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 // while the first Trakt snapshot is still loading.
                                 emit(emptyList())
                             },
-                        watchProgressPreferences.allRawProgress,
+                        watchProgressPreferences.observeRawProgress(profileId),
                         metadataState
                     ) { remoteItems, localItems, metadataMap ->
                         val merged = mergeProgressLists(remoteItems, localItems)
@@ -202,53 +207,44 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         merged.map { enrichWithMetadata(it, metadataMap) }
                     }
                 } else {
-                    flowOf(emptyList())
-                }
-            }
-
-    override val continueWatching: Flow<List<WatchProgress>>
-        get() = allProgress.map { list -> list.filter { it.isInProgress() } }
-
-    override fun getProgress(contentId: String): Flow<WatchProgress?> {
-        return trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
-            .distinctUntilChanged()
-            .flatMapLatest { isAuthenticated ->
-                if (isAuthenticated) {
-                    allProgress.map { items ->
-                        items
-                            .filter { it.contentId == contentId }
-                            .maxByOrNull { it.lastWatched }
+                    combine(
+                        watchProgressPreferences.observeRawProgress(profileId),
+                        metadataState
+                    ) { localItems, metadataMap ->
+                        hydrateMetadata(localItems)
+                        localItems.map { enrichWithMetadata(it, metadataMap) }
                     }
-                } else {
-                    flowOf(null)
                 }
             }
     }
 
-    override fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
-        return trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
-            .distinctUntilChanged()
-            .flatMapLatest { isAuthenticated ->
-                if (isAuthenticated) {
-                    allProgress.map { items ->
-                        items.firstOrNull {
-                            it.contentId == contentId && it.season == season && it.episode == episode
-                        }
-                    }
-                } else {
-                    flowOf(null)
-                }
-            }
+    override fun observeContinueWatching(profileId: Int): Flow<List<WatchProgress>> =
+        observeProgress(profileId).map { list -> list.filter { it.isInProgress() } }
+
+    override fun getProgress(profileId: Int, contentId: String): Flow<WatchProgress?> {
+        return observeProgress(profileId).map { items ->
+            items
+                .filter { it.contentId == contentId }
+                .maxByOrNull { it.lastWatched }
+        }
     }
 
-    override fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        return trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
+    override fun getEpisodeProgress(profileId: Int, contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
+        return observeProgress(profileId).map { items ->
+            items.firstOrNull {
+                it.contentId == contentId && it.season == season && it.episode == episode
+            }
+        }
+    }
+
+    override fun getAllEpisodeProgress(profileId: Int, contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+        return trackingProviderStateService.stateForProfile(profileId).map { it.hasAuthenticatedProvider }
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
                     combine(
                         trackingProgressService.observeEpisodeProgress(contentId),
-                        allProgress.map { items ->
+                        observeProgress(profileId).map { items ->
                             items.filter { it.contentId == contentId && it.season != null && it.episode != null }
                         }
                     ) { remoteMap, liveEpisodes ->
@@ -266,12 +262,19 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
-    override fun isWatched(contentId: String, season: Int?, episode: Int?): Flow<Boolean> {
-        return trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
+    override fun isWatched(profileId: Int, contentId: String, season: Int?, episode: Int?): Flow<Boolean> {
+        return trackingProviderStateService.stateForProfile(profileId).map { it.hasAuthenticatedProvider }
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (!isAuthenticated) {
-                    return@flatMapLatest flowOf(false)
+                    return@flatMapLatest observeProgress(profileId).map { items ->
+                        items.any {
+                            it.contentId == contentId &&
+                                (season == null || it.season == season) &&
+                                (episode == null || it.episode == episode) &&
+                                it.isCompleted()
+                        }
+                    }
                 }
 
                 if (season != null && episode != null) {
@@ -286,19 +289,33 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
-    override suspend fun saveProgress(progress: WatchProgress, syncRemote: Boolean) {
-        if (!trackingProviderStateService.currentState().hasAuthenticatedProvider) {
-            return
+    override suspend fun upsertProgress(
+        profileSession: ActiveProfileSession,
+        progress: WatchProgress,
+        syncRemote: Boolean
+    ) {
+        assertCanWriteProfileState(profileSession)
+        watchProgressPreferences.saveProgress(profileSession.profileId, progress)
+
+        if (syncRemote && trackingProviderStateService.currentState(profileSession.profileId).hasAuthenticatedProvider) {
+            trackingProgressService.applyOptimisticProgress(progress)
         }
-        trackingProgressService.applyOptimisticProgress(progress)
-        watchProgressPreferences.saveProgress(progress)
     }
 
-    override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
-        val providerState = trackingProviderStateService.currentState()
+    override suspend fun removeProgress(
+        profileSession: ActiveProfileSession,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ) {
+        assertCanWriteProfileState(profileSession)
+        watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
+        val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         val isAuthenticated = providerState.traktAuthenticated || providerState.simklAuthenticated
-        if (!isAuthenticated) return
-        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+        if (!isAuthenticated) {
+            return
+        }
+        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
             traktAuthService.currentTraktProfileId()
         } else {
             1
@@ -309,7 +326,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
                 .forEach { playbackId ->
                     val envelope = when (providerState.effectiveProvider) {
-                        com.nexio.tv.domain.model.TrackingProvider.SIMKL ->
+                        TrackingProvider.SIMKL ->
                             SimklProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
                                 playbackId = playbackId,
                                 contentId = contentId,
@@ -317,7 +334,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 episode = episode,
                                 session = session
                             )
-                        com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
+                        TrackingProvider.TRAKT ->
                             TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
                                 playbackId = playbackId,
                                 contentId = contentId,
@@ -337,15 +354,21 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
             throw it
         }
-        watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
-    override suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
-        val providerState = trackingProviderStateService.currentState()
+    override suspend fun removeFromHistory(
+        profileSession: ActiveProfileSession,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ) {
+        assertCanWriteProfileState(profileSession)
+        watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
+        val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
             traktAuthService.currentTraktProfileId()
         } else {
             1
@@ -354,14 +377,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
-                com.nexio.tv.domain.model.TrackingProvider.SIMKL ->
+                TrackingProvider.SIMKL ->
                     SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = season,
                         episode = episode,
                         session = session
                     )
-                com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
+                TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = season,
@@ -379,15 +402,16 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
             throw it
         }
-        watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
-    override suspend fun clearShowProgress(contentId: String) {
-        val providerState = trackingProviderStateService.currentState()
+    override suspend fun clearShowProgress(profileSession: ActiveProfileSession, contentId: String) {
+        assertCanWriteProfileState(profileSession)
+        watchProgressPreferences.removeProgress(profileSession.profileId, contentId, null, null)
+        val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
             traktAuthService.currentTraktProfileId()
         } else {
             1
@@ -402,7 +426,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         runCatching {
             playbackIds.forEach { playbackId ->
                 val deleteEnvelope = when (providerState.effectiveProvider) {
-                    com.nexio.tv.domain.model.TrackingProvider.SIMKL ->
+                    TrackingProvider.SIMKL ->
                         SimklProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
                             playbackId = playbackId,
                             contentId = contentId,
@@ -411,7 +435,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             clearShow = true,
                             session = session
                         )
-                    com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
+                    TrackingProvider.TRAKT ->
                         TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
                             playbackId = playbackId,
                             contentId = contentId,
@@ -424,7 +448,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 traktMutationOutboxCoordinator.enqueueAndDrain(deleteEnvelope)
             }
             val removeEnvelope = when (providerState.effectiveProvider) {
-                com.nexio.tv.domain.model.TrackingProvider.SIMKL ->
+                TrackingProvider.SIMKL ->
                     SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = null,
@@ -432,7 +456,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         removeShow = true,
                         session = session
                     )
-                com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
+                TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = null,
@@ -451,21 +475,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
             throw it
         }
-        watchProgressPreferences.removeProgress(contentId, null, null)
     }
 
-    override suspend fun markAsCompleted(progress: WatchProgress) {
-        val providerState = trackingProviderStateService.currentState()
-        if (!providerState.hasAuthenticatedProvider) {
-            return
-        }
-        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
-            traktAuthService.currentTraktProfileId()
-        } else {
-            1
-        }
+    override suspend fun markAsCompleted(profileSession: ActiveProfileSession, progress: WatchProgress) {
+        assertCanWriteProfileState(profileSession)
         val now = System.currentTimeMillis()
-        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         val duration = progress.duration.takeIf { it > 0L } ?: 1L
         val completed = progress.copy(
             position = duration,
@@ -473,16 +487,27 @@ class WatchProgressRepositoryImpl @Inject constructor(
             progressPercent = 100f,
             lastWatched = now
         )
+        watchProgressPreferences.saveProgress(profileSession.profileId, completed)
+        val providerState = trackingProviderStateService.currentState(profileSession.profileId)
+        if (!providerState.hasAuthenticatedProvider) {
+            return
+        }
+        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
+        }
+        val session = accountSessionFor(providerState.effectiveProvider, profileId)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
-                com.nexio.tv.domain.model.TrackingProvider.SIMKL ->
+                TrackingProvider.SIMKL ->
                     SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
                         progress = completed,
                         title = completed.name.takeIf { it.isNotBlank() },
                         year = null,
                         session = session
                     )
-                com.nexio.tv.domain.model.TrackingProvider.TRAKT ->
+                TrackingProvider.TRAKT ->
                     TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
                         progress = completed,
                         title = completed.name.takeIf { it.isNotBlank() },
@@ -499,23 +524,25 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
             throw it
         }
-        watchProgressPreferences.saveProgress(completed)
     }
 
-    override suspend fun clearAll() {
+    override suspend fun clearAll(profileSession: ActiveProfileSession) {
+        assertCanWriteProfileState(profileSession)
         trackingProgressService.clearOptimistic()
-        watchProgressPreferences.clearAll()
+        watchProgressPreferences.clearAll(profileSession.profileId)
     }
 
     override suspend fun markAsCompletedBatch(
+        profileSession: ActiveProfileSession,
         meta: Meta,
         seasonNumber: Int,
         episodes: List<SeasonEpisodeMark>
     ) {
-        val providerState = trackingProviderStateService.currentState()
+        assertCanWriteProfileState(profileSession)
+        val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) return
         if (episodes.isEmpty()) return
-        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+        val profileId = if (providerState.effectiveProvider == TrackingProvider.TRAKT) {
             traktAuthService.currentTraktProfileId()
         } else {
             1
@@ -542,7 +569,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         snapshotService.applyEpisodesMarked(episodeRefs)
 
         val episodeNumbers = episodes.mapNotNull { it.episodeNumber }
-        if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.SIMKL) {
+        if (providerState.effectiveProvider == TrackingProvider.SIMKL) {
             try {
                 traktMutationOutboxCoordinator.enqueueAndDrain(
                     SimklSeasonMarkMutationAdapter.buildEnvelope(
@@ -671,6 +698,13 @@ class WatchProgressRepositoryImpl @Inject constructor(
         return accountScopeProvider.accountScopedSession(
             provider = provider,
             profileId = profileId
+        )
+    }
+
+    private fun assertCanWriteProfileState(profileSession: ActiveProfileSession) {
+        ProfileBoundaryEnforcer.assertCanWriteProfileState(
+            resultSession = profileSession,
+            activeSession = profileManager.activeProfileSession.value
         )
     }
 }

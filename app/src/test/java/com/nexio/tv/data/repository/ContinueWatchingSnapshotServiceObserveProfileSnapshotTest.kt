@@ -47,7 +47,7 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
             coEvery { refreshNow() } returns Unit
         }
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
-            every { allProgress } returns flowOf(emptyList())
+            every { observeProgress(any()) } returns flowOf(emptyList())
         }
         val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
             every { read(any()) } returns null

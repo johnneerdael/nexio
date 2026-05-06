@@ -174,7 +174,7 @@ class ContinueWatchingResolveRequestTest {
     ): ContinueWatchingSnapshotService =
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
-                every { allProgress } returns flowOf(emptyList())
+                every { observeProgress(any()) } returns flowOf(emptyList())
             },
             trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)

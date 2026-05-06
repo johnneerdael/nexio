@@ -3938,7 +3938,10 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
         if (itemType.equals("movie", ignoreCase = true)) {
             if (statusKey !in movieWatchedObserverJobs) {
                 movieWatchedObserverJobs[statusKey] = viewModelScope.launch {
-                    watchProgressRepository.isWatched(contentId = itemId)
+                    watchProgressRepository.isWatched(
+                        profileId = profileManager.activeProfileId.value,
+                        contentId = itemId
+                    )
                         .distinctUntilChanged()
                         .collectLatest { watched ->
                             _uiState.update { state ->
