@@ -13,15 +13,21 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-06-anime-addon-priority-design.md`
 
+**Amendments since v1 of this plan:** anime detection now uses a boolean `AnimeIdentityIndex.isAnime(parsed)` API instead of `resolveKitsuId(...) != null` (forward-compat for one-to-many IMDb→Kitsu mappings); episode IDs are normalized to parent IDs via an extracted `MetadataParentIdNormalizer.parentIdOf(...)`; trace events `stream.request_classified` and `stream.addon_bucketed` are now in scope (Task 10); explicit non-goal that `addon.isAnime` is stream-priority only and forbidden as metadata-routing input. Three additional Android tests added: parent-id episode normalization (kitsu/imdb/mal), IMDb one-to-many, and the empty anime-tagged addon fallback. Tasks renumbered: original Task 7 became Task 9; trace events were inserted as Task 10; original Tasks 8–12 became 11–15.
+
 ---
 
 ## File Structure
 
 ### Android — new files
-- `app/src/test/java/com/nexio/tv/core/player/StreamAutoPlaySelectorAnimePriorityTest.kt` — comparator regression + anime bucket priority
-- `app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplAnimeBucketTest.kt` — `isAnimeBucket` is computed correctly per emit
+- `app/src/main/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizer.kt` — pure top-level extraction of `parentIdOf(...)` so the stream pipeline can normalize episode IDs without injecting `MetadataRequestNormalizer`
+- `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizerTest.kt` — fixtures preserving the existing `MetadataRequestNormalizer.parentIdOf` contract
+- `app/src/test/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndexIsAnimeTest.kt` — verifies the default `isAnime(parsed)` and that an override can answer without resolving a Kitsu record
+- `app/src/test/java/com/nexio/tv/core/player/StreamAutoPlaySelectorAnimePriorityTest.kt` — comparator regression + anime bucket priority + empty-anime-bucket case
+- `app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplAnimeBucketTest.kt` — `isAnimeBucket` is computed correctly per emit, episode-ID normalization, IMDb one-to-many, empty-anime-addon fallback
 - `app/src/test/java/com/nexio/tv/data/local/AddonPreferencesIsAnimeTest.kt` — DataStore round-trip for the new field
 - `app/src/test/java/com/nexio/tv/ui/screens/addon/AddonManagerViewModelAnimeToggleTest.kt` — viewmodel writes through to the repository
+- `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataRouterIgnoresAddonIsAnimeTest.kt` — invariant guard that `addon.isAnime` is never an input to routing decisions
 
 ### Android — modified files
 - `app/src/main/java/com/nexio/tv/domain/model/Stream.kt` — `AddonStreams` gains `isAnimeBucket`
@@ -31,8 +37,11 @@
 - `app/src/main/java/com/nexio/tv/data/repository/AddonRepositoryImpl.kt` — propagate `isAnime` through cache copies and remote reconcile; implement `updateAddonIsAnime`
 - `app/src/main/java/com/nexio/tv/data/remote/supabase/AccountSyncModels.kt` — `AccountAddonPayload.isAnime`
 - `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt` — propagate `isAnime` from payload to `AddonInstallConfig`
-- `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt` — same
-- `app/src/main/java/com/nexio/tv/data/repository/StreamRepositoryImpl.kt` — inject `AnimeIdentityIndex`, compute `contentIsAnime`, stamp `isAnimeBucket`
+- `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt` — same, plus push-side `is_anime` in the RPC body
+- `app/src/main/java/com/nexio/tv/core/metadata/router/MetadataRequestNormalizer.kt` — `parentIdOf(...)` becomes a thin delegate to `MetadataParentIdNormalizer.parentIdOf(...)`
+- `app/src/main/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndex.kt` — new default `isAnime(parsed)` method on the interface
+- `app/src/main/java/com/nexio/tv/data/repository/StreamRepositoryImpl.kt` — inject `AnimeIdentityIndex` + `TraceMetadataEvents`, normalize parent ID, compute `contentIsAnime`, stamp `isAnimeBucket`, emit two new trace events
+- `app/src/main/java/com/nexio/tv/core/trace/TraceMetadataEvents.kt` — new `emitStreamRequestClassified(...)` and `emitStreamAddonBucketed(...)` methods
 - `app/src/main/java/com/nexio/tv/core/player/StreamAutoPlaySelector.kt` — two-level comparator
 - `app/src/main/java/com/nexio/tv/ui/screens/addon/AddonManagerViewModel.kt` — `updateAddonIsAnime` method
 - `app/src/main/java/com/nexio/tv/ui/screens/addon/AddonManagerScreen.kt` — toggle UI
@@ -49,7 +58,7 @@
 
 ## Task ordering rationale
 
-Tasks proceed bottom-up: domain types → persistence → sync wire → repository plumbing → stream pipeline → UI. Each task is independently green-able and committable. Wire-format and storage tasks come before consumer logic so the round-trip is verified by the time the comparator changes.
+Tasks proceed bottom-up: domain types (1–3) → persistence (4) → repository plumbing (5) → sync wire (6) → shared metadata helpers (7–8) → stream pipeline (9–10) → Android UI (11) → routing invariant guard (12) → web (13–15) → end-to-end smoke (16). Each task is independently green-able and committable. The shared helpers (Tasks 7 + 8) come before the consumer (Task 9) so the new boolean `isAnime(...)` API and the parent-ID normalizer exist before `StreamRepositoryImpl` calls them. The trace events (Task 10) follow Task 9 because their wiring lives in the same file. The routing-invariant guard (Task 12) is a no-implementation test that pins the spec's "stream-priority only" non-goal — it can run any time after Task 9.
 
 ---
 
@@ -180,6 +189,23 @@ class StreamAutoPlaySelectorAnimePriorityTest {
             listOf("Anime-A", "Unknown-Anime", "Generic-A", "Unknown-Generic"),
             ordered
         )
+    }
+
+    @Test
+    fun `empty anime-bucket section stays in its bucket and does not collapse generics`() {
+        // An anime-tagged addon returned zero streams (still emitted as an
+        // empty section). It must remain in the anime bucket above the
+        // generic addons so the section header order stays correct.
+        val installedOrder = listOf("Anime-A", "Generic-A")
+        val input = listOf(
+            streams("Generic-A"), // has streams in caller's fixture
+            streams("Anime-A", isAnimeBucket = true), // empty list
+        )
+
+        val ordered = StreamAutoPlaySelector.orderAddonStreams(input, installedOrder)
+            .map { it.addonName }
+
+        assertEquals(listOf("Anime-A", "Generic-A"), ordered)
     }
 }
 ```
@@ -921,15 +947,292 @@ git commit -m "feat(sync): propagate addon isAnime through Supabase wire shape"
 
 ---
 
-### Task 7: Tag `AddonStreams.isAnimeBucket` in `StreamRepositoryImpl`
+### Task 7: Extract `MetadataParentIdNormalizer` from `MetadataRequestNormalizer`
+
+**Files:**
+- Create: `app/src/main/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizer.kt`
+- Modify: `app/src/main/java/com/nexio/tv/core/metadata/router/MetadataRequestNormalizer.kt`
+- Test: `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizerTest.kt`
+
+The existing `MetadataRequestNormalizer.parentIdOf(...)` is a pure string operation that doesn't reference its `traceEvents` dependency. Lift it to a top-level function so the stream pipeline can normalize episode IDs without injecting a class with `TraceMetadataEvents` dependency. The instance method delegates so existing callers keep working.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizerTest.kt`:
+```kotlin
+package com.nexio.tv.core.metadata.router
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class MetadataParentIdNormalizerTest {
+
+    @Test
+    fun `imdb episode id normalizes to imdb parent`() {
+        assertEquals("tt12343534", MetadataParentIdNormalizer.parentIdOf("tt12343534:1:1"))
+    }
+
+    @Test
+    fun `kitsu episode id normalizes to kitsu work`() {
+        assertEquals("kitsu:7442", MetadataParentIdNormalizer.parentIdOf("kitsu:7442:1:1"))
+    }
+
+    @Test
+    fun `mal episode id normalizes to mal work`() {
+        assertEquals("mal:21", MetadataParentIdNormalizer.parentIdOf("mal:21:1:1"))
+    }
+
+    @Test
+    fun `anilist episode id normalizes to anilist work`() {
+        assertEquals("anilist:113415", MetadataParentIdNormalizer.parentIdOf("anilist:113415:1:1"))
+    }
+
+    @Test
+    fun `anidb episode id normalizes to anidb work`() {
+        assertEquals("anidb:69", MetadataParentIdNormalizer.parentIdOf("anidb:69:1:1"))
+    }
+
+    @Test
+    fun `parent id is returned unchanged`() {
+        assertEquals("kitsu:7442", MetadataParentIdNormalizer.parentIdOf("kitsu:7442"))
+        assertEquals("tt12343534", MetadataParentIdNormalizer.parentIdOf("tt12343534"))
+    }
+
+    @Test
+    fun `tmdb person and tvdb company ids are preserved`() {
+        assertEquals("tmdb:person:1234", MetadataParentIdNormalizer.parentIdOf("tmdb:person:1234"))
+        assertEquals("tvdb:company:42", MetadataParentIdNormalizer.parentIdOf("tvdb:company:42"))
+    }
+
+    @Test
+    fun `blank input returns empty string`() {
+        assertEquals("", MetadataParentIdNormalizer.parentIdOf(""))
+        assertEquals("", MetadataParentIdNormalizer.parentIdOf("   "))
+    }
+
+    @Test
+    fun `unknown scheme is preserved as-is`() {
+        assertEquals("garbage-id", MetadataParentIdNormalizer.parentIdOf("garbage-id"))
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.metadata.router.MetadataParentIdNormalizerTest --no-daemon`
+Expected: FAIL — `MetadataParentIdNormalizer` does not exist.
+
+- [ ] **Step 3: Create `MetadataParentIdNormalizer.kt`**
+
+Create `app/src/main/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizer.kt`:
+```kotlin
+package com.nexio.tv.core.metadata.router
+
+object MetadataParentIdNormalizer {
+    fun parentIdOf(contentId: String): String {
+        val id = contentId.trim()
+        if (id.isBlank()) return ""
+
+        val parts = id.split(":")
+        return when {
+            isProviderObjectId(id, parts) -> id
+            id.startsWith("imdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("kitsu:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("mal:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("anilist:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("anidb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tmdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tvdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tt", ignoreCase = true) && parts.size >= 3 -> parts[0]
+            else -> id
+        }
+    }
+
+    private fun isProviderObjectId(id: String, parts: List<String>): Boolean {
+        if (parts.size < 3) return false
+        val provider = parts[0]
+        val objectType = parts[1]
+        val isSupportedProvider = provider.equals("tmdb", ignoreCase = true) ||
+            provider.equals("tvdb", ignoreCase = true)
+        val isSupportedObject = objectType.equals("person", ignoreCase = true) ||
+            objectType.equals("company", ignoreCase = true) ||
+            objectType.equals("network", ignoreCase = true) ||
+            objectType.equals("org", ignoreCase = true)
+        return isSupportedProvider && isSupportedObject && id.startsWith("$provider:", ignoreCase = true)
+    }
+}
+```
+
+- [ ] **Step 4: Delegate `MetadataRequestNormalizer.parentIdOf` to the new helper**
+
+In `MetadataRequestNormalizer.kt:25-55`, replace:
+```kotlin
+    fun parentIdOf(contentId: String): String {
+        val id = contentId.trim()
+        if (id.isBlank()) return ""
+
+        val parts = id.split(":")
+        return when {
+            isProviderObjectId(id, parts) -> id
+            id.startsWith("imdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("kitsu:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("mal:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("anilist:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("anidb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tmdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tvdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
+            id.startsWith("tt", ignoreCase = true) && parts.size >= 3 -> parts[0]
+            else -> id
+        }
+    }
+
+    private fun isProviderObjectId(id: String, parts: List<String>): Boolean {
+        if (parts.size < 3) return false
+        val provider = parts[0]
+        val objectType = parts[1]
+        val isSupportedProvider = provider.equals("tmdb", ignoreCase = true) ||
+            provider.equals("tvdb", ignoreCase = true)
+        val isSupportedObject = objectType.equals("person", ignoreCase = true) ||
+            objectType.equals("company", ignoreCase = true) ||
+            objectType.equals("network", ignoreCase = true) ||
+            objectType.equals("org", ignoreCase = true)
+        return isSupportedProvider && isSupportedObject && id.startsWith("$provider:", ignoreCase = true)
+    }
+```
+with:
+```kotlin
+    fun parentIdOf(contentId: String): String = MetadataParentIdNormalizer.parentIdOf(contentId)
+```
+
+(Delete the now-unused `isProviderObjectId` private function.)
+
+- [ ] **Step 5: Run all metadata-router tests to verify no regression**
+
+Run: `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.metadata.router.*" --no-daemon`
+Expected: PASS — including the new `MetadataParentIdNormalizerTest`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/src/main/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizer.kt app/src/main/java/com/nexio/tv/core/metadata/router/MetadataRequestNormalizer.kt app/src/test/java/com/nexio/tv/core/metadata/router/MetadataParentIdNormalizerTest.kt
+git commit -m "refactor(metadata): extract MetadataParentIdNormalizer for shared id normalization"
+```
+
+---
+
+### Task 8: Add `isAnime(parsed)` default method to `AnimeIdentityIndex`
+
+**Files:**
+- Modify: `app/src/main/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndex.kt:32-34`
+- Test: `app/src/test/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndexIsAnimeTest.kt`
+
+This new boolean API is forward-compat for the Anime Mapping Pack: today the default delegates to `resolveKitsuId(...) != null`, but once one-to-many IMDb→Kitsu mappings land, an override returns `true` without committing to a specific Kitsu record. Stream priority calls only `isAnime(...)`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `app/src/test/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndexIsAnimeTest.kt`:
+```kotlin
+package com.nexio.tv.core.metadata.router
+
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class AnimeIdentityIndexIsAnimeTest {
+
+    private val parsed = ParsedMetadataId(
+        scheme = AnimeIdScheme.IMDB,
+        value = "tt12343534",
+        raw = "tt12343534",
+    )
+
+    @Test
+    fun `default isAnime is true when resolveKitsuId returns non-null`() = runTest {
+        val index = object : AnimeIdentityIndex {
+            override suspend fun resolveKitsuId(id: ParsedMetadataId): String? = "kitsu-1"
+        }
+        assertTrue(index.isAnime(parsed))
+    }
+
+    @Test
+    fun `default isAnime is false when resolveKitsuId returns null`() = runTest {
+        val index = object : AnimeIdentityIndex {
+            override suspend fun resolveKitsuId(id: ParsedMetadataId): String? = null
+        }
+        assertFalse(index.isAnime(parsed))
+    }
+
+    @Test
+    fun `override can return true without resolving a single kitsu record`() = runTest {
+        val index = object : AnimeIdentityIndex {
+            override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+                throw AssertionError("isAnime override must not delegate to resolveKitsuId")
+            }
+            override suspend fun isAnime(id: ParsedMetadataId): Boolean = true
+        }
+        assertTrue(index.isAnime(parsed))
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.metadata.router.AnimeIdentityIndexIsAnimeTest --no-daemon`
+Expected: FAIL — `isAnime(...)` does not exist on the interface.
+
+- [ ] **Step 3: Add `isAnime(...)` default to the interface**
+
+In `AnimeIdentityIndex.kt:32-34`, replace:
+```kotlin
+interface AnimeIdentityIndex {
+    suspend fun resolveKitsuId(id: ParsedMetadataId): String?
+}
+```
+with:
+```kotlin
+interface AnimeIdentityIndex {
+    suspend fun resolveKitsuId(id: ParsedMetadataId): String?
+
+    /**
+     * Returns true if [id] identifies anime content. The default delegates to
+     * [resolveKitsuId] for back-compat. Stream priority calls only this method;
+     * once a one-to-many IMDb→Kitsu mapping pack lands, implementations can
+     * override [isAnime] to answer without picking a single canonical record.
+     * Must not be used as input to MetadataRouter routing decisions.
+     */
+    suspend fun isAnime(id: ParsedMetadataId): Boolean = resolveKitsuId(id) != null
+}
+```
+
+- [ ] **Step 4: Run tests to verify pass**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.metadata.router.AnimeIdentityIndexIsAnimeTest --no-daemon`
+Expected: PASS for all three cases.
+
+Run: `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.metadata.router.*" --no-daemon`
+Expected: PASS — existing `AssetAnimeIdentityIndex` and `InMemoryAnimeIdentityIndex` callers compile and behave identically (default method is non-breaking).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/src/main/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndex.kt app/src/test/java/com/nexio/tv/core/metadata/router/AnimeIdentityIndexIsAnimeTest.kt
+git commit -m "feat(anime): add boolean isAnime() to AnimeIdentityIndex"
+```
+
+---
+
+### Task 9: Tag `AddonStreams.isAnimeBucket` in `StreamRepositoryImpl`
 
 **Files:**
 - Modify: `app/src/main/java/com/nexio/tv/data/repository/StreamRepositoryImpl.kt`
 - Test: `app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplAnimeBucketTest.kt`
 
+Uses both helpers from Tasks 7–8: parent-id normalization for episode IDs and the boolean `isAnime(...)` API.
+
 - [ ] **Step 1: Write the failing test**
 
-Create `app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplAnimeBucketTest.kt`. Pattern after the existing `StreamRepositoryImplTest` constructor signature (open that file briefly to confirm the FakeAddonStreamIntegrationProvider / FakeAddonRepository shape used there, then mirror it). Minimal new assertions:
+Create `app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplAnimeBucketTest.kt`. The constructor scaffolding (`newRepo(...)`, `fakeAddon(...)`, `streamAddon(...)`) follows the MockK pattern in the existing `StreamRepositoryImplTest.kt`. Open that file once and copy the `streamAddon` builder + `mockAndroidLog` helper as the basis. The new fixture additions are the `isAnime` flag on `Addon` and a `FakeAnimeIdentityIndex`. Minimal new assertions:
 
 ```kotlin
 package com.nexio.tv.data.repository
@@ -937,10 +1240,10 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.metadata.router.AnimeIdScheme
 import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.ParsedMetadataId
-import com.nexio.tv.domain.model.Addon
-import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.AddonStreams
-// ...remaining imports mirroring StreamRepositoryImplTest...
+// ...remaining imports + scaffolding helpers cloned from StreamRepositoryImplTest...
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -950,13 +1253,20 @@ import org.junit.Test
 
 class StreamRepositoryImplAnimeBucketTest {
 
-    private val animeAddon = fakeAddon(id = "anime-1", baseUrl = "https://anime.example.com", isAnime = true)
-    private val genericAddon = fakeAddon(id = "gen-1", baseUrl = "https://gen.example.com", isAnime = false)
+    private fun parsedMatching(scheme: AnimeIdScheme, parentValue: String): (ParsedMetadataId) -> Boolean =
+        { it.scheme == scheme && it.value == parentValue }
 
     @Test
     fun `bucket is true only when both addon isAnime and contentIsAnime`() = runTest {
-        val animeIndex = FakeAnimeIdentityIndex(returns = "kitsu-123")
-        val repo = newRepo(addons = listOf(animeAddon, genericAddon), animeIdentityIndex = animeIndex)
+        val animeIndex = FakeAnimeIdentityIndex(answer = { true })
+        val repo = newRepo(
+            addons = listOf(
+                streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true),
+                streamAddon(baseUrl = "https://gen.example.com", name = "Generic-A", isAnime = false),
+            ),
+            animeIdentityIndex = animeIndex,
+        )
+
         val emitted = repo.getStreamsFromAllAddons(
             type = "movie",
             videoId = "kitsu:42",
@@ -967,25 +1277,20 @@ class StreamRepositoryImplAnimeBucketTest {
             requestId = "req-1",
         ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
 
-        val animeSection = emitted.first { it.addonName == animeAddon.displayName }
-        val genericSection = emitted.first { it.addonName == genericAddon.displayName }
-
-        assertTrue(animeSection.isAnimeBucket)
-        assertFalse(genericSection.isAnimeBucket)
+        assertTrue(emitted.first { it.addonName == "Anime-A" }.isAnimeBucket)
+        assertFalse(emitted.first { it.addonName == "Generic-A" }.isAnimeBucket)
     }
 
     @Test
     fun `bucket is false when content is not anime even if addon is tagged`() = runTest {
-        val animeIndex = FakeAnimeIdentityIndex(returns = null)
-        val repo = newRepo(addons = listOf(animeAddon, genericAddon), animeIdentityIndex = animeIndex)
+        val animeIndex = FakeAnimeIdentityIndex(answer = { false })
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
         val emitted = repo.getStreamsFromAllAddons(
-            type = "movie",
-            videoId = "tt0111161",
-            season = null,
-            episode = null,
-            installedAddons = null,
-            requestOrigin = "test",
-            requestId = "req-2",
+            type = "movie", videoId = "tt0111161", season = null, episode = null,
+            installedAddons = null, requestOrigin = "test", requestId = "req-2",
         ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
 
         emitted.forEach { assertFalse(it.isAnimeBucket) }
@@ -993,29 +1298,139 @@ class StreamRepositoryImplAnimeBucketTest {
 
     @Test
     fun `unparseable videoId leaves bucket false`() = runTest {
-        val animeIndex = FakeAnimeIdentityIndex(returns = null) // never asked
-        val repo = newRepo(addons = listOf(animeAddon), animeIdentityIndex = animeIndex)
+        val animeIndex = FakeAnimeIdentityIndex(answer = { error("must not be asked when parsedId is null") })
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
         val emitted = repo.getStreamsFromAllAddons(
-            type = "movie",
-            videoId = "garbage-id",
-            season = null,
-            episode = null,
-            installedAddons = null,
-            requestOrigin = "test",
-            requestId = "req-3",
+            type = "movie", videoId = "garbage-id", season = null, episode = null,
+            installedAddons = null, requestOrigin = "test", requestId = "req-3",
         ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
         assertEquals(false, emitted.first().isAnimeBucket)
     }
 
-    private class FakeAnimeIdentityIndex(private val returns: String?) : AnimeIdentityIndex {
-        override suspend fun resolveKitsuId(id: ParsedMetadataId): String? = returns
+    @Test
+    fun `kitsu_episode_id_routes_to_anime_bucket`() = runTest {
+        // kitsu:7442:1:1 normalizes to kitsu:7442 before identity lookup
+        var seenLookupValue: String? = null
+        val animeIndex = FakeAnimeIdentityIndex(answer = { id ->
+            seenLookupValue = id.value
+            id.scheme == AnimeIdScheme.KITSU && id.value == "7442"
+        })
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
+        val emitted = repo.getStreamsFromAllAddons(
+            type = "series", videoId = "kitsu:7442:1:1", season = 1, episode = 1,
+            installedAddons = null, requestOrigin = "test", requestId = "req-4",
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
+        assertEquals("7442", seenLookupValue)
+        assertTrue(emitted.first().isAnimeBucket)
     }
 
-    // newRepo, fakeAddon helpers: copy from the patterns in StreamRepositoryImplTest.kt
+    @Test
+    fun `imdb_episode_id_routes_to_anime_bucket_when_parent_imdb_is_anime`() = runTest {
+        var seenLookupValue: String? = null
+        val animeIndex = FakeAnimeIdentityIndex(answer = { id ->
+            seenLookupValue = id.value
+            id.scheme == AnimeIdScheme.IMDB && id.value == "tt12343534"
+        })
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
+        val emitted = repo.getStreamsFromAllAddons(
+            type = "series", videoId = "tt12343534:1:1", season = 1, episode = 1,
+            installedAddons = null, requestOrigin = "test", requestId = "req-5",
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
+        assertEquals("tt12343534", seenLookupValue)
+        assertTrue(emitted.first().isAnimeBucket)
+    }
+
+    @Test
+    fun `mal_episode_id_routes_to_anime_bucket`() = runTest {
+        var seenLookupValue: String? = null
+        val animeIndex = FakeAnimeIdentityIndex(answer = { id ->
+            seenLookupValue = id.value
+            id.scheme == AnimeIdScheme.MAL && id.value == "21"
+        })
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
+        val emitted = repo.getStreamsFromAllAddons(
+            type = "series", videoId = "mal:21:1:1", season = 1, episode = 1,
+            installedAddons = null, requestOrigin = "test", requestId = "req-6",
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
+        assertEquals("21", seenLookupValue)
+        assertTrue(emitted.first().isAnimeBucket)
+    }
+
+    @Test
+    fun `imdb_one_to_many_anime_id_sets_contentIsAnime_without_selecting_single_kitsu_record`() = runTest {
+        // The override answers true without ever calling resolveKitsuId.
+        // This proves stream priority does not require a canonical Kitsu record.
+        val animeIndex = object : AnimeIdentityIndex {
+            override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+                throw AssertionError("resolveKitsuId must not be called by stream priority")
+            }
+            override suspend fun isAnime(id: ParsedMetadataId): Boolean = true
+        }
+        val repo = newRepo(
+            addons = listOf(streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true)),
+            animeIdentityIndex = animeIndex,
+        )
+        val emitted = repo.getStreamsFromAllAddons(
+            type = "movie", videoId = "tt5626028", season = null, episode = null,
+            installedAddons = null, requestOrigin = "test", requestId = "req-7",
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
+        assertTrue(emitted.first().isAnimeBucket)
+    }
+
+    @Test
+    fun `anime_tagged_addon_empty_generic_addons_still_selected`() = runTest {
+        // Anime-tagged addon returns zero streams; generic addon returns one.
+        // Generic addon's section must still be present in the result.
+        val animeIndex = FakeAnimeIdentityIndex(answer = { true })
+        val repo = newRepo(
+            addons = listOf(
+                streamAddon(baseUrl = "https://anime.example.com", name = "Anime-A", isAnime = true, returnedStreams = emptyList()),
+                streamAddon(baseUrl = "https://gen.example.com", name = "Generic-A", isAnime = false, returnedStreams = listOf(streamDto("G-1"))),
+            ),
+            animeIdentityIndex = animeIndex,
+        )
+        val emitted = repo.getStreamsFromAllAddons(
+            type = "movie", videoId = "kitsu:42", season = null, episode = null,
+            installedAddons = null, requestOrigin = "test", requestId = "req-8",
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList().last().data
+
+        val generic = emitted.first { it.addonName == "Generic-A" }
+        assertEquals(1, generic.streams.size)
+        assertFalse(generic.isAnimeBucket)
+    }
+
+    private class FakeAnimeIdentityIndex(private val answer: (ParsedMetadataId) -> Boolean) : AnimeIdentityIndex {
+        override suspend fun resolveKitsuId(id: ParsedMetadataId): String? =
+            if (answer(id)) "kitsu-1" else null
+    }
+
+    // newRepo(...), streamAddon(...), streamDto(...), and the mockAndroidLog() helper:
+    // mirror the setup in StreamRepositoryImplTest.kt. The streamAddon helper takes
+    // an additional parameter `isAnime: Boolean = false` and a `returnedStreams: List<StreamDto>`
+    // wired via mockk's coEvery on AddonStreamIntegrationProvider.getStreams. The newRepo
+    // helper takes an extra `animeIdentityIndex: AnimeIdentityIndex` and passes it to the
+    // StreamRepositoryImpl constructor.
 }
 ```
 
-After scaffolding, copy the `newRepo(...)`/`fakeAddon(...)` builders from the existing `StreamRepositoryImplTest.kt` so the constructor wiring matches (the new `AnimeIdentityIndex` parameter is the only addition). Make sure the helper passes the test's `animeIdentityIndex` argument into the constructor.
+The test scaffolding intentionally references the existing `StreamRepositoryImplTest.kt` builders rather than redefining them — opening that file once and copying its `mockAndroidLog`, `streamAddon`, and `streamDto` helpers into the new file is faster than reproducing them inline. The two new parameters that the helpers must take are `isAnime: Boolean = false` (on `streamAddon`) and `animeIdentityIndex: AnimeIdentityIndex` (on `newRepo`).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1024,10 +1439,11 @@ Expected: FAIL — `AnimeIdentityIndex` not in constructor; `isAnimeBucket` alwa
 
 - [ ] **Step 3: Inject `AnimeIdentityIndex` into `StreamRepositoryImpl`**
 
-In `StreamRepositoryImpl.kt`, add the import:
+In `StreamRepositoryImpl.kt`, add the imports:
 ```kotlin
 import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.MetadataIdParser
+import com.nexio.tv.core.metadata.router.MetadataParentIdNormalizer
 ```
 
 In `StreamRepositoryImpl.kt:37-44`, replace:
@@ -1056,7 +1472,7 @@ class StreamRepositoryImpl @Inject constructor(
 
 `AnimeIdentityIndex` is already bound as a `@Singleton` (`AssetAnimeIdentityIndex`) via Hilt in `MetadataRouterModule`, so no DI module edit is needed — the constructor binding picks it up automatically.
 
-- [ ] **Step 4: Compute `contentIsAnime` once after `streamAddons`**
+- [ ] **Step 4: Normalize parent ID and compute `contentIsAnime` once after `streamAddons`**
 
 In `StreamRepositoryImpl.kt:64-66`, immediately after:
 ```kotlin
@@ -1066,11 +1482,14 @@ In `StreamRepositoryImpl.kt:64-66`, immediately after:
 ```
 add:
 ```kotlin
-            val parsedContentId = MetadataIdParser.parse(videoId)
+            val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
+            val parsedContentId = MetadataIdParser.parse(parentContentId)
             val contentIsAnime = parsedContentId?.let { parsed ->
-                animeIdentityIndex.resolveKitsuId(parsed) != null
+                animeIdentityIndex.isAnime(parsed)
             } ?: false
 ```
+
+Note: this calls `isAnime(...)` (the new boolean API from Task 8), not `resolveKitsuId(...)`. Stream priority must never select a single Kitsu record from a one-to-many IMDb mapping.
 
 - [ ] **Step 5: Stamp `isAnimeBucket` on emitted `AddonStreams`**
 
@@ -1096,7 +1515,12 @@ with:
 
 Run: `grep -n "StreamRepositoryImpl(" app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplTest.kt`
 
-For each constructor call, add `animeIdentityIndex = FakeAnimeIdentityIndex(returns = null)` (or an analogous fake that always returns `null`, mirroring today's behavior of "no anime priority"). Add the `FakeAnimeIdentityIndex` helper to the test file if it doesn't already have one.
+For each constructor call, add `animeIdentityIndex = NoAnimeIdentityIndex` (a top-level test object that always returns `null`/`false`, mirroring today's behavior). Define this once at the top of the existing test file:
+```kotlin
+private object NoAnimeIdentityIndex : com.nexio.tv.core.metadata.router.AnimeIdentityIndex {
+    override suspend fun resolveKitsuId(id: com.nexio.tv.core.metadata.router.ParsedMetadataId): String? = null
+}
+```
 
 - [ ] **Step 7: Run all StreamRepositoryImpl tests**
 
@@ -1112,7 +1536,198 @@ git commit -m "feat(stream): tag AddonStreams.isAnimeBucket per request"
 
 ---
 
-### Task 8: Android UI — `AddonManagerViewModel.updateAddonIsAnime` + screen toggle
+### Task 10: Trace events `stream.request_classified` and `stream.addon_bucketed`
+
+**Files:**
+- Modify: `app/src/main/java/com/nexio/tv/core/trace/TraceMetadataEvents.kt`
+- Modify: `app/src/main/java/com/nexio/tv/data/repository/StreamRepositoryImpl.kt`
+- Test: `app/src/test/java/com/nexio/tv/core/trace/TraceMetadataEventsStreamClassificationTest.kt`
+
+Two events:
+- `stream.request_classified` — once per `getStreamsFromAllAddons` call. Payload `{ contentId, parentId, contentIsAnime, evidence }`.
+- `stream.addon_bucketed` — once per addon section as it lands. Payload `{ addonIdHash, addonIsAnime, contentIsAnime, isAnimeBucket }`.
+
+`addonIdHash` reuses whatever hashing helper `TraceMetadataEvents` already uses for addon IDs. If no such helper exists, hash the addon URL with the same scheme used for other identity events (search the file for `Hash` or `redact` first to confirm the existing convention).
+
+- [ ] **Step 1: Inspect existing emit method conventions**
+
+Open `app/src/main/java/com/nexio/tv/core/trace/TraceMetadataEvents.kt`. Pick one `emit*` method that takes a payload map (e.g. `emitRouteDecision` near line 198 or `emitFieldSelected` near line 167). Note the signature pattern used: typically `eventType` as a string, `payload` built via `buildJsonObject`/`mapOf`, plus the trace sink call.
+
+- [ ] **Step 2: Write the failing test**
+
+Create `app/src/test/java/com/nexio/tv/core/trace/TraceMetadataEventsStreamClassificationTest.kt`:
+```kotlin
+package com.nexio.tv.core.trace
+
+import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class TraceMetadataEventsStreamClassificationTest {
+
+    @Test
+    fun `emitStreamRequestClassified writes contentId parentId contentIsAnime evidence`() {
+        val sink = mockk<RuntimeTraceEventListener>(relaxed = true)
+        val events = TraceMetadataEvents(sink) // adapt to actual ctor; mirror existing pattern
+
+        events.emitStreamRequestClassified(
+            contentId = "tt12343534:1:1",
+            parentId = "tt12343534",
+            contentIsAnime = true,
+            evidence = "AnimeIdentityIndex",
+        )
+
+        val captured = slot<TraceEventEnvelope<*>>()
+        verify { sink.onEvent(capture(captured)) }
+        val payload = captured.captured.payload as Map<*, *>
+        assertEquals("stream.request_classified", captured.captured.eventType)
+        assertEquals("tt12343534:1:1", payload["contentId"])
+        assertEquals("tt12343534", payload["parentId"])
+        assertEquals(true, payload["contentIsAnime"])
+        assertEquals("AnimeIdentityIndex", payload["evidence"])
+    }
+
+    @Test
+    fun `emitStreamAddonBucketed writes addonIdHash flags and isAnimeBucket`() {
+        val sink = mockk<RuntimeTraceEventListener>(relaxed = true)
+        val events = TraceMetadataEvents(sink)
+
+        events.emitStreamAddonBucketed(
+            addonIdHash = "abc123",
+            addonIsAnime = true,
+            contentIsAnime = true,
+            isAnimeBucket = true,
+        )
+
+        val captured = slot<TraceEventEnvelope<*>>()
+        verify { sink.onEvent(capture(captured)) }
+        val payload = captured.captured.payload as Map<*, *>
+        assertEquals("stream.addon_bucketed", captured.captured.eventType)
+        assertEquals("abc123", payload["addonIdHash"])
+        assertEquals(true, payload["addonIsAnime"])
+        assertEquals(true, payload["contentIsAnime"])
+        assertEquals(true, payload["isAnimeBucket"])
+    }
+}
+```
+
+If the actual `TraceMetadataEvents` constructor takes a different parameter than `RuntimeTraceEventListener`, adapt the test setup to match. The shape of the assertions stays the same: each emit call writes one event with the named eventType and payload keys.
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.trace.TraceMetadataEventsStreamClassificationTest --no-daemon`
+Expected: FAIL — `emitStreamRequestClassified` and `emitStreamAddonBucketed` do not exist.
+
+- [ ] **Step 4: Add the two emit methods to `TraceMetadataEvents`**
+
+In `TraceMetadataEvents.kt`, append (mirroring the convention of an existing `emit*` method — copy the structure of `emitRouteDecision` or any other map-payload event):
+```kotlin
+    fun emitStreamRequestClassified(
+        contentId: String,
+        parentId: String,
+        contentIsAnime: Boolean,
+        evidence: String,
+    ) {
+        sink.onEvent(
+            TraceEventEnvelope(
+                eventType = "stream.request_classified",
+                payload = mapOf(
+                    "contentId" to contentId,
+                    "parentId" to parentId,
+                    "contentIsAnime" to contentIsAnime,
+                    "evidence" to evidence,
+                ),
+                sequence = sequenceCounter.getAndIncrement(),
+            )
+        )
+    }
+
+    fun emitStreamAddonBucketed(
+        addonIdHash: String,
+        addonIsAnime: Boolean,
+        contentIsAnime: Boolean,
+        isAnimeBucket: Boolean,
+    ) {
+        sink.onEvent(
+            TraceEventEnvelope(
+                eventType = "stream.addon_bucketed",
+                payload = mapOf(
+                    "addonIdHash" to addonIdHash,
+                    "addonIsAnime" to addonIsAnime,
+                    "contentIsAnime" to contentIsAnime,
+                    "isAnimeBucket" to isAnimeBucket,
+                ),
+                sequence = sequenceCounter.getAndIncrement(),
+            )
+        )
+    }
+```
+
+If `TraceMetadataEvents` does not use `sink.onEvent + TraceEventEnvelope` (i.e. the existing emit methods route through a different sink method), match the existing convention exactly. The exact emit machinery is encapsulated; this task just adds two new entrypoints that follow the file's existing pattern.
+
+- [ ] **Step 5: Wire the two emit calls in `StreamRepositoryImpl`**
+
+Inject `TraceMetadataEvents`:
+```kotlin
+import com.nexio.tv.core.trace.TraceMetadataEvents
+```
+Add it as a constructor parameter (after `animeIdentityIndex` from Task 9 Step 3):
+```kotlin
+    private val animeIdentityIndex: AnimeIdentityIndex,
+    private val traceMetadataEvents: TraceMetadataEvents,
+```
+
+After computing `contentIsAnime` (Task 9 Step 4 location), add:
+```kotlin
+            traceMetadataEvents.emitStreamRequestClassified(
+                contentId = videoId,
+                parentId = parentContentId,
+                contentIsAnime = contentIsAnime,
+                evidence = "AnimeIdentityIndex",
+            )
+```
+
+At the emit site for `AddonStreams` (Task 9 Step 5 location), immediately after constructing `emittedAddonStreams`, add:
+```kotlin
+                                    traceMetadataEvents.emitStreamAddonBucketed(
+                                        addonIdHash = addonIdHash(addon.id),
+                                        addonIsAnime = addon.isAnime,
+                                        contentIsAnime = contentIsAnime,
+                                        isAnimeBucket = addon.isAnime && contentIsAnime,
+                                    )
+```
+
+Where `addonIdHash(...)` is the existing addon-id hashing helper used elsewhere in the trace pipeline. If no such helper exists in this repository, use:
+```kotlin
+private fun addonIdHash(addonId: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(addonId.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+        .take(12)
+```
+defined as a top-level private function in `StreamRepositoryImpl.kt`. Twelve hex chars is enough to disambiguate addon ids in trace correlation without leaking the URL.
+
+- [ ] **Step 6: Update existing `StreamRepositoryImplTest` constructor calls again**
+
+The constructor now has a new mandatory `traceMetadataEvents` parameter. Update the existing test fixtures by passing `mockk<TraceMetadataEvents>(relaxed = true)`.
+
+- [ ] **Step 7: Run trace + repository tests**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.trace.TraceMetadataEventsStreamClassificationTest --tests com.nexio.tv.data.repository.StreamRepositoryImplTest --tests com.nexio.tv.data.repository.StreamRepositoryImplAnimeBucketTest --no-daemon`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add app/src/main/java/com/nexio/tv/core/trace/TraceMetadataEvents.kt app/src/main/java/com/nexio/tv/data/repository/StreamRepositoryImpl.kt app/src/test/java/com/nexio/tv/core/trace/TraceMetadataEventsStreamClassificationTest.kt app/src/test/java/com/nexio/tv/data/repository/StreamRepositoryImplTest.kt
+git commit -m "feat(trace): emit stream.request_classified and stream.addon_bucketed"
+```
+
+---
+
+### Task 11: Android UI — `AddonManagerViewModel.updateAddonIsAnime` + screen toggle
 
 **Files:**
 - Modify: `app/src/main/java/com/nexio/tv/ui/screens/addon/AddonManagerViewModel.kt`
@@ -1239,7 +1854,71 @@ git commit -m "feat(addons): expose isAnime toggle in addon manager UI"
 
 ---
 
-### Task 9: Web wire shape — `AddonRecord.isAnime` + bootstrap/persist
+### Task 12: Routing-invariant guard — `MetadataRouterIgnoresAddonIsAnimeTest`
+
+**Files:**
+- Test: `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataRouterIgnoresAddonIsAnimeTest.kt`
+
+This is a no-implementation safety test: asserts that the `MetadataRouter` (and any class on its `usedInputs` path) never reads `addon.isAnime`. The existing `RouteDecisionUsedInputs` validator forbids `addon` and `animeType` tokens in `usedInputs`; this test demonstrates that an installed anime-tagged addon does not perturb that invariant.
+
+- [ ] **Step 1: Write the test**
+
+Create `app/src/test/java/com/nexio/tv/core/metadata/router/MetadataRouterIgnoresAddonIsAnimeTest.kt`:
+```kotlin
+package com.nexio.tv.core.metadata.router
+
+import com.nexio.tv.core.trace.TraceValidationRules
+import com.nexio.tv.core.trace.TraceEventEnvelope
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class MetadataRouterIgnoresAddonIsAnimeTest {
+
+    @Test
+    fun `route decision used inputs never include addon isAnime token`() {
+        // Build a synthetic route_decision event that would represent the worst
+        // case: an implementation accidentally including "addon.isAnime" in usedInputs.
+        // The existing validator already fails this, so the test pins the invariant
+        // and serves as a tripwire if anyone adds the token in usedInputs.
+        val malicious = TraceEventEnvelope(
+            eventType = "metadata.route_decision",
+            payload = mapOf("usedInputs" to listOf("item.id", "addon.isAnime")),
+            sequence = 1L,
+        )
+        val failures = TraceValidationRules.RouteDecisionUsedInputs.apply(listOf(malicious))
+        assertTrue("route_decision must reject addon.isAnime as a usedInput", failures.isNotEmpty())
+    }
+
+    @Test
+    fun `route decision used inputs allow normal item-id input`() {
+        val safe = TraceEventEnvelope(
+            eventType = "metadata.route_decision",
+            payload = mapOf("usedInputs" to listOf("item.id", "AnimeIdentityIndex")),
+            sequence = 1L,
+        )
+        val failures = TraceValidationRules.RouteDecisionUsedInputs.apply(listOf(safe))
+        assertTrue("safe usedInputs must not trip the validator", failures.isEmpty())
+    }
+}
+```
+
+(If the actual `TraceEventEnvelope` constructor or property names differ, mirror the existing test at `app/src/test/java/com/nexio/tv/core/trace/TraceValidationRulesTest.kt`.)
+
+- [ ] **Step 2: Run test**
+
+Run: `./gradlew testArm64DebugUnitTest --tests com.nexio.tv.core.metadata.router.MetadataRouterIgnoresAddonIsAnimeTest --no-daemon`
+Expected: PASS — both invariants hold today.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add app/src/test/java/com/nexio/tv/core/metadata/router/MetadataRouterIgnoresAddonIsAnimeTest.kt
+git commit -m "test(metadata): pin invariant that addon.isAnime is not a routing input"
+```
+
+---
+
+### Task 13: Web wire shape — `AddonRecord.isAnime` + bootstrap/persist
 
 **Files:**
 - Modify: `nexio-web/types/portal.ts:61-78`
@@ -1348,7 +2027,7 @@ git commit -m "feat(web): plumb addon isAnime through portal API"
 
 ---
 
-### Task 10: Web store mutation — `usePortalStore.updateAddonIsAnime`
+### Task 14: Web store mutation — `usePortalStore.updateAddonIsAnime`
 
 **Files:**
 - Modify: `nexio-web/composables/usePortalStore.ts:261-294, 1557-1562, 2934-2944`
@@ -1459,7 +2138,7 @@ git commit -m "feat(web): add updateAddonIsAnime action to portal store"
 
 ---
 
-### Task 11: Web UI — `AddonManager.vue` toggle + `account.vue` wiring
+### Task 15: Web UI — `AddonManager.vue` toggle + `account.vue` wiring
 
 **Files:**
 - Modify: `nexio-web/components/portal/AddonManager.vue`
@@ -1527,7 +2206,7 @@ git commit -m "feat(web): add anime addon toggle to addon manager UI"
 
 ---
 
-### Task 12: End-to-end smoke check
+### Task 16: End-to-end smoke check
 
 No code changes — this is a manual verification step covering the full pipeline.
 
@@ -1543,41 +2222,61 @@ Force-stop the app and reopen. The toggle is still on.
 
 Open `nexio-web` for the same account. The same addon shows the "Anime" chip enabled.
 
-- [ ] **Step 4: Open an anime title and verify stream order**
+- [ ] **Step 4: Open an anime title and verify the manual stream list orders by bucket**
 
-Pick an anime title (e.g. opened from a Kitsu catalog or a Trakt/IMDB anime entry). Open the stream selection screen. Confirm:
+Pick an anime title (e.g. opened from a Kitsu catalog or a Trakt/IMDB anime entry). Open the stream selection screen. Confirm in the **manual list**:
 1. The anime-tagged addon's section appears at the top of the list.
 2. Generic addon sections appear below it, in their existing `sortOrder`.
-3. Autoplay (if enabled in `FIRST_STREAM` or `REGEX_MATCH` mode) selects from the anime-tagged section first.
 
-- [ ] **Step 5: Open a non-anime title and verify ordering is unchanged**
+- [ ] **Step 5: Same anime title — verify autoplay picks from the anime bucket**
+
+With autoplay set to `FIRST_STREAM` or `REGEX_MATCH`, return to the same title and let autoplay run. Confirm:
+1. The selected stream comes from the anime-tagged addon's section, not from a generic addon.
+2. If the anime-tagged section is empty for this specific title, autoplay falls through to the next bucket without erroring.
+
+This proves both the manual list and autoplay flows route through the same `StreamAutoPlaySelector.orderAddonStreams` seam — they're both ordered by the same bucket key.
+
+- [ ] **Step 6: Open an anime episode (not the show) and verify parent-id normalization**
+
+Pick a specific anime episode (e.g. open episode S01E03 of a show that's mapped to Kitsu). The Stream view's `videoId` will look like `kitsu:7442:1:3` or `tt12343534:1:3`. Confirm the anime-tagged addon section still floats to the top — proving the parent-id normalization (`kitsu:7442` / `tt12343534`) ran before the anime-identity lookup.
+
+- [ ] **Step 7: Open a non-anime title and verify ordering is unchanged**
 
 Pick a regular movie/show. Confirm the stream list ordering is identical to the legacy behavior — anime-tagged addon is wherever its `sortOrder` puts it, not floated to top.
 
-- [ ] **Step 6: No commit** (manual verification only).
+- [ ] **Step 8: Inspect the trace stream**
+
+If you have the runtime trace sink enabled in this build, open the trace log for the request and confirm one `stream.request_classified` event and one `stream.addon_bucketed` event per addon section. The classification event's `parentId` should match the normalized parent (not the episode-coordinate `videoId`).
+
+- [ ] **Step 9: No commit** (manual verification only).
 
 ---
 
 ## Self-review checklist (run before declaring plan complete)
 
 **Spec coverage:**
-- [x] Web `AddonRecord.isAnime` — Task 9.
-- [x] Android `Addon.isAnime` — Task 3.
 - [x] `AddonStreams.isAnimeBucket` — Task 1.
-- [x] Per-addon edit UI on web — Task 11.
-- [x] Per-addon edit UI on Android — Task 8.
-- [x] `contentIsAnime` computed once via `AnimeIdentityIndex` — Task 7.
-- [x] `isAnimeBucket = addon.isAnime && contentIsAnime` — Task 7.
-- [x] Two-level comparator at the single sort seam — Task 2.
-- [x] Wire-shape persistence on Android sync DTO — Task 6.
-- [x] Wire-shape persistence on web — Task 9.
+- [x] Two-level comparator at the single sort seam (with empty-anime-bucket case) — Task 2.
+- [x] Android `Addon.isAnime` — Task 3.
 - [x] DataStore round-trip — Task 4.
 - [x] Repository propagation through cache copies — Task 5.
-- [x] Migration: none (defaults preserve back-compat) — verified in Task 4.
-- [x] Edge cases: non-anime content, no anime addons, anime-tagged addon empty, unparseable id — covered by Task 7 tests + comparator regression test in Task 2.
+- [x] Wire-shape persistence on Android sync DTO (push + pull) — Task 6.
+- [x] Shared parent-ID normalization extracted as pure helper — Task 7.
+- [x] Boolean `AnimeIdentityIndex.isAnime(parsed)` API for forward-compat with one-to-many IMDb→Kitsu mapping — Task 8.
+- [x] `contentIsAnime` computed once via `AnimeIdentityIndex.isAnime(...)` (not `resolveKitsuId`) — Task 9.
+- [x] `isAnimeBucket = addon.isAnime && contentIsAnime` — Task 9.
+- [x] Episode-id normalization before anime detection (kitsu/imdb/mal/anilist/anidb episode IDs) — Tasks 7 + 9.
+- [x] Trace events `stream.request_classified` + `stream.addon_bucketed` — Task 10.
+- [x] Per-addon edit UI on Android — Task 11.
+- [x] Routing-invariant guard (addon.isAnime never an input to MetadataRouter) — Task 12.
+- [x] Web `AddonRecord.isAnime` and wire-shape persistence on web — Task 13.
+- [x] Web store mutation — Task 14.
+- [x] Per-addon edit UI on web — Task 15.
+- [x] Migration: none (defaults preserve back-compat) — verified in Tasks 4 + 13.
+- [x] Edge cases: non-anime content, no anime addons, anime-tagged addon empty, unparseable id, IMDb one-to-many — covered by Task 9 tests + comparator regression in Task 2.
+- [x] Manual list and autoplay share the same ordered output — verified by code inspection at `StreamScreenViewModel:408-412`, by Task 9's repository-level tests, and by the Task 16 smoke run.
+- [x] `addon.isAnime` is stream-priority only, never metadata-routing input — pinned by Task 12.
 
-**Trace events** (`streamRequest.contentIsAnime`, `addonStreams.isAnimeBucket`) from the spec are deferred to a follow-up — adding new trace event types touches `TraceMetadataEvents.kt` and trace validators, which is its own multi-file change. Flag with the user whether to include in this plan or defer.
-
-**Type consistency:** all method names (`updateAddonIsAnime`), field names (`isAnime`, `isAnimeBucket`), wire keys (`is_anime`), and parameter orders (`url, isAnime`) are identical across tasks.
+**Type consistency:** all method names (`updateAddonIsAnime`, `isAnime`, `parentIdOf`), field names (`isAnime`, `isAnimeBucket`), wire keys (`is_anime`), trace event types (`stream.request_classified`, `stream.addon_bucketed`), and parameter orders (`url, isAnime`) are identical across tasks.
 
 **No placeholders.** Every code block is complete; every test has a runnable command; every commit message is exact.
