@@ -1,11 +1,11 @@
 package com.nexio.tv.core.anime.projection
 
 import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMapIndexes
 import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
-import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
@@ -20,36 +20,29 @@ import org.junit.Test
 
 class DefaultAnimeSeasonDetailRepositoryTest {
 
-    // ---- MHA Season 3: expects Success with 25 episodes in season 3 ----
-
     @Test
     fun `MHA S3 - returns Success with 25 episodes in season 3`() = runBlocking {
         val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf(
-                "11469" to series("11469"),
-                "13881" to series("13881"),
-            )
+            schemaVersion = 2,
+            identityRecordsByKitsu = mapOf(
+                "11469" to series("11469", tvdbSeason = "1"),
+                "13881" to series("13881", tvdbSeason = "3"),
+            ),
+            indexes = AnimeIdMapIndexes(
+                byKitsu = mapOf("11469" to "11469", "13881" to "13881"),
+                byTvdb = mapOf("305074" to listOf("11469", "13881")),
+            ),
         )
         val mapping = AnimeIdMappingService(assetProvider = { asset })
         val kitsu = mockk<KitsuMetadataService>()
 
-        // Resolver needs all-members' episodes (emptyList() = no season filter)
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:11469", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..13).associate { (1 to it) to kitsuEp(season = 1, ep = it) }
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:13881", ContentMediaKind.SERIES, emptyList()) } returns
-            (1..25).associate { (3 to it) to kitsuEp(season = 3, ep = it) }
-
-        // Repository fetches only the selected season's episodes for the correct member
         coEvery { kitsu.fetchEpisodeEnrichment("kitsu:13881", ContentMediaKind.SERIES, listOf(3)) } returns
             (1..25).associate { (3 to it) to kitsuEp(season = 3, ep = it) }
 
         val resolver = DefaultAnimeSeasonProjectionResolver(
-            idMappingService = mapping,
-            kitsuMetadataService = kitsu,
+            mappingService = mapping,
             store = InMemoryAnimeEpisodeCoordinateStore(),
             traceEvents = mockk(relaxed = true),
-            presentationCache = InMemoryAnimeSeasonPresentationCache(),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
@@ -70,29 +63,25 @@ class DefaultAnimeSeasonDetailRepositoryTest {
         assertTrue(success.meta.videos.all { it.season == 3 })
     }
 
-    // ---- Empty episode map: expects Error ----
-
     @Test
     fun `empty episode map returns Error`() = runBlocking {
         val asset = AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf("99999" to series("99999"))
+            schemaVersion = 2,
+            identityRecordsByKitsu = mapOf("99999" to series("99999", tvdbSeason = "1")),
+            indexes = AnimeIdMapIndexes(
+                byKitsu = mapOf("99999" to "99999"),
+                byTvdb = mapOf("305074" to listOf("99999")),
+            ),
         )
         val mapping = AnimeIdMappingService(assetProvider = { asset })
         val kitsu = mockk<KitsuMetadataService>()
 
-        // Resolver discovery returns empty (no episodes at all)
-        coEvery { kitsu.fetchEpisodeEnrichment("kitsu:99999", ContentMediaKind.SERIES, emptyList()) } returns emptyMap()
-
-        // Repository fetch also returns empty (season 1 default)
         coEvery { kitsu.fetchEpisodeEnrichment("kitsu:99999", ContentMediaKind.SERIES, any()) } returns emptyMap()
 
         val resolver = DefaultAnimeSeasonProjectionResolver(
-            idMappingService = mapping,
-            kitsuMetadataService = kitsu,
+            mappingService = mapping,
             store = InMemoryAnimeEpisodeCoordinateStore(),
             traceEvents = mockk(relaxed = true),
-            presentationCache = InMemoryAnimeSeasonPresentationCache(),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
@@ -112,10 +101,12 @@ class DefaultAnimeSeasonDetailRepositoryTest {
         assertTrue(error.message.contains("unavailable", ignoreCase = true))
     }
 
-    // ---- Helpers ----
-
-    private fun series(kitsu: String, tvdb: String = "305074", imdb: String = "tt5626028") =
-        AnimeIdMapRecord(kitsu = kitsu, tvdb = tvdb, imdb = imdb, mediaType = "series", sourceType = "TV")
+    private fun series(kitsu: String, tvdb: String = "305074", imdb: String = "tt5626028", tvdbSeason: String? = null) =
+        AnimeIdMapRecord(
+            kitsu = kitsu, tvdb = tvdb, imdb = imdb,
+            mediaType = "series", sourceType = "TV",
+            tvdbSeason = tvdbSeason,
+        )
 
     private fun kitsuEp(season: Int, ep: Int) = TvEpisodeMetadata(
         providerEpisodeId = "kitsu:ep$season-$ep",

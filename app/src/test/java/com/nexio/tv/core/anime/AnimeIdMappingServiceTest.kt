@@ -36,7 +36,7 @@ class AnimeIdMappingServiceTest {
     @Test
     fun `resolveKitsuId returns null when assetProvider throws (missing asset on profileable)`() {
         val service = AnimeIdMappingService(
-            assetProvider = { throw java.io.FileNotFoundException("anime/anime-id-map.json") }
+            assetProvider = { throw java.io.FileNotFoundException("anime/nexio-anime-map-v1.json") }
         )
 
         val resolved = service.resolveKitsuId(
@@ -63,8 +63,8 @@ class AnimeIdMappingServiceTest {
 
     private fun fixtureAsset(): AnimeIdMapAsset {
         return AnimeIdMapAsset(
-            schemaVersion = 1,
-            recordsByKitsu = mapOf(
+            schemaVersion = 2,
+            identityRecordsByKitsu = mapOf(
                 "3936" to AnimeIdMapRecord(
                     kitsu = "3936",
                     mal = "5114",
@@ -77,14 +77,16 @@ class AnimeIdMappingServiceTest {
                 ),
                 "198" to AnimeIdMapRecord(kitsu = "198", mal = "222", tmdb = "12174", mediaType = "movie")
             ),
-            byKitsu = mapOf("3936" to "3936", "198" to "198"),
-            byMal = mapOf("5114" to "3936", "222" to "198"),
-            byAnilist = mapOf("5114" to "3936"),
-            byAnidb = mapOf("6107" to "3936"),
-            byTvdb = mapOf("85249" to "3936"),
-            byTmdbMovie = mapOf("12174" to "198"),
-            byTmdbSeries = mapOf("31911" to "3936"),
-            byImdb = mapOf("tt1355642" to "3936")
+            indexes = AnimeIdMapIndexes(
+                byKitsu = mapOf("3936" to "3936", "198" to "198"),
+                byMal = mapOf("5114" to "3936", "222" to "198"),
+                byAnilist = mapOf("5114" to "3936"),
+                byAnidb = mapOf("6107" to "3936"),
+                byTvdb = mapOf("85249" to listOf("3936")),
+                byTmdbMovie = mapOf("12174" to "198"),
+                byTmdbTv = mapOf("31911" to listOf("3936")),
+                byImdb = mapOf("tt1355642" to listOf("3936")),
+            ),
         )
     }
 }

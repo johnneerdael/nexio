@@ -7,7 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val ANIME_ID_MAP_ASSET = "anime/anime-id-map.json"
+private const val ANIME_ID_MAP_ASSET = "anime/nexio-anime-map-v1.json"
 
 @Singleton
 class AnimeIdMappingService(
@@ -41,18 +41,27 @@ class AnimeIdMappingService(
     }
 
     fun resolveKitsuId(id: AnimeStremioId, mediaKind: ContentMediaKind): String? {
+        val indexes = asset.indexes
         return when (id.source) {
-            AnimeIdSource.KITSU -> id.value.takeIf { asset.byKitsu.containsKey(it) } ?: id.value
-            AnimeIdSource.MAL -> asset.byMal[id.value]
-            AnimeIdSource.ANILIST -> asset.byAnilist[id.value]
-            AnimeIdSource.ANIDB -> asset.byAnidb[id.value]
-            AnimeIdSource.TVDB -> asset.byTvdb[id.value]
-            AnimeIdSource.IMDB -> asset.byImdb[id.value]
+            AnimeIdSource.KITSU -> id.value.takeIf { indexes.byKitsu.containsKey(it) } ?: id.value
+            AnimeIdSource.MAL -> indexes.byMal[id.value]
+            AnimeIdSource.ANILIST -> indexes.byAnilist[id.value]
+            AnimeIdSource.ANIDB -> indexes.byAnidb[id.value]
+            AnimeIdSource.TVDB -> indexes.byTvdb[id.value]?.firstOrNull()
+            AnimeIdSource.IMDB -> resolveImdbKitsuId(id.value, mediaKind)
             AnimeIdSource.TMDB -> when (mediaKind) {
-                ContentMediaKind.MOVIE -> asset.byTmdbMovie[id.value]
-                ContentMediaKind.SERIES -> asset.byTmdbSeries[id.value]
+                ContentMediaKind.MOVIE -> indexes.byTmdbMovie[id.value]
+                ContentMediaKind.SERIES -> indexes.byTmdbTv[id.value]?.firstOrNull()
             }
         }
+    }
+
+    private fun resolveImdbKitsuId(imdbId: String, mediaKind: ContentMediaKind): String? {
+        val candidates = asset.indexes.byImdb[imdbId] ?: return null
+        if (candidates.isEmpty()) return null
+        val records = candidates.mapNotNull { asset.identityRecordsByKitsu[it] }
+        val matched = records.firstOrNull { rec -> rec.matches(mediaKind) }
+        return matched?.kitsu ?: candidates.firstOrNull()
     }
 
     fun resolveProviderIdsForKitsu(kitsuId: String, mediaKind: ContentMediaKind): ProviderIds {
@@ -61,7 +70,7 @@ class AnimeIdMappingService(
             .removePrefix("kitsu:")
             .takeIf { it.isNotBlank() }
             ?: return ProviderIds()
-        val record = asset.recordsByKitsu[cleanKitsuId]
+        val record = asset.identityRecordsByKitsu[cleanKitsuId]
             ?.takeIf { it.matches(mediaKind) }
             ?: return ProviderIds(kitsu = cleanKitsuId)
 
@@ -77,7 +86,22 @@ class AnimeIdMappingService(
     }
 
     fun recordForKitsuId(kitsuId: String): AnimeIdMapRecord? =
-        asset.recordsByKitsu[kitsuId.removePrefix("kitsu:")]
+        asset.identityRecordsByKitsu[kitsuId.removePrefix("kitsu:")]
+
+    fun recordForAnidbId(anidbId: String): AnimeIdMapRecord? {
+        val kitsu = asset.indexes.byAnidb[anidbId] ?: return null
+        return asset.identityRecordsByKitsu[kitsu]
+    }
+
+    fun episodeMappingForAnidb(anidbId: String): AnimeEpisodeMappingRecord? =
+        asset.episodeMappingsByAnidb[anidbId]
+
+    fun recordsForImdbId(imdbId: String): List<AnimeIdMapRecord> {
+        val kitsuIds = asset.indexes.byImdb[imdbId] ?: return emptyList()
+        return kitsuIds.mapNotNull { asset.identityRecordsByKitsu[it] }
+    }
+
+    fun isAnimeImdbId(imdbId: String): Boolean = recordsForImdbId(imdbId).isNotEmpty()
 
     /**
      * Returns every SERIES TV record sharing the same tvdb id as [record].
@@ -87,9 +111,14 @@ class AnimeIdMappingService(
      */
     fun allSeriesRecordsSharingTvdb(record: AnimeIdMapRecord): List<AnimeIdMapRecord> {
         val tvdb = record.tvdb?.takeIf { it.isNotBlank() } ?: return listOf(record)
-        return asset.recordsByKitsu.values.filter { other ->
-            other.tvdb == tvdb && isSeriesTvEntry(other)
+        val kitsuIds = asset.indexes.byTvdb[tvdb]
+        val candidates = if (!kitsuIds.isNullOrEmpty()) {
+            kitsuIds.mapNotNull { asset.identityRecordsByKitsu[it] }
+        } else {
+            asset.identityRecordsByKitsu.values.filter { it.tvdb == tvdb }
         }
+        val filtered = candidates.filter { isSeriesTvEntry(it) }
+        return filtered.ifEmpty { listOf(record) }
     }
 
     private fun isSeriesTvEntry(record: AnimeIdMapRecord): Boolean {

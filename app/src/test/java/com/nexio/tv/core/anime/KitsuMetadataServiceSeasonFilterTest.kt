@@ -37,8 +37,8 @@ class KitsuMetadataServiceSeasonFilterTest {
         val idMappingService = AnimeIdMappingService(
             assetProvider = {
                 AnimeIdMapAsset(
-                    schemaVersion = 1,
-                    recordsByKitsu = mapOf(
+                    schemaVersion = 2,
+                    identityRecordsByKitsu = mapOf(
                         "13881" to AnimeIdMapRecord(
                             kitsu = "13881",
                             mal = "33486",
@@ -46,14 +46,10 @@ class KitsuMetadataServiceSeasonFilterTest {
                             mediaType = "series"
                         )
                     ),
-                    byKitsu = mapOf("13881" to "13881"),
-                    byMal = mapOf("33486" to "13881"),
-                    byAnilist = emptyMap(),
-                    byAnidb = emptyMap(),
-                    byTvdb = emptyMap(),
-                    byTmdbMovie = emptyMap(),
-                    byTmdbSeries = emptyMap(),
-                    byImdb = emptyMap()
+                    indexes = AnimeIdMapIndexes(
+                        byKitsu = mapOf("13881" to "13881"),
+                        byMal = mapOf("33486" to "13881"),
+                    )
                 )
             }
         )
