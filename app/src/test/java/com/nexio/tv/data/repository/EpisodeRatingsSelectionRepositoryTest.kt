@@ -98,6 +98,41 @@ class EpisodeRatingsSelectionRepositoryTest {
     }
 
     @Test
+    fun `custom imdb episode candidates survive tmdb and omdb failures`() = runTest {
+        val customRepository = mockk<CustomImdbEpisodeRatingsRepository>()
+        val tmdbService = mockk<TmdbService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
+        val omdbRepository = mockk<OmdbEpisodeRatingsRepository>()
+        coEvery {
+            customRepository.getEpisodeRatingsForMeta(any(), any(), any(), any())
+        } returns mapOf((1 to 1) to 8.4)
+        coEvery { tmdbService.ensureTmdbId("tt27444205", "series") } throws IllegalStateException("tmdb unavailable")
+        coEvery {
+            omdbRepository.getEpisodeRatingsForMeta(any(), any(), any(), any())
+        } throws IllegalStateException("omdb unavailable")
+
+        val repository = repository(
+            customRepository = customRepository,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService,
+            omdbRepository = omdbRepository,
+            customActive = true
+        )
+
+        val candidates = repository.episodeRatingCandidates(
+            meta = stubMeta("tt27444205"),
+            fallbackItemId = "",
+            fallbackItemType = "series",
+            episodesBySeason = mapOf(1 to setOf(1))
+        )
+
+        assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
+        assertEquals(listOf(8.4), candidates.map { it.value })
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
+        coVerify(exactly = 1) { omdbRepository.getEpisodeRatingsForMeta(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `inactive custom imdb emits provider and omdb candidates only`() = runTest {
         val customRepository = mockk<CustomImdbEpisodeRatingsRepository>()
         val tmdbService = mockk<TmdbService>()

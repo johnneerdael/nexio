@@ -444,7 +444,7 @@ class MetadataDisplayRepositoryTest {
     }
 
     @Test
-    fun `resolveDetailDisplay degrades when optional rating display fails`() = runTest {
+    fun `resolveDetailDisplay keeps primary rating when optional rating display fails`() = runTest {
         val routerFacade = mockk<MetadataRouterFacade>()
         val ratingRepository = mockk<DetailRatingDisplayRepository>()
         val repository = MetadataDisplayRepository(
@@ -490,8 +490,9 @@ class MetadataDisplayRepositoryTest {
         val document = repository.resolveDetailDisplay(request)
 
         assertEquals("Game of Thrones", document.fields.title)
-        assertEquals(ResolvedDetailRatingDisplay(), document.ratings)
-        assertNull(document.rating)
+        assertEquals(9.2, document.rating?.value ?: 0.0, 0.0)
+        assertEquals(TitleRatingSource.IMDB, document.rating?.source)
+        assertEquals(document.rating, document.ratings.titleRating)
     }
 
     private fun minimalRatingsMeta(id: String): Meta =

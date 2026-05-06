@@ -8,6 +8,7 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,24 +32,29 @@ class EpisodeRatingsSelectionRepository @Inject constructor(
         if (episodesBySeason.isEmpty()) return emptyList()
 
         val candidates = mutableListOf<EpisodeRatingCandidate>()
-        if (customImdbActiveProvider()) {
-            customImdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
+        if (runOptional { customImdbActiveProvider() } == true) {
+            runOptional {
+                customImdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
+                    meta = meta,
+                    fallbackItemId = fallbackItemId,
+                    fallbackItemType = fallbackItemType,
+                    episodesBySeason = episodesBySeason
+                )
+            }?.mapTo(candidates, SourceRole.CUSTOM_IMDB, "IMDB", Confidence.HIGH)
+        }
+
+        runOptional {
+            tmdbEpisodeRatings(meta, fallbackItemId, fallbackItemType, episodesBySeason)
+        }?.mapTo(candidates, SourceRole.PRIMARY_PROVIDER, "TMDB", Confidence.MEDIUM)
+
+        runOptional {
+            omdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
                 meta = meta,
                 fallbackItemId = fallbackItemId,
                 fallbackItemType = fallbackItemType,
                 episodesBySeason = episodesBySeason
-            ).mapTo(candidates, SourceRole.CUSTOM_IMDB, "IMDB", Confidence.HIGH)
-        }
-
-        tmdbEpisodeRatings(meta, fallbackItemId, fallbackItemType, episodesBySeason)
-            .mapTo(candidates, SourceRole.PRIMARY_PROVIDER, "TMDB", Confidence.MEDIUM)
-
-        omdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
-            meta = meta,
-            fallbackItemId = fallbackItemId,
-            fallbackItemType = fallbackItemType,
-            episodesBySeason = episodesBySeason
-        ).mapTo(candidates, SourceRole.OMDB, "OMDB", Confidence.HIGH)
+            )
+        }?.mapTo(candidates, SourceRole.OMDB, "OMDB", Confidence.HIGH)
 
         return candidates
     }
@@ -113,3 +119,12 @@ class EpisodeRatingsSelectionRepository @Inject constructor(
         }
     }
 }
+
+private inline fun <T> runOptional(block: () -> T): T? =
+    try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
