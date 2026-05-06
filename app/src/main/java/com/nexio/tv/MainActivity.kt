@@ -118,6 +118,11 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.data.local.AppOnboardingDataStore
@@ -194,38 +199,34 @@ private data class MainUiPrefs(
     val trailerScreensaverEnabled: Boolean = false
 )
 
-internal data class IdleTrailerResolverRequest(
-    val title: String,
-    val year: String?,
-    val tmdbId: String?,
-    val type: String,
-    val contentId: String,
-    val fallbackYtIds: List<String>
-)
-
 internal suspend fun resolveIdleTrailerScreensaverPlaybackSource(
     candidate: IdleTrailerScreensaverCandidate,
     trailerId: String,
-    resolveTrailer: suspend (IdleTrailerResolverRequest) -> TrailerResolutionResult?
+    resolveTrailer: suspend (TrailerResolveRequest) -> TrailerResolution,
+    resolvePlaybackSource: suspend (TrailerPlaybackRef) -> TrailerResolutionResult?
 ): TrailerPlaybackSource? {
-    val result = resolveTrailer(candidate.toTrailerResolverRequest(trailerId))
+    val request = candidate.toTrailerResolverRequest(trailerId)
+    val selectedRef = resolveTrailer(request).selected ?: return null
+    val result = resolvePlaybackSource(selectedRef)
     return (result as? TrailerResolutionResult.Playback)?.source
 }
 
 private fun IdleTrailerScreensaverCandidate.toTrailerResolverRequest(
     trailerId: String
-): IdleTrailerResolverRequest {
-    return IdleTrailerResolverRequest(
+): TrailerResolveRequest {
+    return TrailerResolveRequest(
+        itemKey = "${itemType.trim().lowercase()}:$itemId",
         title = title,
         year = extractIdleTrailerReleaseYear(releaseInfo),
-        tmdbId = stableIds.tmdb?.trim()?.takeIf(String::isNotEmpty),
-        type = itemType,
-        contentId = trailerResolverContentId(),
+        stableIds = stableIds,
         fallbackYtIds = if (trailerId == RESOLVE_TRAILER_BY_ITEM_SENTINEL) {
             emptyList()
         } else {
             listOf(trailerId)
-        }
+        },
+        surface = TrailerSurface.SCREENSAVER,
+        type = itemType,
+        contentId = trailerResolverContentId()
     )
 }
 
@@ -238,19 +239,24 @@ private fun IdleTrailerScreensaverCandidate.trailerResolverContentId(): String {
 }
 
 private suspend fun TrailerService.resolveIdleTrailerScreensaverPlaybackSource(
+    trailerResolver: TrailerResolver,
     candidate: IdleTrailerScreensaverCandidate,
     trailerId: String
 ): TrailerPlaybackSource? {
-    return resolveIdleTrailerScreensaverPlaybackSource(candidate, trailerId) { request ->
-        resolveTrailer(
-            title = request.title,
-            year = request.year,
-            tmdbId = request.tmdbId,
-            type = request.type,
-            contentId = request.contentId,
-            fallbackYtIds = request.fallbackYtIds
-        )
-    }
+    return resolveIdleTrailerScreensaverPlaybackSource(
+        candidate = candidate,
+        trailerId = trailerId,
+        resolveTrailer = { request ->
+            trailerResolver.resolveTrailer(request)
+        },
+        resolvePlaybackSource = { ref ->
+            resolvePlaybackSource(
+                ref = ref,
+                title = candidate.title,
+                year = extractIdleTrailerReleaseYear(candidate.releaseInfo)
+            )
+        }
+    )
 }
 
 @AndroidEntryPoint
@@ -324,6 +330,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var trailerService: TrailerService
+
+    @Inject
+    lateinit var trailerResolver: TrailerResolver
 
     @Inject
     lateinit var idleScreensaverController: IdleScreensaverController
@@ -905,7 +914,11 @@ class MainActivity : ComponentActivity() {
                             com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSessionFromCandidates(
                                 candidates = idleTrailerCandidates
                             ) { candidate, trailerId ->
-                                trailerService.resolveIdleTrailerScreensaverPlaybackSource(candidate, trailerId)
+                                trailerService.resolveIdleTrailerScreensaverPlaybackSource(
+                                    trailerResolver = trailerResolver,
+                                    candidate = candidate,
+                                    trailerId = trailerId
+                                )
                             }
                         } else {
                             null
@@ -1094,7 +1107,11 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             },
                                             resolvePlaybackSource = { candidate, trailerId ->
-                                                trailerService.resolveIdleTrailerScreensaverPlaybackSource(candidate, trailerId)
+                                                trailerService.resolveIdleTrailerScreensaverPlaybackSource(
+                                                    trailerResolver = trailerResolver,
+                                                    candidate = candidate,
+                                                    trailerId = trailerId
+                                                )
                                             }
                                         )
                                     }

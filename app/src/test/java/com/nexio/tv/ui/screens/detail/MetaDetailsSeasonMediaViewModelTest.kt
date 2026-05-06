@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -99,15 +100,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.Playback(
             TrailerPlaybackSource(
                 videoUrl = "https://example.com/series.m3u8",
@@ -125,7 +118,10 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         } returns null
 
-        val viewModel = buildViewModel(trailerService)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("series"))
+        )
         advanceUntilIdle()
 
         assertEquals(null, viewModel.uiState.value.trailerUrl)
@@ -142,15 +138,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertFalse(state.hideLogoDuringTrailer)
         assertFalse(state.selectedSeasonHasPlayableTrailerMedia)
         coVerify(exactly = 0) {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         }
         coVerify(atLeast = 1) {
             trailerService.getSeasonMediaAvailability(
@@ -361,15 +349,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.External("https://youtube.com/watch?v=series")
         coEvery {
             trailerService.getSeasonTrailerPlaybackSource(
@@ -382,7 +362,10 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         } returns null
 
-        val viewModel = buildViewModel(trailerService)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("series"))
+        )
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -404,15 +387,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertFalse(state.hideLogoDuringTrailer)
         assertFalse(state.selectedSeasonHasPlayableTrailerMedia)
         coVerify(exactly = 1) {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("series"), any(), any())
         }
         coVerify(atLeast = 1) {
             trailerService.getSeasonMediaAvailability(
@@ -514,15 +489,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.Playback(
             TrailerPlaybackSource(
                 videoUrl = "https://example.com/series.m3u8",
@@ -540,7 +507,10 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         } returns null
 
-        val viewModel = buildViewModel(trailerService)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("series"))
+        )
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -582,15 +552,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.External("https://youtube.com/watch?v=series")
         coEvery {
             trailerService.getSeasonRecapPlaybackSource(
@@ -603,7 +565,10 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         } returns null
 
-        val viewModel = buildViewModel(trailerService)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("series"))
+        )
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -651,20 +616,15 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } coAnswers {
             trailerResolutionGate.await()
         }
 
-        val viewModel = buildViewModel(trailerService)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("series"))
+        )
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -859,15 +819,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasRecap = false
         )
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.Playback(
             TrailerPlaybackSource(
                 videoUrl = "https://example.com/title.m3u8",
@@ -884,15 +836,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertEquals(null, viewModel.uiState.value.trailerUrl)
         assertTrue(viewModel.uiState.value.titleHasPlayableTrailerMedia)
         coVerify(exactly = 0) {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         }
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -905,15 +849,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertTrue(state.showTrailerControls)
         assertTrue(state.hideLogoDuringTrailer)
         coVerify(exactly = 1) {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("titleTrailerId"), any(), any())
         }
     }
 
@@ -929,15 +865,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         } returns false
         coEvery {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns null
         coEvery {
             trailerService.getSeasonMediaAvailability(
@@ -967,15 +895,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             )
         }
         coVerify(exactly = 0) {
-            trailerService.resolveTrailer(
-                title = any(),
-                year = any(),
-                tmdbId = any(),
-                type = any(),
-                seasonNumber = any(),
-                contentId = any(),
-                fallbackYtIds = any()
-            )
+            trailerService.resolvePlaybackSource(any(), any(), any())
         }
     }
 

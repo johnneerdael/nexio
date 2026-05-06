@@ -634,11 +634,12 @@ class MetaDetailsViewModel @Inject constructor(
                 // that the initial UI state (episode list, season expansion) is immediately
                 // correct before async TVDB episode enrichment completes.
                 if (preferredAddonBaseUrl?.isNotBlank() == true &&
-                    (meta.videos.isEmpty() || meta.links.isEmpty())) {
+                    (meta.videos.isEmpty() || meta.links.isEmpty() || meta.trailerYtIds.isEmpty())) {
                     if (initialAddonMeta != null) {
                         meta = meta.copy(
                             videos = meta.videos.ifEmpty { initialAddonMeta.videos },
-                            links = meta.links.ifEmpty { initialAddonMeta.links }
+                            links = meta.links.ifEmpty { initialAddonMeta.links },
+                            trailerYtIds = meta.trailerYtIds.ifEmpty { initialAddonMeta.trailerYtIds }
                         )
                     }
                 }
@@ -793,10 +794,15 @@ class MetaDetailsViewModel @Inject constructor(
         calculateNextToWatch()
     }
 
-    private fun applyTitleTrailerAvailabilityFromResolvedDocument() {
+    private fun applyTitleTrailerAvailabilityFromFallbackRefs(fallbackTrailerYtIds: List<String>) {
         _uiState.update { state ->
-            val available = state.trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
+            val trailerState = state.trailerState.copy(
+                fallbackTrailerYtIds = state.trailerState.fallbackTrailerYtIds
+                    .ifEmpty { fallbackTrailerYtIds }
+            )
+            val available = trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
             state.copy(
+                trailerState = trailerState,
                 titleHasPlayableTrailerMedia = available,
                 trailerResolutionStatus = when {
                     state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
@@ -812,9 +818,24 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun applyResolvedDetailState(document: ResolvedDetailDisplayDocument) {
         _uiState.update { state ->
+            val trailerState = document.trailer.copy(
+                fallbackTrailerYtIds = document.trailer.fallbackTrailerYtIds
+                    .ifEmpty { state.meta?.trailerYtIds.orEmpty() }
+            )
+            val hasFallbackTrailerRef = trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
             state.copy(
                 resolvedDetail = document,
-                trailerState = document.trailer,
+                trailerState = trailerState,
+                titleHasPlayableTrailerMedia = state.titleHasPlayableTrailerMedia || hasFallbackTrailerRef,
+                trailerResolutionStatus = when {
+                    state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
+                        TrailerResolutionStatus.RESOLVING
+                    !state.trailerUrl.isNullOrBlank() || !state.trailerExternalUrl.isNullOrBlank() ->
+                        TrailerResolutionStatus.READY
+                    state.titleHasPlayableTrailerMedia || hasFallbackTrailerRef ->
+                        TrailerResolutionStatus.IDLE
+                    else -> state.trailerResolutionStatus
+                },
                 localizationFallbackReason = document.localization.fallbackReason,
                 reviews = document.reviews,
                 relatedItems = document.recommendations,
@@ -2024,7 +2045,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun preloadTitleTrailerAvailability(meta: Meta) {
         val fallbackYtIds = _uiState.value.trailerState.fallbackTrailerYtIds.ifEmpty { meta.trailerYtIds }
         if (fallbackYtIds.any { it.isNotBlank() }) {
-            applyTitleTrailerAvailabilityFromResolvedDocument()
+            applyTitleTrailerAvailabilityFromFallbackRefs(fallbackYtIds)
             return
         }
 
@@ -2816,6 +2837,8 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val trailerContentType = resolveTmdbContentType(meta)
+            val fallbackTrailerYtIds = _uiState.value.trailerState.fallbackTrailerYtIds
+                .ifEmpty { meta.trailerYtIds }
             val trailerResult = metadataRouterFacade.fetchTrailer(
                 metadataRequest = MetadataRequest(
                     contentId = if (!tmdbId.isNullOrBlank()) "tmdb:$tmdbId" else meta.id,
@@ -2837,7 +2860,7 @@ class MetaDetailsViewModel @Inject constructor(
                     null
                 },
                 contentId = meta.id,
-                fallbackYtIds = meta.trailerYtIds
+                fallbackYtIds = fallbackTrailerYtIds
             )
 
             _uiState.update { state ->
