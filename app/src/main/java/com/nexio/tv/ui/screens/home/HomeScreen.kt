@@ -431,7 +431,9 @@ fun HomeScreen(
                             title = item.name,
                             releaseInfo = item.releaseInfo,
                             apiType = item.apiType,
-                            fallbackYtId = item.trailerYtIds.firstOrNull()
+                            fallbackYtId = viewModel.trailerSelectedFallbackYtIds[
+                                homeTrailerAvailabilityKey(item.id, item.apiType)
+                            ]
                         )
                     } else {
                         viewModel.requestTrailerPreview(item)

@@ -22,6 +22,9 @@ import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
 import com.nexio.tv.core.metadata.router.resolver.RatingResolution
 import com.nexio.tv.core.metadata.router.resolver.RatingResolver
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedProductionCompany
 import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
@@ -433,8 +436,26 @@ class MetadataDisplayRepository @Inject constructor(
         val fallbackTrailerYtIds = providerRunResult.toFieldValues(ResolvedField.TRAILERS)
             .flatMap(::youtubeIdsFromTrailerValue)
             .distinct()
+        val resolution = metadataRouterFacade.resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = route?.parentId ?: resolvedDocument.canonicalId ?: displayMetadata.title.orEmpty(),
+                title = displayMetadata.title.orEmpty(),
+                year = displayMetadata.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                stableIds = ProviderIds(),
+                fallbackYtIds = fallbackTrailerYtIds,
+                surface = TrailerSurface.DETAIL,
+                type = route?.sourceContext?.itemType,
+                contentId = route?.parentId ?: resolvedDocument.canonicalId,
+                providerCandidates = providerRunResult.toFieldValues(ResolvedField.TRAILERS)
+                    .flatMap(::trailerPlaybackRefsFrom)
+            )
+        )
         return TrailerDisplayState(
-            fallbackTrailerYtIds = fallbackTrailerYtIds,
+            fallbackTrailerYtIds = listOfNotNull((resolution.selected as? TrailerPlaybackRef.YouTubeId)?.videoId)
+                .ifEmpty { fallbackTrailerYtIds.takeIf { resolution.selected != null }.orEmpty() },
+            selectedPlaybackRef = resolution.selected,
+            availabilityReason = resolution.availability.reason,
+            surface = TrailerSurface.DETAIL.name.lowercase(),
             resolverSource = resolvedDocument.sourceProviders[ResolvedField.TRAILERS],
             lastResolvedAtMs = null
         )
@@ -606,6 +627,29 @@ class MetadataDisplayRepository @Inject constructor(
             is Collection<*> -> value.flatMap(::youtubeIdsFromTrailerValue)
             else -> emptyList()
         }
+
+    private fun trailerPlaybackRefsFrom(value: Any?): List<TrailerPlaybackRef> =
+        when (value) {
+            is TrailerResolutionResult.External -> listOf(TrailerPlaybackRef.ExternalUrl(value.url))
+            is TrailerResolutionResult.Playback -> listOf(value.source.toTrailerPlaybackRef())
+            is TrailerPlaybackSource -> listOf(value.toTrailerPlaybackRef())
+            is TmdbVideoResult -> listOfNotNull(
+                value.key?.trim()?.takeIf { it.isNotBlank() }?.let(TrailerPlaybackRef::YouTubeId)
+            )
+            is String -> listOfNotNull(
+                (value.youtubeIdFromUrl() ?: value.trim().takeIf { it.isNotBlank() })
+                    ?.let(TrailerPlaybackRef::YouTubeId)
+            )
+            is Collection<*> -> value.flatMap(::trailerPlaybackRefsFrom)
+            else -> emptyList()
+        }
+
+    private fun TrailerPlaybackSource.toTrailerPlaybackRef(): TrailerPlaybackRef =
+        TrailerPlaybackRef.InAppSource(
+            videoUrl = videoUrl,
+            audioUrl = audioUrl,
+            userAgent = userAgent
+        )
 
     private fun String.youtubeIdFromUrl(): String? {
         val value = trim()

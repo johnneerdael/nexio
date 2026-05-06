@@ -280,6 +280,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewUserAgentsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
+    internal val trailerSelectedFallbackYtIdsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailabilityInFlightKeys = Collections.synchronizedSet(mutableSetOf<String>())
     internal val trailerMetadataAvailabilityJobs = Collections.synchronizedSet(mutableSetOf<Job>())
     internal var activeTrailerPreviewItemId: String? = null
@@ -380,6 +381,8 @@ class HomeViewModel @Inject constructor(
             .filterValues { it }
             .keys
             .toSet()
+    val trailerSelectedFallbackYtIds: Map<String, String>
+        get() = trailerSelectedFallbackYtIdsState
 
     init {
         observeStartupPerfTelemetry()

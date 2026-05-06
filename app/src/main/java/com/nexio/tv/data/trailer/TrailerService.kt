@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TrailerService"
+internal fun buildYouTubeWatchUrl(videoId: String): String =
+    "https://www.youtube.com/watch?v=${videoId.trim()}"
+
 private fun trailerDebugLog(message: String) {
     if (!BuildConfig.DEBUG) return
     runCatching { Log.d(TAG, message) }
@@ -435,11 +438,12 @@ class TrailerService(
         when (ref) {
             is TrailerPlaybackRef.YouTubeId -> {
                 val videoId = ref.videoId.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                val youtubeUrl = buildYouTubeWatchUrl(videoId)
                 resolveYouTubeTrailer(
-                    youtubeUrl = buildYouTubeWatchUrl(videoId),
+                    youtubeUrl = youtubeUrl,
                     title = title,
                     year = year
-                )
+                ) ?: TrailerResolutionResult.External(youtubeUrl)
             }
             is TrailerPlaybackRef.ExternalUrl -> {
                 val url = ref.url.trim().takeIf { it.isNotBlank() } ?: return@withContext null
@@ -945,9 +949,6 @@ class TrailerService(
 
         null
     }
-
-    private fun buildYouTubeWatchUrl(videoId: String): String =
-        "https://www.youtube.com/watch?v=${videoId.trim()}"
 
     private suspend fun resolveLatestAiredSeasonNumber(
         tmdbId: Int,

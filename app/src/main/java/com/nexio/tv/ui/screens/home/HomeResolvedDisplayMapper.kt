@@ -2,6 +2,10 @@ package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeItemHydrationState
@@ -22,20 +26,32 @@ internal object HomeResolvedDisplayMapper {
     fun toResolvedDisplayItems(
         rows: List<CatalogRow>,
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long = System.currentTimeMillis(),
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null
     ): List<ResolvedDisplayItem> =
         rows.flatMap { row -> row.items }
-            .map { item -> item.toResolvedDisplayItem(overlaysByItemKey, nowMs) }
+            .map { item -> item.toResolvedDisplayItem(overlaysByItemKey, nowMs, resolveTrailer) }
 
     private fun MetaPreview.toResolvedDisplayItem(
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-        nowMs: Long
+        nowMs: Long,
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
         val overlay = overlaysByItemKey[itemKey]
         val fields = toHomeDisplayMetadata()
         val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
         val stableIds = firstPaintStableIds.withOverlayStableId(overlay)
+        val trailerState = resolveHomeTrailerDisplayState(
+            itemKey = itemKey,
+            title = fields.title ?: name,
+            year = fields.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+            stableIds = stableIds,
+            fallbackYtIds = trailerYtIds,
+            apiType = apiType,
+            contentId = id,
+            resolveTrailer = resolveTrailer
+        )
 
         return ResolvedDisplayItem(
             itemKey = itemKey,
@@ -62,7 +78,7 @@ internal object HomeResolvedDisplayMapper {
             ),
             artwork = fields.artwork ?: ArtworkBundle(),
             rating = fields.imdbRating?.let { value -> TitleRating(value.toString().toDouble(), ratingSource) },
-            trailer = TrailerDisplayState(),
+            trailer = trailerState,
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
                 overlay.isStale(nowMs) -> HydrationState.STALE_READY
@@ -70,6 +86,41 @@ internal object HomeResolvedDisplayMapper {
             },
             sourceTrace = overlay?.fieldTrace.orEmpty(),
             updatedAtMs = overlay?.updatedAtMs ?: nowMs
+        )
+    }
+
+    private fun resolveHomeTrailerDisplayState(
+        itemKey: String,
+        title: String,
+        year: String?,
+        stableIds: ProviderIds,
+        fallbackYtIds: List<String>,
+        apiType: String,
+        contentId: String,
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?
+    ): TrailerDisplayState {
+        val resolver = resolveTrailer ?: return TrailerDisplayState()
+        val resolution = resolver(
+            TrailerResolveRequest(
+                itemKey = itemKey,
+                title = title,
+                year = year,
+                stableIds = stableIds,
+                fallbackYtIds = fallbackYtIds,
+                surface = TrailerSurface.HOME,
+                type = apiType,
+                contentId = contentId
+            )
+        )
+        val selected = resolution.selected ?: return TrailerDisplayState(
+            availabilityReason = resolution.availability.reason,
+            surface = TrailerSurface.HOME.name.lowercase()
+        )
+        return TrailerDisplayState(
+            fallbackTrailerYtIds = listOfNotNull((selected as? TrailerPlaybackRef.YouTubeId)?.videoId),
+            selectedPlaybackRef = selected,
+            availabilityReason = resolution.availability.reason,
+            surface = TrailerSurface.HOME.name.lowercase()
         )
     }
 

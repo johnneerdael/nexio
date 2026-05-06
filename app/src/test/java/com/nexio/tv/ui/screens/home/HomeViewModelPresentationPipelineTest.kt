@@ -240,6 +240,24 @@ class HomeViewModelPresentationPipelineTest {
     }
 
     @Test
+    fun `catalog presentation uses resolver selected trailer fallback instead of raw sidecar`() {
+        val item = testPreview("tt123", "Movie").copy(
+            trailerYtIds = listOf("raw-sidecar")
+        )
+
+        val carouselItem = buildCatalogItem(
+            item = item,
+            row = testCatalogRow(item),
+            useLandscapePosters = true,
+            occurrence = 0,
+            selectedTrailerFallbackYtId = "resolver-selected"
+        )
+
+        val payload = carouselItem.payload as ModernPayload.Catalog
+        assertEquals("resolver-selected", payload.fallbackTrailerYtId)
+    }
+
+    @Test
     fun `continue watching runtime warm candidates only include episodic items missing runtime`() {
         val missingEpisode = ContinueWatchingItem.NextUp(
             NextUpInfo(

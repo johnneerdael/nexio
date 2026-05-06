@@ -7,6 +7,9 @@ import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -18,6 +21,7 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -238,20 +242,65 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List<CatalogRow>) {
-    rows
-        .asSequence()
+    val activeKeys = mutableSetOf<String>()
+    rows.asSequence()
         .flatMap { it.items.asSequence() }
-        .filter { item -> item.trailerYtIds.isNotEmpty() }
         .forEach { item ->
-            trailerMetadataAvailableState.remove(homeTrailerAvailabilityKey(item.id, item.apiType))
-            if (!hasPublishedHomeTrailerPreview(item.id, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
-                trailerPreviewNegativeCache[item.id] = true
+            val key = homeTrailerAvailabilityKey(item.id, item.apiType)
+            activeKeys += key
+            val resolution = metadataRouterFacade.resolveTrailer(
+                TrailerResolveRequest(
+                    itemKey = key,
+                    title = item.name,
+                    year = item.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                    stableIds = item.firstPaintStableIds,
+                    fallbackYtIds = item.trailerYtIds,
+                    surface = TrailerSurface.HOME,
+                    type = item.apiType,
+                    contentId = item.id
+                )
+            )
+            val selected = resolution.selected
+            if (selected != null) {
+                trailerMetadataAvailableState[key] = true
+                when (selected) {
+                    is TrailerPlaybackRef.YouTubeId -> trailerSelectedFallbackYtIdsState[key] = selected.videoId
+                    else -> trailerSelectedFallbackYtIdsState.remove(key)
+                }
+                if (!hasPublishedHomeTrailerPreview(item.id, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
+                    trailerPreviewNegativeCache[item.id] = true
+                }
+            } else {
+                trailerMetadataAvailableState.remove(key)
+                trailerSelectedFallbackYtIdsState.remove(key)
             }
         }
+    trailerMetadataAvailableState.keys.retainAll(activeKeys)
+    trailerSelectedFallbackYtIdsState.keys.retainAll(activeKeys)
+}
+
+internal fun HomeViewModel.syncHomeTrailerAvailabilityFromResolvedItems(items: List<ResolvedDisplayItem>) {
+    val activeKeys = items.mapTo(mutableSetOf()) { it.itemKey }
+    items.forEach { item ->
+        val selected = item.trailer.selectedPlaybackRef
+        if (selected != null) {
+            trailerMetadataAvailableState[item.itemKey] = true
+            when (selected) {
+                is TrailerPlaybackRef.YouTubeId -> trailerSelectedFallbackYtIdsState[item.itemKey] = selected.videoId
+                else -> trailerSelectedFallbackYtIdsState.remove(item.itemKey)
+            }
+        } else {
+            trailerMetadataAvailableState.remove(item.itemKey)
+            trailerSelectedFallbackYtIdsState.remove(item.itemKey)
+        }
+    }
+    trailerMetadataAvailableState.keys.retainAll(activeKeys)
+    trailerSelectedFallbackYtIdsState.keys.retainAll(activeKeys)
 }
 
 internal fun HomeViewModel.clearTrailerMetadataAvailabilityPipeline() {
     trailerMetadataAvailableState.clear()
+    trailerSelectedFallbackYtIdsState.clear()
     trailerMetadataAvailabilityInFlightKeys.clear()
     val jobs = synchronized(trailerMetadataAvailabilityJobs) {
         trailerMetadataAvailabilityJobs.toList().also { trailerMetadataAvailabilityJobs.clear() }
@@ -265,7 +314,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
         title = item.name,
         releaseInfo = item.releaseInfo,
         apiType = item.apiType,
-        fallbackYtId = item.trailerYtIds.firstOrNull()
+        fallbackYtId = trailerSelectedFallbackYtIdsState[homeTrailerAvailabilityKey(item.id, item.apiType)]
     )
 }
 
