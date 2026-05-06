@@ -141,6 +141,35 @@ internal fun resolveModernCarouselCardArtworkModel(
     )
 }
 
+internal fun resolveModernCarouselCardFallbackArtworkModel(
+    item: ModernCarouselItem,
+    useLandscapePosters: Boolean,
+    focusedPosterBackdropExpandEnabled: Boolean,
+    isBackdropExpanded: Boolean
+): Any? {
+    val useBackdrop = useLandscapePosters || (focusedPosterBackdropExpandEnabled && isBackdropExpanded)
+    val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
+    val legacyFallback = if (useBackdrop) {
+        firstNonBlank(
+            item.metaPreview?.background,
+            item.heroPreview.backdrop,
+            item.metaPreview?.poster,
+            item.heroPreview.poster
+        )
+    } else {
+        firstNonBlank(
+            item.metaPreview?.poster,
+            item.heroPreview.poster,
+            item.metaPreview?.background,
+            item.heroPreview.backdrop
+        )
+    }
+    return legacyFallback.toLegacyArtworkCoilModelOrNull(
+        ownerKey = "${item.key}:fallback:${fallbackType.name.lowercase()}",
+        imageType = fallbackType
+    )
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ModernContinueWatchingRowItem(
@@ -805,6 +834,14 @@ private fun ModernCarouselCard(
             fallbackModel = imageUrl
         )
     }
+    val fallbackArtworkModel = remember(item, useLandscapePosters, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+        resolveModernCarouselCardFallbackArtworkModel(
+            item = item,
+            useLandscapePosters = useLandscapePosters,
+            focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+            isBackdropExpanded = isBackdropExpanded
+        )
+    }
     val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, item.metaPreview?.id, item.metaPreview?.posterProviderTag) {
         coilModel?.let { model ->
             val modelKey = model.toString()
@@ -992,7 +1029,7 @@ private fun ModernCarouselCard(
                     if (hasImage) {
                         FallbackArtworkImage(
                             model = imageModel,
-                            fallbackModel = item.heroPreview.poster?.takeIf { it != imageUrl },
+                            fallbackModel = fallbackArtworkModel,
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
