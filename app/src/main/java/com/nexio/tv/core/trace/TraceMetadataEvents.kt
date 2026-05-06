@@ -616,6 +616,50 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitAnimeCuratedHit(
+        source: String,
+        kitsuId: String,
+        target: String,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.curated_hit",
+                payload = mapOf(
+                    "source" to source,
+                    "kitsuId" to kitsuId,
+                    "target" to target,
+                )
+            )
+        )
+    }
+
+    fun emitAnimeUnresolvedTopKitsuId(
+        kitsuId: String,
+        reason: String,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.unresolved_top_kitsu_ids",
+                payload = mapOf(
+                    "kitsuId" to kitsuId,
+                    "reason" to reason,
+                )
+            )
+        )
+    }
+
     fun emitAnimeScrobbleRejected(
         contentId: String,
         reason: String,

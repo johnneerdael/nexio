@@ -98,6 +98,12 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         store.put(work.groupKey, sourceEpisode, target, computed)
         if (computed.scrobbleCoordinate != null) {
             traceEvents.emitEpisodeCoordinateResolved(computed, target)
+            val curatedSource = if (record?.hasMappingRules == true) "range-or-explicit" else "per-resource"
+            traceEvents.emitCuratedHit(
+                source = curatedSource,
+                kitsuId = sourceEpisode.sourceKitsuId,
+                target = target.name,
+            )
         } else {
             traceEvents.emitEpisodeCoordinateUnresolved(
                 sourceKitsuId = sourceEpisode.sourceKitsuId,
@@ -106,6 +112,9 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
                 target = target,
                 fallbackReason = computed.fallbackReason,
             )
+            computed.fallbackReason?.let {
+                traceEvents.emitUnresolvedTopKitsuId(sourceEpisode.sourceKitsuId, it.name)
+            }
         }
         return computed
     }
