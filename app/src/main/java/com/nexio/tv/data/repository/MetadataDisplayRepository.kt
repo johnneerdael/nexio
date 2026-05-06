@@ -4,6 +4,8 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFieldTrace
 import com.nexio.tv.core.metadata.router.ProviderPlanRunResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
@@ -54,7 +56,7 @@ class MetadataDisplayRepository @Inject constructor(
             localization = LocalizationDisplayState(
                 requestedLanguage = request.language,
                 selectedLanguage = resolvedDocument.language ?: request.language,
-                fallbackReason = null
+                fallbackReason = resolvedDocument.localizationFallbackReason()
             )
         )
     }
@@ -194,6 +196,14 @@ class MetadataDisplayRepository @Inject constructor(
             )
         }
     }
+
+    private fun ResolvedMetadataDocument.localizationFallbackReason(): String? =
+        localization.values
+            .firstOrNull { it.fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED }
+            ?.toFallbackReason()
+
+    private fun MetadataLocalizationFieldTrace.toFallbackReason(): String =
+        "${field.name} fell back to $selectedLanguage via ${selectedProvider.name} (${fallbackRole.name})"
 
     private fun ProviderPlanRunResult?.toFieldValues(field: ResolvedField): List<Any?> =
         this?.stepResults

@@ -26,6 +26,7 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
@@ -320,11 +321,63 @@ class MetadataRouterFacade(
         )
         val resolution = resolveRequest(trailerRequest)
         return resolution.providerRunResult?.toLegacyTrailerResolutionOrNull()
+            ?: trailerService?.resolveTrailer(
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = seasonNumber,
+                contentId = contentId,
+                fallbackYtIds = fallbackYtIds
+            )
             ?: fallbackYtIds.firstNotNullOfOrNull { ytId ->
                 ytId.trim().takeIf { it.isNotBlank() }?.let { youtubeId ->
                     TrailerResolutionResult.External("https://www.youtube.com/watch?v=$youtubeId")
                 }
             }
+    }
+
+    suspend fun fetchTitleMediaAvailability(
+        metadataRequest: MetadataRequest,
+        tmdbId: String? = null,
+        type: String? = null,
+        contentId: String? = null,
+        fallbackYtIds: List<String> = emptyList()
+    ): Boolean {
+        val service = checkNotNull(trailerService) {
+            "fetchTitleMediaAvailability requires a configured trailer playback resolver"
+        }
+        resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_MEDIA))
+        return service.getTitleMediaAvailability(
+            tmdbId = tmdbId,
+            type = type,
+            contentId = contentId,
+            fallbackYtIds = fallbackYtIds
+        )
+    }
+
+    internal suspend fun fetchSeasonMediaAvailability(
+        metadataRequest: MetadataRequest,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): SeasonMediaAvailability {
+        val service = checkNotNull(trailerService) {
+            "fetchSeasonMediaAvailability requires a configured trailer playback resolver"
+        }
+        resolveRequest(
+            metadataRequest.copy(
+                depth = MetadataDepth.DETAIL_MEDIA,
+                seasonNumber = seasonNumber ?: metadataRequest.seasonNumber
+            )
+        )
+        return service.getSeasonMediaAvailability(
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId
+        )
     }
 
     /**
