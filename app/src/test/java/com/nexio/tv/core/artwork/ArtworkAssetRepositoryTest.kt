@@ -338,8 +338,15 @@ class ArtworkAssetRepositoryTest {
         val result = repository.getOrFetchDecision(ArtworkDecisionKey("missing-decision"))
 
         assertNull(result)
-        assertEquals("artwork.decision_lookup", traceSink.events.single().eventType)
-        assertEquals(false, (traceSink.events.single().payload as Map<*, *>)["found"])
+        assertEquals(
+            listOf("artwork.decision_lookup", "artwork.decision_missing"),
+            traceSink.events.map { it.eventType }
+        )
+        assertEquals(false, (traceSink.events.first().payload as Map<*, *>)["found"])
+        assertEquals(
+            "missing-decision",
+            (traceSink.events.last().payload as Map<*, *>)["decisionKey"]
+        )
     }
 
     @Test
