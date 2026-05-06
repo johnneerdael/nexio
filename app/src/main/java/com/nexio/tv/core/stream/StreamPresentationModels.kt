@@ -184,7 +184,8 @@ data class StreamCardModel(
     val detailLines: List<String>,
     val badgeRow: String? = null,
     val hasFormatterChipTokens: Boolean = false,
-    val suppressAutomaticBadgeRow: Boolean = false
+    val suppressAutomaticBadgeRow: Boolean = false,
+    val addonPriorityRank: Int = Int.MAX_VALUE
 )
 
 @Immutable
@@ -303,7 +304,8 @@ object StreamPresentationEngine {
         selectedAddonFilter: String?,
         flags: StreamFeatureFlags,
         requestContext: StreamRequestContext = StreamRequestContext(),
-        parserCache: ParserCache? = null
+        parserCache: ParserCache? = null,
+        addonPriorityRanks: Map<String, Int> = emptyMap()
     ): OrganizedStreams {
         val parsed = streams.map { stream ->
             val parsedInfo = parserCache?.parse(stream) ?: AioStrictStreamParser.parse(stream)
@@ -333,7 +335,8 @@ object StreamPresentationEngine {
                     ?: buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled),
                 badgeRow = uniformPresentation?.badgeRow,
                 hasFormatterChipTokens = uniformPresentation?.hasFormatterChipTokens == true,
-                suppressAutomaticBadgeRow = uniformPresentation?.suppressAutomaticBadgeRow == true
+                suppressAutomaticBadgeRow = uniformPresentation?.suppressAutomaticBadgeRow == true,
+                addonPriorityRank = addonPriorityRanks[stream.addonName] ?: Int.MAX_VALUE
             )
         }
 
@@ -420,7 +423,8 @@ object StreamPresentationEngine {
             0
         }
         val groupedItems = groupedPreSortItems.sortedWith(
-            compareBy<StreamCardModel> { cacheStateRank(it.parsed.isCached) }
+            compareBy<StreamCardModel> { it.addonPriorityRank }
+                .thenBy { cacheStateRank(it.parsed.isCached) }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }

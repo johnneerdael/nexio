@@ -98,6 +98,8 @@ class StreamRepositoryImpl @Inject constructor(
 
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()
             val addonDiagnostics = mutableListOf<AddonFetchDiagnostic>()
+            val animePriorityGateEnabled = contentIsAnime && streamAddons.any { it.isAnime }
+            var emittedSuccess = false
 
             coroutineScope {
                 val eventChannel = Channel<StreamPipelineEvent>(Channel.UNLIMITED)
@@ -175,6 +177,7 @@ class StreamRepositoryImpl @Inject constructor(
                                     StreamPipelineEvent.AddonFetched(
                                         AddonFetchResult(
                                             addonStreams = emittedAddonStreams,
+                                            addonIsAnime = addon.isAnime,
                                             diagnostic = AddonFetchDiagnostic(
                                                 addonName = addon.displayName,
                                                 outcome = outcome,
@@ -190,11 +193,15 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
                 var remainingAddonEvents = jobs.size
+                var remainingAnimeAddonEvents = if (animePriorityGateEnabled) streamAddons.count { it.isAnime } else 0
                 var pendingWrapEvents = 0
                 while (remainingAddonEvents > 0 || pendingWrapEvents > 0) {
                     when (val event = eventChannel.receive()) {
                         is StreamPipelineEvent.AddonFetched -> {
                             remainingAddonEvents -= 1
+                            if (event.result.addonIsAnime) {
+                                remainingAnimeAddonEvents = (remainingAnimeAddonEvents - 1).coerceAtLeast(0)
+                            }
                             addonDiagnostics += event.result.diagnostic
                             if (diagnosticsEnabled) {
                                 logAddonFetchDiagnostic(
@@ -219,7 +226,10 @@ class StreamRepositoryImpl @Inject constructor(
                                     streams = visibleStreams,
                                     isAnimeBucket = addonStreams.isAnimeBucket
                                 )
-                                emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                if (remainingAnimeAddonEvents == 0) {
+                                    emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                    emittedSuccess = true
+                                }
                                 Log.d(
                                     TAG,
                                     "Emitted ${accumulatedResults.size} addon bucket(s), latest: ${addonStreams.addonName} visible=${visibleStreams.size}"
@@ -244,7 +254,10 @@ class StreamRepositoryImpl @Inject constructor(
                                 streams = mergedStreams,
                                 isAnimeBucket = existing?.isAnimeBucket ?: false
                             )
-                            emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                            if (remainingAnimeAddonEvents == 0) {
+                                emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                emittedSuccess = true
+                            }
                         }
                     }
                 }
@@ -264,8 +277,8 @@ class StreamRepositoryImpl @Inject constructor(
             }
 
             // Emit final result (even if empty)
-            if (accumulatedResults.isEmpty()) {
-                emit(NetworkResult.Success(emptyList()))
+            if (!emittedSuccess) {
+                emit(NetworkResult.Success(accumulatedResults.values.toList()))
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -397,6 +410,7 @@ class StreamRepositoryImpl @Inject constructor(
 
 private data class AddonFetchResult(
     val addonStreams: AddonStreams?,
+    val addonIsAnime: Boolean,
     val diagnostic: AddonFetchDiagnostic
 )
 
