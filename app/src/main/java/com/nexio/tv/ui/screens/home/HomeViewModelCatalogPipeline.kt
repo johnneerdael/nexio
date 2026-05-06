@@ -443,6 +443,7 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
     expectedLanguageTag: String,
     trigger: StableIdResolutionTrigger
 ): Boolean {
+    val profileSessionForSurface = profileManager.activeProfileSession.value
     val mismatchReason = homeHydrationScopeMismatchReason(expectedGeneration, expectedLanguageTag)
     if (mismatchReason != null) {
         traceEvents.emitHomeHydrationIgnored(
@@ -466,6 +467,12 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
         lastCatalogComputationSignature = null
         scheduleUpdateCatalogRows()
     }
+    resolvedDisplaySurfaceRepository.publishResolvedItems(
+        surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+        profileSession = profileSessionForSurface,
+        items = listOf(overlay.toResolvedDisplayItem()),
+        replace = false
+    )
     return true
 }
 

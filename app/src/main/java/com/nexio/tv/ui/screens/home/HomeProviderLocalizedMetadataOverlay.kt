@@ -14,6 +14,8 @@ import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.CancellationException
 
@@ -32,8 +34,7 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
             profileBoundary = profileBoundary
         )
         logHomeProviderDecisionDiagnostics(item, decision.diagnostics, onLog)
-        decision.value ?: return item
-        item
+        decision.value?.toHomeCompatibilityDisplayMetadata()?.applyToProviderLocalizedHomeItem(item) ?: item
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
@@ -99,3 +100,19 @@ private fun logHomeProviderDecisionDiagnostics(
         onLog("tvdb_fallback_tmdb", itemKey)
     }
 }
+
+private fun TvMetadataEnrichment.toHomeCompatibilityDisplayMetadata(): HomeDisplayMetadata =
+    // Compatibility projection for first-paint MetaPreview rows. Canonical hydrated
+    // home display still flows through HydratedHomeOverlay and ResolvedDisplaySurfaceRepository.
+    HomeDisplayMetadata(
+        title = localizedTitle,
+        logo = logo,
+        description = description,
+        imdbRating = rating?.toFloat(),
+        ratingSource = ratingSource ?: TitleRatingSource.IMDB,
+        poster = poster,
+        backdrop = backdrop
+    )
+
+private fun HomeDisplayMetadata.applyToProviderLocalizedHomeItem(item: MetaPreview): MetaPreview =
+    applyTo(item)

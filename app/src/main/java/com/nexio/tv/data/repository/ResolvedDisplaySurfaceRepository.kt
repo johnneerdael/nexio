@@ -63,7 +63,8 @@ class ResolvedDisplaySurfaceRepository(
     fun publishResolvedItems(
         surfaceKey: String,
         profileSession: ActiveProfileSession,
-        items: List<ResolvedDisplayItem>
+        items: List<ResolvedDisplayItem>,
+        replace: Boolean = true
     ): Boolean {
         if (surfaceKey != HOME_SURFACE_KEY) return false
         val active = activeProfileSession()
@@ -72,7 +73,14 @@ class ResolvedDisplaySurfaceRepository(
         }
 
         surfaces.update { current ->
-            current + (profileSession.profileId to items.distinctBy { item -> item.itemKey })
+            val nextItems = if (replace) {
+                items
+            } else {
+                val existing = current[profileSession.profileId].orEmpty()
+                val incomingKeys = items.map { item -> item.itemKey }.toSet()
+                existing.filterNot { item -> item.itemKey in incomingKeys } + items
+            }
+            current + (profileSession.profileId to nextItems.distinctBy { item -> item.itemKey })
         }
         return true
     }
