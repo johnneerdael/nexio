@@ -60,7 +60,13 @@ class ArtworkAssetRepository @Inject constructor(
                 "found" to (decision != null)
             )
         )
-        if (decision == null) return null
+        if (decision == null) {
+            traceArtwork(
+                eventType = "artwork.decision_missing",
+                payload = mapOf("decisionKey" to decisionKey.value)
+            )
+            return null
+        }
 
         val result = getOrFetch(decision)
         traceArtwork(
