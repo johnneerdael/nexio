@@ -9,10 +9,12 @@ import com.nexio.tv.core.artwork.ArtworkCredentialResolver
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkPosterTransport
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
+import com.nexio.tv.core.artwork.ArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.artwork.DefaultArtworkByteLoader
 import com.nexio.tv.core.artwork.DefaultArtworkPosterTransport
 import com.nexio.tv.core.artwork.DurableArtworkDecisionCache
+import com.nexio.tv.core.artwork.FileBackedArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.PosterRatingsArtworkCredentialResolver
 import com.nexio.tv.core.artwork.PosterRatingsArtworkProviderSettingsSource
 import com.nexio.tv.core.integration.DefaultIntegrationRuntime
@@ -115,8 +117,24 @@ object IntegrationRuntimeModule {
 
     @Provides
     @Singleton
-    fun provideArtworkSourceMaterializer(): ArtworkSourceMaterializer =
-        ArtworkSourceMaterializer(emptyMap())
+    fun provideArtworkRemoteSourceStore(
+        @ApplicationContext context: Context,
+        gson: Gson
+    ): ArtworkRemoteSourceStore =
+        FileBackedArtworkRemoteSourceStore(
+            file = File(context.filesDir, "artwork-remote-sources-v1.json"),
+            gson = gson
+        )
+
+    @Provides
+    @Singleton
+    fun provideArtworkSourceMaterializer(
+        remoteSourceStore: ArtworkRemoteSourceStore
+    ): ArtworkSourceMaterializer =
+        ArtworkSourceMaterializer(
+            remoteSourcesByHash = emptyMap(),
+            remoteSourceStore = remoteSourceStore
+        )
 
     @Provides
     @Singleton

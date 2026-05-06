@@ -13,16 +13,17 @@ import com.nexio.tv.core.artwork.ArtworkExternalIdSelector
 import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkProviderRegistry
+import com.nexio.tv.core.artwork.ArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.ArtworkRoutingPolicy
 import com.nexio.tv.core.artwork.ArtworkRouter
 import com.nexio.tv.core.artwork.ArtworkSource
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.artwork.PersistedArtworkCandidate
-import com.nexio.tv.core.artwork.PersistedProviderTemplate
+import com.nexio.tv.core.artwork.NoopArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.RejectedArtworkCandidate
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.artwork.toPersistedCandidate
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.image.TopPostersThumbnailRequest
@@ -43,9 +44,10 @@ import javax.inject.Singleton
 @Singleton
 class PosterRatingsUrlResolver @Inject constructor(
     private val settingsDataStore: PosterRatingsSettingsDataStore,
-    private val artworkDecisionCache: ArtworkDecisionCache
+    private val artworkDecisionCache: ArtworkDecisionCache,
+    private val remoteSourceStore: ArtworkRemoteSourceStore = NoopArtworkRemoteSourceStore
 ) {
-    private val artworkRouter = ArtworkRouter()
+    private val artworkRouter = ArtworkRouter(remoteSourceStore = remoteSourceStore)
     private val providerRegistry = ArtworkProviderRegistry()
     private val externalIdSelector = ArtworkExternalIdSelector()
 
@@ -148,7 +150,10 @@ class PosterRatingsUrlResolver @Inject constructor(
             ownerKey = ownerKey,
             canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
             imageType = ArtworkType.POSTER,
-            selectedCandidate = selected.toPersistedCandidate(policy.policyVersion),
+            selectedCandidate = selected.toPersistedCandidate(
+                policyVersion = policy.policyVersion,
+                remoteSourceStore = remoteSourceStore
+            ),
             rejectedCandidates = selection.rejectedCandidates,
             policyVersion = policy.policyVersion,
             imageLanguage = selected.imageLanguage,
@@ -217,7 +222,10 @@ class PosterRatingsUrlResolver @Inject constructor(
         val selection = artworkRouter.select(candidates, policy)
         val selected = selection.selectedCandidateOrNull ?: return null
         val rejectedCandidates = missingRejections + selection.rejectedCandidates
-        val persistedSelected = selected.toPersistedCandidate(policy.policyVersion)
+        val persistedSelected = selected.toPersistedCandidate(
+            policyVersion = policy.policyVersion,
+            remoteSourceStore = remoteSourceStore
+        )
         val selectedAssetKey = selected.assetKeyForRuntimeRef(policy.policyVersion)
         val settingsHash = settings.stableSettingsHash(ArtworkType.THUMBNAIL)
         val credentialHash = settings.credentialHash(settings.selection.thumbnailProvider)
@@ -489,42 +497,13 @@ class PosterRatingsUrlResolver @Inject constructor(
                 }
         }
 
-    private fun ArtworkCandidate.toPersistedCandidate(policyVersion: Int): PersistedArtworkCandidate {
-        val sourceHash = when (val candidateSource = source) {
-            is ArtworkSource.RemoteUrl -> candidateSource.normalizedUrlHash
-            is ArtworkSource.ProviderTemplate -> candidateSource.providerPathHash
-            is ArtworkSource.LocalAsset -> candidateSource.assetKey.value
-            is ArtworkSource.Placeholder -> null
-            else -> null
-        }
-        val providerTemplate = (source as? ArtworkSource.ProviderTemplate)?.let { template ->
-            PersistedProviderTemplate(
-                provider = template.provider,
-                imageType = imageType,
-                idType = template.idType,
-                mediaId = template.mediaId,
-                providerPathHash = template.providerPathHash,
-                settingsHash = template.settingsHash,
-                credentialHash = template.credentialHash,
-                imageLanguage = imageLanguage,
-                policyVersion = policyVersion,
-                pathParams = template.pathParams
-            )
-        }
-        return PersistedArtworkCandidate(
-            provider = provider,
-            sourceRole = sourceRole,
-            sourceHash = sourceHash,
-            redactedSourceForTrace = (source as? ArtworkSource.RemoteUrl)?.redactedUrlForTrace,
-            providerTemplate = providerTemplate,
-            priority = priority
-        )
-    }
-
     private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int): ArtworkAssetKey? =
         when (val candidateSource = source) {
             is ArtworkSource.ProviderTemplate ->
-                toPersistedCandidate(policyVersion).providerTemplate
+                toPersistedCandidate(
+                    policyVersion = policyVersion,
+                    remoteSourceStore = remoteSourceStore
+                ).providerTemplate
                     ?.let(ArtworkCacheKeys::assetKeyForProviderTemplate)
             is ArtworkSource.RemoteUrl ->
                 provider?.let { selectedProvider ->

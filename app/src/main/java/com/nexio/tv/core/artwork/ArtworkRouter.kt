@@ -18,7 +18,8 @@ data class ArtworkSelectionResult(
 }
 
 class ArtworkRouter(
-    private val capabilityResolver: ArtworkProviderCapabilityResolver = ArtworkProviderCapabilityResolver()
+    private val capabilityResolver: ArtworkProviderCapabilityResolver = ArtworkProviderCapabilityResolver(),
+    private val remoteSourceStore: ArtworkRemoteSourceStore = NoopArtworkRemoteSourceStore
 ) {
     private val registry = ArtworkProviderRegistry()
 
@@ -132,7 +133,10 @@ class ArtworkRouter(
         reason: String,
         policyVersion: Int
     ): RejectedArtworkCandidate {
-        val persisted = toPersistedCandidate(policyVersion)
+        val persisted = toPersistedCandidate(
+            policyVersion = policyVersion,
+            remoteSourceStore = remoteSourceStore
+        )
         return RejectedArtworkCandidate(
             provider = provider,
             sourceRole = sourceRole,
