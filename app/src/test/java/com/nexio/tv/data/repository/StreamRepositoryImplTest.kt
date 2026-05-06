@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.AnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
 import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
@@ -89,7 +91,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -150,7 +153,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -236,7 +240,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -321,7 +326,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -361,7 +367,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         repository.cancelActiveStreamRequests("request-a")
@@ -395,7 +402,8 @@ class StreamRepositoryImplTest {
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            addonStreamRequestCanceller = addonStreamRequestCanceller
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = NoAnimeIdentityIndex
         )
 
         val result = repository.getStreamsFromAddon(
@@ -467,4 +475,9 @@ class StreamRepositoryImplTest {
             height = 2160
         )
     }
+}
+
+private object NoAnimeIdentityIndex : AnimeIdentityIndex {
+    override suspend fun resolveKitsuId(id: ParsedMetadataId): String? = null
+    override suspend fun isAnime(id: ParsedMetadataId): Boolean = false
 }
