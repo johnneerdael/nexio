@@ -1,6 +1,8 @@
 package com.nexio.tv.architecture
 
 import java.io.File
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -11,12 +13,52 @@ class RailMediaIdentityResolverArchitectureTest {
         val source = requiredFile(
             "app/src/main/java/com/nexio/tv/core/integration/RailMediaIdentityResolver.kt"
         ).readText()
+        val resolverKdoc = kdocImmediatelyBeforeClass(source, "RailMediaIdentityResolver")
 
-        assertTrue(
+        assertNotNull(
             "RailMediaIdentityResolver must document its temporary cache-key compatibility role " +
                 "and expiration before StableIdBundleResolver migration.",
-            REQUIRED_KDOC in source
+            resolverKdoc
         )
+        assertResolverKdocSemantics(resolverKdoc!!)
+    }
+
+    @Test
+    fun `resolver kdoc scanner ignores matching text not attached to resolver class`() {
+        val source = """
+            package com.nexio.tv.fixture
+
+            $SEMANTIC_KDOC_FIXTURE
+            class CopiedDocumentation
+
+            class RailMediaIdentityResolver
+        """.trimIndent()
+
+        val resolverKdoc = kdocImmediatelyBeforeClass(source, "RailMediaIdentityResolver")
+
+        assertNull(
+            "RailMediaIdentityResolver KDoc guard must inspect only the KDoc immediately before the resolver class.",
+            resolverKdoc
+        )
+    }
+
+    @Test
+    fun `resolver kdoc semantics tolerate harmless line wrapping`() {
+        val kdoc = """
+            /**
+             * Temporary compatibility adapter for rail cache ownership keys.
+             *
+             * Canonical identity ownership belongs to StableIdBundleResolver. This adapter may
+             * normalize already-observed rail identifiers for cache key stability only.
+             *
+             * It must not perform network identity bridging and must not be injected into UI,
+             * ViewModel, player, or screensaver code.
+             *
+             * Expiration: remove after MetaPreview / RailItemPreview carry StableIdBundle directly.
+             */
+        """.trimIndent()
+
+        assertResolverKdocSemantics(kdoc)
     }
 
     @Test
@@ -95,6 +137,49 @@ class RailMediaIdentityResolverArchitectureTest {
         }
     }
 
+    private fun kdocImmediatelyBeforeClass(source: String, className: String): String? =
+        Regex(
+            pattern = """(/\*\*.*?\*/)\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*)*class\s+$className\b""",
+            option = RegexOption.DOT_MATCHES_ALL
+        ).find(source)?.groupValues?.getOrNull(1)
+
+    private fun assertResolverKdocSemantics(kdoc: String) {
+        val normalized = kdoc
+            .lineSequence()
+            .map { line ->
+                line.trim()
+                    .removePrefix("/**")
+                    .removePrefix("*/")
+                    .removePrefix("*")
+                    .trim()
+            }
+            .joinToString(separator = " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        val requiredSemantics = listOf(
+            "temporary compatibility adapter role" to
+                Regex("""temporary\s+compatibility\s+adapter""", RegexOption.IGNORE_CASE),
+            "canonical ownership belongs to StableIdBundleResolver" to
+                Regex("""canonical\s+identity\s+ownership\s+belongs\s+to\s+StableIdBundleResolver""", RegexOption.IGNORE_CASE),
+            "already-observed rail identifier normalization for cache key stability only" to
+                Regex("""may\s+normalize\s+already-observed\s+rail\s+identifiers\s+for\s+cache\s+key\s+stability\s+only""", RegexOption.IGNORE_CASE),
+            "network identity bridging prohibition" to
+                Regex("""must\s+not\s+perform\s+network\s+identity\s+bridging""", RegexOption.IGNORE_CASE),
+            "UI, ViewModel, player, and screensaver injection prohibition" to
+                Regex("""must\s+not\s+be\s+injected\s+into\s+UI,\s+ViewModel,\s+player,\s+or\s+screensaver\s+code""", RegexOption.IGNORE_CASE),
+            "expiration after previews carry StableIdBundle directly" to
+                Regex("""expiration:.*after.*MetaPreview\s*/\s*RailItemPreview.*carry\s+StableIdBundle\s+directly""", RegexOption.IGNORE_CASE)
+        )
+
+        requiredSemantics.forEach { (label, pattern) ->
+            assertTrue(
+                "RailMediaIdentityResolver KDoc is missing required semantic: $label. KDoc: $normalized",
+                pattern.containsMatchIn(normalized)
+            )
+        }
+    }
+
     private fun kotlinFixture(source: String): File =
         File.createTempFile("RailMediaIdentityResolverArchitectureTest", ".kt").apply {
             writeText(source)
@@ -106,7 +191,7 @@ class RailMediaIdentityResolverArchitectureTest {
             """^\s*import\s+com\.nexio\.tv\.core\.integration\.(?:RailMediaIdentityResolver(?:\s+as\s+\w+)?|\*)\s*$"""
         )
 
-        private val REQUIRED_KDOC = """
+        private val SEMANTIC_KDOC_FIXTURE = """
             /**
              * Temporary compatibility adapter for rail cache ownership keys.
              *
