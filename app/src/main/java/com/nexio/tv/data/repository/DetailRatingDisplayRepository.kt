@@ -4,11 +4,15 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.ResolvedEpisodeRating
+import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.orDefault
 import javax.inject.Inject
 
-data class DetailRatingDisplayResolution(
+data class DetailRatingDisplayContext(
     val meta: Meta,
-    val display: ResolvedDetailRatingDisplay
+    val fallbackItemId: String,
+    val fallbackItemType: String,
+    val episodesBySeason: Map<Int, Set<Int>>
 )
 
 class DetailRatingDisplayRepository private constructor(
@@ -39,7 +43,7 @@ class DetailRatingDisplayRepository private constructor(
         fallbackItemType: String,
         providerIds: ProviderIds,
         episodesBySeason: Map<Int, Set<Int>>
-    ): DetailRatingDisplayResolution {
+    ): ResolvedDetailRatingDisplay {
         val ratingFallbackItemId = providerIds.imdb?.takeIf { it.isNotBlank() } ?: fallbackItemId
         val enrichedMeta = deps?.titleRatingOverrideRepository?.enrichMeta(
             meta = meta,
@@ -59,18 +63,18 @@ class DetailRatingDisplayRepository private constructor(
             episodesBySeason = episodesBySeason
         ).orEmpty()
 
-        return DetailRatingDisplayResolution(
-            meta = enrichedMeta,
-            display = ResolvedDetailRatingDisplay(
-                mdbListRatings = mdbListResult?.ratings,
-                showMdbListImdb = mdbListResult?.hasImdbRating == true,
-                episodeRatings = episodeRatings.mapValues { (_, rating) ->
-                    ResolvedEpisodeRating(
-                        value = rating.value,
-                        source = rating.source.name
-                    )
-                }
-            )
+        return ResolvedDetailRatingDisplay(
+            titleRating = enrichedMeta.imdbRating?.toDouble()?.let { value ->
+                TitleRating(value = value, source = enrichedMeta.ratingSource.orDefault())
+            },
+            mdbListRatings = mdbListResult?.ratings,
+            showMdbListImdb = mdbListResult?.hasImdbRating == true,
+            episodeRatings = episodeRatings.mapValues { (_, rating) ->
+                ResolvedEpisodeRating(
+                    value = rating.value,
+                    source = rating.source.name
+                )
+            }
         )
     }
 

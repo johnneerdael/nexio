@@ -26,9 +26,15 @@ import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MDBListRatings
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
+import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -227,6 +233,111 @@ class MetadataDisplayRepositoryTest {
         assertEquals("999", document.identity.providerIds.tmdb)
         assertEquals("121361", document.identity.providerIds.tvdb)
     }
+
+    @Test
+    fun `resolveDetailDisplay carries detail rating display state in resolved document`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val ratingRepository = mockk<DetailRatingDisplayRepository>()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = ratingRepository,
+            detailSecondaryDisplayRepository = DetailSecondaryDisplayRepository.noOp()
+        )
+        val request = MetadataRequest(
+            contentId = "tt0944947",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+        val meta = minimalRatingsMeta("tt0944947")
+        val ratings = ResolvedDetailRatingDisplay(
+            titleRating = TitleRating(8.8, TitleRatingSource.IMDB),
+            mdbListRatings = MDBListRatings(imdb = 8.8, trakt = 91.0),
+            showMdbListImdb = true
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "imdb:tt0944947",
+                title = "Game of Thrones",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = 9.2,
+                runtimeMinutes = null,
+                remoteIds = mapOf("imdb" to setOf("tt0944947")),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview"),
+            trace = emptyList()
+        )
+        coEvery {
+            ratingRepository.resolve(
+                meta = meta,
+                fallbackItemId = "tt0944947",
+                fallbackItemType = "series",
+                providerIds = any(),
+                episodesBySeason = emptyMap()
+            )
+        } returns ratings
+
+        val document = repository.resolveDetailDisplay(
+            request = request,
+            ratingContext = DetailRatingDisplayContext(
+                meta = meta,
+                fallbackItemId = "tt0944947",
+                fallbackItemType = "series",
+                episodesBySeason = emptyMap()
+            )
+        )
+
+        assertEquals(8.8, document.rating?.value ?: 0.0, 0.0)
+        assertEquals(TitleRatingSource.IMDB, document.rating?.source)
+        assertEquals(ratings, document.ratings)
+        coVerify(exactly = 1) {
+            ratingRepository.resolve(
+                meta = meta,
+                fallbackItemId = "tt0944947",
+                fallbackItemType = "series",
+                providerIds = any(),
+                episodesBySeason = emptyMap()
+            )
+        }
+    }
+
+    private fun minimalRatingsMeta(id: String): Meta =
+        Meta(
+            id = id,
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "Game of Thrones",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
+        )
 
     private fun artworkRef(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =
         ArtworkDisplayRef.RuntimeAsset(

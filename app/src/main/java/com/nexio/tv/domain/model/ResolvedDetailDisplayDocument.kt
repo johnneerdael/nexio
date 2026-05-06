@@ -67,6 +67,7 @@ data class DetailAdvancedMetadata(
 
 @Immutable
 data class ResolvedDetailRatingDisplay(
+    val titleRating: TitleRating? = null,
     val mdbListRatings: MDBListRatings? = null,
     val showMdbListImdb: Boolean = false,
     val episodeRatings: Map<Pair<Int, Int>, ResolvedEpisodeRating> = emptyMap(),
