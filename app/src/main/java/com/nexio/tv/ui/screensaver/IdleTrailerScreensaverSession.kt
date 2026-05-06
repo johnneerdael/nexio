@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screensaver
 
 import android.view.KeyEvent
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import kotlin.random.Random
 
@@ -11,7 +12,7 @@ internal enum class IdleScreensaverPresentationMode {
 
 internal data class IdleTrailerScreensaverPlayback(
     val candidate: IdleTrailerScreensaverCandidate,
-    val trailerId: String,
+    val playbackRef: TrailerPlaybackRef,
     val source: TrailerPlaybackSource,
     val index: Int
 )
@@ -30,19 +31,16 @@ internal enum class IdleTrailerRemoteKeyAction {
 
 private val IdleTrailerYearRegex = Regex("\\b(19|20)\\d{2}\\b")
 
-internal const val RESOLVE_TRAILER_BY_ITEM_SENTINEL = "__resolve_by_item__"
-
 internal fun collectIdleTrailerScreensaverCandidates(
     slides: List<IdleScreensaverSlide>
 ): List<IdleTrailerScreensaverCandidate> {
     return slides
         .mapNotNull { slide ->
-            val trailerIds = slide.modeData.trailer
-                ?.trailerYtIds
-                .orEmpty()
-                .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-                .distinct()
-            if (trailerIds.isEmpty()) {
+            val trailerState = slide.modeData.trailer?.trailerState
+            val playbackRefs = trailerState?.let { state ->
+                IdleTrailerScreensaverCandidate(slide, state).playbackRefs
+            }.orEmpty()
+            if (trailerState == null || playbackRefs.isEmpty()) {
                 null
             } else {
                 IdleTrailerScreensaverCandidate(
@@ -50,10 +48,10 @@ internal fun collectIdleTrailerScreensaverCandidates(
                     itemType = slide.itemType,
                     addonBaseUrl = slide.addonBaseUrl,
                     title = slide.title,
-                    logoUrl = slide.logoUrl,
-                    backgroundUrl = slide.backgroundUrl,
-                    fallbackArtworkUrls = slide.modeData.image.fallbackArtworkUrls.ifEmpty {
-                        listOf(slide.backgroundUrl)
+                    logoArtwork = slide.logoArtwork,
+                    backgroundArtwork = slide.backgroundArtwork,
+                    fallbackArtwork = slide.modeData.image.fallbackArtwork.ifEmpty {
+                        listOf(slide.backgroundArtwork)
                     },
                     genres = slide.genres,
                     description = slide.description,
@@ -61,7 +59,7 @@ internal fun collectIdleTrailerScreensaverCandidates(
                     runtime = slide.runtime,
                     imdbRating = slide.imdbRating,
                     tomatoesRating = slide.tomatoesRating,
-                    trailerYtIds = trailerIds
+                    trailerState = trailerState
                 )
             }
         }
@@ -86,7 +84,7 @@ internal suspend fun prepareIdleTrailerScreensaverSession(
     },
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
-        trailerId: String
+        playbackRef: TrailerPlaybackRef
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverSessionStart? {
     return prepareIdleTrailerScreensaverSessionFromCandidates(
@@ -103,7 +101,7 @@ internal suspend fun prepareIdleTrailerScreensaverSessionFromCandidates(
     },
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
-        trailerId: String
+        playbackRef: TrailerPlaybackRef
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverSessionStart? {
     val orderedCandidates = shuffleCandidates(
@@ -130,7 +128,7 @@ internal suspend fun resolveNextIdleTrailerPlayback(
     skippedPlaybackKeys: Set<String> = emptySet(),
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
-        trailerId: String
+        playbackRef: TrailerPlaybackRef
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverPlayback? {
     if (candidates.isEmpty()) return null
@@ -175,8 +173,8 @@ internal fun extractIdleTrailerReleaseYear(releaseInfo: String?): String? {
 
 internal fun idleTrailerPlaybackKey(
     candidate: IdleTrailerScreensaverCandidate,
-    trailerId: String
-): String = "${candidate.itemType}:${candidate.itemId}:${trailerId.trim()}"
+    playbackRef: TrailerPlaybackRef
+): String = "${candidate.itemType}:${candidate.itemId}:${playbackRef.stablePlaybackKey()}"
 
 private suspend fun resolveIdleTrailerPlaybackInOrder(
     candidates: List<IdleTrailerScreensaverCandidate>,
@@ -184,21 +182,19 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
     skippedPlaybackKeys: Set<String> = emptySet(),
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
-        trailerId: String
+        playbackRef: TrailerPlaybackRef
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverPlayback? {
     orderedIndices.forEach { index ->
         val candidate = candidates.getOrNull(index) ?: return@forEach
-        val trailerIds = candidate.trailerYtIds.takeIf { it.isNotEmpty() }
-            ?: listOf(RESOLVE_TRAILER_BY_ITEM_SENTINEL)
-        trailerIds.forEach { trailerId ->
-            if (idleTrailerPlaybackKey(candidate, trailerId) in skippedPlaybackKeys) {
+        candidate.playbackRefsForSession().forEach { playbackRef ->
+            if (idleTrailerPlaybackKey(candidate, playbackRef) in skippedPlaybackKeys) {
                 return@forEach
             }
-            val source = resolvePlayback(candidate, trailerId) ?: return@forEach
+            val source = resolvePlayback(candidate, playbackRef) ?: return@forEach
             return IdleTrailerScreensaverPlayback(
                 candidate = candidate,
-                trailerId = trailerId,
+                playbackRef = playbackRef,
                 source = source,
                 index = index
             )
@@ -206,6 +202,47 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
     }
     return null
 }
+
+private fun IdleTrailerScreensaverCandidate.playbackRefsForSession(): List<TrailerPlaybackRef> {
+    return playbackRefs.ifEmpty {
+        listOf(
+            TrailerPlaybackRef.ItemLookup(
+                title = title,
+                year = extractIdleTrailerReleaseYear(releaseInfo),
+                stableIds = stableIds,
+                type = itemType,
+                contentId = trailerResolverContentId()
+            )
+        )
+    }
+}
+
+internal fun IdleTrailerScreensaverCandidate.trailerResolverContentId(): String {
+    return stableIds.tvdb?.trim()?.takeIf(String::isNotEmpty)?.let { "tvdb:$it" }
+        ?: stableIds.tmdb?.trim()?.takeIf(String::isNotEmpty)?.let { "tmdb:$it" }
+        ?: stableIds.imdb?.trim()?.takeIf(String::isNotEmpty)?.let { "imdb:$it" }
+        ?: stableIds.kitsu?.trim()?.takeIf(String::isNotEmpty)?.let { "kitsu:$it" }
+        ?: itemId
+}
+
+private fun TrailerPlaybackRef.stablePlaybackKey(): String =
+    when (this) {
+        is TrailerPlaybackRef.YouTubeId -> "youtube:${videoId.trim()}"
+        is TrailerPlaybackRef.ExternalUrl -> "external:${url.trim()}"
+        is TrailerPlaybackRef.InAppSource -> "in-app:${videoUrl.trim()}:${audioUrl.orEmpty().trim()}"
+        is TrailerPlaybackRef.ItemLookup -> listOf(
+            "item",
+            title.trim(),
+            year.orEmpty().trim(),
+            stableIds.tvdb.orEmpty().trim(),
+            stableIds.tmdb.orEmpty().trim(),
+            stableIds.imdb.orEmpty().trim(),
+            stableIds.kitsu.orEmpty().trim(),
+            type.orEmpty().trim(),
+            seasonNumber?.toString().orEmpty(),
+            contentId.orEmpty().trim()
+        ).joinToString(":")
+    }
 
 private fun Int.floorMod(size: Int): Int {
     return ((this % size) + size) % size
