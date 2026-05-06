@@ -85,7 +85,7 @@ class MetadataDisplayRepositoryTest {
                 ),
                 sourceProviders = mapOf(
                     ResolvedField.TITLE to "TMDB",
-                    ResolvedField.RATING to "TMDB"
+                    ResolvedField.RATING to "TMDB_RATING"
                 ),
                 artwork = ArtworkBundle(
                     poster = artworkRef("resolved-poster", ArtworkType.POSTER),
@@ -135,7 +135,7 @@ class MetadataDisplayRepositoryTest {
         assertEquals("nl", document.localization.requestedLanguage)
         assertEquals("en", document.localization.selectedLanguage)
         assertEquals(
-            listOf("TITLE:TMDB:PRIMARY", "RATING:TMDB:RATING"),
+            listOf("TITLE:TMDB:PRIMARY", "RATING:TMDB_RATING:RATING"),
             document.sourceTrace.map { "${it.field}:${it.selectedProvider}:${it.sourceRole}" }
         )
     }

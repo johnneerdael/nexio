@@ -161,9 +161,9 @@ class MetadataDisplayRepository @Inject constructor(
             ?: displayMetadata.ratingSource.orDefault()
 
     private fun String?.toTitleRatingSource(): TitleRatingSource? =
-        when {
-            equals("TMDB", ignoreCase = true) -> TitleRatingSource.TMDB
-            else -> null
+        when (val source = this?.trim()?.uppercase()) {
+            "TMDB" -> TitleRatingSource.TMDB
+            else -> TitleRatingSource.TMDB.takeIf { source?.startsWith("TMDB_") == true }
         }
 
     private fun ResolvedMetadataDocument.toSourceTrace(): List<HydratedHomeFieldTrace> {
