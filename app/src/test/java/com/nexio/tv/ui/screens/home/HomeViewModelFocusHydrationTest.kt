@@ -25,10 +25,8 @@ import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -876,7 +874,6 @@ class HomeViewModelFocusHydrationTest {
      */
     private fun buildTestHomeViewModel(
         metadataRouterFacade: MetadataRouterFacade,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true),
         nonPlaybackHomeWorkAllowed: Boolean = false,
         homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true),
         currentLanguageTagProvider: () -> String = { "en" },
@@ -969,11 +966,8 @@ class HomeViewModelFocusHydrationTest {
             tmdbDiscoveryService = mockk(relaxed = true),
             kitsuDiscoveryService = mockk(relaxed = true),
             mdbListRepository = mockk(relaxed = true),
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
-            tmdbService = mockk(relaxed = true),
             metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(metadataRouterFacade),
-            trailerService = mockk(relaxed = true),
             trailerSettingsDataStore = mockk(relaxed = true),
             accountSyncRefreshNotifier = accountSyncRefreshNotifier,
             catalogPriorityHydrationNotifier = catalogPriorityHydrationNotifier,

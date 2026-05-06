@@ -104,16 +104,27 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
-    fun `tvdb home enrichment carries runtime into preview`() {
-        val enriched = preview(id = "a", poster = "posterA")
-            .applyTvMetadataEnrichmentForHome(
-                TvMetadataEnrichment(
-                    seriesTvdbId = 121361,
-                    runtimeMinutes = 52
-                )
+    fun `provider home enrichment no longer mutates preview runtime`() = runTest {
+        val item = preview(id = "a", poster = "posterA")
+        val resolver = mockk<ProviderLocalizedMetadataResolver>()
+        val profileBoundary = mockk<ProfileBoundary>()
+        coEvery { resolver.fetchDecision(any(), any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 121361,
+                runtimeMinutes = 52
             )
+        )
+        every { profileBoundary.currentLanguageTag() } returns "en"
 
-        assertEquals("52 min", enriched.runtime)
+        val enriched = overlayProviderLocalizedMetadataForHome(
+            item = item,
+            providerLocalizedMetadataResolver = resolver,
+            profileBoundary = profileBoundary
+        )
+
+        assertEquals(item, enriched)
     }
 
     @Test
@@ -787,7 +798,6 @@ class HomeCatalogRefreshCoordinatorTest {
         coordinator(
             catalogRepository = catalogRepository,
             metadataRouterFacade = metadataRouterFacade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).prefetchVisibleImagesOnly(
@@ -828,7 +838,6 @@ class HomeCatalogRefreshCoordinatorTest {
         coordinator(
             catalogRepository = catalogRepository,
             metadataRouterFacade = metadataRouterFacade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             posterRatingsUrlResolver = posterRatingsUrlResolver
         ).prefetchVisibleImagesOnly(
@@ -884,13 +893,9 @@ class HomeCatalogRefreshCoordinatorTest {
     private fun coordinator(
         catalogRepository: CatalogRepository,
         tvMetadataRouter: TvMetadataRouter,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository? = null,
         metadataDiskCacheStore: MetadataDiskCacheStore = mockk(relaxed = true),
         posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
     ): HomeCatalogRefreshCoordinator {
-        val ratingOverrides = titleRatingOverrideRepository ?: mockk<TitleRatingOverrideRepository>().also {
-            coEvery { it.enrichPreview(any()) } answers { firstArg() }
-        }
         val posterResolver = posterRatingsUrlResolver ?: mockk<PosterRatingsUrlResolver>(relaxed = true).also {
             every { it.apply(any<MetaPreview>(), any()) } answers { firstArg() }
         }
@@ -902,7 +907,6 @@ class HomeCatalogRefreshCoordinatorTest {
 
         return HomeCatalogRefreshCoordinator(
             catalogRepository = catalogRepository,
-            titleRatingOverrideRepository = ratingOverrides,
             metadataDiskCacheStore = metadataDiskCacheStore,
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
@@ -918,7 +922,6 @@ class HomeCatalogRefreshCoordinatorTest {
     private fun coordinator(
         catalogRepository: CatalogRepository,
         metadataRouterFacade: MetadataRouterFacade,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver
     ): HomeCatalogRefreshCoordinator {
@@ -930,7 +933,6 @@ class HomeCatalogRefreshCoordinatorTest {
 
         return HomeCatalogRefreshCoordinator(
             catalogRepository = catalogRepository,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(

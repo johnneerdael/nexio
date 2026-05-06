@@ -32,9 +32,8 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
             profileBoundary = profileBoundary
         )
         logHomeProviderDecisionDiagnostics(item, decision.diagnostics, onLog)
-        val enrichment = decision.value ?: return item
-
-        item.applyTvMetadataEnrichmentForHome(enrichment)
+        decision.value ?: return item
+        item
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {

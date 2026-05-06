@@ -2721,6 +2721,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             overlaysByItemKey = currentHydratedHomeOverlays
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
+            surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
             profileSession = profileSessionForSurface,
             items = resolvedItemsForSurface
         )

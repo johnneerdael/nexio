@@ -5,7 +5,6 @@ import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -44,18 +43,14 @@ class HomeViewModelTvdbProviderRoutingTest {
     fun `hero enrichment tvdb success does not call tmdb`() = runTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val tmdbService = mockk<TmdbService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
-        val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val preview = seriesPreview()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
-        every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
-        every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
         every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
         every { viewModel.homeProfileGeneration } returns 7L
         every { viewModel.isCurrentHomeProfileGeneration(7L) } returns true
@@ -105,20 +100,17 @@ class HomeViewModelTvdbProviderRoutingTest {
             )
         }
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
-        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
     @Test
     fun `focused enrichment tvdb success does not call tmdb`() = runTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val tmdbService = mockk<TmdbService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
-        every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
@@ -131,7 +123,6 @@ class HomeViewModelTvdbProviderRoutingTest {
 
         assertEquals("TVDB title", enrichment?.localizedTitle)
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
-        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
     // TODO: Re-enable when shouldEnrichContinueWatchingProviderMetadata is restored
@@ -152,14 +143,12 @@ class HomeViewModelTvdbProviderRoutingTest {
     fun `continue watching movie enrichment uses shared home provider overlay`() = runTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
-        val tmdbService = mockk<TmdbService>()
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
-        every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
         every { viewModel.profileBoundary } returns profileBoundary
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
@@ -181,14 +170,11 @@ class HomeViewModelTvdbProviderRoutingTest {
                 language = "nl"
             )
         )
-        coEvery { tmdbService.ensureTmdbId("tt1375666", "movie") } returns "27205"
-
         val result = viewModel.enrichContinueWatchingItemWithProvider(
             item = continueWatchingMovieItem()
         ) as ContinueWatchingItem.InProgress
 
         assertEquals("Nederlandse titel", result.displayMetadata?.title)
-        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
     private fun seriesPreview(): MetaPreview {
@@ -332,11 +318,5 @@ class HomeViewModelTvdbProviderRoutingTest {
                 lastWatched = 42L
             )
         )
-    }
-
-    private fun passthroughTitleRatingOverrideRepository(): com.nexio.tv.data.repository.TitleRatingOverrideRepository {
-        return mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>().also { repository ->
-            coEvery { repository.enrichPreview(any(), any()) } answers { firstArg() }
-        }
     }
 }
