@@ -114,7 +114,7 @@ class TrackingScrobbleServiceAnimeProjectionTest {
             tvdbCoordinate = null,
             tmdbCoordinate = null,
             confidence = CoordinateConfidence.LOW,
-            fallbackReason = com.nexio.tv.core.anime.projection.FallbackReason.LOW_CONFIDENCE_FLAT_KITSU,
+            fallbackReason = com.nexio.tv.core.anime.projection.FallbackReason.NO_CURATED_SEASON,
             evidence = emptyList(),
         )
 

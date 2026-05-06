@@ -71,7 +71,7 @@ class TrackingScrobbleServiceAnimeRejectionTest {
             tvdbCoordinate = null,
             tmdbCoordinate = null,
             confidence = CoordinateConfidence.LOW,
-            fallbackReason = FallbackReason.NO_TVDB_MAPPING,
+            fallbackReason = FallbackReason.NO_CURATED_SEASON,
             evidence = emptyList(),
         )
 
