@@ -215,6 +215,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     catalogUpdateJob?.cancel()
     heroEnrichmentJob?.cancel()
     heroEnrichmentJob = null
+    lastHeroEnrichmentSignature = null
+    lastHeroEnrichedItems = emptyList()
     continueWatchingEnrichmentJob?.cancel()
     catalogsMap.clear()
     catalogOrder.clear()
