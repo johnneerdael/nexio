@@ -4,7 +4,8 @@ import com.nexio.tv.core.integration.ArtworkApiShapes
 import com.nexio.tv.core.integration.IntegrationProvider
 
 class ArtworkSourceMaterializer(
-    private val remoteSourcesByHash: Map<String, SensitiveArtworkUrl>
+    private val remoteSourcesByHash: Map<String, SensitiveArtworkUrl>,
+    private val remoteSourceStore: ArtworkRemoteSourceStore = NoopArtworkRemoteSourceStore
 ) {
     fun materialize(decision: ArtworkDecision): MaterializedArtworkSource? {
         val candidate = decision.selectedCandidate
@@ -30,7 +31,7 @@ class ArtworkSourceMaterializer(
 
         val sourceHash = candidate.sourceHash ?: return null
         val provider = candidate.provider ?: ArtworkProviderId.AddonPreview
-        val rawSource = remoteSourcesByHash[sourceHash] ?: ArtworkRemoteSourceRegistry.get(sourceHash)
+        val rawSource = remoteSourcesByHash[sourceHash] ?: remoteSourceStore.get(sourceHash)
         return MaterializedArtworkSource(
             source = if (rawSource != null) {
                 ArtworkSource.RemoteUrl.of(rawSource, sourceHash)

@@ -1,11 +1,12 @@
 package com.nexio.tv.core.artwork
 
-import java.util.concurrent.ConcurrentHashMap
-
-fun ArtworkCandidate.toPersistedCandidate(policyVersion: Int): PersistedArtworkCandidate {
+fun ArtworkCandidate.toPersistedCandidate(
+    policyVersion: Int,
+    remoteSourceStore: ArtworkRemoteSourceStore = NoopArtworkRemoteSourceStore
+): PersistedArtworkCandidate {
     val candidateSource = source
     if (candidateSource is ArtworkSource.RemoteUrl && sourceRole != ArtworkSourceRole.PREMIUM) {
-        ArtworkRemoteSourceRegistry.put(candidateSource.normalizedUrlHash, candidateSource.rawUrl)
+        remoteSourceStore.put(candidateSource.normalizedUrlHash, candidateSource.rawUrl)
     }
 
     return PersistedArtworkCandidate(
@@ -39,18 +40,4 @@ fun ArtworkCandidate.toPersistedCandidate(policyVersion: Int): PersistedArtworkC
         },
         priority = priority
     )
-}
-
-internal object ArtworkRemoteSourceRegistry {
-    private val sourcesByHash = ConcurrentHashMap<String, SensitiveArtworkUrl>()
-
-    fun put(
-        normalizedUrlHash: String,
-        source: SensitiveArtworkUrl
-    ) {
-        sourcesByHash[normalizedUrlHash] = source
-    }
-
-    fun get(normalizedUrlHash: String): SensitiveArtworkUrl? =
-        sourcesByHash[normalizedUrlHash]
 }

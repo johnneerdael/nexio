@@ -210,9 +210,12 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
-    fun `selected provider failure falls back to primary remote candidate`() = runTest {
+    fun `selected provider failure falls back to primary remote candidate after restart`() = runTest {
+        val remoteSourceFile = temp.newFile("remote-sources.json")
+        val decisionFile = temp.newFile("fallback-decisions.json")
+        val firstRemoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
         val selected = rpdbTemplateDecision()
-        val fallback = remotePreviewCandidateFromProductionSource()
+        val fallback = remotePreviewCandidateFromProductionSource(firstRemoteSourceStore)
         val decision = selected.copy(
             selectedCandidate = selected.selectedCandidate,
             rejectedCandidates = selected.rejectedCandidates + RejectedArtworkCandidate(
@@ -225,13 +228,19 @@ class ArtworkAssetRepositoryTest {
                 priority = fallback.priority
             )
         )
-        val cache = InMemoryArtworkDecisionCache()
-        cache.put(decision)
+        DurableArtworkDecisionCache(decisionFile, Gson()).put(decision)
+
+        val restartedCache = DurableArtworkDecisionCache(decisionFile, Gson())
+        val restartedRemoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
         val runtime = LoadingIntegrationRuntime()
         var loadCount = 0
         val repository = repository(
             runtime = runtime,
-            cache = cache,
+            cache = restartedCache,
+            sourceMaterializer = ArtworkSourceMaterializer(
+                remoteSourcesByHash = emptyMap(),
+                remoteSourceStore = restartedRemoteSourceStore
+            ),
             byteLoader = ArtworkByteLoader { source, _ ->
                 loadCount += 1
                 when (source) {
@@ -251,6 +260,40 @@ class ArtworkAssetRepositoryTest {
         assertArrayEquals("fallback-bytes".toByteArray(), result!!.localFile.readBytes())
         assertEquals(2, loadCount)
         assertEquals("FALLBACK_MATERIALIZED", result.cacheDecision)
+    }
+
+    @Test
+    fun `raw premium fallback url is not stored or materialized as remote source`() {
+        val remoteSourceFile = temp.newFile("premium-remote-sources.json")
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
+        val premiumUrl = "https://api.ratingposterdb.com/rpdb-key/imdb/poster-default/tt0137523.jpg"
+        val sourceHash = ArtworkCacheKeys.normalizedUrlHash(premiumUrl)
+        val candidate = ArtworkCandidate(
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+            canonicalContentId = "imdb:tt0137523",
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+            imageType = ArtworkType.POSTER,
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            source = ArtworkSource.RemoteUrl.of(
+                rawUrl = SensitiveArtworkUrl.of(premiumUrl),
+                normalizedUrlHash = sourceHash
+            ),
+            priority = 10,
+            requiresRuntimeFetch = true
+        )
+
+        val persisted = candidate.toPersistedCandidate(
+            policyVersion = 1,
+            remoteSourceStore = remoteSourceStore
+        )
+        val restartedRemoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
+        val materialized = ArtworkSourceMaterializer(
+            remoteSourcesByHash = emptyMap(),
+            remoteSourceStore = restartedRemoteSourceStore
+        ).materialize(rpdbTemplateDecision().copy(selectedCandidate = persisted))
+
+        assertNull(restartedRemoteSourceStore.get(sourceHash))
+        assertTrue(materialized?.source is UnavailableRemoteArtworkSource)
     }
 
     @Test
@@ -739,7 +782,9 @@ class ArtworkAssetRepositoryTest {
             staleUntilMs = 300L
         )
 
-    private fun remotePreviewCandidateFromProductionSource(): PersistedArtworkCandidate =
+    private fun remotePreviewCandidateFromProductionSource(
+        remoteSourceStore: ArtworkRemoteSourceStore
+    ): PersistedArtworkCandidate =
         ArtworkCandidate(
             ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
             canonicalContentId = "imdb:tt0137523",
@@ -752,7 +797,10 @@ class ArtworkAssetRepositoryTest {
             ),
             priority = 10,
             requiresRuntimeFetch = true
-        ).toPersistedCandidate(policyVersion = 1)
+        ).toPersistedCandidate(
+            policyVersion = 1,
+            remoteSourceStore = remoteSourceStore
+        )
 
     private fun topPostersThumbnailDecision(): ArtworkDecision =
         ArtworkDecision(
