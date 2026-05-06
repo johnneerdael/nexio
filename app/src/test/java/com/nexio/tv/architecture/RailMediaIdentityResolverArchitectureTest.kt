@@ -38,6 +38,20 @@ class RailMediaIdentityResolverArchitectureTest {
         )
     }
 
+    @Test
+    fun `resolver import scanner catches exact aliased and wildcard imports`() {
+        val exact = kotlinFixture("import com.nexio.tv.core.integration.RailMediaIdentityResolver")
+        val aliased = kotlinFixture("import com.nexio.tv.core.integration.RailMediaIdentityResolver as RailResolver")
+        val wildcard = kotlinFixture("import com.nexio.tv.core.integration.*")
+
+        val offenders = listOf(exact, aliased, wildcard).flatMap(::resolverImportOffenders)
+
+        assertTrue(
+            "RailMediaIdentityResolver boundary scanner must catch exact, aliased, and wildcard imports: $offenders",
+            offenders.size == 3
+        )
+    }
+
     private fun resolverImportOffenders(file: File): List<String> =
         file.readLines().mapIndexedNotNull { index, line ->
             if (RESOLVER_IMPORT.containsMatchIn(line)) {
@@ -81,9 +95,15 @@ class RailMediaIdentityResolverArchitectureTest {
         }
     }
 
+    private fun kotlinFixture(source: String): File =
+        File.createTempFile("RailMediaIdentityResolverArchitectureTest", ".kt").apply {
+            writeText(source)
+            deleteOnExit()
+        }
+
     private companion object {
         private val RESOLVER_IMPORT = Regex(
-            """^\s*import\s+com\.nexio\.tv\.core\.integration\.RailMediaIdentityResolver\s*$"""
+            """^\s*import\s+com\.nexio\.tv\.core\.integration\.(?:RailMediaIdentityResolver(?:\s+as\s+\w+)?|\*)\s*$"""
         )
 
         private val REQUIRED_KDOC = """
