@@ -12,9 +12,12 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFieldTrace
 import com.nexio.tv.core.metadata.router.MetadataLocalizationRejectedCandidate
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedField
@@ -163,6 +166,66 @@ class MetadataDisplayRepositoryTest {
             listOf("TITLE:TMDB:PRIMARY", "RATING:TMDB_RATING:RATING"),
             document.sourceTrace.map { "${it.field}:${it.selectedProvider}:${it.sourceRole}" }
         )
+    }
+
+    @Test
+    fun `resolveDetailDisplay fills missing provider ids from route target ids`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val repository = MetadataDisplayRepository(routerFacade)
+        val request = MetadataRequest(
+            contentId = "tt0944947",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.TVDB,
+                parentId = "tt0944947",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+                sourceContext = MetadataSourceContext(),
+                language = "en",
+                seasonNumber = null,
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.TMDB to "tmdb:1399",
+                    MetadataPrimaryProvider.TVDB to "tvdb:121361"
+                ),
+                trace = emptyList()
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "imdb:tt0944947",
+                title = "Game of Thrones",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                remoteIds = mapOf(
+                    "imdb" to setOf("tt0944947"),
+                    "tmdb" to setOf("999")
+                ),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview"),
+            trace = emptyList()
+        )
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("tt0944947", document.identity.providerIds.imdb)
+        assertEquals("999", document.identity.providerIds.tmdb)
+        assertEquals("121361", document.identity.providerIds.tvdb)
     }
 
     private fun artworkRef(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =

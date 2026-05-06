@@ -8,15 +8,18 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.data.repository.DetailRatingDisplayResolution
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LocalizationDisplayState
+import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
+import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -65,6 +68,17 @@ class MetaDetailsResolvedDocumentTest {
                     request.language == "nl-NL"
             })
         } returns document
+        coEvery {
+            displayRepository.resolveDetailRatingDisplay(any(), any(), any(), any(), any())
+        } answers {
+            DetailRatingDisplayResolution(
+                meta = firstArg(),
+                display = ResolvedDetailRatingDisplay(
+                    mdbListRatings = MDBListRatings(imdb = 9.2, trakt = 91.0),
+                    showMdbListImdb = true
+                )
+            )
+        }
 
         val viewModel = buildMetaDetailsViewModel(
             meta = minimalSeriesMeta().copy(id = "tmdb:1399"),
@@ -101,6 +115,8 @@ class MetaDetailsResolvedDocumentTest {
         assertEquals(TitleRatingSource.TMDB, state.meta?.ratingSource)
         assertEquals(document.trailer, state.trailerState)
         assertEquals("provider_language_fallback", state.localizationFallbackReason)
+        assertEquals(MDBListRatings(imdb = 9.2, trakt = 91.0), state.mdbListRatings)
+        assertEquals(true, state.showMdbListImdb)
         assertFalse(state.isLoading)
     }
 

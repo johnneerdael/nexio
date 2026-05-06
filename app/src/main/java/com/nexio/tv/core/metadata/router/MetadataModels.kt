@@ -167,6 +167,7 @@ data class ResolvedMetadataDocument(
     val countries: List<String> = emptyList(),
     val language: String? = null,
     val castMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
+    val crewMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
     val productionCompanies: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
     val networks: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
     val airsTime: String? = null,

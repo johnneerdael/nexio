@@ -321,6 +321,9 @@ class MetadataRouterFacade(
         )
         val resolution = resolveRequest(trailerRequest)
         return resolution.providerRunResult?.toLegacyTrailerResolutionOrNull()
+            // Temporary Packet E compatibility boundary: callers go through the facade/provider-plan
+            // owner first. Until trailer playback is fully resolver-owned, the facade owns this legacy
+            // TrailerService fallback so UI ViewModels do not depend on trailer sidecars directly.
             ?: trailerService?.resolveTrailer(
                 title = title,
                 year = year,

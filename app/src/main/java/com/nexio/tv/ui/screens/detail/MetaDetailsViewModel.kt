@@ -50,6 +50,7 @@ import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
+import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.Video
@@ -155,6 +156,7 @@ internal fun shouldTreatDetailTrailerPlaybackAsActiveTime(
 private data class DetailMetadataEnrichment(
     val meta: Meta,
     val resolvedDetail: ResolvedDetailDisplayDocument?,
+    val ratingDisplay: ResolvedDetailRatingDisplay = ResolvedDetailRatingDisplay(),
     val tvEnrichment: TvMetadataEnrichment?,
     val animeRelated: List<com.nexio.tv.domain.model.MetaPreview> = emptyList(),
     val isAnimeDetail: Boolean = false,
@@ -796,6 +798,31 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun applyRatingDisplay(metaId: String, ratingDisplay: ResolvedDetailRatingDisplay) {
+        _uiState.update { state ->
+            if (state.meta?.id != metaId) {
+                state
+            } else {
+                state.copy(
+                    mdbListRatings = ratingDisplay.mdbListRatings,
+                    showMdbListImdb = ratingDisplay.showMdbListImdb,
+                    episodeRatings = ratingDisplay.episodeRatings.mapValues { (_, rating) ->
+                        EpisodeRating(
+                            value = rating.value,
+                            source = rating.source.toEpisodeRatingSource()
+                        )
+                    },
+                    isEpisodeRatingsLoading = false,
+                    episodeRatingsError = ratingDisplay.episodeRatingsError
+                )
+            }
+        }
+    }
+
+    private fun String.toEpisodeRatingSource(): EpisodeRatingSource =
+        EpisodeRatingSource.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
+            ?: EpisodeRatingSource.TMDB
+
     private suspend fun applyMetaWithEnrichment(
         meta: Meta,
         resolvedDetail: ResolvedDetailDisplayDocument? = null
@@ -883,6 +910,7 @@ class MetaDetailsViewModel @Inject constructor(
         }
         enrichment.resolvedDetail?.let(::applyResolvedDetailState)
         applyMeta(enrichment.meta)
+        applyRatingDisplay(enrichment.meta.id, enrichment.ratingDisplay)
         hydrateSecondaryNavigationTargetsAsync(enrichment.meta)
         if (preferredSeason != null) {
             _uiState.update { state ->
@@ -1294,49 +1322,6 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadMDBListRatings(meta: Meta, tvEnrichment: TvMetadataEnrichment?) {
-        _uiState.update { state ->
-            state.copy(
-                mdbListRatings = null,
-                showMdbListImdb = false
-            )
-        }
-    }
-
-    private fun loadEpisodeRatingsAsync(meta: Meta, tvEnrichment: TvMetadataEnrichment?) {
-        episodeRatingsJob?.cancel()
-        val isSeries = isSeriesDetailMeta(meta)
-        val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct().sorted()
-
-        _uiState.update { state ->
-            if (state.meta == null || state.meta.id != meta.id) {
-                state
-            } else {
-                state.copy(
-                    episodeRatings = emptyMap(),
-                    isEpisodeRatingsLoading = isSeries && seasonNumbers.isNotEmpty(),
-                    episodeRatingsError = null
-                )
-            }
-        }
-
-        if (!isSeries || seasonNumbers.isEmpty()) return
-
-        episodeRatingsJob = viewModelScope.launch {
-            _uiState.update { state ->
-                if (state.meta?.id != meta.id) {
-                    state
-                } else {
-                    state.copy(
-                        episodeRatings = emptyMap(),
-                        isEpisodeRatingsLoading = false,
-                        episodeRatingsError = null
-                    )
-                }
-            }
-        }
-    }
-
     private suspend fun enrichMeta(
         meta: Meta,
         includeEpisodeMetadata: Boolean = true,
@@ -1378,10 +1363,23 @@ class MetaDetailsViewModel @Inject constructor(
                 isTvContent = isTvContent
             )
         }
+        val ratingResolution = detailDocument?.let { document ->
+            metadataDisplayRepository.resolveDetailRatingDisplay(
+                meta = updated,
+                fallbackItemId = resolveRatingsFallbackItemId(updated, tvEnrichment),
+                fallbackItemType = itemType,
+                providerIds = document.identity.providerIds,
+                episodesBySeason = updated.episodesBySeason()
+            )
+        }
+        if (ratingResolution != null) {
+            updated = ratingResolution.meta
+        }
 
         return DetailMetadataEnrichment(
             meta = updated,
             resolvedDetail = detailDocument,
+            ratingDisplay = ratingResolution?.display ?: detailDocument?.ratings ?: ResolvedDetailRatingDisplay(),
             tvEnrichment = tvEnrichment,
             animeRelated = animeRelated,
             isAnimeDetail = isKitsuAnimeByProvider,
@@ -1416,10 +1414,13 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
         if (settings.useDetails) {
+            val countries = document.advanced.countries.takeIf { it.isNotEmpty() }
             updated = updated.copy(
                 runtime = document.fields.runtimeText?.parseRuntimeMinutesText() ?: updated.runtime,
                 releaseInfo = document.fields.releaseDate ?: document.fields.year?.toString() ?: updated.releaseInfo,
-                language = document.localization.selectedLanguage ?: updated.language
+                ageRating = document.advanced.ageRating ?: updated.ageRating,
+                country = countries?.joinToString(", ") ?: updated.country,
+                language = document.advanced.language ?: document.localization.selectedLanguage ?: updated.language
             )
         }
         if (settings.useCredits) {
@@ -1428,6 +1429,12 @@ class MetaDetailsViewModel @Inject constructor(
                 updated = updated.withPeople(people)
             }
         }
+        if (settings.useProductions && document.advanced.productionCompanies.isNotEmpty()) {
+            updated = updated.copy(productionCompanies = document.advanced.productionCompanies)
+        }
+        if (settings.useNetworks && document.advanced.networks.isNotEmpty()) {
+            updated = updated.copy(networks = document.advanced.networks)
+        }
         return updated.copy(
             trailerYtIds = document.trailer.fallbackTrailerYtIds.ifEmpty { updated.trailerYtIds }
         )
@@ -1435,10 +1442,19 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun Meta.withPeople(people: PeopleDisplay): Meta {
         val castMembers = people.cast.filter { it.name.isNotBlank() }
-        if (castMembers.isEmpty()) return this
+        val crewMembers = people.crew.filter { it.name.isNotBlank() }
+        if (castMembers.isEmpty() && crewMembers.isEmpty()) return this
         return copy(
-            castMembers = castMembers,
-            cast = castMembers.map { it.name }
+            castMembers = castMembers.ifEmpty { this.castMembers },
+            cast = castMembers.map { it.name }.ifEmpty { cast },
+            director = crewMembers
+                .filter { it.character.equals("Director", ignoreCase = true) }
+                .map { it.name }
+                .ifEmpty { director },
+            writer = crewMembers
+                .filter { it.character.equals("Writer", ignoreCase = true) }
+                .map { it.name }
+                .ifEmpty { writer }
         )
     }
 
@@ -1472,7 +1488,16 @@ class MetaDetailsViewModel @Inject constructor(
             ratingSource = rating?.source,
             runtimeMinutes = fields.runtimeText?.parseRuntimeMinutesText()?.toIntOrNull(),
             language = localization.selectedLanguage,
+            ageRating = advanced.ageRating,
+            countries = advanced.countries.takeIf { it.isNotEmpty() },
             castMembers = people?.cast.orEmpty(),
+            productionCompanies = advanced.productionCompanies,
+            networks = advanced.networks,
+            airsTime = advanced.airsTime,
+            originalCountry = advanced.originalCountry,
+            originalNetwork = advanced.originalNetwork,
+            latestNetwork = advanced.latestNetwork,
+            platformName = advanced.platformName,
             remoteIds = identity.providerIds.toRemoteIds()
         )
     }
@@ -1503,6 +1528,16 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.firstNotNullOfOrNull(::extractImdbIdForRatings)
             ?: itemId
     }
+
+    private fun Meta.episodesBySeason(): Map<Int, Set<Int>> =
+        videos
+            .mapNotNull { video ->
+                val season = video.season ?: return@mapNotNull null
+                val episode = video.episode ?: return@mapNotNull null
+                season to episode
+            }
+            .groupBy(keySelector = { it.first }, valueTransform = { it.second })
+            .mapValues { (_, episodes) -> episodes.toSet() }
 
     private fun extractImdbIdForRatings(rawId: String?): String? {
         if (rawId.isNullOrBlank()) return null
