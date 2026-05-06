@@ -333,6 +333,49 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `idle trailer fallback ids do not short circuit screensaver item lookup`() = runBlocking {
+        val candidate = buildTrailerCandidate(
+            itemId = "source:breaking-bad",
+            trailerIds = listOf("abc123def45"),
+            stableIds = ProviderIds(tvdb = "81189", tmdb = "1396", imdb = "tt0903747")
+        )
+        val resolver = com.nexio.tv.core.metadata.router.resolver.TrailerResolver(
+            com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.integration.RecordingTraceSink(),
+                sessionId = { "screensaver" }
+            )
+        )
+        val playbackRefs = mutableListOf<TrailerPlaybackRef>()
+
+        val source = resolveIdleTrailerScreensaverPlaybackSource(
+            candidate = candidate,
+            playbackRef = TrailerPlaybackRef.ItemLookup(
+                title = candidate.title,
+                year = "2024",
+                stableIds = candidate.stableIds,
+                type = candidate.itemType,
+                contentId = "tvdb:81189",
+                fallbackYtIds = listOf("abc123def45")
+            ),
+            resolveTrailer = resolver::resolveTrailer,
+            resolvePlaybackSource = { ref ->
+                playbackRefs += ref
+                if (ref !is TrailerPlaybackRef.ItemLookup) {
+                    return@resolveIdleTrailerScreensaverPlaybackSource null
+                }
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(videoUrl = "https://video.example.com/by-item-with-fallback.m3u8")
+                )
+            }
+        )
+
+        assertEquals("https://video.example.com/by-item-with-fallback.m3u8", source?.videoUrl)
+        val playbackRef = playbackRefs.single()
+        assertTrue(playbackRef is TrailerPlaybackRef.ItemLookup)
+        assertEquals(listOf("abc123def45"), (playbackRef as TrailerPlaybackRef.ItemLookup).fallbackYtIds)
+    }
+
+    @Test
     fun `idle trailer resolver passes explicit fallback youtube id without building a youtube url`() = runBlocking {
         val candidate = buildTrailerCandidate(
             itemId = "source:movie",

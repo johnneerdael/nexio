@@ -82,12 +82,12 @@ class TrailerResolver @Inject constructor(
                     ?.let(TrailerPlaybackRef::YouTubeId)
             }
             .distinct()
-        val itemLookupCandidates = if (providerCandidates.isEmpty() && fallbackCandidates.isEmpty()) {
+        val itemLookupCandidates = if (providerCandidates.isEmpty()) {
             listOfNotNull(request.toItemLookupRef())
         } else {
             emptyList()
         }
-        val candidates = (providerCandidates + fallbackCandidates + itemLookupCandidates).distinct()
+        val candidates = (providerCandidates + itemLookupCandidates + fallbackCandidates).distinct()
         val selected = candidates.firstOrNull()
         val reason = when {
             selected == null -> "missing_candidates"
