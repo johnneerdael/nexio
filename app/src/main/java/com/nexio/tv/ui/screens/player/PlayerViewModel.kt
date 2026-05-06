@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.resolver.SkipSegmentResolver
 import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
@@ -20,7 +21,6 @@ import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
-import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TraktEpisodeMappingService
 import com.nexio.tv.data.repository.TrackingScrobbleService
@@ -48,7 +48,7 @@ class PlayerViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
     private val trackingScrobbleService: TrackingScrobbleService,
-    private val skipIntroRepository: SkipIntroRepository,
+    private val skipSegmentResolver: SkipSegmentResolver,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
@@ -91,7 +91,7 @@ class PlayerViewModel @Inject constructor(
             addonRepository = addonRepository,
             subtitleRepository = subtitleRepository,
             trackingScrobbleService = trackingScrobbleService,
-            skipIntroRepository = skipIntroRepository,
+            skipSegmentResolver = skipSegmentResolver,
             playerSettingsDataStore = playerSettingsDataStore,
             debugSettingsDataStore = debugSettingsDataStore,
             subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,

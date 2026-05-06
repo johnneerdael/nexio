@@ -230,8 +230,8 @@ class MetadataRouterFacade(
         // Each resolver consumes candidates produced by ProviderPlanRunner and either picks a winner
         // (TrailerResolver, RecommendationResolver) or aggregates (ReviewResolver, OrganizationPersonResolver).
         // ARTWORK / ADDON_DISPLAY / RATING / TRACKING participate via FieldResolver / orchestrator local
-        // pass — no separate dispatch needed. SKIP_SEGMENTS was removed in Task 20 (F-12-01); player
-        // skip is owned by SkipIntroRepository, not the resolver pipeline.
+        // pass — no separate dispatch needed. Player skip uses SkipSegmentResolver outside this
+        // scheduled metadata pipeline.
         resolverSchedule.networkResolvers.forEach { resolverType ->
             when (resolverType) {
                 ResolverType.TRAILERS -> effectiveTrailerResolver.resolve(

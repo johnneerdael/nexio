@@ -1,5 +1,6 @@
 package com.nexio.tv.core.di
 
+import com.nexio.tv.core.metadata.router.resolver.SkipIntroRepositoryPort
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.integration.imdb.ImdbTitleSearchIntegrationRepository
 import com.nexio.tv.data.repository.AddonRepositoryImpl
@@ -7,6 +8,7 @@ import com.nexio.tv.data.repository.CatalogRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
 import com.nexio.tv.data.repository.MetaRepositoryImpl
 import com.nexio.tv.data.repository.OpenSubtitlesSourceImpl
+import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
@@ -82,6 +84,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindWatchProgressRepository(impl: WatchProgressRepositoryImpl): WatchProgressRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSkipIntroRepositoryPort(impl: SkipIntroRepository): SkipIntroRepositoryPort
 
     @Binds
     @Singleton
