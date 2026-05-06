@@ -88,7 +88,6 @@ class HomeResolvedSurfacePublishingTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = overlayStore,
-            resolvedDisplaySurfaceRepository = surfaceRepository,
             traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
         ).hydrate(
             item = preview,
@@ -97,7 +96,14 @@ class HomeResolvedSurfacePublishingTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 7L },
-            onOverlayApplied = { true }
+            onOverlayApplied = { overlay ->
+                surfaceRepository.publishResolvedItems(
+                    surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                    profileSession = activeSession,
+                    items = listOf(overlay.toResolvedDisplayItem())
+                )
+                true
+            }
         )
 
         val published = surfaceRepository.getSnapshot(profileId = activeSession.profileId).single()
@@ -109,6 +115,65 @@ class HomeResolvedSurfacePublishingTest {
         assertEquals(TitleRatingSource.IMDB, published.rating?.source)
         assertEquals(HydrationState.CANONICAL_READY, published.hydrationState)
         assertTrue(preview.imdbRating == 6.5f)
+    }
+
+    @Test
+    fun `home hydration does not publish resolved surface when overlay is rejected`() = runTest {
+        val activeSession = ActiveProfileSession(
+            profileId = 7,
+            sessionId = "home-session",
+            sessionOrdinal = 1L,
+            startedAtMs = 1_000L
+        )
+        val surfaceRepository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession })
+        val facade = mockk<MetadataRouterFacade>()
+        val overlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = MetaPreview(
+            id = "550",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Preview title",
+            poster = "preview-poster.jpg",
+            posterShape = PosterShape.POSTER,
+            background = "preview-backdrop.jpg",
+            logo = null,
+            description = "Preview overview",
+            releaseInfo = "1999",
+            imdbRating = 6.5f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = listOf("Preview Genre"),
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintSourceProvider = ProviderId.TMDB,
+            firstPaintStableIds = ProviderIds(tmdb = "550", imdb = "tt-preview"),
+            firstPaintRailSource = RailSource.BUILT_IN_TMDB,
+            firstPaintSourceItemId = "550"
+        )
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                description = "Canonical overview",
+                imdbRating = 8.4f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } throws IllegalStateException("stable ids unavailable")
+
+        HomeHydrationCoordinator(
+            metadataRouterFacade = facade,
+            overlayStore = overlayStore,
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+        ).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { false }
+        )
+
+        assertTrue(surfaceRepository.getSnapshot(profileId = activeSession.profileId).isEmpty())
     }
 
     private fun resolutionResult(

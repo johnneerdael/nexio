@@ -293,6 +293,9 @@ class HomeViewModelFocusHydrationTest {
         advanceUntilIdle()
 
         assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${visible.id}"))
+        val surfaceItem = viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 1).single()
+        assertEquals("movie:${visible.id}", surfaceItem.itemKey)
+        assertEquals("Canonical Visible", surfaceItem.display.title)
         assertNotNull(viewModel.catalogUpdateJob)
         coVerify(exactly = 1) {
             homeHydrationCoordinator.hydrate(

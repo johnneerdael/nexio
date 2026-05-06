@@ -14,7 +14,6 @@ import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
-import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
@@ -41,7 +40,6 @@ enum class HomeHydrationPriority {
 class HomeHydrationCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val overlayStore: HydratedHomeOverlayStore,
-    private val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
     private val traceEvents: TraceMetadataEvents
 ) {
     suspend fun hydrate(
@@ -123,10 +121,6 @@ class HomeHydrationCoordinator @Inject constructor(
                 )
                 return null
             }
-            resolvedDisplaySurfaceRepository.publishResolvedItems(
-                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
-                items = listOf(overlay.toResolvedDisplayItem())
-            )
             traceEvents.emitHomeHydrationOverlayWritten(
                 itemKey = itemKey,
                 canonicalProvider = overlay.canonicalProvider.name,

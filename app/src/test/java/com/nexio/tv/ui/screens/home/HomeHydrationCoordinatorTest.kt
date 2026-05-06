@@ -31,7 +31,6 @@ import com.nexio.tv.core.metadata.router.StableIdEvidence
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
-import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -567,16 +566,6 @@ class HomeHydrationCoordinatorTest {
     ) = HomeHydrationCoordinator(
         metadataRouterFacade = facade,
         overlayStore = store,
-        resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
-            activeProfileSession = {
-                com.nexio.tv.core.integration.ActiveProfileSession(
-                    profileId = 1,
-                    sessionId = "home-test",
-                    sessionOrdinal = 1L,
-                    startedAtMs = 1L
-                )
-            }
-        ),
         traceEvents = TraceMetadataEvents(sink) { "home-test" }
     )
 
