@@ -226,7 +226,9 @@ class MetadataRouterFacade(
             secondary = runResult.secondaryCandidates,
             requestContentId = request.contentId
         )
-        val displayMetadata = resolvedDocument.toHomeDisplayMetadata(initialDisplay)
+        val displayMetadata = resolvedDocument.toHomeDisplayMetadata(
+            initialDisplay.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
+        )
 
         // F-B-04: dispatch scheduled networkResolvers and emit metadata.field_selected events for each.
         // Each resolver consumes candidates produced by ProviderPlanRunner and either picks a winner
@@ -1035,11 +1037,22 @@ class MetadataRouterFacade(
         primary: MetadataCandidate
     ): MetadataCandidate? {
         val fields = fields.filterNot { (field, _) ->
-            field in localizedTextFields && !primary.fields.containsKey(field)
+            field in localizedTextFields && !primary.hasUsableLocalizedTextField(field)
         }
         if (fields.isEmpty()) return null
         return copy(fields = fields)
     }
+
+    private fun HomeDisplayMetadata.withoutSilentLocalizedTextFallback(
+        primary: MetadataCandidate
+    ): HomeDisplayMetadata =
+        copy(
+            title = title.takeIf { primary.hasUsableLocalizedTextField(ResolvedField.TITLE) },
+            description = description.takeIf { primary.hasUsableLocalizedTextField(ResolvedField.OVERVIEW) }
+        )
+
+    private fun MetadataCandidate.hasUsableLocalizedTextField(field: ResolvedField): Boolean =
+        (fields[field]?.value as? String)?.isNotBlank() == true
 
     private fun HomeDisplayMetadata.toPreviewFields(): Map<ResolvedField, FieldValue> =
         buildMap {
