@@ -69,7 +69,16 @@ class MetadataDisplayRepository @Inject constructor(
         val result = metadataRouterFacade.resolveRequest(request)
         val resolvedDocument = result.resolvedDocument
         val identity = result.toContentIdentity()
-        val effectiveRatingContext = ratingContext ?: resolvedDocument.toRatingDisplayContext(request, identity)
+        val primaryTitleRating = result.toTitleRating()
+        val effectiveRatingContext = if (ratingContext != null) {
+            ratingContext.copy(
+                primaryProviderTitleRating = ratingContext.primaryProviderTitleRating ?: primaryTitleRating,
+                previewFallbackTitleRating = ratingContext.previewFallbackTitleRating ?: ratingContext.meta.toTitleRating()
+            )
+        } else {
+            resolvedDocument.toRatingDisplayContext(request, identity)
+                ?.copy(primaryProviderTitleRating = primaryTitleRating)
+        }
         val ratings = resolveRatings(effectiveRatingContext, identity)
         val kitsuBridge = result.fetchKitsuBridgeDetail(request, identity)
         val cast = kitsuBridge?.castMembers?.takeIf { it.isNotEmpty() } ?: resolvedDocument.castMembers
@@ -124,7 +133,9 @@ class MetadataDisplayRepository @Inject constructor(
                 fallbackItemId = effectiveContext.fallbackItemId,
                 fallbackItemType = effectiveContext.fallbackItemType,
                 providerIds = identity.providerIds,
-                episodesBySeason = effectiveContext.episodesBySeason
+                episodesBySeason = effectiveContext.episodesBySeason,
+                primaryProviderTitleRating = effectiveContext.primaryProviderTitleRating,
+                previewFallbackTitleRating = effectiveContext.previewFallbackTitleRating
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -375,6 +386,11 @@ class MetadataDisplayRepository @Inject constructor(
 
         return TitleRating(value = value, source = ratingSource())
     }
+
+    private fun Meta.toTitleRating(): TitleRating? =
+        imdbRating?.takeIf { it > 0.0f }?.let { value ->
+            TitleRating(value = value.toDouble(), source = ratingSource.orDefault())
+        }
 
     private fun MetadataResolutionResult.ratingSource(): TitleRatingSource =
         resolvedDocument.sourceProviders[ResolvedField.RATING].toTitleRatingSource()
