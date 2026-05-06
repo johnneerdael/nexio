@@ -27,6 +27,8 @@ import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.TrailerAvailability
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.SourceRole as RatingSourceRole
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -176,6 +178,80 @@ class MetadataDisplayRepositoryTest {
         assertEquals(
             listOf("TITLE:TMDB:PRIMARY", "RATING:TMDB_RATING:RATING"),
             document.sourceTrace.map { "${it.field}:${it.selectedProvider}:${it.sourceRole}" }
+        )
+    }
+
+    @Test
+    fun `resolveDetailDisplay selected language comes from localization trace before advanced language`() = runTest {
+        val routerFacade = mockk<MetadataRouterFacade>()
+        val repository = MetadataDisplayRepository(routerFacade)
+        val request = MetadataRequest(
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(),
+            language = "nl",
+            depth = MetadataDepth.DETAIL_CORE
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_CORE,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "tvdb:121361",
+                title = "English TVDB title",
+                overview = "English TVDB overview",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                language = "ja",
+                fieldOwners = mapOf(
+                    ResolvedField.TITLE to FieldOwner.PRIMARY,
+                    ResolvedField.OVERVIEW to FieldOwner.PRIMARY
+                ),
+                ignoredOverwrites = emptyList(),
+                localization = mapOf(
+                    ResolvedField.TITLE to MetadataLocalizationFieldTrace(
+                        field = ResolvedField.TITLE,
+                        selectedProvider = MetadataPrimaryProvider.TVDB,
+                        selectedLanguage = "eng",
+                        fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
+                        sourceApiShapeId = "tvdb.series.translation",
+                        rejectedCandidates = listOf(
+                            MetadataLocalizationRejectedCandidate(
+                                provider = MetadataPrimaryProvider.TVDB,
+                                language = "nld",
+                                fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+                                reason = "missing_or_placeholder"
+                            )
+                        )
+                    )
+                )
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Preview title"),
+            trace = emptyList()
+        )
+
+        coEvery { routerFacade.resolveTrailer(any()) } returns TrailerResolution(
+            availability = TrailerAvailability(available = false, reason = "no_candidates"),
+            candidates = emptyList(),
+            selected = null,
+            trace = emptyList()
+        )
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("eng", document.localization.selectedLanguage)
+        assertEquals("ja", document.advanced.language)
+        assertEquals(
+            "TITLE fell back to eng via TVDB (LANGUAGE_FALLBACK)",
+            document.localization.fallbackReason
         )
     }
 
