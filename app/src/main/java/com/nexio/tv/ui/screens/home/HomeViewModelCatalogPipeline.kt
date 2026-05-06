@@ -509,7 +509,8 @@ private fun HomeViewModel.homeHydrationScopeMismatchReason(
 
 internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     items: List<MetaPreview>,
-    expectedGeneration: Long
+    expectedGeneration: Long,
+    expectedProfileSession: ActiveProfileSession? = null
 ) {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
@@ -517,13 +518,40 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     if (uniqueItems.isEmpty()) return
 
     val languageTag = profileBoundary.currentLanguageTag()
-    val expectedProfileSession = profileManager.activeProfileSession.value
+    val capturedProfileSession = expectedProfileSession ?: profileManager.activeProfileSession.value
+    if (
+        homeHydrationScopeMismatchReason(
+            expectedGeneration = expectedGeneration,
+            expectedLanguageTag = languageTag,
+            expectedProfileSession = capturedProfileSession
+        ) != null
+    ) {
+        return
+    }
     uniqueItems.forEach { item ->
         if (!isNonPlaybackHomeWorkAllowed()) return
+        if (
+            homeHydrationScopeMismatchReason(
+                expectedGeneration = expectedGeneration,
+                expectedLanguageTag = languageTag,
+                expectedProfileSession = capturedProfileSession
+            ) != null
+        ) {
+            return
+        }
         val itemKey = item.homeOverlayItemKey()
         if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
         if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) return@forEach
         try {
+            if (
+                homeHydrationScopeMismatchReason(
+                    expectedGeneration = expectedGeneration,
+                    expectedLanguageTag = languageTag,
+                    expectedProfileSession = capturedProfileSession
+                ) != null
+            ) {
+                return
+            }
             if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
             homeHydrationCoordinator.hydrate(
                 item = item,
@@ -537,7 +565,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
                         overlay = overlay,
                         expectedGeneration = expectedGeneration,
                         expectedLanguageTag = languageTag,
-                        expectedProfileSession = expectedProfileSession,
+                        expectedProfileSession = capturedProfileSession,
                         trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
                     )
                 }
@@ -1524,8 +1552,13 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
     if (visibleItems.isNotEmpty()) {
         hydrateVisibleHomeItemsWithCoordinator(
             items = visibleItems,
-            expectedGeneration = expectedGeneration
+            expectedGeneration = expectedGeneration,
+            expectedProfileSession = expectedProfileSession
         )
+        if (!isCurrentSerializedRefreshScope()) {
+            Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible prefetch generation=$expectedGeneration")
+            return
+        }
         homeCatalogRefreshCoordinator.prefetchVisibleImagesOnly(
             items = visibleItems,
             telemetryEnabled = startupPerfTelemetryEnabled,
