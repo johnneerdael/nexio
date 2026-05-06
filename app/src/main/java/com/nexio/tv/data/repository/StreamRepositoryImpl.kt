@@ -69,12 +69,21 @@ class StreamRepositoryImpl @Inject constructor(
             val streamAddons = addons.filter { addon ->
                 addon.supportsStreamResource(type)
             }
-            val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
-            val parsedContentId = MetadataIdParser.parse(parentContentId)
-            val contentIsAnime = if (parsedContentId.scheme == AnimeIdScheme.UNKNOWN) {
+            val contentIsAnime = if (streamAddons.none { it.isAnime }) {
                 false
             } else {
-                animeIdentityIndex.isAnime(parsedContentId)
+                val parentContentId = MetadataParentIdNormalizer.parentIdOf(videoId)
+                val parsedContentId = MetadataIdParser.parse(parentContentId)
+                if (parsedContentId.scheme == AnimeIdScheme.UNKNOWN) {
+                    false
+                } else {
+                    try {
+                        animeIdentityIndex.isAnime(parsedContentId)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Anime identity lookup failed for stream bucket hint: ${e.message}")
+                        false
+                    }
+                }
             }
 
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()

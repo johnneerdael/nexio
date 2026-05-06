@@ -86,6 +86,34 @@ class StreamRepositoryImplAnimeBucketTest {
     }
 
     @Test
+    fun `generic addons do not call anime identity index and still return streams`() = runTest {
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val repository = repository(
+            addons = listOf(genericAddon),
+            animeIdentityIndex = ThrowingAnimeIdentityIndex
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21")
+
+        assertFalse(buckets.single().isAnimeBucket)
+        assertEquals(1, buckets.single().streams.size)
+    }
+
+    @Test
+    fun `anime identity lookup failure leaves buckets false and still returns streams`() = runTest {
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val repository = repository(
+            addons = listOf(animeAddon),
+            animeIdentityIndex = ThrowingAnimeIdentityIndex
+        )
+
+        val buckets = repository.successBuckets(videoId = "mal:21")
+
+        assertFalse(buckets.single().isAnimeBucket)
+        assertEquals(1, buckets.single().streams.size)
+    }
+
+    @Test
     fun `kitsu_episode_id_routes_to_anime_bucket`() = runTest {
         val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
         val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
