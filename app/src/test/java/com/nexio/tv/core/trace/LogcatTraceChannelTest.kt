@@ -104,8 +104,18 @@ class LogcatTraceChannelTest {
     fun `artwork materialization events map to INT_RUNTIME`() {
         assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_lookup"))
         assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_missing"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_put"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_store_load"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_store_write"))
         assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.asset_materialized"))
         assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.fallback_materialized"))
+    }
+
+    @Test
+    fun `home snapshot events map to META_ROUTE`() {
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_read"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_write"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_sanitize_artwork"))
     }
 
     @Test

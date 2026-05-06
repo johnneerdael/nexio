@@ -26,6 +26,7 @@ import com.nexio.tv.core.integration.IntegrationPolicyRegistry
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.NoOpIntegrationAuditSink
 import com.nexio.tv.core.integration.defaultIntegrationPolicyRegistry
+import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.ui.screens.home.DefaultHomeRailHydrationExecutor
 import com.nexio.tv.ui.screens.home.HomeRailHydrationExecutor
 import com.nexio.tv.data.local.integration.IntegrationBlobStore
@@ -102,11 +103,13 @@ object IntegrationRuntimeModule {
     @Singleton
     fun provideArtworkDecisionCache(
         @ApplicationContext context: Context,
-        gson: Gson
+        gson: Gson,
+        traceSink: RuntimeTraceSink
     ): ArtworkDecisionCache =
         DurableArtworkDecisionCache(
             file = File(context.filesDir, "artwork-decisions-v1.json"),
-            gson = gson
+            gson = gson,
+            traceSink = traceSink
         )
 
     @Provides

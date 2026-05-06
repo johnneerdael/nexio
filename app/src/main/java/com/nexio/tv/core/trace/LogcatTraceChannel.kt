@@ -17,6 +17,7 @@ enum class LogcatTraceChannel(val tag: String) {
             eventType == "metadata.normalizer_warning" -> META_ROUTE
             eventType == "metadata.stable_id_bundle" -> META_ROUTE
             eventType.startsWith("home.hydration_") -> META_ROUTE
+            eventType.startsWith("home.snapshot_") -> META_ROUTE
             eventType.startsWith("screensaver.") -> META_ROUTE
             eventType.startsWith("runtime.") -> INT_RUNTIME
             eventType.startsWith("http.") -> INT_RUNTIME

@@ -303,6 +303,48 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `artwork decision store write event writes to IntRuntime tag with persistence fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("artwork.decision_store_write", mapOf(
+            "success" to false,
+            "decisionCount" to 4,
+            "linkCount" to 1,
+            "errorClass" to "JsonSyntaxException"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=artwork.decision_store_write"))
+        assertTrue(msg.contains("success=false"))
+        assertTrue(msg.contains("decisionCount=4"))
+        assertTrue(msg.contains("linkCount=1"))
+        assertTrue(msg.contains("errorClass=JsonSyntaxException"))
+    }
+
+    @Test
+    fun `home snapshot sanitization event writes to MetaRoute tag`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("home.snapshot_sanitize_artwork", mapOf(
+            "scope" to "catalogRows[0].items[0]",
+            "reason" to "missing_decision",
+            "posterKind" to "decision",
+            "posterProviderTag" to "rpdb",
+            "decisionFound" to false
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=home.snapshot_sanitize_artwork"))
+        assertTrue(msg.contains("scope=catalogRows[0].items[0]"))
+        assertTrue(msg.contains("reason=missing_decision"))
+        assertTrue(msg.contains("posterKind=decision"))
+        assertTrue(msg.contains("posterProviderTag=rpdb"))
+        assertTrue(msg.contains("decisionFound=false"))
+    }
+
+    @Test
     fun `disabled integration runtime channel suppresses artwork logcat events`() {
         val onlyMeta = object : LogcatChannelGate {
             override fun isEnabled(channel: LogcatTraceChannel): Boolean =
