@@ -86,3 +86,69 @@ fun main(args: Array<String>) {
         scudleeCommit = null
     ))
 }
+
+object FetchMain {
+    @JvmStatic fun main(args: Array<String>) {
+        require(args.size == 7) { "expected 7 args: fribbRawUrl fribbCommitsUrl fribbCachePath scudleeRawUrl scudleeCommitsUrl scudleeCachePath shasOutputPath" }
+        val fetcher = com.nexio.animemap.fetch.UpstreamFetcher()
+        val fribb = fetcher.fetchSource(args[0], args[1], java.io.File(args[2]))
+        val scudlee = fetcher.fetchSource(args[3], args[4], java.io.File(args[5]))
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        val mapType = com.squareup.moshi.Types.newParameterizedType(
+            Map::class.java, String::class.java, Any::class.java
+        )
+        @Suppress("UNCHECKED_CAST")
+        val adapter = moshi.adapter<Map<String, Any?>>(mapType).indent("  ")
+        val out = java.io.File(args[6])
+        out.parentFile.mkdirs()
+        out.writeText(adapter.toJson(mapOf(
+            "fribb" to mapOf("url" to fribb.url, "commit" to fribb.commit, "fetchedAt" to fribb.fetchedAt),
+            "scudlee" to mapOf("url" to scudlee.url, "commit" to scudlee.commit, "fetchedAt" to scudlee.fetchedAt)
+        )))
+    }
+}
+
+object GenerateMain {
+    @JvmStatic fun main(args: Array<String>) {
+        require(args.size == 8) { "expected 8 args: fribbInput scudleeInput overlayInput shasFile assetOutput provenanceOutput fribbUrl scudleeUrl" }
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        val mapType = com.squareup.moshi.Types.newParameterizedType(
+            Map::class.java, String::class.java, Any::class.java
+        )
+        val shasFile = java.io.File(args[3])
+        @Suppress("UNCHECKED_CAST")
+        val shas: Map<String, Any?> = if (shasFile.exists())
+            (moshi.adapter<Map<String, Any?>>(mapType).fromJson(shasFile.readText()) ?: emptyMap())
+        else emptyMap()
+        val fribbCommit = ((shas["fribb"] as? Map<*, *>)?.get("commit") as? String)
+        val scudleeCommit = ((shas["scudlee"] as? Map<*, *>)?.get("commit") as? String)
+        Generator.run(Generator.Args(
+            fribbInput = java.io.File(args[0]),
+            scudleeInput = java.io.File(args[1]),
+            overlayInput = java.io.File(args[2]),
+            assetOutput = java.io.File(args[4]),
+            provenanceOutput = java.io.File(args[5]),
+            fribbUrl = args[6], fribbCommit = fribbCommit,
+            scudleeUrl = args[7], scudleeCommit = scudleeCommit
+        ))
+    }
+}
+
+object CheckMain {
+    @JvmStatic fun main(args: Array<String>) {
+        require(args.size == 1) { "expected 1 arg: assetPath" }
+        val file = java.io.File(args[0])
+        check(file.exists()) { "anime mapping asset missing: ${file.absolutePath}" }
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        val asset = com.nexio.animemap.model.NexioAnimeMapJsonAdapter(moshi)
+            .fromJson(file.readText())
+            ?: error("failed to parse anime mapping asset at ${file.absolutePath}")
+        check(asset.schemaVersion == 2) {
+            "expected schemaVersion=2 but got ${asset.schemaVersion}"
+        }
+        check(asset.identityRecordsByKitsu.isNotEmpty()) {
+            "anime mapping asset has zero identity records"
+        }
+        println("anime mapping asset OK: ${asset.counts.identityRecords} identity, ${asset.counts.episodeMappingRecords} mapping records")
+    }
+}
