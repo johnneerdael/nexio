@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "mappingPolicyVersion": 1,
+  "generatedAt": "2026-05-06T00:00:00Z",
+  "counts": {"identityRecords": 4, "episodeMappingRecords": 1, "skippedCount": 0},
+  "identityRecordsByKitsu": {
+    "11469": {"kitsu":"11469","anidb":"11739","tvdb":"305074","tmdb":"65930","imdb":"tt5626028","mediaType":"series","sourceType":"TV","tvdbSeason":"1","tmdbSeason":"1"},
+    "13881": {"kitsu":"13881","anidb":"13485","tvdb":"305074","tmdb":"65930","imdb":"tt5626028","mediaType":"series","sourceType":"TV","tvdbSeason":"3","tmdbSeason":"3"},
+    "12":    {"kitsu":"12","anidb":"69","tvdb":"81797","tmdb":"37854","imdb":"tt0388629","mediaType":"series","sourceType":"TV","tvdbSeason":"a","tmdbSeason":"a","hasMappingRules":true},
+    "99999": {"kitsu":"99999","mediaType":"series","sourceType":"TV"}
+  },
+  "episodeMappingsByAnidb": {
+    "69": {
+      "anidb":"69","name":"One Piece","tvdbSeriesId":"81797","tmdbTvId":"37854",
+      "ranges":[
+        {"sourceSeason":1,"startEpisode":1,"endEpisode":8,"targetProvider":"TVDB","targetSeason":1,"offset":0},
+        {"sourceSeason":1,"startEpisode":892,"endEpisode":1085,"targetProvider":"TVDB","targetSeason":21,"offset":-891},
+        {"sourceSeason":1,"startEpisode":1086,"endEpisode":1155,"targetProvider":"TVDB","targetSeason":22,"offset":-1085},
+        {"sourceSeason":1,"startEpisode":1156,"targetProvider":"TVDB","targetSeason":23,"offset":-1155},
+        {"sourceSeason":1,"startEpisode":1,"endEpisode":61,"targetProvider":"TMDB","targetSeason":1,"offset":0}
+      ],
+      "explicitMaps":[
+        {"sourceSeason":0,"sourceEpisode":1,"targetProvider":"TVDB","targetSeason":0,"targetEpisode":27}
+      ]
+    }
+  },
+  "indexes": {
+    "byKitsu":{"11469":"11469","13881":"13881","12":"12","99999":"99999"},
+    "byMal":{},"byAnilist":{},"byAnidb":{"11739":"11469","13485":"13881","69":"12"},
+    "byTvdb":{"305074":["11469","13881"],"81797":["12"]},
+    "byTmdbTv":{"65930":["11469","13881"],"37854":["12"]},
+    "byTmdbMovie":{},"byImdb":{"tt5626028":["11469","13881"],"tt0388629":["12"]}
+  }
+}
