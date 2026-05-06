@@ -1,8 +1,13 @@
 package com.nexio.tv.core.artwork
 
+import com.google.gson.Gson
+import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class ArtworkDecisionCacheTest {
     private val cache = InMemoryArtworkDecisionCache()
@@ -200,6 +205,101 @@ class ArtworkDecisionCacheTest {
         assertEquals(canonical, cache.get(canonicalKey))
     }
 
+    @Test
+    fun `durable cache survives process restart without raw secrets`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+
+        val raw = file.readText()
+        assertTrue(raw.contains(decision.decisionKey.value))
+        assertFalse(raw.contains("rpdb-key"))
+        assertFalse(raw.contains("https://api.ratingposterdb.com"))
+        assertFalse(raw.contains("https://api.top-posters.com"))
+
+        val second = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val restored = second.get(decision.decisionKey)
+
+        assertEquals(decision.decisionKey, restored?.decisionKey)
+        assertEquals("RPDB", restored?.selectedCandidate?.provider?.key)
+        assertEquals("imdb", restored?.selectedCandidate?.providerTemplate?.idType)
+        assertEquals("tt15940132", restored?.selectedCandidate?.providerTemplate?.mediaId)
+        assertEquals(decision.credentialHash, restored?.credentialHash)
+    }
+
+    @Test
+    fun `durable cache remove deletes persisted decision`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        cache.put(decision)
+        cache.remove(decision.decisionKey)
+
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+        assertNull(restarted.get(decision.decisionKey))
+    }
+
+    @Test
+    fun `durable cache restores rejected fallback candidate source data`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val fallbackTemplate = PersistedProviderTemplate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            imageType = ArtworkType.POSTER,
+            idType = "tmdb",
+            mediaId = "550",
+            providerPathHash = "fallbackpathhash",
+            settingsHash = null,
+            credentialHash = null,
+            imageLanguage = "en",
+            policyVersion = 1
+        )
+        val decision = durableRpdbDecision().copy(
+            rejectedCandidates = listOf(
+                RejectedArtworkCandidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    sourceRole = ArtworkSourceRole.PRIMARY,
+                    reason = "available_fallback",
+                    sourceHash = "fallbacksourcehash",
+                    redactedSourceForTrace = "https://image.tmdb.org/t/p/w500/<redacted>",
+                    providerTemplate = fallbackTemplate,
+                    priority = 10
+                )
+            )
+        )
+
+        first.put(decision)
+
+        val restored = DurableArtworkDecisionCache(file = file, gson = Gson())
+            .get(decision.decisionKey)
+            ?.rejectedCandidates
+            ?.single()
+
+        assertEquals("fallbacksourcehash", restored?.sourceHash)
+        assertEquals("https://image.tmdb.org/t/p/w500/<redacted>", restored?.redactedSourceForTrace)
+        assertEquals(fallbackTemplate, restored?.providerTemplate)
+        assertEquals(10, restored?.priority)
+    }
+
+    @Test
+    fun `durable cache invalidates premium decisions by credential hash`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        cache.put(decision)
+        cache.invalidateByCredentialHash("credentialhash")
+
+        assertNull(cache.get(decision.decisionKey))
+    }
+
     private fun decision(
         key: ArtworkDecisionKey,
         ownerKey: ArtworkOwnerKey,
@@ -226,5 +326,48 @@ class ArtworkDecisionCacheTest {
             createdAtMs = 100,
             expiresAtMs = 200,
             staleUntilMs = 300
+        )
+
+    private fun durableRpdbDecision(): ArtworkDecision =
+        ArtworkDecision(
+            decisionKey = ArtworkDecisionKey(
+                "artwork-decision:poster:canonical:imdb:tt15940132:provider:RPDB:" +
+                    "premium:true:settings:settingshash:credential:credentialhash:imageLang:en:policy:1"
+            ),
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt15940132"),
+            canonicalContentId = "imdb:tt15940132",
+            imageType = ArtworkType.POSTER,
+            selectedCandidate = PersistedArtworkCandidate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                sourceRole = ArtworkSourceRole.PREMIUM,
+                sourceHash = "sourcehash",
+                redactedSourceForTrace = null,
+                providerTemplate = PersistedProviderTemplate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    imageType = ArtworkType.POSTER,
+                    idType = "imdb",
+                    mediaId = "tt15940132",
+                    providerPathHash = "pathhash",
+                    settingsHash = "settingshash",
+                    credentialHash = "credentialhash",
+                    imageLanguage = "en",
+                    policyVersion = 1
+                ),
+                priority = 100
+            ),
+            rejectedCandidates = listOf(
+                RejectedArtworkCandidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    sourceRole = ArtworkSourceRole.PRIMARY,
+                    reason = "premium_selected"
+                )
+            ),
+            policyVersion = 1,
+            imageLanguage = "en",
+            settingsHash = "settingshash",
+            credentialHash = "credentialhash",
+            createdAtMs = 1_000L,
+            expiresAtMs = 2_000L,
+            staleUntilMs = 3_000L
         )
 }

@@ -226,7 +226,11 @@ data class PersistedProviderTemplate(
 data class RejectedArtworkCandidate(
     val provider: ArtworkProviderId?,
     val sourceRole: ArtworkSourceRole,
-    val reason: String
+    val reason: String,
+    val sourceHash: String? = null,
+    val redactedSourceForTrace: String? = null,
+    val providerTemplate: PersistedProviderTemplate? = null,
+    val priority: Int = 0
 )
 
 data class ArtworkAssetRecord(
