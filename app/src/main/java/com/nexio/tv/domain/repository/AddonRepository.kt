@@ -9,8 +9,13 @@ interface AddonRepository {
     fun getInstalledAddons(): Flow<List<Addon>>
     suspend fun getCachedInstalledAddons(): List<Addon>
     suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon>
-    suspend fun addAddon(url: String, parserPreset: AddonParserPreset = AddonParserPreset.GENERIC)
+    suspend fun addAddon(
+        url: String,
+        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        isAnime: Boolean = false,
+    )
     suspend fun removeAddon(url: String)
     suspend fun setAddonOrder(urls: List<String>)
     suspend fun updateAddonParserPreset(url: String, parserPreset: AddonParserPreset)
+    suspend fun updateAddonIsAnime(url: String, isAnime: Boolean)
 }

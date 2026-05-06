@@ -31,6 +31,16 @@ data class AnimeIdentityLookup(
 
 interface AnimeIdentityIndex {
     suspend fun resolveKitsuId(id: ParsedMetadataId): String?
+
+    /**
+     * Returns true when the parsed metadata ID identifies anime content.
+     *
+     * The default delegates to [resolveKitsuId] for back-compat. Future one-to-many
+     * mappings can override this without choosing a canonical Kitsu record.
+     *
+     * Do not use this as input to MetadataRouter routing decisions.
+     */
+    suspend fun isAnime(id: ParsedMetadataId): Boolean = resolveKitsuId(id) != null
 }
 
 @Singleton

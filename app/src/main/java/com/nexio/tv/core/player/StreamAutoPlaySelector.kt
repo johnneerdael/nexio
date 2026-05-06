@@ -28,11 +28,14 @@ object StreamAutoPlaySelector {
     ): List<AddonStreams> {
         if (streams.isEmpty()) return streams
 
-        return streams.sortedBy { addonStreams ->
-            installedOrder.indexOf(addonStreams.addonName).let { index ->
-                if (index >= 0) index else Int.MAX_VALUE
-            }
-        }
+        return streams.sortedWith(
+            compareByDescending<AddonStreams> { it.isAnimeBucket }
+                .thenBy { addonStreams ->
+                    installedOrder.indexOf(addonStreams.addonName).let { index ->
+                        if (index >= 0) index else Int.MAX_VALUE
+                    }
+                }
+        )
     }
 
     private fun resolvePlayableUrl(stream: Stream): String? {

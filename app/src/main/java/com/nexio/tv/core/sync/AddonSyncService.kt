@@ -53,7 +53,7 @@ class AddonSyncService @Inject constructor(
             }
             val localAddons = addonPreferences.installedAddons.first()
             val parsedAddons = localAddons.mapNotNull { addon ->
-                runCatching { parseStoredAddonInstallUrl(addon.url) to addon.parserPreset }
+                runCatching { Triple(parseStoredAddonInstallUrl(addon.url), addon.parserPreset, addon.isAnime) }
                     .onFailure { error ->
                         Log.w(TAG, "pushToRemote: dropping malformed local addon URL=${addon.url}", error)
                     }
@@ -61,7 +61,7 @@ class AddonSyncService @Inject constructor(
             }
             Log.d(TAG, "pushToRemote: localAddons count=${localAddons.size} valid=${parsedAddons.size}")
 
-            parsedAddons.forEach { (parsed, _) ->
+            parsedAddons.forEach { (parsed, _, _) ->
                 val secretPayload = parsed.secretPayload
                 val secretRef = parsed.secretRef
                 if (secretPayload != null && !secretRef.isNullOrBlank()) {
@@ -118,11 +118,12 @@ class AddonSyncService @Inject constructor(
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
                     parsedAddons.forEachIndexed { index, addon ->
-                        val (parsedAddon, parserPreset) = addon
+                        val (parsedAddon, parserPreset, isAnime) = addon
                         addJsonObject {
                             put("url", parsedAddon.publicBaseUrl)
                             put("manifest_url", parsedAddon.manifestUrl)
                             put("parser_preset", parserPreset.name)
+                            put("is_anime", isAnime)
                             put("public_query_params", Json.encodeToJsonElement(MapSerializer(String.serializer(), String.serializer()), parsedAddon.publicQueryParams))
                             put("install_kind", parsedAddon.installKind)
                             parsedAddon.secretRef?.let { put("secret_ref", it) }
@@ -168,7 +169,8 @@ class AddonSyncService @Inject constructor(
                             url = resolvedUrl,
                             parserPreset = runCatching {
                                 enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
-                            }.getOrDefault(AddonParserPreset.GENERIC)
+                            }.getOrDefault(AddonParserPreset.GENERIC),
+                            isAnime = addon.isAnime
                         )
                     }
             )

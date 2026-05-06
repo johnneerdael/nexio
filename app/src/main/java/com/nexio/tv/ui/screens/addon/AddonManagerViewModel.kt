@@ -145,6 +145,12 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
+    fun updateAddonIsAnime(baseUrl: String, isAnime: Boolean) {
+        viewModelScope.launch {
+            addonRepository.updateAddonIsAnime(baseUrl, isAnime)
+        }
+    }
+
     fun moveAddonUp(baseUrl: String) {
         reorderAddon(baseUrl, -1)
     }

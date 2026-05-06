@@ -50,10 +50,11 @@ class AndroidTvNativeSearchContractTest {
         override fun getInstalledAddons(): Flow<List<Addon>> = flowOf(listOf(addon()))
         override suspend fun getCachedInstalledAddons(): List<Addon> = listOf(addon())
         override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> = NetworkResult.Success(addon())
-        override suspend fun addAddon(url: String, parserPreset: AddonParserPreset) = Unit
+        override suspend fun addAddon(url: String, parserPreset: AddonParserPreset, isAnime: Boolean) = Unit
         override suspend fun removeAddon(url: String) = Unit
         override suspend fun setAddonOrder(urls: List<String>) = Unit
         override suspend fun updateAddonParserPreset(url: String, parserPreset: AddonParserPreset) = Unit
+        override suspend fun updateAddonIsAnime(url: String, isAnime: Boolean) = Unit
     }
 
     private class SingleCatalogRepository : CatalogRepository {
