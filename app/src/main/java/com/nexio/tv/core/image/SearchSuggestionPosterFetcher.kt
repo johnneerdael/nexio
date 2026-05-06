@@ -11,6 +11,7 @@ import java.io.Closeable
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import okio.Path.Companion.toOkioPath
 
 class SearchSuggestionPosterFetcher(
@@ -20,7 +21,13 @@ class SearchSuggestionPosterFetcher(
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
         val url = registry.resolve(model) ?: return null
-        val result = runCatching { transport.execute(url) }.getOrNull() ?: return null
+        val result = try {
+            transport.execute(url)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            return null
+        }
         val bytes = result.body?.takeIf { result.isSuccessful } ?: return null
         return SourceResult(
             source = createTempFileSource(bytes),

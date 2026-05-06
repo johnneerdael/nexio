@@ -875,6 +875,8 @@ private fun ImdbSuggestionDropdown(
                                     coil.compose.AsyncImage(
                                         model = coil.request.ImageRequest.Builder(LocalContext.current)
                                             .data(posterModel)
+                                            .memoryCacheKey(posterModel.key)
+                                            .diskCacheKey(posterModel.key)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = null,

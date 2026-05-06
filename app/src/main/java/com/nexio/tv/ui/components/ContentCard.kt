@@ -55,6 +55,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
@@ -71,6 +72,61 @@ import kotlinx.coroutines.delay
 private const val BACKDROP_ASPECT_RATIO = 16f / 9f
 private const val TRAILER_PREVIEW_REQUEST_FOCUS_DEBOUNCE_MS = 140L
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
+
+internal data class ContentCardArtworkSelection(
+    val model: Any?,
+    val diskCacheKey: String?
+)
+
+internal fun resolveContentCardArtworkSelection(
+    item: MetaPreview,
+    expandedBackdropRequested: Boolean
+): ContentCardArtworkSelection {
+    val displayPoster = item.displayPoster
+    val displayBackground = item.displayBackground
+    val selectedArtworkRef = if (expandedBackdropRequested) {
+        item.artwork?.backdrop ?: item.artwork?.poster
+    } else {
+        item.artwork?.poster
+    }
+    val selectedArtworkFallback = if (expandedBackdropRequested) {
+        displayBackground ?: displayPoster
+    } else {
+        displayPoster
+    }
+    val model = selectedArtworkRef.toCoilModelOrNull()
+        ?: selectedArtworkFallback.toSafeArtworkCoilModelOrNull()
+    val modelKey = model?.toString()
+    val selectedType = selectedArtworkRef?.imageType
+        ?: fallbackArtworkType(
+            expandedBackdropRequested = expandedBackdropRequested,
+            displayBackground = displayBackground,
+            selectedArtworkFallback = selectedArtworkFallback
+        )
+    val diskKey = when (selectedType) {
+        ArtworkType.BACKDROP -> ArtworkImageCacheKeys.backdrop(item.id)
+        else -> ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, modelKey)
+    }
+    return ContentCardArtworkSelection(
+        model = model,
+        diskCacheKey = diskKey
+    )
+}
+
+private fun fallbackArtworkType(
+    expandedBackdropRequested: Boolean,
+    displayBackground: String?,
+    selectedArtworkFallback: String?
+): ArtworkType =
+    if (
+        expandedBackdropRequested &&
+        selectedArtworkFallback != null &&
+        selectedArtworkFallback == displayBackground
+    ) {
+        ArtworkType.BACKDROP
+    } else {
+        ArtworkType.POSTER
+    }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -204,34 +260,26 @@ fun ContentCard(
         val requestHeightPx = remember(baseCardHeight, density) {
             with(density) { baseCardHeight.roundToPx() }
         }
-        val displayPoster = item.displayPoster
-        val displayBackground = item.displayBackground
-        val selectedArtworkRef = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-            item.artwork?.backdrop ?: item.artwork?.poster
-        } else {
-            item.artwork?.poster
-        }
-        val selectedArtworkFallback = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-            displayBackground ?: displayPoster
-        } else {
-            displayPoster
-        }
-        val coilModel = selectedArtworkRef.toCoilModelOrNull()
-            ?: selectedArtworkFallback.toSafeArtworkCoilModelOrNull()
+        val artworkSelection = resolveContentCardArtworkSelection(
+            item = item,
+            expandedBackdropRequested = focusedPosterBackdropExpandEnabled && isBackdropExpanded
+        )
+        val coilModel = artworkSelection.model
         val hasArtworkModel = coilModel != null
-        val imageModel = remember(coilModel, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+        val imageModel = remember(
+            coilModel,
+            artworkSelection.diskCacheKey,
+            requestWidthPx,
+            requestHeightPx,
+            item.id,
+            item.posterProviderTag
+        ) {
             val modelKey = coilModel?.toString()
-            val isBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded
-            val diskKey = if (isBackdrop) {
-                ArtworkImageCacheKeys.backdrop(item.id)
-            } else {
-                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, modelKey)
-            }
             ImageRequest.Builder(context)
                 .data(coilModel)
                 .crossfade(false)
                 .memoryCacheKey("${modelKey}_${requestWidthPx}x${requestHeightPx}")
-                .diskCacheKey(diskKey)
+                .apply { artworkSelection.diskCacheKey?.let(::diskCacheKey) }
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
         }

@@ -17,6 +17,7 @@ import com.nexio.tv.core.image.IntegrationPosterFetcher
 import com.nexio.tv.core.image.ImageCacheTtlWorker
 import com.nexio.tv.core.image.NexioArtworkFetcher
 import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
+import com.nexio.tv.core.image.SearchSuggestionPosterKeyer
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.sync.StartupSyncService
@@ -78,6 +79,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
                 add(nexioArtworkFetcherFactory())
                 add(integrationPosterFetcherFactory)
                 add(searchSuggestionPosterFetcherFactory)
+                add(SearchSuggestionPosterKeyer())
             }
             .memoryCache {
                 MemoryCache.Builder(this)
