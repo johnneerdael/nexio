@@ -2,6 +2,11 @@ package com.nexio.tv
 
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
+import com.nexio.tv.core.metadata.router.resolver.TrailerAvailability
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.ui.navigation.Screen
 import com.nexio.tv.ui.screensaver.IdleScreensaverPresentationMode
@@ -243,30 +248,39 @@ class MainActivityIdleScreensaverTest {
             trailerIds = emptyList(),
             stableIds = ProviderIds(tvdb = "81189", tmdb = "1396", imdb = "tt0903747", kitsu = "7442")
         )
-        val requests = mutableListOf<IdleTrailerResolverRequest>()
+        val requests = mutableListOf<TrailerResolveRequest>()
 
         val source = resolveIdleTrailerScreensaverPlaybackSource(
             candidate = candidate,
-            trailerId = RESOLVE_TRAILER_BY_ITEM_SENTINEL
-        ) { request ->
-            requests += request
-            TrailerResolutionResult.Playback(
-                TrailerPlaybackSource(videoUrl = "https://video.example.com/breaking-bad.m3u8")
-            )
-        }
+            trailerId = RESOLVE_TRAILER_BY_ITEM_SENTINEL,
+            resolveTrailer = { request ->
+                requests += request
+                TrailerResolution(
+                    availability = TrailerAvailability(available = true, reason = "provider_candidate"),
+                    candidates = listOf(TrailerPlaybackRef.InAppSource("https://video.example.com/breaking-bad.m3u8")),
+                    selected = TrailerPlaybackRef.InAppSource("https://video.example.com/breaking-bad.m3u8"),
+                    trace = emptyList()
+                )
+            },
+            resolvePlaybackSource = { ref ->
+                require(ref is TrailerPlaybackRef.InAppSource)
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(videoUrl = "https://video.example.com/breaking-bad.m3u8")
+                )
+            }
+        )
 
         assertEquals("https://video.example.com/breaking-bad.m3u8", source?.videoUrl)
         assertEquals(
-            IdleTrailerResolverRequest(
-                title = "Example source:breaking-bad",
-                year = "2024",
-                tmdbId = "1396",
-                type = "movie",
-                contentId = "tvdb:81189",
-                fallbackYtIds = emptyList()
-            ),
-            requests.single()
+            "Example source:breaking-bad",
+            requests.single().title
         )
+        assertEquals("2024", requests.single().year)
+        assertEquals(ProviderIds(tvdb = "81189", tmdb = "1396", imdb = "tt0903747", kitsu = "7442"), requests.single().stableIds)
+        assertEquals("movie", requests.single().type)
+        assertEquals("tvdb:81189", requests.single().contentId)
+        assertEquals(emptyList<String>(), requests.single().fallbackYtIds)
+        assertEquals(TrailerSurface.SCREENSAVER, requests.single().surface)
     }
 
     @Test
@@ -276,21 +290,33 @@ class MainActivityIdleScreensaverTest {
             trailerIds = listOf("abc123def45"),
             stableIds = ProviderIds(tmdb = "550")
         )
-        val requests = mutableListOf<IdleTrailerResolverRequest>()
+        val requests = mutableListOf<TrailerResolveRequest>()
+        val playbackRefs = mutableListOf<TrailerPlaybackRef>()
 
         resolveIdleTrailerScreensaverPlaybackSource(
             candidate = candidate,
-            trailerId = "abc123def45"
-        ) { request ->
-            requests += request
-            TrailerResolutionResult.Playback(
-                TrailerPlaybackSource(videoUrl = "https://video.example.com/movie.m3u8")
-            )
-        }
+            trailerId = "abc123def45",
+            resolveTrailer = { request ->
+                requests += request
+                TrailerResolution(
+                    availability = TrailerAvailability(available = true, reason = "fallback_youtube_id"),
+                    candidates = listOf(TrailerPlaybackRef.YouTubeId("abc123def45")),
+                    selected = TrailerPlaybackRef.YouTubeId("abc123def45"),
+                    trace = emptyList()
+                )
+            },
+            resolvePlaybackSource = { ref ->
+                playbackRefs += ref
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(videoUrl = "https://video.example.com/movie.m3u8")
+                )
+            }
+        )
 
         assertEquals(listOf("abc123def45"), requests.single().fallbackYtIds)
         assertFalse(requests.single().fallbackYtIds.single().startsWith("https://www.youtube.com/watch"))
         assertEquals("tmdb:550", requests.single().contentId)
+        assertEquals(TrailerPlaybackRef.YouTubeId("abc123def45"), playbackRefs.single())
     }
 
     private fun buildTrailerCandidate(itemId: String): IdleTrailerScreensaverCandidate {

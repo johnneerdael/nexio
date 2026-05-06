@@ -8,7 +8,11 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -320,24 +324,36 @@ class MetadataRouterFacade(
             seasonNumber = seasonNumber ?: metadataRequest.seasonNumber
         )
         val resolution = resolveRequest(trailerRequest)
-        return resolution.providerRunResult?.toLegacyTrailerResolutionOrNull()
-            // Temporary Packet E compatibility boundary: callers go through the facade/provider-plan
-            // owner first. Until trailer playback is fully resolver-owned, the facade owns this legacy
-            // TrailerService fallback so UI ViewModels do not depend on trailer sidecars directly.
-            ?: trailerService?.resolveTrailer(
+        val trailerResolution = resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = contentId ?: metadataRequest.contentId,
                 title = title,
                 year = year,
-                tmdbId = tmdbId,
+                stableIds = ProviderIds(
+                    tmdb = tmdbId?.trim()?.takeIf { it.isNotBlank() }
+                ),
+                fallbackYtIds = fallbackYtIds,
+                surface = TrailerSurface.DETAIL,
                 type = type,
                 seasonNumber = seasonNumber,
-                contentId = contentId,
-                fallbackYtIds = fallbackYtIds
+                contentId = contentId ?: metadataRequest.contentId,
+                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs()
             )
-            ?: fallbackYtIds.firstNotNullOfOrNull { ytId ->
-                ytId.trim().takeIf { it.isNotBlank() }?.let { youtubeId ->
-                    TrailerResolutionResult.External("https://www.youtube.com/watch?v=$youtubeId")
-                }
-            }
+        )
+        return trailerResolution.selected?.let { ref ->
+            trailerService?.resolvePlaybackSource(
+                ref = ref,
+                title = title,
+                year = year
+            ) ?: ref.toLegacyTrailerResolutionWithoutTransport()
+        }
+    }
+
+    fun resolveTrailer(request: TrailerResolveRequest): TrailerResolution {
+        val resolver = checkNotNull(trailerResolver) {
+            "resolveTrailer requires a configured trailer resolver"
+        }
+        return resolver.resolveTrailer(request)
     }
 
     suspend fun fetchTitleMediaAvailability(
@@ -347,16 +363,21 @@ class MetadataRouterFacade(
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): Boolean {
-        val service = checkNotNull(trailerService) {
-            "fetchTitleMediaAvailability requires a configured trailer playback resolver"
-        }
-        resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_MEDIA))
-        return service.getTitleMediaAvailability(
-            tmdbId = tmdbId,
-            type = type,
-            contentId = contentId,
-            fallbackYtIds = fallbackYtIds
-        )
+        val resolution = resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_MEDIA))
+        return resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = contentId ?: metadataRequest.contentId,
+                title = metadataRequest.contentId,
+                stableIds = ProviderIds(
+                    tmdb = tmdbId?.trim()?.takeIf { it.isNotBlank() }
+                ),
+                fallbackYtIds = fallbackYtIds,
+                surface = TrailerSurface.DETAIL,
+                type = type,
+                contentId = contentId ?: metadataRequest.contentId,
+                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs()
+            )
+        ).availability.available
     }
 
     internal suspend fun fetchSeasonMediaAvailability(
@@ -367,7 +388,7 @@ class MetadataRouterFacade(
         contentId: String? = null
     ): SeasonMediaAvailability {
         val service = checkNotNull(trailerService) {
-            "fetchSeasonMediaAvailability requires a configured trailer playback resolver"
+            "fetchSeasonMediaAvailability requires a configured trailer playback adapter"
         }
         resolveRequest(
             metadataRequest.copy(
@@ -404,7 +425,7 @@ class MetadataRouterFacade(
         contentId: String? = null
     ): TrailerPlaybackSource? {
         val service = checkNotNull(trailerService) {
-            "fetchSeasonTrailer requires a configured trailer playback resolver"
+            "fetchSeasonTrailer requires a configured trailer playback adapter"
         }
         // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
         resolveRequest(metadataRequest)
@@ -437,7 +458,7 @@ class MetadataRouterFacade(
         contentId: String? = null
     ): TrailerPlaybackSource? {
         val service = checkNotNull(trailerService) {
-            "fetchSeasonRecap requires a configured trailer playback resolver"
+            "fetchSeasonRecap requires a configured trailer playback adapter"
         }
         // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
         resolveRequest(metadataRequest)
@@ -1057,9 +1078,9 @@ class MetadataRouterFacade(
                 }
             }
 
-    private fun ProviderPlanRunResult.toLegacyTrailerResolutionOrNull(): TrailerResolutionResult? =
+    private fun ProviderPlanRunResult?.toTrailerPlaybackRefs(): List<TrailerPlaybackRef> =
         toFieldValues(ResolvedField.TRAILERS)
-            .firstNotNullOfOrNull(::legacyTrailerResultFrom)
+            .flatMap(::trailerPlaybackRefsFrom)
 
     private fun ProviderPlanRunResult?.toLegacyPersonIdOrNull(): Int? =
         (
@@ -1124,21 +1145,56 @@ class MetadataRouterFacade(
             ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(field)?.value }
             .orEmpty()
 
-    private fun legacyTrailerResultFrom(value: Any?): TrailerResolutionResult? =
+    private fun trailerPlaybackRefsFrom(value: Any?): List<TrailerPlaybackRef> =
         when (value) {
-            is TrailerResolutionResult -> value
-            is TrailerPlaybackSource -> TrailerResolutionResult.Playback(value)
-            is TmdbVideoResult -> value.toLegacyTrailerResult()
-            is String -> value.trim().takeIf { it.isNotBlank() }?.let(TrailerResolutionResult::External)
-            is Collection<*> -> value.firstNotNullOfOrNull(::legacyTrailerResultFrom)
-            else -> null
+            is TrailerResolutionResult -> listOf(value.toTrailerPlaybackRef())
+            is TrailerPlaybackSource -> listOf(value.toTrailerPlaybackRef())
+            is TmdbVideoResult -> listOfNotNull(value.toTrailerPlaybackRef())
+            is String -> listOfNotNull(value.toTrailerPlaybackRef())
+            is Collection<*> -> value.flatMap(::trailerPlaybackRefsFrom)
+            else -> emptyList()
         }
 
-    private fun TmdbVideoResult.toLegacyTrailerResult(): TrailerResolutionResult? {
+    private fun TrailerResolutionResult.toTrailerPlaybackRef(): TrailerPlaybackRef =
+        when (this) {
+            is TrailerResolutionResult.Playback -> source.toTrailerPlaybackRef()
+            is TrailerResolutionResult.External -> TrailerPlaybackRef.ExternalUrl(url)
+        }
+
+    private fun TrailerPlaybackSource.toTrailerPlaybackRef(): TrailerPlaybackRef =
+        TrailerPlaybackRef.InAppSource(
+            videoUrl = videoUrl,
+            audioUrl = audioUrl,
+            userAgent = userAgent
+        )
+
+    private fun TmdbVideoResult.toTrailerPlaybackRef(): TrailerPlaybackRef? {
         if (!(site ?: "").equals("YouTube", ignoreCase = true)) return null
         val youtubeId = key?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return TrailerResolutionResult.External("https://www.youtube.com/watch?v=$youtubeId")
+        return TrailerPlaybackRef.YouTubeId(youtubeId)
     }
+
+    private fun String.toTrailerPlaybackRef(): TrailerPlaybackRef? {
+        val normalized = trim().takeIf { it.isNotBlank() } ?: return null
+        return if ("://" in normalized) {
+            TrailerPlaybackRef.ExternalUrl(normalized)
+        } else {
+            TrailerPlaybackRef.YouTubeId(normalized)
+        }
+    }
+
+    private fun TrailerPlaybackRef.toLegacyTrailerResolutionWithoutTransport(): TrailerResolutionResult? =
+        when (this) {
+            is TrailerPlaybackRef.ExternalUrl -> TrailerResolutionResult.External(url)
+            is TrailerPlaybackRef.InAppSource -> TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(
+                    videoUrl = videoUrl,
+                    audioUrl = audioUrl,
+                    userAgent = userAgent
+                )
+            )
+            is TrailerPlaybackRef.YouTubeId -> null
+        }
 
     private fun String.tmdbNumericSuffix(): Int? =
         substringAfterLast(':').trim().toIntOrNull()

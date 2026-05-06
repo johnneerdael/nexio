@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import android.util.Log
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
@@ -35,7 +36,7 @@ import org.junit.Test
  * `MetadataRouterFacade.fetchTrailer(...)` (depth = DETAIL_MEDIA) so canonical
  * `metadata.route_decision` and `metadata.field_selected` trace events fire on
  * trailer button click, instead of bypassing the facade with a direct
- * `TrailerService.resolveTrailer(...)` invocation.
+ * trailer-service ownership path.
  *
  * Task 10 of the cluster-A facade-bypass migration. Pattern B (facade wrapper)
  * is required because `TrailerResolutionResult` carries player-ready playback
@@ -103,7 +104,7 @@ class MetaDetailsViewModelTrailerTest {
             trailerService.getSeasonMediaAvailability(any(), any(), any(), any())
         } returns SeasonMediaAvailability()
         coEvery {
-            trailerService.resolveTrailer(any(), any(), any(), any(), any(), any(), any())
+            trailerService.resolvePlaybackSource(any(), any(), any())
         } returns TrailerResolutionResult.Playback(
             source = TrailerPlaybackSource(videoUrl = "https://example.test/trailer.mp4")
         )
@@ -150,6 +151,13 @@ class MetaDetailsViewModelTrailerTest {
                 seasonNumber = any(),
                 contentId = any(),
                 fallbackYtIds = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            trailerService.resolvePlaybackSource(
+                TrailerPlaybackRef.YouTubeId("m8e-FF8MsqU"),
+                any(),
+                any()
             )
         }
     }

@@ -173,10 +173,6 @@ internal fun extractIdleTrailerReleaseYear(releaseInfo: String?): String? {
     return IdleTrailerYearRegex.find(releaseInfo)?.value
 }
 
-internal fun buildIdleTrailerYouTubeUrl(trailerId: String): String {
-    return "https://www.youtube.com/watch?v=${trailerId.trim()}"
-}
-
 internal fun idleTrailerPlaybackKey(
     candidate: IdleTrailerScreensaverCandidate,
     trailerId: String

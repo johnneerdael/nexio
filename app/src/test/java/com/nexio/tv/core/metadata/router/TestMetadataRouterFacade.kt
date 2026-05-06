@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
@@ -24,9 +25,10 @@ fun testMetadataRouterFacade(
     // TmdbMetadataService directly and must not call tvMetadataRouter.fetchEnrichment().
     // When it is null (home path), movie routes need fetchEnrichment() to get TMDB-backed enrichment.
     val callFetchEnrichmentForMovieRoutes = metadataSecondaryRepository == null
+    val traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
     return MetadataRouterFacade(
         router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
+            normalizer = MetadataRequestNormalizer(traceEvents = traceEvents),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore()
         ),
@@ -55,7 +57,8 @@ fun testMetadataRouterFacade(
                 .toSet()
         ),
         fieldResolver = FieldResolver(),
-        trailerService = trailerService
+        trailerService = trailerService,
+        trailerResolver = TrailerResolver(traceEvents)
     )
 }
 

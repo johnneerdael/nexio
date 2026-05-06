@@ -3,6 +3,7 @@ package com.nexio.tv.data.trailer
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
@@ -423,6 +424,45 @@ class TrailerService(
         ) {
             is TrailerResolutionResult.Playback -> result.source
             else -> null
+        }
+    }
+
+    suspend fun resolvePlaybackSource(
+        ref: TrailerPlaybackRef,
+        title: String? = null,
+        year: String? = null
+    ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        when (ref) {
+            is TrailerPlaybackRef.YouTubeId -> {
+                val videoId = ref.videoId.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                resolveYouTubeTrailer(
+                    youtubeUrl = buildYouTubeWatchUrl(videoId),
+                    title = title,
+                    year = year
+                )
+            }
+            is TrailerPlaybackRef.ExternalUrl -> {
+                val url = ref.url.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                if (extractYouTubeVideoId(url) != null) {
+                    resolveYouTubeTrailer(
+                        youtubeUrl = url,
+                        title = title,
+                        year = year
+                    ) ?: TrailerResolutionResult.External(url)
+                } else {
+                    TrailerResolutionResult.External(url)
+                }
+            }
+            is TrailerPlaybackRef.InAppSource -> {
+                val videoUrl = ref.videoUrl.trim().takeIf { it.isNotBlank() } ?: return@withContext null
+                TrailerResolutionResult.Playback(
+                    TrailerPlaybackSource(
+                        videoUrl = videoUrl,
+                        audioUrl = ref.audioUrl?.trim()?.takeIf { it.isNotBlank() },
+                        userAgent = ref.userAgent?.trim()?.takeIf { it.isNotBlank() }
+                    )
+                )
+            }
         }
     }
 
@@ -905,6 +945,9 @@ class TrailerService(
 
         null
     }
+
+    private fun buildYouTubeWatchUrl(videoId: String): String =
+        "https://www.youtube.com/watch?v=${videoId.trim()}"
 
     private suspend fun resolveLatestAiredSeasonNumber(
         tmdbId: Int,
