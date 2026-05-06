@@ -257,7 +257,7 @@ class MetaDetailsSeasonMediaViewModelTest {
                 contentId = any()
             )
         }
-        coVerify(exactly = 1) {
+        coVerify(atLeast = 1) {
             trailerService.getSeasonTrailerPlaybackSource(
                 title = any(),
                 year = any(),
@@ -692,10 +692,13 @@ class MetaDetailsSeasonMediaViewModelTest {
                 seasonNumber = 2,
                 contentId = any()
             )
-        } returns TrailerPlaybackSource(
-            videoUrl = "https://example.com/season-trailer.m3u8",
-            audioUrl = "https://example.com/season-trailer-audio.m4a"
-        )
+        } coAnswers {
+            seasonAvailabilityGate.await()
+            TrailerPlaybackSource(
+                videoUrl = "https://example.com/season-trailer.m3u8",
+                audioUrl = "https://example.com/season-trailer-audio.m4a"
+            )
+        }
 
         val viewModel = buildViewModel(trailerService)
         advanceUntilIdle()
@@ -764,10 +767,13 @@ class MetaDetailsSeasonMediaViewModelTest {
                 seasonNumber = 2,
                 contentId = any()
             )
-        } returns TrailerPlaybackSource(
-            videoUrl = "https://example.com/season-recap.m3u8",
-            audioUrl = "https://example.com/season-recap-audio.m4a"
-        )
+        } coAnswers {
+            seasonAvailabilityGate.await()
+            TrailerPlaybackSource(
+                videoUrl = "https://example.com/season-recap.m3u8",
+                audioUrl = "https://example.com/season-recap-audio.m4a"
+            )
+        }
 
         val viewModel = buildViewModel(trailerService)
         advanceUntilIdle()
@@ -878,6 +884,26 @@ class MetaDetailsSeasonMediaViewModelTest {
             hasTrailerOrTeaser = true,
             hasRecap = true
         )
+        coEvery {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns TrailerPlaybackSource(videoUrl = "https://example.com/season-trailer.m3u8")
+        coEvery {
+            trailerService.getSeasonRecapPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns TrailerPlaybackSource(videoUrl = "https://example.com/season-recap.m3u8")
         val viewModel = buildViewModel(trailerService)
         advanceUntilIdle()
         viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(2))
@@ -887,7 +913,9 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertTrue(availability?.hasTrailerOrTeaser == true)
         assertTrue(availability?.hasRecap == true)
         coVerify(atLeast = 1) {
-            trailerService.getSeasonMediaAvailability(
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
                 tmdbId = any(),
                 type = any(),
                 seasonNumber = 2,

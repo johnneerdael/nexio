@@ -543,7 +543,8 @@ internal fun buildCatalogItem(
     row: CatalogRow,
     useLandscapePosters: Boolean,
     occurrence: Int,
-    previousCachedItem: ModernCarouselItem? = null
+    previousCachedItem: ModernCarouselItem? = null,
+    selectedTrailerFallbackYtId: String? = null
 ): ModernCarouselItem {
     val displayMetadata = item.toFirstPaintHomeDisplayMetadata()
     val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
@@ -589,7 +590,7 @@ internal fun buildCatalogItem(
             trailerTitle = displayMetadata.title ?: item.name,
             trailerReleaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
             trailerApiType = item.apiType,
-            fallbackTrailerYtId = item.trailerYtIds.firstOrNull()
+            fallbackTrailerYtId = selectedTrailerFallbackYtId
         ),
         metaPreview = item
     )

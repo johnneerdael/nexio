@@ -3,6 +3,7 @@ package com.nexio.tv.domain.model
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 
 @Immutable
 data class ResolvedDisplayItem(
@@ -38,6 +39,9 @@ data class ResolvedDisplayFields(
 @Immutable
 data class TrailerDisplayState(
     val fallbackTrailerYtIds: List<String> = emptyList(),
+    val selectedPlaybackRef: TrailerPlaybackRef? = null,
+    val availabilityReason: String? = null,
+    val surface: String? = null,
     val resolverSource: String? = null,
     val lastResolvedAtMs: Long? = null
 )

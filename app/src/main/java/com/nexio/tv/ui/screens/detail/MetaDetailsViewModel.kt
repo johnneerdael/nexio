@@ -14,6 +14,9 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.PaginationCursor
 import com.nexio.tv.core.metadata.router.ReviewsPage
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
@@ -794,13 +797,26 @@ class MetaDetailsViewModel @Inject constructor(
         calculateNextToWatch()
     }
 
-    private fun applyTitleTrailerAvailabilityFromFallbackRefs(fallbackTrailerYtIds: List<String>) {
+    private fun applyTitleTrailerAvailabilityFromFallbackRefs(meta: Meta, fallbackTrailerYtIds: List<String>) {
+        val resolution = metadataRouterFacade.resolveTrailer(
+            TrailerResolveRequest(
+                itemKey = "${meta.apiType.trim().lowercase()}:${meta.id}",
+                title = meta.name,
+                year = meta.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                fallbackYtIds = fallbackTrailerYtIds,
+                surface = TrailerSurface.DETAIL,
+                type = meta.apiType,
+                contentId = meta.id
+            )
+        )
         _uiState.update { state ->
             val trailerState = state.trailerState.copy(
-                fallbackTrailerYtIds = state.trailerState.fallbackTrailerYtIds
-                    .ifEmpty { fallbackTrailerYtIds }
+                fallbackTrailerYtIds = listOfNotNull((resolution.selected as? TrailerPlaybackRef.YouTubeId)?.videoId),
+                selectedPlaybackRef = resolution.selected,
+                availabilityReason = resolution.availability.reason,
+                surface = TrailerSurface.DETAIL.name.lowercase()
             )
-            val available = trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
+            val available = resolution.availability.available
             state.copy(
                 trailerState = trailerState,
                 titleHasPlayableTrailerMedia = available,
@@ -818,11 +834,34 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun applyResolvedDetailState(document: ResolvedDetailDisplayDocument) {
         _uiState.update { state ->
+            val fallbackYtIds = document.trailer.fallbackTrailerYtIds
+                .ifEmpty { state.meta?.trailerYtIds.orEmpty() }
+            val fallbackResolution = if (document.trailer.selectedPlaybackRef == null && fallbackYtIds.isNotEmpty()) {
+                state.meta?.let { meta ->
+                    metadataRouterFacade.resolveTrailer(
+                        TrailerResolveRequest(
+                            itemKey = "${meta.apiType.trim().lowercase()}:${meta.id}",
+                            title = meta.name,
+                            year = meta.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                            fallbackYtIds = fallbackYtIds,
+                            surface = TrailerSurface.DETAIL,
+                            type = meta.apiType,
+                            contentId = meta.id
+                        )
+                    )
+                }
+            } else {
+                null
+            }
             val trailerState = document.trailer.copy(
-                fallbackTrailerYtIds = document.trailer.fallbackTrailerYtIds
-                    .ifEmpty { state.meta?.trailerYtIds.orEmpty() }
+                fallbackTrailerYtIds = listOfNotNull(
+                    ((document.trailer.selectedPlaybackRef ?: fallbackResolution?.selected) as? TrailerPlaybackRef.YouTubeId)?.videoId
+                ),
+                selectedPlaybackRef = document.trailer.selectedPlaybackRef ?: fallbackResolution?.selected,
+                availabilityReason = document.trailer.availabilityReason ?: fallbackResolution?.availability?.reason,
+                surface = document.trailer.surface ?: TrailerSurface.DETAIL.name.lowercase()
             )
-            val hasFallbackTrailerRef = trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
+            val hasFallbackTrailerRef = trailerState.selectedPlaybackRef != null
             state.copy(
                 resolvedDetail = document,
                 trailerState = trailerState,
@@ -2045,7 +2084,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun preloadTitleTrailerAvailability(meta: Meta) {
         val fallbackYtIds = _uiState.value.trailerState.fallbackTrailerYtIds.ifEmpty { meta.trailerYtIds }
         if (fallbackYtIds.any { it.isNotBlank() }) {
-            applyTitleTrailerAvailabilityFromFallbackRefs(fallbackYtIds)
+            applyTitleTrailerAvailabilityFromFallbackRefs(meta, fallbackYtIds)
             return
         }
 

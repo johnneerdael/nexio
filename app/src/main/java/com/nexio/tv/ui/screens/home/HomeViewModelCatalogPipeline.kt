@@ -2843,8 +2843,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         applyHomeSnapshotToUiPipeline(transientSnapshot)
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
             rows = _uiState.value.catalogRows,
-            overlaysByItemKey = currentHydratedHomeOverlays
+            overlaysByItemKey = currentHydratedHomeOverlays,
+            resolveTrailer = metadataRouterFacade::resolveTrailer
         )
+        syncHomeTrailerAvailabilityFromResolvedItems(resolvedItemsForSurface)
         resolvedDisplaySurfaceRepository.publishResolvedItems(
             surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
             profileSession = profileSessionForSurface,

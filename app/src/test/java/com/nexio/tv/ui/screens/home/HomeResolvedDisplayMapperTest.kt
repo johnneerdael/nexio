@@ -6,6 +6,10 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -156,6 +160,33 @@ class HomeResolvedDisplayMapperTest {
         ).single()
 
         assertEquals(emptyList<String>(), resolved.trailer.fallbackTrailerYtIds)
+    }
+
+    @Test
+    fun `mapper publishes home trailer state only from resolver selected refs`() {
+        val finalItem = preview(
+            id = "tmdb:550",
+            title = "Final Home Title",
+            overview = "Final Home Overview",
+            rating = null,
+            artwork = ArtworkBundle(),
+            trailerYtIds = listOf(" trailer-a ")
+        )
+        val resolver = TrailerResolver(
+            TraceMetadataEvents(RecordingTraceSink(), sessionId = { "s1" })
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(finalItem)),
+            overlaysByItemKey = emptyMap(),
+            nowMs = 10_000L,
+            resolveTrailer = resolver::resolveTrailer
+        ).single()
+
+        assertEquals(listOf("trailer-a"), resolved.trailer.fallbackTrailerYtIds)
+        assertEquals(TrailerPlaybackRef.YouTubeId("trailer-a"), resolved.trailer.selectedPlaybackRef)
+        assertEquals("fallback_youtube_id", resolved.trailer.availabilityReason)
+        assertEquals("home", resolved.trailer.surface)
     }
 
     private fun preview(
