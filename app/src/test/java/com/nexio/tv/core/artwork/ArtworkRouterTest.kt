@@ -37,6 +37,39 @@ class ArtworkRouterTest {
     }
 
     @Test
+    fun `rejected primary candidate records persisted fallback source material`() {
+        val primarySource = ArtworkSource.RemoteUrl.of(
+            rawUrl = SensitiveArtworkUrl.of("https://image.tmdb.org/t/p/w500/fallback.jpg"),
+            normalizedUrlHash = "fallbacksourcehash"
+        )
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    source = primarySource
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10
+                )
+            ),
+            policy = policy(topPostersPosterSettings())
+        )
+
+        val rejected = decision.rejectedCandidates.single()
+
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB), rejected.provider)
+        assertEquals(ArtworkSourceRole.PRIMARY, rejected.sourceRole)
+        assertEquals("fallbacksourcehash", rejected.sourceHash)
+        assertEquals("https://image.tmdb.org/t/p/w500/<redacted>", rejected.redactedSourceForTrace)
+        assertNull(rejected.providerTemplate)
+        assertEquals(20, rejected.priority)
+    }
+
+    @Test
     fun `current addon preview beats other rail preview when primary missing`() {
         val decision = router.select(
             candidates = listOf(
@@ -612,7 +645,8 @@ class ArtworkRouterTest {
         role: ArtworkSourceRole,
         priority: Int,
         providerIds: ProviderIds = ProviderIds(imdb = "tt0137523"),
-        imageType: ArtworkType = ArtworkType.POSTER
+        imageType: ArtworkType = ArtworkType.POSTER,
+        source: ArtworkSource? = null
     ): ArtworkCandidate =
         ArtworkCandidate(
             ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
@@ -621,18 +655,20 @@ class ArtworkRouterTest {
             imageType = imageType,
             provider = provider,
             sourceRole = role,
-            source = if (role == ArtworkSourceRole.PLACEHOLDER) {
-                ArtworkSource.Placeholder(PlaceholderType.POSTER)
-            } else {
-                ArtworkSource.ProviderTemplate(
-                    provider = provider,
-                    idType = "imdb",
-                    mediaId = "tt0137523",
-                    providerPathHash = null,
-                    settingsHash = null,
-                    credentialHash = null
-                )
-            },
+            source = source ?: (
+                if (role == ArtworkSourceRole.PLACEHOLDER) {
+                    ArtworkSource.Placeholder(PlaceholderType.POSTER)
+                } else {
+                    ArtworkSource.ProviderTemplate(
+                        provider = provider,
+                        idType = "imdb",
+                        mediaId = "tt0137523",
+                        providerPathHash = null,
+                        settingsHash = null,
+                        credentialHash = null
+                    )
+                }
+            ),
             priority = priority,
             requiresRuntimeFetch = true
         )

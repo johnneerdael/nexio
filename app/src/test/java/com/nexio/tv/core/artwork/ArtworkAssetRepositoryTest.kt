@@ -1,5 +1,6 @@
 package com.nexio.tv.core.artwork
 
+import com.google.gson.Gson
 import com.nexio.tv.core.integration.ArtworkApiShapes
 import com.nexio.tv.core.integration.ByteArrayIntegrationCodec
 import com.nexio.tv.core.integration.IntegrationCachePolicy
@@ -180,6 +181,79 @@ class ArtworkAssetRepositoryTest {
         assertEquals(ArtworkCacheKeys.assetKeyForProviderTemplate(decision.selectedCandidate.providerTemplate!!), result.assetKey)
         assertArrayEquals("decision-image".toByteArray(), result.localFile.readBytes())
         assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
+    }
+
+    @Test
+    fun `decision ref materializes from durable cache after repository restart`() = runTest {
+        val decisionFile = temp.newFile("decisions.json")
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+
+        DurableArtworkDecisionCache(decisionFile, Gson()).put(decision)
+
+        val restartedCache = DurableArtworkDecisionCache(decisionFile, Gson())
+        val runtime = LoadingIntegrationRuntime()
+        val repository = repository(
+            runtime = runtime,
+            cache = restartedCache,
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("after-restart".toByteArray())
+            }
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        assertArrayEquals("after-restart".toByteArray(), result!!.localFile.readBytes())
+        assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
+    }
+
+    @Test
+    fun `selected provider failure falls back to primary remote candidate`() = runTest {
+        val selected = rpdbTemplateDecision()
+        val fallback = remotePreviewCandidate()
+        val decision = selected.copy(
+            selectedCandidate = selected.selectedCandidate,
+            rejectedCandidates = selected.rejectedCandidates + RejectedArtworkCandidate(
+                provider = fallback.provider,
+                sourceRole = fallback.sourceRole,
+                reason = "available_fallback",
+                sourceHash = fallback.sourceHash,
+                redactedSourceForTrace = fallback.redactedSourceForTrace,
+                providerTemplate = fallback.providerTemplate,
+                priority = fallback.priority
+            )
+        )
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(decision)
+        val runtime = LoadingIntegrationRuntime()
+        var loadCount = 0
+        val repository = repository(
+            runtime = runtime,
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(
+                mapOf(
+                    requireNotNull(fallback.sourceHash) to
+                        SensitiveArtworkUrl.of("https://image.tmdb.org/t/p/w500/fallback.jpg")
+                )
+            ),
+            byteLoader = ArtworkByteLoader { source, _ ->
+                loadCount += 1
+                if (source is ArtworkSource.ProviderTemplate) {
+                    IntegrationLoadResult.NetworkError(IllegalStateException("premium unavailable"))
+                } else {
+                    IntegrationLoadResult.Success("fallback-bytes".toByteArray())
+                }
+            }
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        assertArrayEquals("fallback-bytes".toByteArray(), result!!.localFile.readBytes())
+        assertEquals(2, loadCount)
+        assertEquals("FALLBACK_MATERIALIZED", result.cacheDecision)
     }
 
     @Test
@@ -666,6 +740,16 @@ class ArtworkAssetRepositoryTest {
             createdAtMs = 100L,
             expiresAtMs = 200L,
             staleUntilMs = 300L
+        )
+
+    private fun remotePreviewCandidate(): PersistedArtworkCandidate =
+        PersistedArtworkCandidate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            sourceHash = "fallbacksourcehash",
+            redactedSourceForTrace = "https://image.tmdb.org/t/p/w500/<redacted>",
+            providerTemplate = null,
+            priority = 10
         )
 
     private fun topPostersThumbnailDecision(): ArtworkDecision =

@@ -47,7 +47,10 @@ class ArtworkRouter(
                 candidate.sourceRole == ArtworkSourceRole.PREMIUM && !candidate.isActiveSupportedPremium(context)
             }
             .map { candidate ->
-                candidate.rejected(candidate.rejectionReasonForSelected(selectedRank))
+                candidate.rejected(
+                    reason = candidate.rejectionReasonForSelected(selectedRank),
+                    policyVersion = policy.policyVersion
+                )
             }
 
         return ArtworkSelectionResult(
@@ -89,12 +92,18 @@ class ArtworkRouter(
 
         val candidateProvider = provider
         if (candidateProvider == null || candidateProvider != context.selectedProviderFor(imageType)) {
-            return rejected("inactive_premium_artwork_provider_for_${imageType.name.lowercase()}")
+            return rejected(
+                reason = "inactive_premium_artwork_provider_for_${imageType.name.lowercase()}",
+                policyVersion = context.policy.policyVersion
+            )
         }
 
         val capability = candidateProvider.evaluatePremiumCandidate(this, context.policy)
         if (capability.supported) return null
-        return rejected(capability.reason ?: "unsupported_premium_artwork_provider")
+        return rejected(
+            reason = capability.reason ?: "unsupported_premium_artwork_provider",
+            policyVersion = context.policy.policyVersion
+        )
     }
 
     private fun ArtworkProviderId.evaluatePremiumCandidate(
@@ -119,12 +128,21 @@ class ArtworkRouter(
             RoutingRank.PLACEHOLDER -> "placeholder_artwork_precedence"
         }
 
-    private fun ArtworkCandidate.rejected(reason: String): RejectedArtworkCandidate =
-        RejectedArtworkCandidate(
+    private fun ArtworkCandidate.rejected(
+        reason: String,
+        policyVersion: Int
+    ): RejectedArtworkCandidate {
+        val persisted = toPersistedCandidate(policyVersion)
+        return RejectedArtworkCandidate(
             provider = provider,
             sourceRole = sourceRole,
-            reason = reason
+            reason = reason,
+            sourceHash = persisted.sourceHash,
+            redactedSourceForTrace = persisted.redactedSourceForTrace,
+            providerTemplate = persisted.providerTemplate,
+            priority = persisted.priority
         )
+    }
 
     private enum class RoutingRank(val precedence: Int) {
         PREMIUM(0),
