@@ -20,7 +20,7 @@ enum class MetadataDecisionReason {
 
 enum class MetadataMediaKind { MOVIE, SERIES, ANIME, UNKNOWN }
 
-enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, SEASON, PLAYER }
+enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, DETAIL_FULL, SEASON, PLAYER }
 enum class ResolverType {
     ADDON_DISPLAY,
     RATING,

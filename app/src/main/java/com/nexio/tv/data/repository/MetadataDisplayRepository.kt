@@ -4,8 +4,12 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.ProviderPlanRunResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.TrailerPlaybackSource
+import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.LocalizationDisplayState
@@ -36,13 +40,15 @@ class MetadataDisplayRepository @Inject constructor(
             fields = resolvedDocument.toResolvedDisplayFields(),
             artwork = result.displayArtwork(),
             rating = result.toTitleRating(),
-            trailer = TrailerDisplayState(),
+            trailer = result.toTrailerDisplayState(),
             seasons = emptyList(),
             people = resolvedDocument.castMembers
                 .takeIf { it.isNotEmpty() }
                 ?.let { PeopleDisplay(cast = it, crew = emptyList()) },
-            reviews = emptyList(),
-            recommendations = emptyList(),
+            reviews = result.providerRunResult.toFieldValues(ResolvedField.REVIEWS)
+                .flatMap(::reviewsFrom),
+            recommendations = result.providerRunResult.toFieldValues(ResolvedField.RECOMMENDATIONS)
+                .flatMap(::recommendationsFrom),
             collection = emptyList(),
             sourceTrace = resolvedDocument.toSourceTrace(),
             localization = LocalizationDisplayState(
@@ -160,6 +166,17 @@ class MetadataDisplayRepository @Inject constructor(
         resolvedDocument.sourceProviders[ResolvedField.RATING].toTitleRatingSource()
             ?: displayMetadata.ratingSource.orDefault()
 
+    private fun MetadataResolutionResult.toTrailerDisplayState(): TrailerDisplayState {
+        val fallbackTrailerYtIds = providerRunResult.toFieldValues(ResolvedField.TRAILERS)
+            .flatMap(::youtubeIdsFromTrailerValue)
+            .distinct()
+        return TrailerDisplayState(
+            fallbackTrailerYtIds = fallbackTrailerYtIds,
+            resolverSource = resolvedDocument.sourceProviders[ResolvedField.TRAILERS],
+            lastResolvedAtMs = null
+        )
+    }
+
     private fun String?.toTitleRatingSource(): TitleRatingSource? =
         when (val source = this?.trim()?.uppercase()) {
             "TMDB" -> TitleRatingSource.TMDB
@@ -176,5 +193,47 @@ class MetadataDisplayRepository @Inject constructor(
                 sourceRole = sourceRoles[field]?.name.orEmpty()
             )
         }
+    }
+
+    private fun ProviderPlanRunResult?.toFieldValues(field: ResolvedField): List<Any?> =
+        this?.stepResults
+            ?.mapNotNull { stepResult -> stepResult.candidate?.fields?.get(field)?.value }
+            .orEmpty()
+
+    private fun reviewsFrom(value: Any?): List<com.nexio.tv.domain.model.MetaReview> =
+        when (value) {
+            is com.nexio.tv.domain.model.MetaReview -> listOf(value)
+            is Collection<*> -> value.filterIsInstance<com.nexio.tv.domain.model.MetaReview>()
+            else -> emptyList()
+        }
+
+    private fun recommendationsFrom(value: Any?): List<com.nexio.tv.domain.model.MetaPreview> =
+        when (value) {
+            is com.nexio.tv.domain.model.MetaPreview -> listOf(value)
+            is Collection<*> -> value.filterIsInstance<com.nexio.tv.domain.model.MetaPreview>()
+            else -> emptyList()
+        }
+
+    private fun youtubeIdsFromTrailerValue(value: Any?): List<String> =
+        when (value) {
+            is TrailerResolutionResult.External -> listOfNotNull(value.url.youtubeIdFromUrl())
+            is TrailerResolutionResult.Playback -> emptyList()
+            is TrailerPlaybackSource -> emptyList()
+            is TmdbVideoResult -> listOfNotNull(value.key?.trim()?.takeIf { it.isNotBlank() })
+            is String -> listOfNotNull(value.youtubeIdFromUrl() ?: value.trim().takeIf { it.isNotBlank() })
+            is Collection<*> -> value.flatMap(::youtubeIdsFromTrailerValue)
+            else -> emptyList()
+        }
+
+    private fun String.youtubeIdFromUrl(): String? {
+        val value = trim()
+        if (value.isBlank()) return null
+        val watchId = value.substringAfter("v=", missingDelimiterValue = "")
+            .substringBefore('&')
+            .takeIf { it.isNotBlank() }
+        if (watchId != null) return watchId
+        return value.substringAfter("youtu.be/", missingDelimiterValue = "")
+            .substringBefore('?')
+            .takeIf { it.isNotBlank() }
     }
 }
