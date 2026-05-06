@@ -16,12 +16,14 @@ import com.nexio.tv.core.integration.IntegrationStreamHandle
 import com.nexio.tv.core.integration.IntegrationStreamSpec
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
+import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
@@ -181,6 +183,150 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
+    fun `decision materialization returns existing artwork asset before runtime`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val firstRepository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("disk-first".toByteArray())
+            }
+        )
+        assertNotNull(firstRepository.getOrFetch(decision))
+
+        val runtime = FailingIfCalledIntegrationRuntime()
+        val secondRepository = repository(
+            runtime = runtime,
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.NetworkError(IllegalStateException("loader should not run"))
+            }
+        )
+
+        val result = secondRepository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals(false, runtime.called)
+        assertEquals(false, result!!.networkExecuted)
+        assertEquals("ARTWORK_DISK_HIT", result.cacheDecision)
+        assertArrayEquals("disk-first".toByteArray(), result.localFile.readBytes())
+    }
+
+    @Test
+    fun `decision materialization falls through to runtime when existing artwork asset cannot be read`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val assetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(decision.selectedCandidate.providerTemplate!!)
+        val firstRepository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("unreadable-disk".toByteArray())
+            }
+        )
+        assertNotNull(firstRepository.getOrFetch(decision))
+        val existing = diskCache.getExistingFile(assetKey)!!
+        existing.setReadable(false, false)
+        assumeTrue("filesystem must enforce unreadable file permissions", !existing.canRead())
+
+        val runtime = RecordingIntegrationRuntime(successValue = "runtime-after-unreadable".toByteArray())
+        val secondRepository = repository(runtime = runtime, diskCache = diskCache)
+
+        try {
+            val result = secondRepository.getOrFetch(decision)
+
+            assertNotNull(result)
+            assertNotNull(runtime.lastSpec)
+            assertEquals("HIT", result!!.cacheDecision)
+            assertArrayEquals("runtime-after-unreadable".toByteArray(), result.localFile.readBytes())
+        } finally {
+            existing.setReadable(true, false)
+        }
+    }
+
+    @Test
+    fun `decision materialization falls back to existing artwork asset after runtime missing`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val materializedAssetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            decision.selectedCandidate.providerTemplate!!
+        )
+        val runtime = MissingAfterConcurrentDiskWriteRuntime(
+            diskCache = diskCache,
+            decision = decision,
+            assetKey = materializedAssetKey
+        )
+        val repository = repository(
+            runtime = runtime,
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.NetworkError(IllegalStateException("provider unavailable"))
+            }
+        )
+
+        val result = repository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals(true, runtime.called)
+        assertEquals(false, result!!.networkExecuted)
+        assertEquals("ARTWORK_DISK_HIT_AFTER_RUNTIME_MISS", result.cacheDecision)
+        assertArrayEquals("late-disk".toByteArray(), result.localFile.readBytes())
+    }
+
+    @Test
+    fun `decision materialization fallback after runtime missing preserves loader invocation`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val materializedAssetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            decision.selectedCandidate.providerTemplate!!
+        )
+        val runtime = MissingAfterLoadAndConcurrentDiskWriteRuntime(
+            diskCache = diskCache,
+            decision = decision,
+            assetKey = materializedAssetKey
+        )
+        val repository = repository(
+            runtime = runtime,
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.NetworkError(IllegalStateException("provider unavailable"))
+            }
+        )
+
+        val result = repository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals(true, runtime.called)
+        assertEquals(true, result!!.networkExecuted)
+        assertEquals("ARTWORK_DISK_HIT_AFTER_RUNTIME_MISS", result.cacheDecision)
+        assertArrayEquals("late-disk".toByteArray(), result.localFile.readBytes())
+    }
+
+    @Test
+    fun `decision materialization returns null when runtime missing fallback file cannot be read`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val materializedAssetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            decision.selectedCandidate.providerTemplate!!
+        )
+        val runtime = MissingAfterUnreadableDiskWriteRuntime(
+            diskCache = diskCache,
+            decision = decision,
+            assetKey = materializedAssetKey
+        )
+        val repository = repository(runtime = runtime, diskCache = diskCache)
+
+        try {
+            val result = repository.getOrFetch(decision)
+
+            assertNull(result)
+        } finally {
+            runtime.fallbackFile?.setReadable(true, false)
+        }
+    }
+
+    @Test
     fun `getOrFetchDecision returns null and traces missing decision`() = runTest {
         val traceSink = RecordingArtworkTraceSink()
         val repository = repository(
@@ -251,6 +397,7 @@ class ArtworkAssetRepositoryTest {
     private fun repository(
         runtime: IntegrationRuntime,
         cache: ArtworkDecisionCache = InMemoryArtworkDecisionCache(),
+        diskCache: ArtworkAssetDiskCache = ArtworkAssetDiskCache(temp.root),
         sourceMaterializer: ArtworkSourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
         byteLoader: ArtworkByteLoader = ArtworkByteLoader { _, _ ->
             IntegrationLoadResult.Success("image-bytes".toByteArray())
@@ -259,7 +406,7 @@ class ArtworkAssetRepositoryTest {
     ): ArtworkAssetRepository =
         ArtworkAssetRepository(
             runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
+            diskCache = diskCache,
             sourceMaterializer = sourceMaterializer,
             byteLoader = byteLoader,
             decisionCache = cache,
@@ -331,6 +478,125 @@ class ArtworkAssetRepositoryTest {
         ): IntegrationFetchResult<T> {
             spec.load()
             return IntegrationFetchResult.Stale(staleValue as T)
+        }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            error("not used")
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            error("not used")
+    }
+
+    private class FailingIfCalledIntegrationRuntime : IntegrationRuntime {
+        var called = false
+
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> {
+            called = true
+            error("runtime should not be called when artwork asset disk cache has a hit")
+        }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            error("not used")
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            error("not used")
+    }
+
+    private class MissingAfterConcurrentDiskWriteRuntime(
+        private val diskCache: ArtworkAssetDiskCache,
+        private val decision: ArtworkDecision,
+        private val assetKey: ArtworkAssetKey
+    ) : IntegrationRuntime {
+        var called = false
+
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> {
+            called = true
+            val bytes = "late-disk".toByteArray()
+            val record = diskCache.recordFor(
+                assetKey = assetKey,
+                decision = decision,
+                provider = decision.selectedCandidate.provider,
+                sourceHash = decision.selectedCandidate.sourceHash ?: "unknown",
+                mimeType = ByteArrayIntegrationCodec.mimeType,
+                byteCount = bytes.size.toLong(),
+                fetchedAtMs = 123L
+            )
+            diskCache.write(record, bytes)
+            return IntegrationFetchResult.Missing
+        }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            error("not used")
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            error("not used")
+    }
+
+    private class MissingAfterLoadAndConcurrentDiskWriteRuntime(
+        private val diskCache: ArtworkAssetDiskCache,
+        private val decision: ArtworkDecision,
+        private val assetKey: ArtworkAssetKey
+    ) : IntegrationRuntime {
+        var called = false
+
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> {
+            called = true
+            spec.load()
+            val bytes = "late-disk".toByteArray()
+            val record = diskCache.recordFor(
+                assetKey = assetKey,
+                decision = decision,
+                provider = decision.selectedCandidate.provider,
+                sourceHash = decision.selectedCandidate.sourceHash ?: "unknown",
+                mimeType = ByteArrayIntegrationCodec.mimeType,
+                byteCount = bytes.size.toLong(),
+                fetchedAtMs = 123L
+            )
+            diskCache.write(record, bytes)
+            return IntegrationFetchResult.Missing
+        }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            error("not used")
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            error("not used")
+    }
+
+    private class MissingAfterUnreadableDiskWriteRuntime(
+        private val diskCache: ArtworkAssetDiskCache,
+        private val decision: ArtworkDecision,
+        private val assetKey: ArtworkAssetKey
+    ) : IntegrationRuntime {
+        var fallbackFile: File? = null
+
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> {
+            val bytes = "unreadable-late-disk".toByteArray()
+            val record = diskCache.recordFor(
+                assetKey = assetKey,
+                decision = decision,
+                provider = decision.selectedCandidate.provider,
+                sourceHash = decision.selectedCandidate.sourceHash ?: "unknown",
+                mimeType = ByteArrayIntegrationCodec.mimeType,
+                byteCount = bytes.size.toLong(),
+                fetchedAtMs = 123L
+            )
+            fallbackFile = diskCache.write(record, bytes).file
+            fallbackFile!!.setReadable(false, false)
+            assumeTrue("filesystem must enforce unreadable file permissions", !fallbackFile!!.canRead())
+            return IntegrationFetchResult.Missing
         }
 
         override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =

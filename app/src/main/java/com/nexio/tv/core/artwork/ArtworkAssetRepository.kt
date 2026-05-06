@@ -80,6 +80,16 @@ class ArtworkAssetRepository @Inject constructor(
 
     suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? {
         val materialized = sourceMaterializer.materialize(decision) ?: return null
+        diskCache.getExistingFile(materialized.assetKey)?.let { existing ->
+            existingAssetResultOrNull(
+                file = existing,
+                materialized = materialized,
+                decision = decision,
+                cacheDecision = "ARTWORK_DISK_HIT",
+                networkExecuted = false
+            )?.let { return it }
+        }
+
         val apiShapeId = materialized.apiShapeId
         val runtimeProvider = materialized.runtimeProvider
         var loaderInvoked = false
@@ -104,7 +114,19 @@ class ArtworkAssetRepository @Inject constructor(
             )
         )
 
-        val bytes = result.bytesOrNull() ?: return null
+        val bytes = result.bytesOrNull()
+        if (bytes == null) {
+            return diskCache.getExistingFile(materialized.assetKey)?.let { existing ->
+                existingAssetResultOrNull(
+                    file = existing,
+                    materialized = materialized,
+                    decision = decision,
+                    cacheDecision = "ARTWORK_DISK_HIT_AFTER_RUNTIME_MISS",
+                    networkExecuted = loaderInvoked
+                )
+            }
+        }
+
         val record = diskCache.recordFor(
             assetKey = materialized.assetKey,
             decision = decision,
@@ -129,6 +151,35 @@ class ArtworkAssetRepository @Inject constructor(
 
     fun getExistingFile(assetKey: ArtworkAssetKey): File? =
         diskCache.getExistingFile(assetKey)
+
+    private fun existingAssetResultOrNull(
+        file: File,
+        materialized: MaterializedArtworkSource,
+        decision: ArtworkDecision,
+        cacheDecision: String,
+        networkExecuted: Boolean
+    ): ArtworkAssetResult? {
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+        val record = diskCache.recordFor(
+            assetKey = materialized.assetKey,
+            decision = decision,
+            provider = materialized.provider,
+            sourceHash = materialized.sourceHash,
+            mimeType = ByteArrayIntegrationCodec.mimeType,
+            byteCount = bytes.size.toLong(),
+            fetchedAtMs = file.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
+        )
+        return ArtworkAssetResult(
+            assetKey = materialized.assetKey,
+            localFile = file,
+            record = record,
+            runtimeResult = IntegrationFetchResult.Fresh(bytes),
+            runtimeApiShapeId = materialized.apiShapeId,
+            cacheDecision = cacheDecision,
+            mimeType = record.mimeType,
+            networkExecuted = networkExecuted
+        )
+    }
 
     private fun traceArtwork(
         eventType: String,
