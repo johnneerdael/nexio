@@ -87,7 +87,7 @@ class AddonPreferencesIsAnimeTest {
     }
 
     @Test
-    fun `existing entries without isAnime decode as false`() = runTest {
+    fun `existing object entries without isAnime decode as false`() = runTest {
         val store = addonPreferencesForTest()
 
         store.writeRawOrderedJson("""[{"url":"https://legacy.example/anime","parserPreset":"GENERIC"}]""")
@@ -95,6 +95,19 @@ class AddonPreferencesIsAnimeTest {
         val addon = store.installedAddons.first().single()
 
         assertFalse(addon.isAnime)
+    }
+
+    @Test
+    fun `existing string list entries decode with defaults`() = runTest {
+        val store = addonPreferencesForTest()
+
+        store.writeRawOrderedJson("""["https://legacy.example/addon"]""")
+
+        val addon = store.installedAddons.first().single()
+
+        assertEquals("https://legacy.example/addon", addon.url)
+        assertEquals(AddonParserPreset.GENERIC, addon.parserPreset)
+        assertEquals(false, addon.isAnime)
     }
 
     private suspend fun addonPreferencesForTest(): AddonPreferences {
