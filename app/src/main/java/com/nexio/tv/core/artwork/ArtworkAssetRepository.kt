@@ -68,7 +68,7 @@ class ArtworkAssetRepository @Inject constructor(
             return null
         }
 
-        val result = getOrFetch(decision)
+        val result = getOrFetch(decision) ?: getOrFetchFallback(decision)
         traceArtwork(
             eventType = "artwork.asset_materialized",
             payload = mapOf(
@@ -82,6 +82,45 @@ class ArtworkAssetRepository @Inject constructor(
             )
         )
         return result
+    }
+
+    private suspend fun getOrFetchFallback(decision: ArtworkDecision): ArtworkAssetResult? {
+        val fallbackRoles = setOf(
+            ArtworkSourceRole.PRIMARY,
+            ArtworkSourceRole.RAIL_PREVIEW,
+            ArtworkSourceRole.ADDON_PREVIEW,
+            ArtworkSourceRole.FALLBACK
+        )
+        val fallbackCandidates = decision.rejectedCandidates
+            .filter { rejected ->
+                rejected.provider != null && rejected.sourceRole in fallbackRoles
+            }
+
+        for (candidate in fallbackCandidates) {
+            val fallbackDecision = decision.copy(
+                selectedCandidate = PersistedArtworkCandidate(
+                    provider = candidate.provider,
+                    sourceRole = candidate.sourceRole,
+                    sourceHash = candidate.sourceHash,
+                    redactedSourceForTrace = candidate.redactedSourceForTrace,
+                    providerTemplate = candidate.providerTemplate,
+                    priority = candidate.priority
+                ),
+                rejectedCandidates = emptyList()
+            )
+            val result = getOrFetch(fallbackDecision) ?: continue
+            traceArtwork(
+                eventType = "artwork.fallback_materialized",
+                payload = mapOf(
+                    "decisionKey" to decision.decisionKey.value,
+                    "fallbackProvider" to result.record.provider?.key,
+                    "assetKey" to result.assetKey.value
+                )
+            )
+            return result.copy(cacheDecision = "FALLBACK_MATERIALIZED")
+        }
+
+        return null
     }
 
     suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? {
