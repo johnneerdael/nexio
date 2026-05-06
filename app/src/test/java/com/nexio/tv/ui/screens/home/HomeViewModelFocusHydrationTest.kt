@@ -366,6 +366,42 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `visible home hydration with captured session skips old items after active session changes`() = runTest(testDispatcher) {
+        val oldSession = profileSession(profileId = 1, sessionId = "session-a")
+        val activeSession = MutableStateFlow(profileSession(profileId = 2, sessionId = "session-b"))
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession
+        )
+        viewModel.homeProfileGeneration = 7L
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible),
+            expectedGeneration = 7L,
+            expectedProfileSession = oldSession
+        )
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) {
+            homeHydrationCoordinator.hydrate(
+                item = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = any(),
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 1).isEmpty())
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 2).isEmpty())
+    }
+
+    @Test
     fun `scheduled catalog publish does not write old rows into new active session`() = runTest(testDispatcher) {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val viewModel = buildTestHomeViewModel(

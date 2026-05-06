@@ -887,6 +887,137 @@ class HomeCatalogRefreshCoordinatorTest {
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
+    fun `serialized settlement skips visible prefetch when session changes during visible hydration`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val uiState = MutableStateFlow(HomeUiState())
+        val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
+        val visiblePreview = preview(id = "tt-visible-session-race", poster = "poster").copy(
+            description = "Visible catalog payload",
+            releaseInfo = "2026"
+        )
+        val displayRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(visiblePreview),
+            hasMore = false
+        )
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns uiState
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
+        every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
+        every { viewModel.homeProfileGeneration } returns 1L
+        every { viewModel.profileBoundary.currentLanguageTag() } returns "en"
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
+            fullCatalogRows.value = listOf(displayRow)
+            uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
+        }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            onCatalogReady(
+                "addon_movie_popular",
+                displayRow,
+                CatalogItemDiff(addedOrChanged = displayRow.items, removed = emptyList())
+            )
+            onRawCatalogBatchComplete()
+            1
+        }
+        coEvery {
+            homeHydrationCoordinator.hydrate(any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            activeProfileSession.value = expectedProfileSession.copy(
+                profileId = 2,
+                sessionId = "new-session",
+                sessionOrdinal = 2L
+            )
+            null
+        }
+        coEvery {
+            coordinator.prefetchVisibleImagesOnly(any(), any(), any())
+        } returns Unit
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = visiblePreview,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 1L,
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+        coVerify(exactly = 0) {
+            coordinator.prefetchVisibleImagesOnly(any(), any(), any())
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
     fun `serialized refresh skips visible bundle hydration when only full rows are populated`() = runTest {
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
