@@ -4,6 +4,7 @@ import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
@@ -20,6 +21,7 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.PosterRatingsSettings
 import com.nexio.tv.domain.model.toArtworkProviderSettings
 import io.mockk.every
@@ -72,6 +74,47 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
     }
 
     @Test
+    fun `top posters decision persists non premium source poster as primary fallback candidate`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = TopPostersMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    topPostersEnabled = true,
+                    topPostersApiKey = "top-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.MOVIE,
+            parentId = "catalog-row-item-42",
+            targetIds = mapOf(
+                MetadataPrimaryProvider.TMDB to "tmdb:550",
+                MetadataPrimaryProvider.IMDB to "tt0137523"
+            ),
+            sourceMetadata = HomeDisplayMetadata(
+                poster = "https://image.tmdb.org/t/p/w500/fallback.jpg"
+            )
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.TOP_POSTERS, PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val decision = cache.get(decisionKeyFromRef(value!!))
+        val rejected = decision!!.rejectedCandidates.single { it.sourceRole == ArtworkSourceRole.PRIMARY }
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB), rejected.provider)
+        assertEquals("premium_artwork_provider_precedence", rejected.reason)
+        assertNotNull(rejected.sourceHash)
+        assertTrue(rejected.redactedSourceForTrace!!.contains("image.tmdb.org"))
+        assertNull(rejected.providerTemplate)
+    }
+
+    @Test
     fun `rpdb candidate ref uses stable tmdb target id instead of route parent id`() = runTest {
         val cache = InMemoryArtworkDecisionCache()
         val adapter = RpdbMetadataProviderAdapter(
@@ -102,6 +145,80 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
         assertEquals("tmdb", template?.idType)
         assertEquals("movie-550", template?.mediaId)
         assertFalse(template?.mediaId.orEmpty().contains(route.parentId))
+    }
+
+    @Test
+    fun `rpdb decision persists non premium source poster as primary fallback candidate`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.MOVIE,
+            parentId = "catalog-row-item-99",
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550"),
+            sourceMetadata = HomeDisplayMetadata(
+                poster = "https://image.tmdb.org/t/p/w500/fallback.jpg"
+            )
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val decision = cache.get(decisionKeyFromRef(value!!))
+        val rejected = decision!!.rejectedCandidates.single { it.sourceRole == ArtworkSourceRole.PRIMARY }
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB), rejected.provider)
+        assertEquals("premium_artwork_provider_precedence", rejected.reason)
+        assertNotNull(rejected.sourceHash)
+        assertTrue(rejected.redactedSourceForTrace!!.contains("image.tmdb.org"))
+        assertNull(rejected.providerTemplate)
+    }
+
+    @Test
+    fun `rpdb adapter does not persist raw premium provider url as fallback candidate`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.MOVIE,
+            parentId = "catalog-row-item-99",
+            targetIds = mapOf(
+                MetadataPrimaryProvider.TMDB to "tmdb:550",
+                MetadataPrimaryProvider.IMDB to "tt0137523"
+            ),
+            sourceMetadata = HomeDisplayMetadata(
+                poster = "https://api.ratingposterdb.com/rpdb-key/imdb/poster-default/tt0137523.jpg"
+            )
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val decision = cache.get(decisionKeyFromRef(value!!))
+        assertTrue(decision!!.rejectedCandidates.none { it.sourceRole == ArtworkSourceRole.PRIMARY })
     }
 
     @Test
@@ -255,13 +372,14 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
         provider: MetadataPrimaryProvider,
         mediaKind: MetadataMediaKind,
         parentId: String,
-        targetIds: Map<MetadataPrimaryProvider, String>
+        targetIds: Map<MetadataPrimaryProvider, String>,
+        sourceMetadata: HomeDisplayMetadata? = null
     ): MetadataRoute = MetadataRoute(
         provider = provider,
         parentId = parentId,
         mediaKind = mediaKind,
         reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
-        sourceContext = MetadataSourceContext(),
+        sourceContext = MetadataSourceContext(addonMetadata = sourceMetadata),
         targetIds = targetIds,
         trace = listOf(
             MetadataRouteTrace(

@@ -56,7 +56,8 @@ class RpdbMetadataProviderAdapter @Inject constructor(
                 settings = settings,
                 providerIds = route.premiumPosterProviderIds(),
                 mediaKind = route.mediaKind,
-                ownerKey = ArtworkOwnerKey.CanonicalContent(stableContentId)
+                ownerKey = ArtworkOwnerKey.CanonicalContent(stableContentId),
+                fallbackPosterUrl = route.nonPremiumPosterFallbackUrl()
             )
         } else {
             null
