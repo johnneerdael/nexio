@@ -67,6 +67,21 @@ class AnimeProjectionTraceEvents @Inject constructor(
         )
     }
 
+    fun emitCuratedHit(source: String, kitsuId: String, target: String) {
+        sink.emitAnimeCuratedHit(
+            source = source,
+            kitsuId = kitsuId,
+            target = target,
+        )
+    }
+
+    fun emitUnresolvedTopKitsuId(kitsuId: String, reason: String) {
+        sink.emitAnimeUnresolvedTopKitsuId(
+            kitsuId = kitsuId,
+            reason = reason,
+        )
+    }
+
     fun emitScrobbleRejected(
         contentId: String,
         reason: ScrobbleRejectionReason,
