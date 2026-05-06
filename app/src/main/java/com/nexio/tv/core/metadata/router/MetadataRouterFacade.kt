@@ -1194,6 +1194,7 @@ class MetadataRouterFacade(
         val reviews = this.toFieldValues(ResolvedField.REVIEWS)
             .flatMap { value ->
                 when (value) {
+                    is ReviewsPage -> value.reviews
                     is MetaReview -> listOf(value)
                     is Collection<*> -> value.filterIsInstance<MetaReview>()
                     else -> emptyList()

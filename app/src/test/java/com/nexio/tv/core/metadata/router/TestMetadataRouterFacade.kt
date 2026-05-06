@@ -1,9 +1,12 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -13,6 +16,11 @@ import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import kotlin.math.absoluteValue
 
 fun testMetadataRouterFacade(
@@ -134,6 +142,13 @@ private class TestMetadataProviderAdapter(
                 episodeMetadata = emptyMap()
             )
         }
+        kitsuSecondaryCandidate(route, step)?.let { candidate ->
+            return ProviderStepResult(
+                step = step,
+                candidate = candidate,
+                episodeMetadata = emptyMap()
+            )
+        }
 
         val coreFields = when {
             route.seasonNumber == null &&
@@ -243,6 +258,135 @@ private class TestMetadataProviderAdapter(
             ?.fetchTmdbEnrichment(tmdbId, ContentType.MOVIE)
             ?.toResolvedFields()
     }
+
+    private suspend fun kitsuSecondaryCandidate(
+        route: MetadataRoute,
+        step: ProviderPlanStep
+    ): MetadataCandidate? {
+        if (provider != MetadataPrimaryProvider.KITSU || metadataSecondaryRepository == null) return null
+        if (step.role != ProviderPlanRole.SECONDARY) return null
+
+        val rawId = route.kitsuRawId()
+        val mediaKind = when (route.mediaKind) {
+            MetadataMediaKind.MOVIE -> ContentMediaKind.MOVIE
+            else -> ContentMediaKind.SERIES
+        }
+
+        return when (step.apiShapeId) {
+            KitsuApiShapes.CASTINGS,
+            KitsuApiShapes.ANIME_STAFF,
+            KitsuApiShapes.ANIME_PRODUCTIONS,
+            KitsuApiShapes.MEDIA_RELATIONSHIPS -> {
+                val detail = metadataSecondaryRepository.fetchKitsuAdvancedDetail(
+                    rawId = rawId,
+                    mediaKind = mediaKind,
+                    preferredLanguageCode = route.preferredKitsuLanguage()
+                )
+                detail?.toKitsuSecondaryCandidate(step.apiShapeId)
+            }
+            KitsuApiShapes.ANIME_REVIEWS -> {
+                val cursor = route.pagination
+                val reviewsPage = metadataSecondaryRepository.fetchKitsuReviews(
+                    rawId = rawId,
+                    mediaKind = mediaKind,
+                    page = cursor?.page ?: 1,
+                    limit = cursor?.limit ?: 20
+                )
+                MetadataCandidate(
+                    provider = provider,
+                    fields = buildMap {
+                        if (reviewsPage.reviews.isNotEmpty()) {
+                            put(ResolvedField.REVIEWS, FieldValue(reviewsPage, FieldOwner.REVIEWS))
+                        }
+                    }
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun MetadataRoute.kitsuRawId(): String =
+        listOfNotNull(
+            parentId,
+            sourceContext.previewSourceItemId,
+            targetIds[MetadataPrimaryProvider.KITSU]
+        ).firstOrNull { id -> id.startsWith("kitsu:", ignoreCase = true) }
+            ?: parentId
+
+    private fun MetadataRoute.preferredKitsuLanguage(): String? =
+        enrichmentCache.values
+            .firstNotNullOfOrNull { decision -> decision.value?.language }
+            ?: language
+
+    private fun KitsuAdvancedAnimeDetail.toKitsuSecondaryCandidate(apiShapeId: String): MetadataCandidate =
+        MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                when (apiShapeId) {
+                    KitsuApiShapes.CASTINGS -> {
+                        val cast = characters.map { character ->
+                            MetaCastMember(
+                                name = character.characterName,
+                                character = character.actorName ?: character.role,
+                                photo = character.characterImage,
+                                provider = "kitsu",
+                                providerId = character.characterId
+                            )
+                        }
+                        if (cast.isNotEmpty()) put(ResolvedField.CAST, FieldValue(cast, FieldOwner.PRIMARY))
+                    }
+                    KitsuApiShapes.ANIME_STAFF -> {
+                        val crew = staff.map { member ->
+                            MetaCastMember(
+                                name = member.personName,
+                                character = member.role,
+                                provider = "kitsu",
+                                providerId = member.personId
+                            )
+                        }
+                        if (crew.isNotEmpty()) put(ResolvedField.CREW, FieldValue(crew, FieldOwner.PRIMARY))
+                    }
+                    KitsuApiShapes.ANIME_PRODUCTIONS -> {
+                        val companies = productionCompanies.map { company ->
+                            MetaCompany(
+                                name = company.producerName,
+                                kind = MetaCompanyKind.COMPANY,
+                                provider = "kitsu",
+                                providerId = company.producerId
+                            )
+                        }
+                        if (companies.isNotEmpty()) {
+                            put(ResolvedField.ORGANIZATION_LIST, FieldValue(companies, FieldOwner.PRIMARY))
+                        }
+                    }
+                    KitsuApiShapes.MEDIA_RELATIONSHIPS -> {
+                        val recommendations = relatedTitles.map { title ->
+                            MetaPreview(
+                                id = "kitsu:${title.mediaId}",
+                                type = if (title.mediaType.equals("movie", ignoreCase = true)) {
+                                    ContentType.MOVIE
+                                } else {
+                                    ContentType.SERIES
+                                },
+                                rawType = "anime",
+                                name = title.title,
+                                poster = title.poster,
+                                posterShape = PosterShape.POSTER,
+                                background = null,
+                                logo = null,
+                                description = title.synopsis,
+                                releaseInfo = title.releaseInfo,
+                                imdbRating = null,
+                                genres = emptyList()
+                            )
+                        }
+                        if (recommendations.isNotEmpty()) {
+                            put(ResolvedField.RECOMMENDATIONS, FieldValue(recommendations, FieldOwner.RECOMMENDATIONS))
+                        }
+                    }
+                }
+            }
+        )
 
     private suspend fun exactTmdbLookupCandidate(route: MetadataRoute): MetadataCandidate? {
         if (provider != MetadataPrimaryProvider.TMDB) return null

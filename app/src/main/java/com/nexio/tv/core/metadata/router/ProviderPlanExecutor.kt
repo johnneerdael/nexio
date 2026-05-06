@@ -241,6 +241,7 @@ class ProviderPlanExecutor @Inject constructor() {
             steps += step(KitsuApiShapes.ANIME_STAFF, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.ANIME_PRODUCTIONS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.MEDIA_RELATIONSHIPS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
+            steps += step(KitsuApiShapes.ANIME_REVIEWS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
         }
 
         if (depth == MetadataDepth.DETAIL_CORE ||

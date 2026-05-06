@@ -61,9 +61,6 @@ class MetaDetailsTvdbAdvancedMetadataTest {
             MetaCompany(name = "TVDB Network", kind = MetaCompanyKind.NETWORK)
         )
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-        coEvery { tmdbMetadataService.findCompanyIdByExactName("TVDB Studio") } returns 123
-        coEvery { tmdbMetadataService.findCompanyIdByExactName("TVDB Network") } returns 456
-
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
@@ -130,12 +127,12 @@ class MetaDetailsTvdbAdvancedMetadataTest {
         // Production companies from TVDB
         assertEquals(1, meta.productionCompanies.size)
         assertEquals("TVDB Studio", meta.productionCompanies[0].name)
-        assertEquals(123, meta.productionCompanies[0].tmdbId)
+        assertEquals(null, meta.productionCompanies[0].tmdbId)
 
         // Networks from TVDB
         assertEquals(1, meta.networks.size)
         assertEquals("TVDB Network", meta.networks[0].name)
-        assertEquals(456, meta.networks[0].tmdbId)
+        assertEquals(null, meta.networks[0].tmdbId)
     }
 
     @Test

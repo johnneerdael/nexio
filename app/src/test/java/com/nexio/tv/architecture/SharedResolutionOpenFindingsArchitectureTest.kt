@@ -16,7 +16,9 @@ class SharedResolutionOpenFindingsArchitectureTest {
                 "episodeRatingsSelectionRepository." to Regex("""episodeRatingsSelectionRepository\."""),
                 "trailerService." to Regex("""trailerService\."""),
                 "tmdbService.ensureTmdbId" to Regex("""tmdbService\.ensureTmdbId"""),
-                ".ensureTmdbId(" to Regex("""\.ensureTmdbId\s*\(""")
+                ".ensureTmdbId(" to Regex("""\.ensureTmdbId\s*\("""),
+                "findPersonIdByExactName(" to Regex("""\bfindPersonIdByExactName\s*\("""),
+                "findCompanyIdByExactName(" to Regex("""\bfindCompanyIdByExactName\s*\(""")
             )
         )
 
@@ -99,7 +101,9 @@ class SharedResolutionOpenFindingsArchitectureTest {
             files = productionKotlinFilesUnder("app/src/main/java/com/nexio/tv/ui") +
                 requiredFile("app/src/main/java/com/nexio/tv/MainActivity.kt"),
             forbiddenPatterns = linkedMapOf(
-                "ensureTmdbId(" to Regex("""(?:tmdbService\.)?ensureTmdbId\s*\(""")
+                "ensureTmdbId(" to Regex("""(?:tmdbService\.)?ensureTmdbId\s*\("""),
+                "findPersonIdByExactName(" to Regex("""\bfindPersonIdByExactName\s*\("""),
+                "findCompanyIdByExactName(" to Regex("""\bfindCompanyIdByExactName\s*\(""")
             )
         )
 
@@ -107,6 +111,43 @@ class SharedResolutionOpenFindingsArchitectureTest {
             offenders,
             "UI and MainActivity must not call TMDB identity bridge helpers; route identity " +
                 "resolution through shared metadata resolution surfaces."
+        )
+    }
+
+    @Test
+    fun `watch progress remote mutations use captured profile session account scope`() {
+        val offenders = scanFile(
+            file = requiredFile("app/src/main/java/com/nexio/tv/data/repository/WatchProgressRepositoryImpl.kt"),
+            forbiddenPatterns = linkedMapOf(
+                "currentTraktProfileId()" to Regex("""\bcurrentTraktProfileId\s*\("""),
+                "hard-coded simkl profile scope" to Regex("""\bprofileId\s*=\s*1\b""")
+            )
+        )
+
+        failIfNotEmpty(
+            offenders,
+            "WatchProgress remote mutation envelopes must derive account scope from the captured " +
+                "ActiveProfileSession, not active/global provider profile defaults."
+        )
+    }
+
+    @Test
+    fun `detail display repository does not call detail secondary sidecar repository`() {
+        val offenders = scanFiles(
+            files = productionKotlinFilesUnder("app/src/main/java/com/nexio/tv/data/repository") +
+                productionKotlinFilesUnder("app/src/main/java/com/nexio/tv/ui/screens/detail"),
+            forbiddenPatterns = linkedMapOf(
+                "DetailSecondaryDisplayRepository" to Regex("""\bDetailSecondaryDisplayRepository\b"""),
+                "fetchKitsuBridgeDetail(" to Regex("""\bfetchKitsuBridgeDetail\s*\("""),
+                "fetchKitsuAdvancedDetail(" to Regex("""\bfetchKitsuAdvancedDetail\s*\("""),
+                "fetchKitsuReviews(" to Regex("""\bfetchKitsuReviews\s*\(""")
+            )
+        )
+
+        failIfNotEmpty(
+            offenders,
+            "Detail display paths must consume provider-plan resolved fields; Kitsu secondary " +
+                "metadata/reviews must not be fetched by a display sidecar."
         )
     }
 
@@ -154,8 +195,10 @@ class SharedResolutionOpenFindingsArchitectureTest {
     fun `metadata ui coil calls do not use raw remote artwork string fields`() {
         val offenders = listOf(
             "app/src/main/java/com/nexio/tv/ui/components/ContentCard.kt",
+            "app/src/main/java/com/nexio/tv/ui/components/HeroCarousel.kt",
             "app/src/main/java/com/nexio/tv/ui/components/GridContentCard.kt",
             "app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeRows.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeHero.kt",
             "app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt",
             "app/src/main/java/com/nexio/tv/ui/screens/search/SearchScreen.kt",
             "app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt",
@@ -210,6 +253,12 @@ class SharedResolutionOpenFindingsArchitectureTest {
             val dataCall = coilDataCallRegex.find(line) ?: return@flatMapIndexed emptyList()
 
             val expression = extractDataArgument(lines, index, dataCall.range.first) ?: return@flatMapIndexed emptyList()
+            if (
+                expression.contains("toLegacyArtworkCoilModelOrNull") ||
+                expression.contains("toCoilModelOrNull")
+            ) {
+                return@flatMapIndexed emptyList()
+            }
             val matchedFields = rawMetadataArtworkFieldRegex.findAll(expression)
                 .map { match -> match.value }
                 .toList()
@@ -350,7 +399,7 @@ class SharedResolutionOpenFindingsArchitectureTest {
         private const val CROSS_PROVIDER_FALLBACK_WINDOW_LINES = 4
 
         private val rawMetadataArtworkFieldRegex = Regex(
-            """\b(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:posterUrl|imageUrl|logoUrl|backdropUrl|displayPoster|displayBackground|displayThumbnail|url)\b"""
+            """\b(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:posterUrl|imageUrl|logoUrl|backdropUrl|displayPoster|displayBackground|displayLogo|displayThumbnail|heroBackdrop|stableBackdrop|url)\b"""
         )
         private val coilDataCallRegex = Regex("""\.data\s*\(""")
         private val crossProviderFallbackRegex = Regex(
