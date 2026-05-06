@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
@@ -298,6 +299,40 @@ class ArtworkDecisionCacheTest {
         cache.invalidateByCredentialHash("credentialhash")
 
         assertNull(cache.get(decision.decisionKey))
+    }
+
+    @Test
+    fun `durable cache keeps in-memory decision when persistence fails`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val unwritableTarget = temp.newFolder("artwork-decisions.json")
+        val cache = DurableArtworkDecisionCache(file = unwritableTarget, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        try {
+            cache.put(decision)
+        } catch (error: Exception) {
+            fail("put should not throw when durable persistence fails: $error")
+        }
+
+        assertEquals(decision, cache.get(decision.decisionKey))
+    }
+
+    @Test
+    fun `durable cache JSON uses stable serialized field names`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        cache.put(durableRpdbDecision())
+
+        val raw = file.readText()
+        assertTrue(raw.contains("\"schemaVersion\""))
+        assertTrue(raw.contains("\"decisions\""))
+        assertTrue(raw.contains("\"previewLinks\""))
+        assertTrue(raw.contains("\"decisionKey\""))
+        assertTrue(raw.contains("\"selectedCandidate\""))
+        assertTrue(raw.contains("\"providerTemplate\""))
+        assertTrue(raw.contains("\"credentialHash\""))
     }
 
     private fun decision(

@@ -1,6 +1,7 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.IntegrationProvider
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
@@ -120,61 +121,83 @@ class DurableArtworkDecisionCache(
     }
 
     private fun persistLocked() {
-        val parent = file.parentFile
-        if (parent != null && !parent.exists()) parent.mkdirs()
+        try {
+            val parent = file.parentFile
+            if (parent != null && !parent.exists()) parent.mkdirs()
 
-        val dto = StoreDto(
-            schemaVersion = SCHEMA_VERSION,
-            decisions = decisions.values.map(DecisionDto::fromDomain),
-            previewLinks = previewToCanonical.map { (previewKey, canonicalKey) ->
-                PreviewLinkDto(
-                    previewKey = previewKey.value,
-                    canonicalKey = canonicalKey.value
+            val dto = StoreDto(
+                schemaVersion = SCHEMA_VERSION,
+                decisions = decisions.values.map(DecisionDto::fromDomain),
+                previewLinks = previewToCanonical.map { (previewKey, canonicalKey) ->
+                    PreviewLinkDto(
+                        previewKey = previewKey.value,
+                        canonicalKey = canonicalKey.value
+                    )
+                }
+            )
+            val tempFile = File(parent ?: File("."), "${file.name}.tmp")
+            tempFile.writeText(gson.toJson(dto))
+            try {
+                Files.move(
+                    tempFile.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    tempFile.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
                 )
             }
-        )
-        val tempFile = File(parent ?: File("."), "${file.name}.tmp")
-        tempFile.writeText(gson.toJson(dto))
-        try {
-            Files.move(
-                tempFile.toPath(),
-                file.toPath(),
-                StandardCopyOption.ATOMIC_MOVE,
-                StandardCopyOption.REPLACE_EXISTING
-            )
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(
-                tempFile.toPath(),
-                file.toPath(),
-                StandardCopyOption.REPLACE_EXISTING
-            )
+        } catch (_: Exception) {
+            // Disk persistence is a best-effort cache; callers still observe the in-memory mutation.
         }
     }
 
     private data class StoreDto(
+        @SerializedName("schemaVersion")
         val schemaVersion: Int,
+        @SerializedName("decisions")
         val decisions: List<DecisionDto>?,
+        @SerializedName("previewLinks")
         val previewLinks: List<PreviewLinkDto>?
     )
 
     private data class PreviewLinkDto(
+        @SerializedName("previewKey")
         val previewKey: String,
+        @SerializedName("canonicalKey")
         val canonicalKey: String
     )
 
     private data class DecisionDto(
+        @SerializedName("decisionKey")
         val decisionKey: String,
+        @SerializedName("owner")
         val owner: OwnerDto,
+        @SerializedName("canonicalContentId")
         val canonicalContentId: String?,
+        @SerializedName("imageType")
         val imageType: String,
+        @SerializedName("selectedCandidate")
         val selectedCandidate: CandidateDto,
+        @SerializedName("rejectedCandidates")
         val rejectedCandidates: List<RejectedDto>?,
+        @SerializedName("policyVersion")
         val policyVersion: Int,
+        @SerializedName("imageLanguage")
         val imageLanguage: String,
+        @SerializedName("settingsHash")
         val settingsHash: String?,
+        @SerializedName("credentialHash")
         val credentialHash: String?,
+        @SerializedName("createdAtMs")
         val createdAtMs: Long,
+        @SerializedName("expiresAtMs")
         val expiresAtMs: Long,
+        @SerializedName("staleUntilMs")
         val staleUntilMs: Long?
     ) {
         fun toDomainOrNull(): ArtworkDecision? = runCatching {
@@ -216,9 +239,13 @@ class DurableArtworkDecisionCache(
     }
 
     private data class OwnerDto(
+        @SerializedName("type")
         val type: String,
+        @SerializedName("contentId")
         val contentId: String?,
+        @SerializedName("itemKey")
         val itemKey: String?,
+        @SerializedName("sourcePayloadHash")
         val sourcePayloadHash: String?
     ) {
         fun toDomain(): ArtworkOwnerKey = when (type) {
@@ -249,11 +276,17 @@ class DurableArtworkDecisionCache(
     }
 
     private data class CandidateDto(
+        @SerializedName("provider")
         val provider: ProviderDto?,
+        @SerializedName("sourceRole")
         val sourceRole: String,
+        @SerializedName("sourceHash")
         val sourceHash: String?,
+        @SerializedName("redactedSourceForTrace")
         val redactedSourceForTrace: String?,
+        @SerializedName("providerTemplate")
         val providerTemplate: TemplateDto?,
+        @SerializedName("priority")
         val priority: Int
     ) {
         fun toDomain(): PersistedArtworkCandidate =
@@ -280,12 +313,19 @@ class DurableArtworkDecisionCache(
     }
 
     private data class RejectedDto(
+        @SerializedName("provider")
         val provider: ProviderDto?,
+        @SerializedName("sourceRole")
         val sourceRole: String,
+        @SerializedName("reason")
         val reason: String,
+        @SerializedName("sourceHash")
         val sourceHash: String?,
+        @SerializedName("redactedSourceForTrace")
         val redactedSourceForTrace: String?,
+        @SerializedName("providerTemplate")
         val providerTemplate: TemplateDto?,
+        @SerializedName("priority")
         val priority: Int
     ) {
         fun toDomain(): RejectedArtworkCandidate =
@@ -314,15 +354,25 @@ class DurableArtworkDecisionCache(
     }
 
     private data class TemplateDto(
+        @SerializedName("provider")
         val provider: ProviderDto,
+        @SerializedName("imageType")
         val imageType: String,
+        @SerializedName("idType")
         val idType: String,
+        @SerializedName("mediaId")
         val mediaId: String,
+        @SerializedName("providerPathHash")
         val providerPathHash: String?,
+        @SerializedName("settingsHash")
         val settingsHash: String?,
+        @SerializedName("credentialHash")
         val credentialHash: String?,
+        @SerializedName("imageLanguage")
         val imageLanguage: String,
+        @SerializedName("policyVersion")
         val policyVersion: Int,
+        @SerializedName("pathParams")
         val pathParams: Map<String, String>?
     ) {
         fun toDomain(): PersistedProviderTemplate =
@@ -357,7 +407,9 @@ class DurableArtworkDecisionCache(
     }
 
     private data class ProviderDto(
+        @SerializedName("type")
         val type: String,
+        @SerializedName("integrationProvider")
         val integrationProvider: String?
     ) {
         fun toDomain(): ArtworkProviderId = when (type) {
