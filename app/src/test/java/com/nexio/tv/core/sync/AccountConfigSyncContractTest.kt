@@ -94,6 +94,23 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `addon is_anime migration persists addon sync field end to end`() {
+        val migration = File("supabase/migrations/20260506000000_add_account_addon_is_anime.sql").readText()
+
+        assertTrue(migration.contains("add column if not exists is_anime boolean not null default false"))
+        assertTrue(migration.contains("coalesce((entry->>'is_anime')::boolean, false)"))
+        assertTrue(migration.contains("'is_anime', coalesce(is_anime, false)"))
+    }
+
+    @Test
+    fun `addon sync service push payload includes is_anime wire field`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt").readText()
+
+        assertTrue(source.contains("put(\"is_anime\", isAnime)"))
+        assertTrue(source.contains("Triple(parseStoredAddonInstallUrl(addon.url), addon.parserPreset, addon.isAnime)"))
+    }
+
+    @Test
     fun `subtitle translation sync defaults use OpenRouter free route`() {
         val settings = SubtitleTranslationSyncSettings()
 
