@@ -1,6 +1,7 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.lang.reflect.Modifier
 
 class ArtworkDecisionCacheTest {
     private val cache = InMemoryArtworkDecisionCache()
@@ -335,6 +337,97 @@ class ArtworkDecisionCacheTest {
         assertTrue(raw.contains("\"credentialHash\""))
     }
 
+    @Test
+    fun `durable cache persisted DTO fields declare stable serialized names`() {
+        assertSerializedNames(
+            className = "StoreDto",
+            expected = mapOf(
+                "schemaVersion" to "schemaVersion",
+                "decisions" to "decisions",
+                "previewLinks" to "previewLinks"
+            )
+        )
+        assertSerializedNames(
+            className = "PreviewLinkDto",
+            expected = mapOf(
+                "previewKey" to "previewKey",
+                "canonicalKey" to "canonicalKey"
+            )
+        )
+        assertSerializedNames(
+            className = "DecisionDto",
+            expected = mapOf(
+                "decisionKey" to "decisionKey",
+                "owner" to "owner",
+                "canonicalContentId" to "canonicalContentId",
+                "imageType" to "imageType",
+                "selectedCandidate" to "selectedCandidate",
+                "rejectedCandidates" to "rejectedCandidates",
+                "policyVersion" to "policyVersion",
+                "imageLanguage" to "imageLanguage",
+                "settingsHash" to "settingsHash",
+                "credentialHash" to "credentialHash",
+                "createdAtMs" to "createdAtMs",
+                "expiresAtMs" to "expiresAtMs",
+                "staleUntilMs" to "staleUntilMs"
+            )
+        )
+        assertSerializedNames(
+            className = "OwnerDto",
+            expected = mapOf(
+                "type" to "type",
+                "contentId" to "contentId",
+                "itemKey" to "itemKey",
+                "sourcePayloadHash" to "sourcePayloadHash"
+            )
+        )
+        assertSerializedNames(
+            className = "CandidateDto",
+            expected = mapOf(
+                "provider" to "provider",
+                "sourceRole" to "sourceRole",
+                "sourceHash" to "sourceHash",
+                "redactedSourceForTrace" to "redactedSourceForTrace",
+                "providerTemplate" to "providerTemplate",
+                "priority" to "priority"
+            )
+        )
+        assertSerializedNames(
+            className = "RejectedDto",
+            expected = mapOf(
+                "provider" to "provider",
+                "sourceRole" to "sourceRole",
+                "reason" to "reason",
+                "sourceHash" to "sourceHash",
+                "redactedSourceForTrace" to "redactedSourceForTrace",
+                "providerTemplate" to "providerTemplate",
+                "priority" to "priority"
+            )
+        )
+        assertSerializedNames(
+            className = "TemplateDto",
+            expected = mapOf(
+                "provider" to "provider",
+                "imageType" to "imageType",
+                "idType" to "idType",
+                "mediaId" to "mediaId",
+                "providerPathHash" to "providerPathHash",
+                "settingsHash" to "settingsHash",
+                "credentialHash" to "credentialHash",
+                "imageLanguage" to "imageLanguage",
+                "policyVersion" to "policyVersion",
+                "pathParams" to "pathParams"
+            )
+        )
+        assertSerializedNames(
+            className = "ProviderDto",
+            expected = mapOf(
+                "type" to "type",
+                "integrationProvider" to "integrationProvider"
+            )
+        )
+    }
+
     private fun decision(
         key: ArtworkDecisionKey,
         ownerKey: ArtworkOwnerKey,
@@ -405,4 +498,24 @@ class ArtworkDecisionCacheTest {
             expiresAtMs = 2_000L,
             staleUntilMs = 3_000L
         )
+
+    private fun assertSerializedNames(
+        className: String,
+        expected: Map<String, String>
+    ) {
+        val dtoClass = Class.forName(
+            "${DurableArtworkDecisionCache::class.qualifiedName}$$className"
+        )
+        val persistedFields = dtoClass.declaredFields
+            .filter { field -> !field.isSynthetic && !Modifier.isStatic(field.modifiers) }
+            .associateBy { field -> field.name }
+
+        assertEquals(expected.keys, persistedFields.keys)
+        expected.forEach { (fieldName, serializedName) ->
+            val annotation = persistedFields
+                .getValue(fieldName)
+                .getAnnotation(SerializedName::class.java)
+            assertEquals(serializedName, annotation?.value)
+        }
+    }
 }
