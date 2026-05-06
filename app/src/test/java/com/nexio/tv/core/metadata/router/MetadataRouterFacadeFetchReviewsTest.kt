@@ -72,14 +72,13 @@ class MetadataRouterFacadeFetchReviewsTest {
             ),
             fieldResolver = FieldResolver(events)
         )
-
         val result = facade.fetchReviews(
             metadataRequest = MetadataRequest(
                 contentId = "tmdb:603",
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE
@@ -265,7 +264,7 @@ class MetadataRouterFacadeFetchReviewsTest {
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE,

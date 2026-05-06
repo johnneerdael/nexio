@@ -50,6 +50,7 @@ class MetadataRouterFacadeFetchRecommendationsTest {
             )
         )
 
+        var observedPagination: PaginationCursor? = null
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = events),
@@ -70,12 +71,14 @@ class MetadataRouterFacadeFetchRecommendationsTest {
                     CannedCandidateAdapter(
                         provider = MetadataPrimaryProvider.TMDB,
                         candidate = tmdbCandidate,
-                        candidateShape = TmdbApiShapes.MOVIE_RECOMMENDATIONS
+                        candidateShape = TmdbApiShapes.MOVIE_RECOMMENDATIONS,
+                        observePagination = { observedPagination = it }
                     )
                 )
             ),
             fieldResolver = FieldResolver(events)
         )
+        val requestPagination = PaginationCursor(page = 7, limit = 70)
 
         val result = facade.fetchRecommendations(
             metadataRequest = MetadataRequest(
@@ -83,13 +86,15 @@ class MetadataRouterFacadeFetchRecommendationsTest {
                 contentType = ContentType.MOVIE,
                 sourceContext = MetadataSourceContext(),
                 language = "eng",
-                depth = MetadataDepth.DETAIL_SECONDARY
+                depth = MetadataDepth.DETAIL_CORE,
+                pagination = requestPagination
             ),
             tmdbId = "603",
             contentType = ContentType.MOVIE
         )
 
         assertEquals(recommendations, result)
+        assertEquals(requestPagination, observedPagination)
 
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
@@ -106,12 +111,16 @@ class MetadataRouterFacadeFetchRecommendationsTest {
     private class CannedCandidateAdapter(
         override val provider: MetadataPrimaryProvider,
         private val candidate: MetadataCandidate,
-        private val candidateShape: String
+        private val candidateShape: String,
+        private val observePagination: (PaginationCursor?) -> Unit = {}
     ) : MetadataProviderAdapter {
         override fun supports(step: ProviderPlanStep): Boolean = true
 
-        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
-            ProviderStepResult(
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            if (step.apiShapeId == candidateShape) {
+                observePagination(route.pagination)
+            }
+            return ProviderStepResult(
                 step = step,
                 candidate = if (step.apiShapeId == candidateShape) {
                     candidate
@@ -120,5 +129,6 @@ class MetadataRouterFacadeFetchRecommendationsTest {
                 },
                 episodeMetadata = emptyMap()
             )
+        }
     }
 }

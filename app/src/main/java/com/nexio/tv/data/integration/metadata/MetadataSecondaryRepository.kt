@@ -15,10 +15,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Low-level TMDB secondary adapter used by ProviderPlanRunner adapters only.
+ * Low-level provider secondary adapter boundary used by ProviderPlanRunner adapters.
  *
- * Production UI, ViewModel, home, screensaver, player, and facade code must not inject this class.
  * Provider-plan adapters may call it while executing IntegrationRuntime-governed provider steps.
+ * Production UI, home, screensaver, player, and facade code must not inject this class. Detail
+ * ViewModel injection is temporary until the resolved-detail migration removes its legacy sidecar
+ * dependencies.
  */
 @Singleton
 class MetadataSecondaryRepository @Inject constructor(

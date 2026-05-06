@@ -310,7 +310,15 @@ class MetadataRouterFacade(
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? {
-        val resolution = resolveRequest(metadataRequest)
+        val trailerRequest = metadataRequest.copy(
+            depth = if (metadataRequest.depth == MetadataDepth.DETAIL_SECONDARY) {
+                MetadataDepth.DETAIL_SECONDARY
+            } else {
+                MetadataDepth.DETAIL_MEDIA
+            },
+            seasonNumber = seasonNumber ?: metadataRequest.seasonNumber
+        )
+        val resolution = resolveRequest(trailerRequest)
         return resolution.providerRunResult?.toLegacyTrailerResolutionOrNull()
             ?: fallbackYtIds.firstNotNullOfOrNull { ytId ->
                 ytId.trim().takeIf { it.isNotBlank() }?.let { youtubeId ->
@@ -422,6 +430,7 @@ class MetadataRouterFacade(
         limit: Int = DEFAULT_REVIEWS_LIMIT
     ): ReviewsPage {
         val paginatedRequest = metadataRequest.copy(
+            depth = MetadataDepth.DETAIL_SECONDARY,
             pagination = PaginationCursor(page = page, limit = limit)
         )
         val resolution = resolveRequest(paginatedRequest)
@@ -438,7 +447,7 @@ class MetadataRouterFacade(
         tmdbId: String,
         contentType: ContentType
     ): List<MetaPreview> {
-        val resolution = resolveRequest(metadataRequest)
+        val resolution = resolveRequest(metadataRequest.copy(depth = MetadataDepth.DETAIL_SECONDARY))
         return resolution.providerRunResult.toLegacyRecommendations()
     }
 
