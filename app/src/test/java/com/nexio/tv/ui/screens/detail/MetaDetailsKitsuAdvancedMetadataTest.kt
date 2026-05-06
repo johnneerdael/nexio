@@ -404,7 +404,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
             work = workIdentity,
             seasons = listOf(AnimeSeasonTab(1, null, 1, "12", false)),
             selectedSeason = 1,
-            source = SeasonPresentationSource.KITSU_SEASON_NUMBERS,
+            source = SeasonPresentationSource.CURATED_PER_RESOURCE,
             confidence = CoordinateConfidence.HIGH
         )
         coEvery { animeSeasonDetailRepository.resolveAndHydrateAnimeDetail(any(), any(), any()) } coAnswers {

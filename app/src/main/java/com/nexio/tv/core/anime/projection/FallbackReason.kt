@@ -1,8 +1,6 @@
 package com.nexio.tv.core.anime.projection
 
 enum class FallbackReason {
-    NO_TVDB_MAPPING,
-    LOW_CONFIDENCE_FLAT_KITSU,
     KITSU_NOT_IN_PACK,
     NO_CURATED_SEASON,
     SEASON_MARKER_HENTAI,
