@@ -2,9 +2,12 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.SeasonTrailerRefRequest
+import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
@@ -16,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataRouterFacadeFetchTrailerTest {
@@ -346,7 +350,97 @@ class MetadataRouterFacadeFetchTrailerTest {
         )
     }
 
-    private fun emptyTrailerFacade(trailerService: TrailerService): MetadataRouterFacade {
+    @Test
+    fun `tvdb title trailers route through provider refs for availability and playback`() = runTest {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.resolvePlaybackSource(any(), any(), any())
+        } returns TrailerResolutionResult.Playback(
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/tvdb-title.m3u8")
+        )
+        val executedShapes = mutableListOf<String>()
+        val facade = tvdbTrailerFacade(
+            trailerService = trailerService,
+            trailerUrl = "https://www.youtube.com/watch?v=tvdbTitle01",
+            executedShapes = executedShapes
+        )
+
+        assertTrue(
+            facade.fetchTitleMediaAvailability(
+                metadataRequest = tvdbSeriesRequest(),
+                type = "series",
+                contentId = "tvdb:81189"
+            )
+        )
+
+        val result = facade.fetchTrailer(
+            metadataRequest = tvdbSeriesRequest(),
+            title = "Fringe",
+            year = "2008",
+            type = "series",
+            contentId = "tvdb:81189"
+        )
+
+        assertEquals(
+            TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/tvdb-title.m3u8")
+            ),
+            result
+        )
+        assertTrue(executedShapes.contains(TvdbApiShapes.TV_TRAILERS))
+        coVerify {
+            trailerService.resolvePlaybackSource(
+                match { it is TrailerPlaybackRef.ExternalUrl && it.url == "https://www.youtube.com/watch?v=tvdbTitle01" },
+                "Fringe",
+                "2008"
+            )
+        }
+    }
+
+    @Test
+    fun `season trailer playback tries lower ranked refs when top transport misses`() = runTest {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("topMiss"), any(), any())
+        } returns null
+        coEvery {
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("nextHit"), any(), any())
+        } returns TrailerResolutionResult.Playback(
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/season-next.m3u8")
+        )
+        val facade = emptyTrailerFacade(
+            trailerService = trailerService,
+            seasonTrailerRefResolver = object : SeasonTrailerRefResolver {
+                override suspend fun resolveSeasonTrailerRefs(request: SeasonTrailerRefRequest): List<TrailerPlaybackRef> =
+                    listOf(
+                        TrailerPlaybackRef.YouTubeId("topMiss"),
+                        TrailerPlaybackRef.YouTubeId("nextHit")
+                    )
+
+                override suspend fun resolveSeasonRecapRefs(request: SeasonTrailerRefRequest): List<TrailerPlaybackRef> =
+                    emptyList()
+            }
+        )
+
+        val source = facade.fetchSeasonTrailer(
+            metadataRequest = seasonMediaRequest(),
+            title = "Demo",
+            type = "series",
+            seasonNumber = 2,
+            contentId = "tvdb:series:1"
+        )
+
+        assertEquals("https://video.example.com/season-next.m3u8", source?.videoUrl)
+        coVerify {
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("topMiss"), "Demo", null)
+            trailerService.resolvePlaybackSource(TrailerPlaybackRef.YouTubeId("nextHit"), "Demo", null)
+        }
+    }
+
+    private fun emptyTrailerFacade(
+        trailerService: TrailerService,
+        seasonTrailerRefResolver: SeasonTrailerRefResolver? = null
+    ): MetadataRouterFacade {
         val events = TraceMetadataEvents(RecordingTraceSink(), sessionId = { "season" })
         val emptyAdapter = object : MetadataProviderAdapter {
             override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
@@ -376,6 +470,61 @@ class MetadataRouterFacadeFetchTrailerTest {
                 }
             ),
             providerPlanRunner = ProviderPlanRunner(setOf(emptyAdapter)),
+            fieldResolver = FieldResolver(events),
+            trailerService = trailerService,
+            seasonTrailerRefResolver = seasonTrailerRefResolver
+        )
+    }
+
+    private fun tvdbTrailerFacade(
+        trailerService: TrailerService,
+        trailerUrl: String,
+        executedShapes: MutableList<String>
+    ): MetadataRouterFacade {
+        val events = TraceMetadataEvents(RecordingTraceSink(), sessionId = { "tvdb-trailers" })
+        val adapter = object : MetadataProviderAdapter {
+            override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
+
+            override fun supports(step: ProviderPlanStep): Boolean = true
+
+            override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+                executedShapes += step.apiShapeId
+                return ProviderStepResult(
+                    step = step,
+                    candidate = MetadataCandidate(
+                        provider = provider,
+                        resolverType = ResolverType.TRAILERS,
+                        fields = if (step.apiShapeId == TvdbApiShapes.TV_TRAILERS) {
+                            mapOf(
+                                ResolvedField.TRAILERS to FieldValue(
+                                    listOf(trailerUrl),
+                                    FieldOwner.TRAILERS
+                                )
+                            )
+                        } else {
+                            emptyMap()
+                        }
+                    )
+                )
+            }
+        }
+
+        return MetadataRouterFacade(
+            router = MetadataRouter(
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
+                animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+                idMappingStore = InMemoryIdMappingStore(),
+                traceEvents = events
+            ),
+            providerPlanExecutor = ProviderPlanExecutor(),
+            resolverOrchestrator = ResolverOrchestrator(events),
+            identityResolver = MetadataIdentityResolver(
+                object : MetadataIdentityResolver.Lookup {
+                    override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                    override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+                }
+            ),
+            providerPlanRunner = ProviderPlanRunner(setOf(adapter)),
             fieldResolver = FieldResolver(events),
             trailerService = trailerService
         )
@@ -463,4 +612,12 @@ class MetadataRouterFacadeFetchTrailerTest {
             seasonNumber = 2
         )
 
+    private fun tvdbSeriesRequest(): MetadataRequest =
+        MetadataRequest(
+            contentId = "tvdb:81189",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            language = "eng",
+            depth = MetadataDepth.DETAIL_MEDIA
+        )
 }
