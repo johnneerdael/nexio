@@ -27,7 +27,7 @@ class IdleTrailerScreensaverSessionTest {
             slides = slides,
             shuffleCandidates = { it }
         ) { candidate, playbackRef ->
-            if (candidate.slide.itemId == "movie-2" && playbackRef == TrailerPlaybackRef.YouTubeId("def456ghi78")) {
+            if (candidate.slide.itemId == "movie-2" && playbackRef.fallbackTrailerIdsForTest() == listOf("def456ghi78")) {
                 TrailerPlaybackSource(videoUrl = "https://video.example.com/movie-2.mp4")
             } else {
                 null
@@ -67,7 +67,7 @@ class IdleTrailerScreensaverSessionTest {
             if (candidate.slide.itemId == "movie-2") {
                 null
             } else {
-                TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.playbackIdForTest()}.mp4")
             }
         }
 
@@ -79,9 +79,9 @@ class IdleTrailerScreensaverSessionTest {
     @Test
     fun `resolveNextIdleTrailerPlayback skips blacklisted trailer ids and advances to next playable candidate`() = runBlocking {
         val candidates = listOf(
-            buildCandidate("movie-1", listOf("abc123def45")),
-            buildCandidate("movie-2", listOf("def456ghi78")),
-            buildCandidate("movie-3", listOf("ghi789jkl01"))
+            buildCandidate("movie-1", selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("abc123def45")),
+            buildCandidate("movie-2", selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("def456ghi78")),
+            buildCandidate("movie-3", selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("ghi789jkl01"))
         )
 
         val playback = resolveNextIdleTrailerPlayback(
@@ -89,7 +89,7 @@ class IdleTrailerScreensaverSessionTest {
             currentIndex = 0,
             skippedPlaybackKeys = setOf(idleTrailerPlaybackKey(candidates[1], TrailerPlaybackRef.YouTubeId("def456ghi78")))
         ) { _, playbackRef ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.playbackIdForTest()}.mp4")
         }
 
         requireNotNull(playback)
@@ -134,8 +134,8 @@ class IdleTrailerScreensaverSessionTest {
     @Test
     fun `resolveNextIdleTrailerPlayback returns null when all candidates are skipped`() = runBlocking {
         val candidates = listOf(
-            buildCandidate("movie-1", listOf("abc123def45")),
-            buildCandidate("movie-2", listOf("def456ghi78"))
+            buildCandidate("movie-1", selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("abc123def45")),
+            buildCandidate("movie-2", selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("def456ghi78"))
         )
         val allSkipped = candidates.flatMap { c ->
             c.playbackRefs.map { ref -> idleTrailerPlaybackKey(c, ref) }
@@ -146,7 +146,7 @@ class IdleTrailerScreensaverSessionTest {
             currentIndex = 0,
             skippedPlaybackKeys = allSkipped
         ) { _, playbackRef ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.playbackIdForTest()}.mp4")
         }
 
         assertNull(playback)
@@ -191,6 +191,31 @@ class IdleTrailerScreensaverSessionTest {
     }
 
     @Test
+    fun `candidate without selected playback ref uses item lookup with fallback ids instead of direct youtube ref`() = runBlocking {
+        val candidates = listOf(
+            buildCandidate("movie-1", listOf("abc123def45"))
+        )
+        val attemptedRefs = mutableListOf<TrailerPlaybackRef>()
+
+        val session = prepareIdleTrailerScreensaverSessionFromCandidates(
+            candidates = candidates,
+            shuffleCandidates = { it }
+        ) { _, playbackRef ->
+            attemptedRefs += playbackRef
+            if (playbackRef is TrailerPlaybackRef.ItemLookup) {
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/by-item.m3u8")
+            } else {
+                null
+            }
+        }
+
+        requireNotNull(session)
+        val lookupRef = attemptedRefs.single() as TrailerPlaybackRef.ItemLookup
+        assertEquals(listOf("abc123def45"), lookupRef.fallbackYtIds)
+        assertEquals(lookupRef, session.initialPlayback.playbackRef)
+    }
+
+    @Test
     fun `resolveNextIdleTrailerPlayback with empty skip set loops back to first candidate`() = runBlocking {
         val candidates = listOf(
             buildCandidate("movie-1", listOf("abc123def45")),
@@ -202,7 +227,7 @@ class IdleTrailerScreensaverSessionTest {
             currentIndex = 1,
             skippedPlaybackKeys = emptySet()
         ) { _, playbackRef ->
-            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.videoIdForTest()}.mp4")
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.playbackIdForTest()}.mp4")
         }
 
         requireNotNull(playback)
@@ -221,7 +246,10 @@ class IdleTrailerScreensaverSessionTest {
         )
 
         assertEquals(listOf("movie-1", "movie-3"), candidates.map { it.slide.itemId })
-        assertTrue(candidates[1].playbackRefs.distinct() == candidates[1].playbackRefs)
+        assertTrue(
+            candidates[1].trailerState.fallbackTrailerYtIds.distinct() ==
+                candidates[1].trailerState.fallbackTrailerYtIds
+        )
     }
 
     private fun buildSlide(
@@ -254,7 +282,8 @@ class IdleTrailerScreensaverSessionTest {
 
     private fun buildCandidate(
         itemId: String,
-        trailerIds: List<String>
+        trailerIds: List<String> = emptyList(),
+        selectedPlaybackRef: TrailerPlaybackRef? = null
     ): IdleTrailerScreensaverCandidate {
         return IdleTrailerScreensaverCandidate(
             itemId = itemId,
@@ -270,7 +299,10 @@ class IdleTrailerScreensaverSessionTest {
             runtime = null,
             imdbRating = null,
             tomatoesRating = null,
-            trailerState = TrailerDisplayState(fallbackTrailerYtIds = trailerIds)
+            trailerState = TrailerDisplayState(
+                fallbackTrailerYtIds = trailerIds,
+                selectedPlaybackRef = selectedPlaybackRef
+            )
         )
     }
 
@@ -281,6 +313,13 @@ class IdleTrailerScreensaverSessionTest {
             trace = ArtworkTrace.empty()
         )
 
-    private fun TrailerPlaybackRef.videoIdForTest(): String =
-        (this as TrailerPlaybackRef.YouTubeId).videoId
+    private fun TrailerPlaybackRef.playbackIdForTest(): String =
+        when (this) {
+            is TrailerPlaybackRef.YouTubeId -> videoId
+            is TrailerPlaybackRef.ItemLookup -> fallbackYtIds.single()
+            else -> error("Unexpected test playback ref: $this")
+        }
+
+    private fun TrailerPlaybackRef.fallbackTrailerIdsForTest(): List<String> =
+        (this as TrailerPlaybackRef.ItemLookup).fallbackYtIds
 }

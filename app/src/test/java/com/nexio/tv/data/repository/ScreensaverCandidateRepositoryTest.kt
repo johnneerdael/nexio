@@ -9,6 +9,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -156,7 +157,7 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals(1, candidates.size)
         assertEquals("series:tvdb:81189", candidates.single().itemKey)
         assertEquals("Breaking Bad", candidates.single().title)
-        assertTrue(candidates.single().fallbackTrailerYtIds.isEmpty())
+        assertTrue(candidates.single().trailerState.fallbackTrailerYtIds.isEmpty())
         assertEquals("81189", candidates.single().stableIds.tvdb)
     }
 
@@ -177,7 +178,39 @@ class ScreensaverCandidateRepositoryTest {
 
         val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
 
-        assertEquals(listOf("abc123", "def456"), candidate.fallbackTrailerYtIds)
+        assertEquals(listOf("abc123", "def456"), candidate.trailerState.fallbackTrailerYtIds)
+    }
+
+    @Test
+    fun `trailer candidates preserve resolved trailer display state`() = runTest {
+        val surface = testSurface()
+        val repository = testScreensaverCandidates(surface)
+        val trailerState = TrailerDisplayState(
+            fallbackTrailerYtIds = listOf(" abc123 ", "", "abc123"),
+            selectedPlaybackRef = TrailerPlaybackRef.InAppSource(
+                videoUrl = "https://video.example.com/fight-club.m3u8",
+                audioUrl = "https://audio.example.com/fight-club.m4a",
+                userAgent = "NexioTest"
+            ),
+            availabilityReason = "provider_candidate",
+            surface = "home",
+            resolverSource = "TMDB",
+            lastResolvedAtMs = 1234L
+        )
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "movie:tmdb:550",
+                    title = "Fight Club",
+                    trailerState = trailerState
+                )
+            )
+        )
+
+        val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
+
+        assertEquals(trailerState.copy(fallbackTrailerYtIds = listOf("abc123")), candidate.trailerState)
     }
 
     @Test
@@ -197,7 +230,7 @@ class ScreensaverCandidateRepositoryTest {
 
         val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
 
-        assertTrue(candidate.fallbackTrailerYtIds.isEmpty())
+        assertTrue(candidate.trailerState.fallbackTrailerYtIds.isEmpty())
     }
 
     @Test
@@ -218,7 +251,7 @@ class ScreensaverCandidateRepositoryTest {
         val snapshot = repository.getCandidatesSnapshot(profileId = 1)
 
         assertEquals(listOf("movie:tmdb:550"), snapshot.imageCandidates.map { it.itemKey })
-        assertEquals(listOf("abc123"), snapshot.trailerCandidates.single().fallbackTrailerYtIds)
+        assertEquals(listOf("abc123"), snapshot.trailerCandidates.single().trailerState.fallbackTrailerYtIds)
     }
 
     @Test
@@ -355,7 +388,8 @@ class ScreensaverCandidateRepositoryTest {
         title: String?,
         artwork: ArtworkBundle = ArtworkBundle(backdrop = artworkRef("backdrop-550", ArtworkType.BACKDROP)),
         sourceTrace: List<HydratedHomeFieldTrace> = emptyList(),
-        fallbackTrailerYtIds: List<String> = emptyList()
+        fallbackTrailerYtIds: List<String> = emptyList(),
+        trailerState: TrailerDisplayState = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds)
     ) = ResolvedDisplayItem(
         itemKey = itemKey,
         contentId = "tmdb:550",
@@ -377,7 +411,7 @@ class ScreensaverCandidateRepositoryTest {
         ),
         artwork = artwork,
         rating = TitleRating(8.8, TitleRatingSource.IMDB),
-        trailer = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds),
+        trailer = trailerState,
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = sourceTrace,
         updatedAtMs = 1L

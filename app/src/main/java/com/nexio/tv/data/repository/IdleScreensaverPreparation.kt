@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
@@ -57,7 +56,7 @@ internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): Id
         runtime = null,
         imdbRating = rating?.value?.toFloat(),
         tomatoesRating = null,
-        trailerState = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds),
+        trailerState = trailerState,
         stableIds = stableIds
     )
 }

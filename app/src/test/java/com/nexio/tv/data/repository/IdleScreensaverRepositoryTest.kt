@@ -12,6 +12,7 @@ import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 import io.mockk.coEvery
@@ -119,7 +120,7 @@ class IdleScreensaverRepositoryTest {
                         source = TitleRatingSource.IMDB
                     ),
                     artwork = ArtworkBundle(backdrop = artworkRef("backdrop-81189", ArtworkType.BACKDROP)),
-                    fallbackTrailerYtIds = emptyList(),
+                    trailerState = TrailerDisplayState(),
                     stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
                 )
             )
@@ -183,7 +184,7 @@ class IdleScreensaverRepositoryTest {
                         backdrop = artworkRef("fight-backdrop", ArtworkType.BACKDROP),
                         poster = artworkRef("fight-poster", ArtworkType.POSTER)
                     ),
-                    fallbackTrailerYtIds = emptyList(),
+                    trailerState = TrailerDisplayState(),
                     stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
                 )
             )

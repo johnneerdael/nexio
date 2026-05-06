@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screensaver
 import android.view.KeyEvent
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
+import com.nexio.tv.domain.model.TrailerDisplayState
 import kotlin.random.Random
 
 internal enum class IdleScreensaverPresentationMode {
@@ -36,11 +37,8 @@ internal fun collectIdleTrailerScreensaverCandidates(
 ): List<IdleTrailerScreensaverCandidate> {
     return slides
         .mapNotNull { slide ->
-            val trailerState = slide.modeData.trailer?.trailerState
-            val playbackRefs = trailerState?.let { state ->
-                IdleTrailerScreensaverCandidate(slide, state).playbackRefs
-            }.orEmpty()
-            if (trailerState == null || playbackRefs.isEmpty()) {
+            val trailerState = slide.modeData.trailer?.trailerState?.normalizedFallbackTrailerIds()
+            if (trailerState == null || !trailerState.hasTrailerResolutionPath()) {
                 null
             } else {
                 IdleTrailerScreensaverCandidate(
@@ -204,18 +202,31 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
 }
 
 private fun IdleTrailerScreensaverCandidate.playbackRefsForSession(): List<TrailerPlaybackRef> {
-    return playbackRefs.ifEmpty {
+    return trailerState.selectedPlaybackRef?.let { listOf(it) } ?: run {
         listOf(
             TrailerPlaybackRef.ItemLookup(
                 title = title,
                 year = extractIdleTrailerReleaseYear(releaseInfo),
                 stableIds = stableIds,
                 type = itemType,
-                contentId = trailerResolverContentId()
+                contentId = trailerResolverContentId(),
+                fallbackYtIds = trailerState.fallbackTrailerYtIds.mapNotNull { id ->
+                    id.trim().takeIf(String::isNotEmpty)
+                }.distinct()
             )
         )
     }
 }
+
+private fun TrailerDisplayState.hasTrailerResolutionPath(): Boolean =
+    selectedPlaybackRef != null || fallbackTrailerYtIds.any { it.isNotBlank() }
+
+private fun TrailerDisplayState.normalizedFallbackTrailerIds(): TrailerDisplayState =
+    copy(
+        fallbackTrailerYtIds = fallbackTrailerYtIds.mapNotNull { id ->
+            id.trim().takeIf(String::isNotEmpty)
+        }.distinct()
+    )
 
 internal fun IdleTrailerScreensaverCandidate.trailerResolverContentId(): String {
     return stableIds.tvdb?.trim()?.takeIf(String::isNotEmpty)?.let { "tvdb:$it" }

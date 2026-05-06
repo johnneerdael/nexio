@@ -106,7 +106,9 @@ class ScreensaverCandidateRepository(
             overview = display.overview,
             rating = rating,
             artwork = artwork,
-            fallbackTrailerYtIds = trailer.fallbackTrailerYtIds.normalizedTrailerIds(),
+            trailerState = trailer.copy(
+                fallbackTrailerYtIds = trailer.fallbackTrailerYtIds.normalizedTrailerIds()
+            ),
             stableIds = stableIds
         )
     }
