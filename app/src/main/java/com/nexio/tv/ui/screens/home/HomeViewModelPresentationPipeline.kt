@@ -328,6 +328,9 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     setEnrichingItemId(item.id)
 
     pendingTmdbEnrichItemId = itemKey
+    val expectedGeneration = homeProfileGeneration
+    val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     tmdbEnrichFocusJob?.cancel()
     tmdbEnrichFocusJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
@@ -355,8 +358,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return@launch
 
             focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
-            val expectedGeneration = homeProfileGeneration
-            val expectedLanguageTag = profileBoundary.currentLanguageTag()
             var overlayApplied = false
             val overlay = try {
                 homeHydrationCoordinator.hydrate(
@@ -371,6 +372,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
                             expectedLanguageTag = expectedLanguageTag,
+                            expectedProfileSession = expectedProfileSession,
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                         if (overlayApplied) {
@@ -414,6 +416,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
     focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
     val expectedGeneration = homeProfileGeneration
     val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     viewModelScope.launch {
         var overlayApplied = false
         val overlay = try {
@@ -429,6 +432,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
                         overlay = appliedOverlay,
                         expectedGeneration = expectedGeneration,
                         expectedLanguageTag = expectedLanguageTag,
+                        expectedProfileSession = expectedProfileSession,
                         trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                     )
                     if (overlayApplied) {
@@ -477,6 +481,9 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (pendingTmdbEnrichItemId == itemKey || pendingAdjacentPrefetchItemId == itemKey) return
 
     pendingAdjacentPrefetchItemId = itemKey
+    val expectedGeneration = homeProfileGeneration
+    val expectedLanguageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     adjacentItemPrefetchJob?.cancel()
     adjacentItemPrefetchJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
@@ -486,8 +493,6 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
 
         try {
             if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
-                val expectedGeneration = homeProfileGeneration
-                val expectedLanguageTag = profileBoundary.currentLanguageTag()
                 homeHydrationCoordinator.hydrate(
                     item = item,
                     trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
@@ -500,6 +505,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
                             expectedLanguageTag = expectedLanguageTag,
+                            expectedProfileSession = expectedProfileSession,
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                         if (overlayApplied) {
@@ -618,6 +624,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 
     val expectedGeneration = homeProfileGeneration
     val languageTag = profileBoundary.currentLanguageTag()
+    val expectedProfileSession = profileManager.activeProfileSession.value
     return items
         .distinctBy { it.homeOverlayItemKey() }
         .associate { item ->
@@ -634,11 +641,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
                             expectedLanguageTag = languageTag,
+                            expectedProfileSession = expectedProfileSession,
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                     }
                 )
-                if (isCurrentHomeHydrationScope(expectedGeneration, languageTag)) {
+                if (isCurrentHomeHydrationScope(expectedGeneration, languageTag, expectedProfileSession)) {
                     overlay?.fields?.applyToHeroItem(item, settings) ?: item
                 } else {
                     item

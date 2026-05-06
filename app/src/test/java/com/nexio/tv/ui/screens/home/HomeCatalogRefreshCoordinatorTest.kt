@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
@@ -451,9 +452,16 @@ class HomeCatalogRefreshCoordinatorTest {
             2
         }
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -587,9 +595,16 @@ class HomeCatalogRefreshCoordinatorTest {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -689,9 +704,16 @@ class HomeCatalogRefreshCoordinatorTest {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
 
+        val profileSession = activeProfileSession()
+        every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
+
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = profileSession,
+                reason = "account_sync"
+            )
         } finally {
             Dispatchers.resetMain()
         }
@@ -953,5 +975,12 @@ class HomeCatalogRefreshCoordinatorTest {
         every { prefs.getInt(any(), any()) } returns 1
         return context
     }
+
+    private fun activeProfileSession() = ActiveProfileSession(
+        profileId = 1,
+        sessionId = "test-session",
+        sessionOrdinal = 1L,
+        startedAtMs = 1L
+    )
 
 }
