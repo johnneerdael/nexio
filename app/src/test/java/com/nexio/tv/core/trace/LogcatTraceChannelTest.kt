@@ -101,6 +101,14 @@ class LogcatTraceChannelTest {
     }
 
     @Test
+    fun `artwork materialization events map to INT_RUNTIME`() {
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_lookup"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.decision_missing"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.asset_materialized"))
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.fallback_materialized"))
+    }
+
+    @Test
     fun `policy events map to null (bundle-only)`() {
         assertNull(LogcatTraceChannel.forEventType("policy.unscoped_network"))
     }
