@@ -131,7 +131,10 @@ class AndroidTvFeedCatalogService @Inject constructor(
             .toList()
         if (normalizedKeys.isEmpty()) return emptyList()
 
-        ensureContinueWatchingSnapshotFresh()
+        val needsContinueWatchingSnapshot = normalizedKeys.any(::feedKeyNeedsContinueWatchingSnapshot)
+        if (needsContinueWatchingSnapshot) {
+            ensureContinueWatchingSnapshotFresh()
+        }
         runCatching { traktDiscoveryService.ensureFresh(force = false) }
         runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
 
@@ -153,7 +156,6 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val needsContinueWatchingSnapshot = normalizedKeys.any(::feedKeyNeedsContinueWatchingSnapshot)
         val continueWatchingSnapshot = if (needsContinueWatchingSnapshot) {
             resolveActiveProfileContinueWatchingSnapshot()
         } else {
@@ -211,7 +213,10 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val normalizedKey = feedKey.trim()
         if (normalizedKey.isEmpty()) return null
 
-        ensureContinueWatchingSnapshotFresh()
+        val needsContinueWatchingSnapshot = feedKeyNeedsContinueWatchingSnapshot(normalizedKey)
+        if (needsContinueWatchingSnapshot) {
+            ensureContinueWatchingSnapshotFresh()
+        }
         runCatching { traktDiscoveryService.ensureFresh(force = false) }
         runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
 
@@ -233,7 +238,6 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val needsContinueWatchingSnapshot = feedKeyNeedsContinueWatchingSnapshot(normalizedKey)
         val continueWatchingSnapshot = if (needsContinueWatchingSnapshot) {
             resolveActiveProfileContinueWatchingSnapshot()
         } else {
