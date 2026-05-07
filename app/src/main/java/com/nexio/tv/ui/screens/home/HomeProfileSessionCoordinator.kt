@@ -51,7 +51,11 @@ class HomeProfileSessionCoordinator internal constructor(
 
     internal fun start(scope: CoroutineScope, generationProvider: () -> Long): StateFlow<HomeProfileSession> {
         val initialInputs = bootstrapSessionInputs(profileManager.activeProfileSession.value)
-        val initialSession = createSession(initialInputs, generationProvider)
+        val initialSession = createSession(
+            inputs = initialInputs,
+            generation = generationProvider(),
+            startedAtMs = nowMs()
+        )
         val sessions = profileManager.activeProfileSession.flatMapLatest { profileSession ->
             combine(
                 localeTags,
@@ -69,10 +73,18 @@ class HomeProfileSessionCoordinator internal constructor(
                 }
             }
         }.runningFold(initialInputs to initialSession) { (_, previousSession), inputs ->
-            if (previousSession.matches(inputs)) {
-                inputs to previousSession
-            } else {
-                inputs to createSession(inputs, generationProvider)
+            when {
+                previousSession.matches(inputs) -> inputs to previousSession
+                previousSession.hasSameProfileSessionKey(inputs) -> inputs to createSession(
+                    inputs = inputs,
+                    generation = previousSession.generation,
+                    startedAtMs = previousSession.startedAtMs
+                )
+                else -> inputs to createSession(
+                    inputs = inputs,
+                    generation = generationProvider(),
+                    startedAtMs = nowMs()
+                )
             }
         }.map { (_, session) ->
             session
@@ -107,13 +119,12 @@ class HomeProfileSessionCoordinator internal constructor(
 
     private fun createSession(
         inputs: HomeProfileSessionInputs,
-        generationProvider: () -> Long
+        generation: Long,
+        startedAtMs: Long
     ): HomeProfileSession {
         val profileId = inputs.profileSession.profileId
-        val generation = generationProvider()
         val sessionId = "home-${inputs.profileSession.sessionId}:$generation"
         val profileSessionKey = profileSessionKey(inputs.profileSession)
-        val startedAtMs = nowMs()
         return when (val route = profileModeRouter.routeFor(profileId)) {
             ProfileModeRoute.DefaultLegacyRoute -> HomeProfileSession.DefaultLegacy(
                 generation = generation,
@@ -143,6 +154,10 @@ class HomeProfileSessionCoordinator internal constructor(
             profileSessionKey == profileSessionKey(inputs.profileSession) &&
             language == inputs.language &&
             subtitleLanguage == inputs.subtitleLanguage
+    }
+
+    private fun HomeProfileSession.hasSameProfileSessionKey(inputs: HomeProfileSessionInputs): Boolean {
+        return profileSessionKey == profileSessionKey(inputs.profileSession)
     }
 
     private fun profileSessionKey(profileSession: ActiveProfileSession): String {

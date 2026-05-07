@@ -389,6 +389,69 @@ class HomeProfileSessionLifecycleContractTest {
     }
 
     @Test
+    fun `settings updates reuse generation while profile session identity changes advance generation`() = runTest {
+        val activeProfileSession = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 1L,
+                startedAtMs = 100L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        }
+        val profileBoundary = mockk<ProfileBoundary> {
+            every { currentLanguageTag() } returns "en"
+        }
+        val playerSettings = MutableSharedFlow<PlayerSettings>()
+        val coordinator = HomeProfileSessionCoordinator(
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = profileBoundary,
+            localeTags = flowOf("en"),
+            playerSettings = playerSettings,
+            nowMs = { 1234L }
+        )
+        var nextGeneration = 10L
+
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { nextGeneration++ })
+            advanceUntilIdle()
+            val bootstrapGeneration = activeSession.value.generation
+            val bootstrapKey = activeSession.value.profileSessionKey
+
+            playerSettings.emit(
+                PlayerSettings(
+                    subtitleStyle = SubtitleStyleSettings(
+                        preferredLanguage = "fr"
+                    )
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals(bootstrapKey, activeSession.value.profileSessionKey)
+            assertEquals("fr", activeSession.value.subtitleLanguage)
+            assertEquals(bootstrapGeneration, activeSession.value.generation)
+
+            activeProfileSession.value = com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 2L,
+                startedAtMs = 200L
+            )
+            advanceUntilIdle()
+
+            assertTrue(activeSession.value.profileSessionKey.endsWith(":2"))
+            assertTrue(activeSession.value.generation > bootstrapGeneration)
+        } finally {
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
     fun `profile reset does not clear shared cache owners`() {
         assertFalse(catalogPipelineSource.contains("metadataDiskCacheStore.clear"))
         assertFalse(catalogPipelineSource.contains("artworkDecisionStore.clear"))
