@@ -293,6 +293,22 @@ class AndroidTvFeedCatalogServiceTmdbTest {
     }
 
     @Test
+    fun `resolving continue watching feed rethrows cancellation from refresh`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingEnsureFreshError = CancellationException("refresh cancelled")
+        )
+
+        try {
+            fixture.service.resolveFeed(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+            fail("Expected refresh cancellation to propagate")
+        } catch (error: CancellationException) {
+            assertEquals("refresh cancelled", error.message)
+        }
+    }
+
+    @Test
     fun `resolving continue watching feed falls back when profile snapshot is unavailable`() = runTest {
         val fixture = fixture(
             tmdbSnapshot = TmdbDiscoverySnapshot(),
@@ -334,7 +350,8 @@ class AndroidTvFeedCatalogServiceTmdbTest {
     private fun fixture(
         tmdbSnapshot: TmdbDiscoverySnapshot,
         tmdbPrefs: TmdbCatalogPreferences,
-        continueWatchingSnapshotFlow: Flow<ContinueWatchingSnapshot> = flowOf(ContinueWatchingSnapshot())
+        continueWatchingSnapshotFlow: Flow<ContinueWatchingSnapshot> = flowOf(ContinueWatchingSnapshot()),
+        continueWatchingEnsureFreshError: Throwable? = null
     ): ServiceFixture {
         val addonRepository = mockk<AddonRepository>(relaxed = true) {
             every { getInstalledAddons() } returns flowOf(emptyList())
@@ -366,7 +383,11 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         }
         val continueWatchingSnapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true) {
             every { observeProfileSnapshot(1) } returns continueWatchingSnapshotFlow
-            coEvery { ensureFresh(force = false) } returns Unit
+            if (continueWatchingEnsureFreshError == null) {
+                coEvery { ensureFresh(force = false) } returns Unit
+            } else {
+                coEvery { ensureFresh(force = false) } throws continueWatchingEnsureFreshError
+            }
         }
 
         val profileManager = mockk<ProfileManager> {

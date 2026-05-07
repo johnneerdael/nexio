@@ -131,7 +131,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
             .toList()
         if (normalizedKeys.isEmpty()) return emptyList()
 
-        runCatching { continueWatchingSnapshotService.ensureFresh(force = false) }
+        ensureContinueWatchingSnapshotFresh()
         runCatching { traktDiscoveryService.ensureFresh(force = false) }
         runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
 
@@ -211,7 +211,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val normalizedKey = feedKey.trim()
         if (normalizedKey.isEmpty()) return null
 
-        runCatching { continueWatchingSnapshotService.ensureFresh(force = false) }
+        ensureContinueWatchingSnapshotFresh()
         runCatching { traktDiscoveryService.ensureFresh(force = false) }
         runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
 
@@ -349,6 +349,16 @@ class AndroidTvFeedCatalogService @Inject constructor(
                 error
             )
             ContinueWatchingSnapshot()
+        }
+    }
+
+    private suspend fun ensureContinueWatchingSnapshotFresh() {
+        try {
+            continueWatchingSnapshotService.ensureFresh(force = false)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(TAG, "Falling back to cached Android TV continue-watching feed", error)
         }
     }
 
