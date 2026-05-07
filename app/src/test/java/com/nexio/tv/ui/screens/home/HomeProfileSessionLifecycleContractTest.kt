@@ -167,6 +167,84 @@ class HomeProfileSessionLifecycleContractTest {
     }
 
     @Test
+    fun `home profile session does not carry previous profile subtitle into next profile session`() = runTest {
+        val activeProfileSession = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 1L,
+                startedAtMs = 100L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        }
+        val profileBoundary = mockk<ProfileBoundary> {
+            every { currentLanguageTag() } returns "en"
+            every { contextFor(ProfileModeRoute.SecondaryProfileRoute(2)) } returns
+                com.nexio.tv.core.profile.SecondaryProfileRuntimeContext(
+                    profileId = 2,
+                    languageTag = "en",
+                    generation = 2L
+                )
+        }
+        val playerSettings = MutableSharedFlow<PlayerSettings>()
+        val coordinator = HomeProfileSessionCoordinator(
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = profileBoundary,
+            localeTags = flowOf("en"),
+            playerSettings = playerSettings,
+            nowMs = { 1234L }
+        )
+
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { 11L })
+            advanceUntilIdle()
+
+            playerSettings.emit(
+                PlayerSettings(
+                    subtitleStyle = SubtitleStyleSettings(
+                        preferredLanguage = "en"
+                    )
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals(1, activeSession.value.profileId)
+            assertEquals("en", activeSession.value.subtitleLanguage)
+
+            activeProfileSession.value = com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 2,
+                sessionId = "profile:2:runtime",
+                sessionOrdinal = 2L,
+                startedAtMs = 200L
+            )
+            advanceUntilIdle()
+
+            assertEquals(2, activeSession.value.profileId)
+            assertTrue(activeSession.value.sessionId.contains("profile:2:runtime"))
+            assertEquals(null, activeSession.value.subtitleLanguage)
+
+            playerSettings.emit(
+                PlayerSettings(
+                    subtitleStyle = SubtitleStyleSettings(
+                        preferredLanguage = "fr"
+                    )
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals(2, activeSession.value.profileId)
+            assertEquals("fr", activeSession.value.subtitleLanguage)
+        } finally {
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
     fun `home profile session updates on first profile session change after start`() = runTest {
         val activeProfileSession = MutableStateFlow(
             com.nexio.tv.core.integration.ActiveProfileSession(
