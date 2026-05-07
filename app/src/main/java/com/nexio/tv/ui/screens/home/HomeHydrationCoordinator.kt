@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -22,6 +24,7 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -129,6 +132,41 @@ class HomeHydrationCoordinator @Inject constructor(
                 displayHash = overlay.displayHash
             )
             val overlayAccepted = onOverlayApplied(overlay)
+            val firstPaintMetadata = item.toHomeDisplayMetadata()
+            val previewRating = firstPaintMetadata.imdbRating
+            val acceptedPreviewRating = RatingValueValidator.validTitleRating(previewRating)
+            val sanitizedPreviewRating = RatingValueValidator.sanitizeTitleRating(previewRating)
+            val sanitizedHydratedRating = RatingValueValidator.sanitizeTitleRating(overlay.fields.imdbRating)
+            val hydratedTvdbId = overlay.canonicalId.takeIf { overlay.canonicalProvider == ProviderId.TVDB }
+                ?: bundle?.canonical?.tvdbSeriesId
+            traceEvents.emitHomeRatingAndArtworkSurface(
+                surface = "HOME",
+                itemKeyHash = traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, itemKey),
+                firstPaintRatingValue = sanitizedPreviewRating,
+                firstPaintRatingAccepted = acceptedPreviewRating,
+                firstPaintRatingRejectReason = if (previewRating != null && !acceptedPreviewRating) {
+                    "OUT_OF_RANGE_TITLE_RATING"
+                } else {
+                    null
+                },
+                firstPaintLogoPresent = firstPaintMetadata.displayLogo != null,
+                firstPaintTmdbIdHash = item.firstPaintStableIds.tmdbOrPreviewId(item.id)
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+                firstPaintTvdbIdHash = item.firstPaintStableIds.tvdb
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+                firstPaintImdbIdHash = item.firstPaintStableIds.imdb
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+                hydrationStarted = true,
+                routeProvider = result.route?.provider?.name,
+                tvdbIdHash = hydratedTvdbId?.let {
+                    traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it)
+                },
+                overlayApplied = overlayAccepted,
+                hydratedRatingValue = sanitizedHydratedRating,
+                hydratedRatingSource = overlay.fields.ratingSource?.name.takeIf { sanitizedHydratedRating != null },
+                hydratedLogoPresent = overlay.fields.displayLogo != null,
+                hydratedLogoSource = overlay.fields.artwork?.logo?.trace?.selectedProvider
+            )
             if (!overlayAccepted) {
                 return null
             }
@@ -142,7 +180,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 trigger = trigger.name,
                 priority = priority.name,
                 workClass = WORK_CLASS_BACKGROUND_HYDRATION,
-                changedFields = changedFields(item.toHomeDisplayMetadata(), overlay.fields),
+                changedFields = changedFields(firstPaintMetadata, overlay.fields),
                 displayHashBefore = item.displayHashForHomeOverlay(),
                 displayHashAfter = overlay.displayHash,
                 rowOrderChanged = false,
@@ -166,9 +204,9 @@ class HomeHydrationCoordinator @Inject constructor(
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
-        val fields = displayMetadata.copy(
-            artwork = displayMetadata.artwork ?: item.artwork
-        )
+        val fields = displayMetadata
+            .sanitizeHydratedTitleRating()
+            .mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -193,6 +231,41 @@ class HomeHydrationCoordinator @Inject constructor(
             staleAtMs = nowMs + OVERLAY_STALE_MS,
             expiresAtMs = nowMs + OVERLAY_EXPIRES_MS,
             state = HomeItemHydrationState.CANONICAL_READY
+        )
+    }
+
+    private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
+        firstPaintArtwork: ArtworkBundle?
+    ): HomeDisplayMetadata {
+        val hydratedArtwork = artwork
+        val merged = firstPaintArtwork?.let { fallback ->
+            ArtworkBundle(
+                poster = hydratedArtwork?.poster ?: fallback.poster.takeIf { displayPoster == null },
+                backdrop = hydratedArtwork?.backdrop ?: fallback.backdrop.takeIf { displayBackdrop == null },
+                logo = hydratedArtwork?.logo ?: fallback.logo.takeIf { displayLogo == null },
+                thumbnail = hydratedArtwork?.thumbnail ?: fallback.thumbnail.takeIf { displayThumbnail == null }
+            )
+        } ?: hydratedArtwork
+        val mergedOrNull = merged?.takeUnless {
+            it.poster == null &&
+                it.backdrop == null &&
+                it.logo == null &&
+                it.thumbnail == null
+        }
+        return copy(
+            poster = mergedOrNull?.poster.toLegacyArtworkString() ?: poster,
+            backdrop = mergedOrNull?.backdrop.toLegacyArtworkString() ?: backdrop,
+            logo = mergedOrNull?.logo.toLegacyArtworkString() ?: logo,
+            thumbnail = mergedOrNull?.thumbnail.toLegacyArtworkString() ?: thumbnail,
+            artwork = mergedOrNull
+        )
+    }
+
+    private fun HomeDisplayMetadata.sanitizeHydratedTitleRating(): HomeDisplayMetadata {
+        val cleanRating = RatingValueValidator.sanitizeTitleRating(imdbRating)
+        return copy(
+            imdbRating = cleanRating,
+            ratingSource = ratingSource.takeIf { cleanRating != null }
         )
     }
 
@@ -291,6 +364,9 @@ class HomeHydrationCoordinator @Inject constructor(
             ?.takeIf { it.isNotEmpty() }
             ?.substringAfter(':')
             ?.takeIf { it.isNotBlank() }
+
+    private fun ProviderIds.tmdbOrPreviewId(previewId: String): String? =
+        tmdb ?: previewId.takeIf { it.startsWith("tmdb:") }?.providerNativeId()
 
     private fun ResolvedMetadataDocument.homeFieldTrace(
         fallbackProvider: MetadataPrimaryProvider?
@@ -423,6 +499,7 @@ class HomeHydrationCoordinator @Inject constructor(
 
     private companion object {
         const val HOME_OVERLAY_POLICY_VERSION = 1
+        const val HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE = "home-rating-artwork"
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L
         const val OVERLAY_EXPIRES_MS = 7L * 24L * 60L * 60L * 1000L

@@ -219,6 +219,172 @@ class MetadataModelSanitizersTest {
         assertEquals("rpdb", sanitized.posterProviderTag)
     }
 
+    @Test
+    fun `sanitize preview clears out of range imdb rating without dropping item`() {
+        val preview = MetaPreview(
+            id = "tmdb:94997",
+            type = ContentType.SERIES,
+            name = "House of the Dragon",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2022",
+            imdbRating = 1767427f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = emptyList()
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertNull(sanitized.imdbRating)
+        assertNull(sanitized.ratingSource)
+        assertEquals("House of the Dragon", sanitized.name)
+    }
+
+    @Test
+    fun `sanitize home display metadata clears out of range title rating`() {
+        val metadata = HomeDisplayMetadata(
+            title = "Widow's Bay",
+            imdbRating = 15129f,
+            ratingSource = TitleRatingSource.IMDB
+        )
+
+        val sanitized = metadata.sanitizedForCache()
+
+        assertNull(sanitized.imdbRating)
+        assertNull(sanitized.ratingSource)
+        assertEquals("Widow's Bay", sanitized.title)
+    }
+
+    @Test
+    fun `sanitize title metadata keeps valid rating source`() {
+        val preview = MetaPreview(
+            id = "tmdb:550",
+            type = ContentType.MOVIE,
+            name = "Fight Club",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "1999",
+            imdbRating = 8.8f,
+            ratingSource = TitleRatingSource.IMDB,
+            genres = emptyList()
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertEquals(8.8f, sanitized.imdbRating ?: 0f, 0f)
+        assertEquals(TitleRatingSource.IMDB, sanitized.ratingSource)
+    }
+
+    @Test
+    fun `sanitize preview with null rating clears stale rating source`() {
+        val preview = MetaPreview(
+            id = "tmdb:94997",
+            type = ContentType.SERIES,
+            name = "House of the Dragon",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2022",
+            imdbRating = null,
+            ratingSource = TitleRatingSource.IMDB,
+            genres = emptyList()
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertNull(sanitized.imdbRating)
+        assertNull(sanitized.ratingSource)
+    }
+
+    @Test
+    fun `sanitize valid rating with null source defaults to imdb by compatibility policy`() {
+        val preview = MetaPreview(
+            id = "tt0137523",
+            type = ContentType.MOVIE,
+            name = "Fight Club",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "1999",
+            imdbRating = 8.8f,
+            ratingSource = null,
+            genres = emptyList()
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertEquals(8.8f, sanitized.imdbRating ?: 0f, 0f)
+        assertEquals(TitleRatingSource.IMDB, sanitized.ratingSource)
+    }
+
+    @Test
+    fun `sanitize tmdb enrichment clears out of range title rating`() {
+        val enrichment = sampleTmdbEnrichment(
+            rating = 1767427.0,
+            ratingSource = TitleRatingSource.TMDB
+        )
+
+        val sanitized = enrichment.sanitizedForCache()
+
+        assertNull(sanitized.rating)
+        assertNull(sanitized.ratingSource)
+        assertEquals(emptyList<String>(), sanitized.genres)
+    }
+
+    @Test
+    fun `sanitize tmdb enrichment with valid rating defaults null source to tmdb`() {
+        val enrichment = sampleTmdbEnrichment(
+            rating = 8.1,
+            ratingSource = null
+        )
+
+        val sanitized = enrichment.sanitizedForCache()
+
+        assertEquals(8.1, sanitized.rating ?: 0.0, 0.0)
+        assertEquals(TitleRatingSource.TMDB, sanitized.ratingSource)
+    }
+
+    @Test
+    fun `sanitize tv metadata enrichment clears out of range title rating`() {
+        val enrichment = TvMetadataEnrichment(
+            seriesTvdbId = 1,
+            localizedTitle = "Show",
+            rating = 15129.0,
+            ratingSource = TitleRatingSource.IMDB
+        )
+
+        val sanitized = enrichment.sanitizedForCache()
+
+        assertNull(sanitized.rating)
+        assertNull(sanitized.ratingSource)
+        assertEquals(emptyMap<String, Boolean>(), sanitized.airsDays)
+    }
+
+    @Test
+    fun `sanitize tv metadata enrichment with valid rating defaults null source to imdb`() {
+        val enrichment = TvMetadataEnrichment(
+            seriesTvdbId = 1,
+            localizedTitle = "Show",
+            rating = 8.0,
+            ratingSource = null
+        )
+
+        val sanitized = enrichment.sanitizedForCache()
+
+        assertEquals(8.0, sanitized.rating ?: 0.0, 0.0)
+        assertEquals(TitleRatingSource.IMDB, sanitized.ratingSource)
+    }
+
     private fun legacyPreviewJson(): MetaPreview {
         return gson.fromJson(
             """
@@ -245,6 +411,35 @@ class MetadataModelSanitizersTest {
             MetaPreview::class.java
         )
     }
+
+    private fun sampleTmdbEnrichment(
+        rating: Double?,
+        ratingSource: TitleRatingSource?
+    ): TmdbEnrichment =
+        TmdbEnrichment(
+            localizedTitle = "Movie",
+            description = null,
+            genres = emptyList(),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = emptyList(),
+            releaseInfo = "2025",
+            rating = rating,
+            ratingSource = ratingSource,
+            runtimeMinutes = 120,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            countries = null,
+            language = "en",
+            collectionId = null,
+            collectionName = null
+        )
 
     private fun sampleMeta(
         poster: String?,

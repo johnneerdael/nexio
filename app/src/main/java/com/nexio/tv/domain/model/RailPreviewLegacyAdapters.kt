@@ -11,6 +11,7 @@ fun MetaPreview.toLegacyRailItemPreview(
     val sourceItemId = firstPaintSourceItemId ?: id
     val effectiveSourcePayloadHash = sourcePayloadHash
         ?: legacyRailPreviewSourcePayloadHash(railId = railId, itemId = id)
+    val ratingText = imdbRating?.let { formatRailPreviewRatingText(it) }
 
     return RailItemPreview(
         railId = railId,
@@ -29,8 +30,8 @@ fun MetaPreview.toLegacyRailItemPreview(
             posterShape = posterShape,
             backdropUrl = background,
             logoUrl = logo,
-            rating = imdbRating?.let { RatingSeed(provider = ratingSource.toProviderId(), value = it.toDouble()) },
-            ratingText = imdbRating?.let { formatRailPreviewRatingText(it) },
+            rating = ratingText?.let { RatingSeed(provider = ratingSource.toProviderId(), value = it.toDouble()) },
+            ratingText = ratingText,
             trailerHint = trailerYtIds.firstOrNull()?.let { TrailerHint.YouTube(it) }
         ),
         sourcePayloadQuality = sourcePayloadQuality,
@@ -113,10 +114,5 @@ private fun TitleRatingSource?.toProviderId(): ProviderId {
     }
 }
 
-private fun formatRailPreviewRatingText(rating: Float): String {
-    return if (rating % 1f == 0f) {
-        rating.toInt().toString()
-    } else {
-        rating.toString()
-    }
-}
+private fun formatRailPreviewRatingText(rating: Float): String =
+    RatingDisplayFormatter.formatTitleRating(rating)

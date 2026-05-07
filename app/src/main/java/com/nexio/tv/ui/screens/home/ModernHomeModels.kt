@@ -13,6 +13,7 @@ import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 
@@ -384,7 +385,7 @@ internal fun buildContinueWatchingItem(
                 contentTypeText = episodeLabel,
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
                 imdbText = (item.episodeImdbRating ?: displayMetadata.imdbRating)
-                    ?.let { String.format("%.1f", it) },
+                    ?.let { RatingDisplayFormatter.formatTitleRating(it) },
                 ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
@@ -417,7 +418,7 @@ internal fun buildContinueWatchingItem(
                 contentTypeText = episodeLabel,
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.info.releaseInfo),
                 imdbText = (item.info.imdbRating ?: displayMetadata.imdbRating)
-                    ?.let { String.format("%.1f", it) },
+                    ?.let { RatingDisplayFormatter.formatTitleRating(it) },
                 ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
@@ -557,7 +558,7 @@ internal fun buildCatalogItem(
         description = displayMetadata.description ?: item.description,
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
         yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
-        imdbText = (displayMetadata.imdbRating ?: item.imdbRating)?.let { String.format("%.1f", it) },
+        imdbText = (displayMetadata.imdbRating ?: item.imdbRating)?.let { RatingDisplayFormatter.formatTitleRating(it) },
         ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource.orDefault() else item.ratingSource.orDefault(),
         tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
         genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
@@ -658,9 +659,8 @@ internal fun CatalogRow.key(): String {
     return "${addonId}_${apiType}_${catalogId}"
 }
 
-private fun formatPreviewTomatoesRating(rating: Double): String {
-    return if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
-}
+private fun formatPreviewTomatoesRating(rating: Double): String =
+    RatingDisplayFormatter.formatPercentRating(rating)
 
 internal fun isSeriesType(type: String?): Boolean {
     return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)

@@ -37,12 +37,14 @@ class ContinueWatchingSnapshotStoreTest {
             ),
             updatedAtMs = 100L
         )
+        val expectedDisplayMetadata = snapshot.displayMetadataByItemKey
+            .mapValues { (_, metadata) -> metadata.copy(ratingSource = null) }
 
         store.write(snapshot)
 
-        assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
+        assertEquals(expectedDisplayMetadata, store.read()?.displayMetadataByItemKey)
 
-        assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
+        assertEquals(expectedDisplayMetadata, store.read()?.displayMetadataByItemKey)
     }
 
     @Test

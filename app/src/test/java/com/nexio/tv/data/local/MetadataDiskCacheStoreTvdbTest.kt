@@ -8,7 +8,6 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
-import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -57,7 +56,7 @@ class MetadataDiskCacheStoreTvdbTest {
         assertTrue(root.has("tvdbSchemaVersion"))
         assertFalse(root.has("tmdbSchemaVersion"))
         assertEquals(
-            enrichment,
+            enrichment.copy(ratingSource = null),
             store.readTvdbEnrichment(
                 seriesId = 121361,
                 recordKind = "extended",
@@ -279,7 +278,7 @@ class MetadataDiskCacheStoreTvdbTest {
         val enrichment = store.readTvdbEnrichment(121361, "series_extended", "en-US", "native")
 
         enrichment.hashCode()
-        assertEquals(TitleRatingSource.IMDB, enrichment?.ratingSource)
+        assertNull(enrichment?.ratingSource)
     }
 
     @Test

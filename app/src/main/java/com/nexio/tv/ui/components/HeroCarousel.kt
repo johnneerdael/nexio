@@ -53,6 +53,7 @@ import coil.request.ImageRequest
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
 import com.nexio.tv.ui.theme.NexioColors
@@ -324,7 +325,7 @@ private fun HeroCarouselSlide(
                             modifier = Modifier.size(30.dp),
                             contentScale = ContentScale.Fit
                         )
-                        val ratingText = remember(rating) { String.format("%.1f", rating) }
+                        val ratingText = remember(rating) { RatingDisplayFormatter.formatTitleRating(rating) }
                         Text(
                             text = ratingText,
                             style = MaterialTheme.typography.labelLarge,
