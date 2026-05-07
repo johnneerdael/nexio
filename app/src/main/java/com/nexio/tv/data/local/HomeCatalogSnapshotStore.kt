@@ -9,6 +9,7 @@ import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDecisionLookupResult
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
@@ -323,7 +324,9 @@ class HomeCatalogSnapshotStore private constructor(
             fullCatalogRows.forEach { row -> yieldAll(row.items) }
             yieldAll(heroItems)
         }.all { item ->
-            item.posterProviderTag == null || item.posterProviderTag == requiredTag
+            item.posterProviderTag == null ||
+                item.posterProviderTag == requiredTag ||
+                item.poster?.trim()?.let(::isDecisionRef) == true
         }
     }
 
@@ -408,7 +411,7 @@ class HomeCatalogSnapshotStore private constructor(
         } else {
             null
         }
-        val reason = clearReasonForPosterRef(posterRef, decisionLookup?.decisionFound)
+        val reason = clearReasonForPosterRef(posterRef, decisionLookup?.clearMissingDecisionRef)
         if (posterRef.isBlank() || reason == null) {
             return this
         }
@@ -417,16 +420,16 @@ class HomeCatalogSnapshotStore private constructor(
             reason = reason,
             posterKind = posterKind,
             posterProviderTag = posterProviderTag,
-            decisionFound = decisionLookup?.decisionFound
+            lookupResultType = decisionLookup?.lookupResultType
         )
         return copy(poster = null, posterProviderTag = null)
     }
 
-    private fun clearReasonForPosterRef(ref: String, decisionFound: Boolean?): String? {
+    private fun clearReasonForPosterRef(ref: String, clearMissingDecisionRef: Boolean?): String? {
         return when {
             isRawPremiumProviderUrl(ref) -> "raw_premium_url"
             isLegacyIntegrationPosterRef(ref) -> "legacy_integration_ref"
-            isMissingDecisionRef(ref, decisionFound) -> "missing_decision"
+            isMissingDecisionRef(ref, clearMissingDecisionRef) -> "missing_decision"
             else -> null
         }
     }
@@ -441,8 +444,8 @@ class HomeCatalogSnapshotStore private constructor(
         return ref.startsWith(LEGACY_INTEGRATION_POSTER_PREFIX, ignoreCase = true)
     }
 
-    private fun isMissingDecisionRef(ref: String, decisionFound: Boolean?): Boolean {
-        return isDecisionRef(ref) && decisionFound != true
+    private fun isMissingDecisionRef(ref: String, clearMissingDecisionRef: Boolean?): Boolean {
+        return isDecisionRef(ref) && clearMissingDecisionRef == true
     }
 
     private fun isDecisionRef(ref: String): Boolean {
@@ -470,7 +473,9 @@ class HomeCatalogSnapshotStore private constructor(
             .takeIf { it.isNotBlank() }
             ?: return DecisionLookupProof(
                 decisionFound = false,
+                clearMissingDecisionRef = true,
                 decisionKeyHash = null,
+                lookupResultType = "blank_decision_key",
                 diagnostics = cacheDiagnostics()
             ).also { proof ->
                 traceState.recordDecisionLookup(
@@ -482,16 +487,33 @@ class HomeCatalogSnapshotStore private constructor(
                 )
             }
 
-        var lookupErrorClass: String? = null
-        val decisionFound = runCatching {
-            artworkDecisionCache.get(ArtworkDecisionKey(keyValue)) != null
-        }.onFailure { error ->
-            lookupErrorClass = error.javaClass.simpleName
-        }.getOrDefault(false)
+        val decisionKey = ArtworkDecisionKey(keyValue)
+        val decisionKeyHash = keyValue.sha256Short()
+        val lookupResult = runCatching {
+            artworkDecisionCache.lookup(decisionKey, requiredContext = null)
+        }.getOrElse { error ->
+            ArtworkDecisionLookupResult.LookupFailed(
+                decisionKey = decisionKey,
+                errorClass = error.javaClass.simpleName,
+                messageHash = error.message?.sha256Short()
+            )
+        }
+        val lookupErrorClass = when (lookupResult) {
+            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> lookupResult.errorClass
+            is ArtworkDecisionLookupResult.LookupFailed -> lookupResult.errorClass
+            else -> null
+        }
+        val rehydrateReason = when (lookupResult) {
+            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> "decision_cache_not_authoritative"
+            is ArtworkDecisionLookupResult.LookupFailed -> "lookup_failed"
+            else -> null
+        }
 
         return DecisionLookupProof(
-            decisionFound = decisionFound,
-            decisionKeyHash = keyValue.sha256Short(),
+            decisionFound = lookupResult is ArtworkDecisionLookupResult.Found,
+            clearMissingDecisionRef = lookupResult is ArtworkDecisionLookupResult.MissingAuthoritative,
+            decisionKeyHash = decisionKeyHash,
+            lookupResultType = lookupResult.lookupResultType(),
             diagnostics = cacheDiagnostics()
         ).also { proof ->
             traceState.recordDecisionLookup(
@@ -501,8 +523,29 @@ class HomeCatalogSnapshotStore private constructor(
                 proof = proof,
                 lookupErrorClass = lookupErrorClass
             )
+            if (rehydrateReason != null) {
+                traceSnapshot(
+                    eventType = "home.snapshot_artwork_rehydrate_requested",
+                    payload = mapOf(
+                        "scope" to scope,
+                        "reason" to rehydrateReason,
+                        "posterKind" to posterKind,
+                        "providerTag" to posterProviderTag,
+                        "decisionKeyHash" to decisionKeyHash,
+                        "lookupResultType" to proof.lookupResultType
+                    )
+                )
+            }
         }
     }
+
+    private fun ArtworkDecisionLookupResult.lookupResultType(): String =
+        when (this) {
+            is ArtworkDecisionLookupResult.Found -> "found"
+            is ArtworkDecisionLookupResult.MissingAuthoritative -> "missing_authoritative"
+            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> "cache_not_authoritative"
+            is ArtworkDecisionLookupResult.LookupFailed -> "lookup_failed"
+        }
 
     private fun cacheDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics? =
         (artworkDecisionCache as? ArtworkDecisionCacheDiagnostics)?.snapshotDiagnostics()
@@ -515,7 +558,9 @@ class HomeCatalogSnapshotStore private constructor(
 
     private data class DecisionLookupProof(
         val decisionFound: Boolean,
+        val clearMissingDecisionRef: Boolean,
         val decisionKeyHash: String?,
+        val lookupResultType: String,
         val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics?
     )
 
@@ -525,6 +570,10 @@ class HomeCatalogSnapshotStore private constructor(
         var decisionFoundCount: Int = 0
             private set
         var missingDecisionCount: Int = 0
+            private set
+        var cacheNotAuthoritativeCount: Int = 0
+            private set
+        var lookupFailedCount: Int = 0
             private set
         var lookupErrorCount: Int = 0
             private set
@@ -549,9 +598,15 @@ class HomeCatalogSnapshotStore private constructor(
             latestDiagnostics = proof.diagnostics
             if (proof.decisionFound) {
                 decisionFoundCount += 1
-            } else {
+            } else if (proof.clearMissingDecisionRef) {
                 missingDecisionCount += 1
                 rememberSample(missingDecisionSamples, "$scope:$posterKind:${posterProviderTag.orEmpty()}")
+            }
+            if (proof.lookupResultType == "cache_not_authoritative") {
+                cacheNotAuthoritativeCount += 1
+            }
+            if (proof.lookupResultType == "lookup_failed") {
+                lookupFailedCount += 1
             }
             if (lookupErrorClass != null) {
                 lookupErrorCount += 1
@@ -563,14 +618,14 @@ class HomeCatalogSnapshotStore private constructor(
             reason: String,
             posterKind: String,
             posterProviderTag: String?,
-            decisionFound: Boolean?
+            lookupResultType: String?
         ) {
             sanitizedCount += 1
             when (reason) {
                 "raw_premium_url" -> rawPremiumCount += 1
                 "legacy_integration_ref" -> legacyIntegrationCount += 1
             }
-            rememberSample(sanitizedSamples, "$scope:$reason:$posterKind:${posterProviderTag.orEmpty()}:$decisionFound")
+            rememberSample(sanitizedSamples, "$scope:$reason:$posterKind:${posterProviderTag.orEmpty()}:$lookupResultType")
         }
 
         fun emitIfNeeded() {
@@ -583,7 +638,15 @@ class HomeCatalogSnapshotStore private constructor(
                     "decisionLookupCount" to decisionLookupCount,
                     "decisionFoundCount" to decisionFoundCount,
                     "missingDecisionCount" to missingDecisionCount,
+                    "cacheNotAuthoritativeCount" to cacheNotAuthoritativeCount,
+                    "lookupFailedCount" to lookupFailedCount,
                     "lookupErrorCount" to lookupErrorCount,
+                    "lookupResultTypes" to listOf(
+                        "found=$decisionFoundCount",
+                        "missing_authoritative=$missingDecisionCount",
+                        "cache_not_authoritative=$cacheNotAuthoritativeCount",
+                        "lookup_failed=$lookupFailedCount"
+                    ).joinToString("|"),
                     "cacheLoaded" to diagnostics?.loaded,
                     "cacheDecisionCount" to diagnostics?.decisionCount,
                     "cacheLinkCount" to diagnostics?.linkCount,
