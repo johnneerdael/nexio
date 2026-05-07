@@ -61,4 +61,65 @@ class MetadataDepthIdentityTest {
         assertEquals("tvdb:393268", route.parentId)
         assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
     }
+
+    @Test
+    fun `identity facade request returns unresolved route with empty plan`() = runTest {
+        val adapter = RecordingProviderAdapter(MetadataPrimaryProvider.TVDB)
+        val facade = MetadataRouterFacade(
+            router = router(),
+            providerPlanExecutor = ProviderPlanExecutor(),
+            resolverOrchestrator = ResolverOrchestrator(),
+            identityResolver = MetadataIdentityResolver(
+                lookup = object : MetadataIdentityResolver.Lookup {
+                    override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                    override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+                }
+            ),
+            providerPlanRunner = ProviderPlanRunner(setOf(adapter)),
+            fieldResolver = FieldResolver()
+        )
+
+        val result = facade.resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:393268",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                depth = MetadataDepth.IDENTITY
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
+        assertEquals("tmdb:393268", result.route?.parentId)
+        assertTrue(result.route?.targetIdRequiresIdentityResolution == true)
+        assertEquals(MetadataDepth.IDENTITY, result.plan?.depth)
+        assertTrue(result.plan?.steps.orEmpty().isEmpty())
+        assertTrue(result.providerRunResult?.stepResults.orEmpty().isEmpty())
+        assertEquals(0, adapter.calls)
+    }
+
+    private fun router(): MetadataRouter {
+        val events = TraceMetadataEvents(
+            sink = NoopRuntimeTraceSink,
+            sessionId = { null }
+        )
+        return MetadataRouter(
+            normalizer = MetadataRequestNormalizer(traceEvents = events),
+            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+            idMappingStore = InMemoryIdMappingStore(),
+            traceEvents = events
+        )
+    }
+
+    private class RecordingProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        var calls = 0
+
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            calls += 1
+            return ProviderStepResult(step = step)
+        }
+    }
 }
