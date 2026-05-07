@@ -233,6 +233,27 @@ class HomeResolvedDisplayMapperTest {
         assertEquals(null, resolved.rating)
     }
 
+    @Test
+    fun `mapper preserves hydrated logo artwork in resolved display surface`() {
+        val logo = artworkRef("logo-94997").copy(imageType = ArtworkType.LOGO)
+        val finalItem = preview(
+            id = "tmdb:94997",
+            title = "House of the Dragon",
+            overview = "Overview",
+            rating = 8.3f,
+            artwork = ArtworkBundle(logo = logo, backdrop = artworkRef("backdrop-94997")),
+            stableIds = ProviderIds(tmdb = "94997", tvdb = "371572")
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(finalItem)),
+            overlaysByItemKey = emptyMap(),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(logo, resolved.artwork.logo)
+    }
+
     private fun preview(
         id: String,
         title: String,
