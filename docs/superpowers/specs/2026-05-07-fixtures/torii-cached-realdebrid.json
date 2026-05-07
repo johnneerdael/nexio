@@ -1,0 +1,52 @@
+{
+  "addon": "torii",
+  "input": {
+    "torrent": {
+      "title": "[SubsPlease] One Piece - 1100 [1080p][AAC].mkv",
+      "hash": "ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+      "size": "1.45 GiB",
+      "seeders": 152,
+      "source": "Nyaa.si"
+    },
+    "parsed": {
+      "title": "One Piece", "resolution": "1080p", "quality": "BluRay", "encode": "HEVC",
+      "audioTags": ["AAC"], "audioChannels": ["5.1"], "languages": ["JPN", "ENG"], "subtitles": ["ENG"],
+      "releaseGroup": "SubsPlease", "network": "Crunchyroll", "visualTags": ["DV", "HDR10"],
+      "episodes": [1100], "seasons": []
+    },
+    "canonical": {
+      "name": "ONE PIECE", "englishName": "ONE PIECE", "year": 1999, "format": "TV",
+      "episodes": 1100, "epMeta": { "1100": { "title": "Romance Dawn" } }, "idMal": 21,
+      "anidb": "69", "kitsu": "12", "imdb": "tt0388629"
+    },
+    "debrid": {
+      "serviceCode": "RD", "isCached": true,
+      "selectedFile": { "name": "One Piece - 1100.mkv", "sizeBytes": 1500000000, "index": 0 }
+    },
+    "match": { "score": 152, "confidence": "HIGH", "reasons": ["title=100", "year_match"] },
+    "anilistId": "21",
+    "requestedEp": 1100,
+    "expectedSeason": 1
+  },
+  "emittedPatterns": {
+    "nameStarts": "1080p · BluRay · HEVC",
+    "nameContains": ["⚡ RD", "🎙 JPN+ENG", "📝 ENG", "⛩ Torii"],
+    "descriptionContains": [
+      "📄 One Piece - 1100.mkv",
+      "📡 Nyaa.si · SubsPlease · Crunchyroll",
+      "🎬 ONE PIECE · 1999 · TV · 1100ep",
+      "📺 S1E1100 · \"Romance Dawn\"",
+      "🎯 HIGH (152) · title=100 · year_match",
+      "🆔 anilist:21 · mal:21 · kitsu:12 · anidb:69 · imdb:tt0388629"
+    ]
+  },
+  "parsed": {
+    "filename": "One Piece - 1100.mkv",
+    "resolution": "1080p", "quality": "BluRay",
+    "serviceId": "RD", "isCached": true,
+    "seeders": 152, "indexer": "Nyaa.si", "releaseGroup": "SubsPlease",
+    "matchInfo": { "score": 152, "confidence": "HIGH" },
+    "episodeTitle": "Romance Dawn",
+    "crossIds": { "anilist": "21", "mal": "21", "kitsu": "12", "anidb": "69", "imdb": "tt0388629" }
+  }
+}
