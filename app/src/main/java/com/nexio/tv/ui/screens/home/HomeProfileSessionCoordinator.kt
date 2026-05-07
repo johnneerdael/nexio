@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.runningFold
@@ -49,15 +52,22 @@ class HomeProfileSessionCoordinator internal constructor(
     internal fun start(scope: CoroutineScope, generationProvider: () -> Long): StateFlow<HomeProfileSession> {
         val initialInputs = bootstrapSessionInputs(profileManager.activeProfileSession.value)
         val initialSession = createSession(initialInputs, generationProvider)
-        val sessions = combine(
-            profileManager.activeProfileSession,
-            localeTags,
-            playerSettings
-        ) { profileSession, _, settings ->
-            sessionInputs(
-                profileSession = profileSession,
-                settings = settings
-            )
+        val sessions = profileManager.activeProfileSession.flatMapLatest { profileSession ->
+            combine(
+                localeTags,
+                playerSettings
+                    .map<PlayerSettings, PlayerSettings?> { it }
+                    .onStart { emit(null) }
+            ) { _, settings ->
+                if (settings == null) {
+                    bootstrapSessionInputs(profileSession)
+                } else {
+                    sessionInputs(
+                        profileSession = profileSession,
+                        settings = settings
+                    )
+                }
+            }
         }.runningFold(initialInputs to initialSession) { (_, previousSession), inputs ->
             if (previousSession.matches(inputs)) {
                 inputs to previousSession
