@@ -7,6 +7,7 @@ internal sealed interface HomeProfileSession {
     val profileId: Int
     val generation: Long
     val sessionId: String
+    val profileSessionKey: String
     val language: String
     val subtitleLanguage: String?
     val startedAtMs: Long
@@ -14,6 +15,7 @@ internal sealed interface HomeProfileSession {
     data class DefaultLegacy(
         override val generation: Long,
         override val sessionId: String,
+        override val profileSessionKey: String,
         override val language: String,
         override val subtitleLanguage: String?,
         override val startedAtMs: Long
@@ -25,6 +27,7 @@ internal sealed interface HomeProfileSession {
         override val profileId: Int,
         override val generation: Long,
         override val sessionId: String,
+        override val profileSessionKey: String,
         override val language: String,
         override val subtitleLanguage: String?,
         override val startedAtMs: Long,

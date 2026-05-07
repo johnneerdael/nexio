@@ -38,6 +38,7 @@ class HomeProfileSessionLifecycleContractTest {
     @Test
     fun `home profile session has stable session identity fields`() {
         assertTrue(homeProfileSessionSource.contains("val sessionId: String"))
+        assertTrue(homeProfileSessionSource.contains("val profileSessionKey: String"))
         assertTrue(homeProfileSessionSource.contains("val startedAtMs: Long"))
         assertTrue(homeProfileSessionSource.contains("val language: String"))
         assertTrue(homeProfileSessionSource.contains("val subtitleLanguage: String?"))
@@ -52,12 +53,18 @@ class HomeProfileSessionLifecycleContractTest {
 
     @Test
     fun `profile session snapshot is assigned before profile scoped reset`() {
-        val assignIndex = homeViewModelSource.indexOf("activeHomeProfileSessionSnapshot = session")
+        val assignIndex = homeViewModelSource.indexOf(".onEach { session ->\n                    activeHomeProfileSessionSnapshot = session")
         val resetIndex = homeViewModelSource.indexOf("resetProfileScopedHomeState(\"home_session:")
 
         assertTrue(assignIndex >= 0)
         assertTrue(resetIndex >= 0)
         assertTrue(assignIndex < resetIndex)
+    }
+
+    @Test
+    fun `profile scoped reset is keyed by profile session identity not settings session id`() {
+        assertTrue(homeViewModelSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertFalse(homeViewModelSource.contains(".distinctUntilChangedBy { it.sessionId }"))
     }
 
     @Test
