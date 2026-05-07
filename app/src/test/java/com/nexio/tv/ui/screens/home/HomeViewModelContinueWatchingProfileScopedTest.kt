@@ -85,13 +85,44 @@ class HomeViewModelContinueWatchingProfileScopedTest {
 
         assertEquals(listOf(1, 2), observedProfiles)
         assertEquals(
-            listOf(firstSession, firstSession, secondSession, secondSession),
+            listOf(firstSession, firstSession, firstSession, secondSession, secondSession, secondSession),
             emissions.map { it.session }
         )
         assertTrue(emissions[0] is ProfileScopedEmission.Loading)
         assertTrue(emissions[1] is ProfileScopedEmission.Success)
-        assertTrue(emissions[2] is ProfileScopedEmission.Loading)
-        assertTrue(emissions[3] is ProfileScopedEmission.Success)
+        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
+        assertTrue(emissions[2] is ProfileScopedEmission.Success)
+        assertTrue(emissions[3] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[4] is ProfileScopedEmission.Success)
+        assertEquals(ContinueWatchingSnapshot(), (emissions[4] as ProfileScopedEmission.Success).value)
+        assertTrue(emissions[5] is ProfileScopedEmission.Success)
+    }
+
+    @Test
+    fun `home policy emits empty snapshot while waiting for profile snapshot`() = runTest {
+        val session = homeSession(profileId = 1, profileSessionKey = "profile:1:runtime:1")
+        val activeSession = MutableStateFlow(session)
+        val snapshotFlow = MutableSharedFlow<ContinueWatchingSnapshot>()
+        val emissions = mutableListOf<ProfileScopedEmission<ContinueWatchingSnapshot>>()
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            continueWatchingProfileScopedEmissions(
+                activeHomeProfileSession = activeSession,
+                observeProfileSnapshot = { snapshotFlow }
+            ).collect { emission ->
+                emissions += emission
+            }
+        }
+
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(2, emissions.size)
+        assertEquals(session, emissions[0].session)
+        assertEquals(session, emissions[1].session)
+        assertTrue(emissions[0] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[1] is ProfileScopedEmission.Success)
+        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
     }
 
     @Test
@@ -131,9 +162,14 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         job.cancel()
 
         assertEquals(listOf(1), observedProfiles)
-        assertEquals(2, emissions.size)
+        assertEquals(3, emissions.size)
         assertEquals(firstSession, emissions[0].session)
         assertEquals(firstSession, emissions[1].session)
+        assertEquals(firstSession, emissions[2].session)
+        assertTrue(emissions[0] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[1] is ProfileScopedEmission.Success)
+        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
+        assertTrue(emissions[2] is ProfileScopedEmission.Success)
     }
 
     @Test
@@ -253,6 +289,7 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         assertTrue(source.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
         assertTrue(source.contains(".flatMapLatest { session ->"))
         assertTrue(source.contains("observeProfileSnapshot(session.profileId)"))
+        assertTrue(source.contains("ProfileScopedEmission.Success(session = session, value = ContinueWatchingSnapshot())"))
         assertTrue(source.contains("isCurrentHomeSession(session)"))
         assertFalse(source.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
     }

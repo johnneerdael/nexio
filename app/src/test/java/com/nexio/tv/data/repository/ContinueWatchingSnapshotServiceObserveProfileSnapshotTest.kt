@@ -7,12 +7,14 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -119,14 +121,24 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
     }
 
     @Test
-    fun `observeProfileSnapshot emits empty snapshot for requested profile before records exist`() = runTest {
+    fun `observeProfileSnapshot waits when requested profile snapshot is not available`() = runTest {
         val service = buildService()
+        seedSnapshot(
+            service,
+            ProfileOwnedContinueWatchingSnapshot(
+                profileId = 1,
+                snapshot = ContinueWatchingSnapshot(updatedAtMs = 10L)
+            )
+        )
 
-        val result = withTimeout(500) {
-            service.observeProfileSnapshot(profileId = 2).first()
+        try {
+            withTimeout(100) {
+                service.observeProfileSnapshot(profileId = 2).first()
+            }
+            fail("Expected observeProfileSnapshot to wait for a matching profile snapshot")
+        } catch (_: TimeoutCancellationException) {
+            // Expected: shared API consumers using .first() must not receive a synthetic empty snapshot.
         }
-
-        assertEquals(ContinueWatchingSnapshot(), result)
     }
 
     @Test

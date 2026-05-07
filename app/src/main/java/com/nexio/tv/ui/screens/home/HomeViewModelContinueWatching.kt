@@ -183,6 +183,7 @@ internal fun continueWatchingProfileScopedEmissions(
                 }
                 .onStart {
                     emit(ProfileScopedEmission.Loading(session))
+                    emit(ProfileScopedEmission.Success(session = session, value = ContinueWatchingSnapshot()))
                 }
                 .catch { error ->
                     if (error is CancellationException) throw error
