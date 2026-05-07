@@ -48,6 +48,7 @@ import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -158,7 +159,6 @@ class HomeHydrationCoordinatorTest {
         coEvery { facade.resolveRequest(any()) } returns resolutionResult(
             displayMetadata = HomeDisplayMetadata(
                 title = "Canonical title",
-                poster = "rawPoster",
                 artwork = artwork
             )
         )
@@ -176,6 +176,7 @@ class HomeHydrationCoordinatorTest {
         )
 
         assertEquals(artwork, overlaySlot.captured.fields.artwork)
+        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.poster)
         assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.displayPoster)
     }
 
@@ -344,7 +345,9 @@ class HomeHydrationCoordinatorTest {
         val sink = RecordingTraceSink()
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         coEvery { store.upsert(any(), any()) } returns Unit
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
         coEvery { facade.resolveRequest(any()) } returns resolutionResult(
             displayMetadata = HomeDisplayMetadata(
                 title = "House of the Dragon",
@@ -442,7 +445,8 @@ class HomeHydrationCoordinatorTest {
         val sink = RecordingTraceSink()
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
-        coEvery { store.upsert(any(), any()) } returns Unit
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
         coEvery { facade.resolveRequest(any()) } returns resolutionResult(
             displayMetadata = HomeDisplayMetadata(
                 title = "House of the Dragon",
@@ -479,6 +483,8 @@ class HomeHydrationCoordinatorTest {
         assertFalse(payload.values.any { value -> value.toString().contains("House of the Dragon") })
         assertEquals(null, payload["hydratedRatingValue"])
         assertEquals(null, payload["hydratedRatingSource"])
+        assertNull(overlaySlot.captured.fields.imdbRating)
+        assertNull(overlaySlot.captured.fields.ratingSource)
     }
 
     @Test

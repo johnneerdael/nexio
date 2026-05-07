@@ -26,6 +26,9 @@ class TraceMetadataEvents(
 ) {
     private val seq = AtomicLong(0L)
 
+    fun hashForActiveSession(purpose: String, value: String): String =
+        TraceHash.of("${traceSessionIdForEmission()}:$purpose", value)
+
     fun emitFirstPaint(
         contentId: String,
         itemType: String,
