@@ -546,13 +546,28 @@ class HomeViewModel @Inject constructor(
                 .drop(1)
                 .mapNotNull { session ->
                     val previousSession = activeHomeProfileSessionSnapshot
-                    activeHomeProfileSessionSnapshot = session
-                    session.takeIf {
-                        shouldResetProfileScopedHomeState(
-                            previousSession = previousSession,
-                            nextSession = session
+                    val shouldResetHomeState = shouldResetProfileScopedHomeState(
+                        previousSession = previousSession,
+                        nextSession = session
+                    )
+                    val sessionIdentifierChanged = shouldResetHomeState ||
+                        previousSession.sessionId != session.sessionId
+                    if (sessionIdentifierChanged) {
+                        traceEvents.emitHomeProfileSessionCancelled(
+                            profileId = previousSession.profileId,
+                            sessionId = previousSession.sessionId,
+                            reason = "profile_session_replaced"
                         )
                     }
+                    activeHomeProfileSessionSnapshot = session
+                    if (sessionIdentifierChanged) {
+                        traceEvents.emitHomeProfileSessionStarted(
+                            profileId = session.profileId,
+                            sessionId = session.sessionId,
+                            generation = session.generation
+                        )
+                    }
+                    session.takeIf { shouldResetHomeState }
                 }
                 .collectLatest { session ->
                     profileSwitchDiskHydrationActive = true
