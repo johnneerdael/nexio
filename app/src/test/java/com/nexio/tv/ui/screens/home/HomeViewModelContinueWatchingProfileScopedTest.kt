@@ -263,12 +263,26 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         val source = sourceFile.readText()
         val functionStart = source.indexOf("private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession")
         val cancelIndex = source.indexOf("continueWatchingEnrichmentJob?.cancel()", functionStart)
+        val transformIndex = source.indexOf("buildMixedContinueWatchingTimeline(", functionStart)
         val eligibilityIndex = source.indexOf("shouldEnrichContinueWatchingProviderMetadata", functionStart)
 
         assertTrue(functionStart >= 0)
         assertTrue(cancelIndex >= 0)
+        assertTrue(transformIndex >= 0)
         assertTrue(eligibilityIndex >= 0)
+        assertTrue(cancelIndex < transformIndex)
         assertTrue(cancelIndex < eligibilityIndex)
+    }
+
+    @Test
+    fun `continue watching enrichment publish is guarded by accepted snapshot version`() {
+        check(sourceFile.exists()) { "expected source at ${sourceFile.absolutePath}" }
+        val source = sourceFile.readText()
+
+        assertTrue(source.contains("continueWatchingSnapshotVersion += 1L"))
+        assertTrue(source.contains("val snapshotVersion = continueWatchingSnapshotVersion"))
+        assertTrue(source.contains("snapshotVersion != continueWatchingSnapshotVersion"))
+        assertTrue(source.contains("if (snapshotVersion != continueWatchingSnapshotVersion) return@update state"))
     }
 
     private fun homeSession(

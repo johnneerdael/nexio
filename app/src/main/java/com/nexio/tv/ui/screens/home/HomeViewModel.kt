@@ -272,6 +272,7 @@ class HomeViewModel @Inject constructor(
     internal var persistedTmdbSyntheticHideUnreleasedDigital: Boolean? = null
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
+    internal var continueWatchingSnapshotVersion: Long = 0L
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal val trailerPreviewLoadingIds = mutableStateMapOf<String, Boolean>()

@@ -259,6 +259,11 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         Log.d(HomeViewModel.TAG, "Skipping stale continue watching snapshot session=${session.sessionId}")
         return
     }
+    continueWatchingEnrichmentJob?.cancel()
+    continueWatchingEnrichmentJob = null
+    continueWatchingSnapshotVersion += 1L
+    val snapshotVersion = continueWatchingSnapshotVersion
+
     val timeline = buildMixedContinueWatchingTimeline(
         resumeItems = snapshot.resumeItems,
         nextUpItems = snapshot.nextUpItems,
@@ -293,8 +298,10 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish session=${session.sessionId}")
         return
     }
-    continueWatchingEnrichmentJob?.cancel()
-    continueWatchingEnrichmentJob = null
+    if (snapshotVersion != continueWatchingSnapshotVersion) {
+        Log.d(HomeViewModel.TAG, "Skipping superseded continue watching publish session=${session.sessionId}")
+        return
+    }
 
     val readinessReason = if (items.isEmpty() && traktUpNextItems.isEmpty()) {
         "first_snapshot_empty"
@@ -302,6 +309,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         "first_snapshot"
     }
     _uiState.update { state ->
+        if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
         if (
             state.continueWatchingItems == items &&
             state.traktUpNextItems == traktUpNextItems &&
@@ -329,16 +337,23 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         continueWatchingEnrichmentJob = viewModelScope.launch {
             try {
                 if (!isCurrentHomeSession(session)) return@launch
+                if (snapshotVersion != continueWatchingSnapshotVersion) return@launch
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 val enrichedItems = enrichContinueWatchingItems(items, settings)
                 if (!isCurrentHomeSession(session)) return@launch
+                if (snapshotVersion != continueWatchingSnapshotVersion) return@launch
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
                 if (!isCurrentHomeSession(session)) {
                     Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment session=${session.sessionId}")
                     return@launch
                 }
+                if (snapshotVersion != continueWatchingSnapshotVersion) {
+                    Log.d(HomeViewModel.TAG, "Skipping superseded continue watching enrichment session=${session.sessionId}")
+                    return@launch
+                }
                 _uiState.update { state ->
+                    if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
                     if (
                         state.continueWatchingItems == enrichedItems &&
                         state.traktUpNextItems == enrichedTraktItems &&
