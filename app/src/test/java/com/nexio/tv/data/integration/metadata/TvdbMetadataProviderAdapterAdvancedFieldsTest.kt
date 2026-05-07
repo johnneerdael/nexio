@@ -67,9 +67,13 @@ class TvdbMetadataProviderAdapterAdvancedFieldsTest {
                 policyVersion = LocalizationPolicy.CURRENT_VERSION
             )
         )
+        val artworkDecisionResolver = mockk<MetadataArtworkDecisionResolver>()
+        coEvery { artworkDecisionResolver.resolveFields(any()) } returns emptyMap()
         val adapter = TvdbMetadataProviderAdapter(
             integrationProvider = provider,
             traceEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null },
+            artworkCandidateMapper = TvdbArtworkCandidateMapper(),
+            artworkDecisionResolver = artworkDecisionResolver,
             advancedMetadataMapper = TvdbAdvancedMetadataMapper()
         )
 

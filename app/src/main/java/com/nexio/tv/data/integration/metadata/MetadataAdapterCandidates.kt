@@ -132,7 +132,8 @@ internal fun buildTvdbCoreLocalizedCandidate(
     policy: LocalizationPolicy,
     extended: TvdbSeriesExtendedRecord?,
     englishTranslation: TvdbTranslationRecord?,
-    requestedTranslation: TvdbTranslationRecord?
+    requestedTranslation: TvdbTranslationRecord?,
+    artworkFields: Map<ResolvedField, FieldValue> = emptyMap()
 ): MetadataCandidate {
     val title = LocalizationResolver.selectField(
         field = ResolvedField.TITLE,
@@ -181,7 +182,7 @@ internal fun buildTvdbCoreLocalizedCandidate(
             extended?.id?.let { put(ResolvedField.CANONICAL_ID, FieldValue("tvdb:$it", FieldOwner.PRIMARY)) }
             title?.value?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
             overview?.value?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
-            extended?.image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            putAll(artworkFields)
             extended?.score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = extended?.remoteIds.toRemoteIdsMap(extended?.id)

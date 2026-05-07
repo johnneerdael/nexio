@@ -1,8 +1,11 @@
 package com.nexio.tv.data.integration.metadata
 
+import com.nexio.tv.core.metadata.router.FieldOwner
+import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import org.junit.Assert.assertEquals
@@ -82,6 +85,49 @@ class TvdbCoreLocalizationTest {
         assertEquals(MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK, overviewTrace.fallbackRole)
         assertEquals("tvdb.series.translation", overviewTrace.sourceApiShapeId)
         assertEquals("nld", overviewTrace.rejectedCandidates.single().language)
+    }
+
+    @Test
+    fun `tvdb core localized candidate merges resolved artwork fields`() {
+        val policy = LocalizationPolicy.tvdb("en-US")
+        val posterField = FieldValue("runtime-poster-ref", FieldOwner.ARTWORK, SourceRole.ARTWORK)
+        val logoField = FieldValue("runtime-logo-ref", FieldOwner.ARTWORK, SourceRole.ARTWORK)
+
+        val selected = buildTvdbCoreLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            policy = policy,
+            extended = TvdbSeriesExtendedRecord(
+                id = 81189,
+                image = "https://art.tvdb.com/raw-extended-image.jpg"
+            ),
+            englishTranslation = TvdbTranslationRecord(name = "English title"),
+            requestedTranslation = null,
+            artworkFields = mapOf(
+                ResolvedField.POSTER to posterField,
+                ResolvedField.LOGO to logoField
+            )
+        )
+
+        assertEquals(posterField, selected.fields.getValue(ResolvedField.POSTER))
+        assertEquals(logoField, selected.fields.getValue(ResolvedField.LOGO))
+    }
+
+    @Test
+    fun `tvdb core localized candidate does not emit raw extended image poster fallback`() {
+        val policy = LocalizationPolicy.tvdb("en-US")
+
+        val selected = buildTvdbCoreLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            policy = policy,
+            extended = TvdbSeriesExtendedRecord(
+                id = 81189,
+                image = "https://art.tvdb.com/raw-extended-image.jpg"
+            ),
+            englishTranslation = TvdbTranslationRecord(name = "English title"),
+            requestedTranslation = null
+        )
+
+        assertEquals(false, selected.fields.containsKey(ResolvedField.POSTER))
     }
 
     @Test

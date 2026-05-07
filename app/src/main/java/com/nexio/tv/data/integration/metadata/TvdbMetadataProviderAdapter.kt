@@ -20,6 +20,8 @@ import javax.inject.Inject
 class TvdbMetadataProviderAdapter @Inject constructor(
     private val integrationProvider: TvdbIntegrationProvider,
     private val traceEvents: TraceMetadataEvents,
+    private val artworkCandidateMapper: TvdbArtworkCandidateMapper,
+    private val artworkDecisionResolver: MetadataArtworkDecisionResolver,
     private val advancedMetadataMapper: TvdbAdvancedMetadataMapper = TvdbAdvancedMetadataMapper()
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
@@ -77,12 +79,21 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                         localizationPayloads += it.trace
                     }.value
                 }
+                val artworkFields = artworkDecisionResolver.resolveFields(
+                    artworkCandidateMapper.mapSeriesArtwork(
+                        seriesId = tvdbId,
+                        artworks = extended?.artworks.orEmpty(),
+                        requestedLanguage = policy.requestedLanguage.providerCode,
+                        posterFallbackImage = extended?.image
+                    )
+                )
                 buildTvdbCoreLocalizedCandidate(
                     provider = this.provider,
                     policy = policy,
                     extended = extended,
                     englishTranslation = english.value,
-                    requestedTranslation = requested
+                    requestedTranslation = requested,
+                    artworkFields = artworkFields
                 ).withAdvancedFields(extended)
             }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {

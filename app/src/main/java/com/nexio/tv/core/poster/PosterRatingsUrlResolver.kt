@@ -6,6 +6,7 @@ import com.nexio.tv.core.artwork.ArtworkCandidate
 import com.nexio.tv.core.artwork.ArtworkCredentialHash
 import com.nexio.tv.core.artwork.ArtworkDecision
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkDecisionPolicy
 import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
@@ -176,14 +177,14 @@ class PosterRatingsUrlResolver @Inject constructor(
 
         val selection = artworkRouter.select(candidates, policy)
         val selected = selection.selectedCandidateOrNull ?: return null
-        val settingsHash = settings.stableSettingsHash()
-        val credentialHash = settings.credentialHash()
+        val settingsHash = ArtworkDecisionPolicy.settingsHash(settings, ArtworkType.POSTER)
+        val credentialHash = ArtworkDecisionPolicy.credentialHash(settings, ArtworkType.POSTER)
         val now = System.currentTimeMillis()
         val decisionKey = ArtworkCacheKeys.decisionKey(
             ownerKey = ownerKey,
             imageType = ArtworkType.POSTER,
             provider = selected.provider,
-            premiumEnabled = settings.selection.posterProvider != ArtworkProviderChoiceKey.DEFAULT,
+            premiumEnabled = ArtworkDecisionPolicy.premiumEnabled(settings, ArtworkType.POSTER),
             settingsHash = settingsHash,
             credentialHash = credentialHash,
             policyVersion = policy.policyVersion
@@ -203,8 +204,8 @@ class PosterRatingsUrlResolver @Inject constructor(
             settingsHash = settingsHash,
             credentialHash = credentialHash,
             createdAtMs = now,
-            expiresAtMs = now + DECISION_TTL_MS,
-            staleUntilMs = now + DECISION_STALE_TTL_MS
+            expiresAtMs = now + ArtworkDecisionPolicy.DECISION_TTL_MS,
+            staleUntilMs = now + ArtworkDecisionPolicy.DECISION_STALE_TTL_MS
         )
         artworkDecisionCache.put(decision)
 
@@ -306,14 +307,14 @@ class PosterRatingsUrlResolver @Inject constructor(
             remoteSourceStore = remoteSourceStore
         )
         val selectedAssetKey = selected.assetKeyForRuntimeRef(policy.policyVersion)
-        val settingsHash = settings.stableSettingsHash(ArtworkType.THUMBNAIL)
-        val credentialHash = settings.credentialHash(settings.selection.thumbnailProvider)
+        val settingsHash = ArtworkDecisionPolicy.settingsHash(settings, ArtworkType.THUMBNAIL)
+        val credentialHash = ArtworkDecisionPolicy.credentialHash(settings, ArtworkType.THUMBNAIL)
         val now = System.currentTimeMillis()
         val decisionKey = ArtworkCacheKeys.decisionKey(
             ownerKey = ownerKey,
             imageType = ArtworkType.THUMBNAIL,
             provider = selected.provider,
-            premiumEnabled = settings.selection.thumbnailProvider != ArtworkProviderChoiceKey.DEFAULT,
+            premiumEnabled = ArtworkDecisionPolicy.premiumEnabled(settings, ArtworkType.THUMBNAIL),
             settingsHash = settingsHash,
             credentialHash = credentialHash,
             policyVersion = policy.policyVersion
@@ -330,8 +331,8 @@ class PosterRatingsUrlResolver @Inject constructor(
             settingsHash = settingsHash,
             credentialHash = credentialHash,
             createdAtMs = now,
-            expiresAtMs = now + DECISION_TTL_MS,
-            staleUntilMs = now + DECISION_STALE_TTL_MS
+            expiresAtMs = now + ArtworkDecisionPolicy.DECISION_TTL_MS,
+            staleUntilMs = now + ArtworkDecisionPolicy.DECISION_STALE_TTL_MS
         )
         artworkDecisionCache.put(decision)
 
@@ -856,10 +857,5 @@ class PosterRatingsUrlResolver @Inject constructor(
         KITSU,
         ANILIST,
         ANIDB
-    }
-
-    private companion object {
-        const val DECISION_TTL_MS: Long = 7L * 24L * 60L * 60L * 1000L
-        const val DECISION_STALE_TTL_MS: Long = 30L * 24L * 60L * 60L * 1000L
     }
 }

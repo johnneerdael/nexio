@@ -3,10 +3,12 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -85,5 +87,36 @@ class FieldResolverArtworkDecisionTest {
 
         assertEquals(null, document.artwork.poster)
         assertEquals("https://image.tmdb.org/t/p/w500/poster.jpg", document.poster)
+    }
+
+    @Test
+    fun `tvdb primary logo artwork retains provider and source role trace`() {
+        val logoRef = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("tvdb-logo-decision"),
+            assetKey = ArtworkAssetKey("tvdb-logo-asset"),
+            imageType = ArtworkType.LOGO,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace(
+                selectedProvider = "TVDB",
+                sourceRole = "PRIMARY",
+                reason = "tvdb_series_extended_artwork_type_23"
+            )
+        )
+        val primary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            sourceProvider = "TVDB",
+            fields = mapOf(
+                ResolvedField.LOGO to FieldValue(logoRef, FieldOwner.ARTWORK, SourceRole.ARTWORK)
+            )
+        )
+
+        val document = resolver.resolve(primary, emptyList(), requestContentId = "tvdb:81189")
+
+        assertEquals(logoRef, document.artwork.logo)
+        assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.LOGO])
+        assertEquals("TVDB", document.sourceProviders[ResolvedField.LOGO])
+        assertEquals("TVDB", document.artwork.logo?.trace?.selectedProvider)
+        assertEquals("PRIMARY", document.artwork.logo?.trace?.sourceRole)
     }
 }
