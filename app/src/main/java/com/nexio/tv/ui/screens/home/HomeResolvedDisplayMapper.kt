@@ -18,6 +18,7 @@ import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
@@ -81,7 +82,9 @@ internal object HomeResolvedDisplayMapper {
                 runtimeText = fields.runtime
             ),
             artwork = fields.toResolvedArtworkBundle(),
-            rating = fields.imdbRating?.let { value -> TitleRating(value.toString().toDouble(), ratingSource) },
+            rating = fields.imdbRating
+                ?.takeIf { RatingValueValidator.validTitleRating(it) }
+                ?.let { value -> TitleRating(value.toDouble(), ratingSource) },
             trailer = trailerState,
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
@@ -183,7 +186,9 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
             runtimeText = fields.runtime
         ),
         artwork = fields.toResolvedArtworkBundle(),
-        rating = fields.imdbRating?.let { value -> TitleRating(value.toDouble(), ratingSource) },
+        rating = fields.imdbRating
+            ?.takeIf { RatingValueValidator.validTitleRating(it) }
+            ?.let { value -> TitleRating(value.toDouble(), ratingSource) },
         trailer = TrailerDisplayState(),
         hydrationState = if (state == HomeItemHydrationState.STALE_READY) {
             HydrationState.STALE_READY
