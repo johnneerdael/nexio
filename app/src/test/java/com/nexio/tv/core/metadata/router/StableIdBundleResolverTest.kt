@@ -103,6 +103,36 @@ class StableIdBundleResolverTest {
     }
 
     @Test
+    fun `tmdb series preview resolves tvdb and imdb sidecars for home hydration`() = runTest {
+        val resolver = resolver(
+            lookup = object : StableIdBundleResolver.Lookup {
+                override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                override suspend fun tmdbTvToTvdb(tmdbId: String): String? = "371572"
+                override suspend fun tmdbTvToImdb(tmdbId: String): String? = "tt11198330"
+                override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+            }
+        )
+
+        val bundle = resolver.resolve(
+            StableIdBundleRequest(
+                itemKey = "series:tmdb:94997",
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TVDB,
+                knownIds = ProviderIds(tmdb = "94997"),
+                sourceProvider = ProviderId.TMDB,
+                sourceItemId = "tmdb:94997",
+                railId = null,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
+            )
+        )
+
+        assertEquals("371572", bundle.canonical.tvdbSeriesId)
+        assertEquals("tt11198330", bundle.sidecars.imdbId)
+    }
+
+    @Test
     fun `tmdb tv rail falls back through imdb when direct tvdb lookup misses`() = runTest {
         val lookup = RecordingLookup(
             tmdbTvToTvdbResult = null,
@@ -298,7 +328,7 @@ class StableIdBundleResolverTest {
 
     private fun resolver(
         store: IdMappingStore = InMemoryIdMappingStore(nowEpochMs = { 10L }),
-        lookup: RecordingLookup = RecordingLookup()
+        lookup: StableIdBundleResolver.Lookup = RecordingLookup()
     ): StableIdBundleResolver =
         StableIdBundleResolver(
             idMappingStore = store,
