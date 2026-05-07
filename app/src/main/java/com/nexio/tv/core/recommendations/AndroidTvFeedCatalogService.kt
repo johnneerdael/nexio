@@ -38,6 +38,7 @@ import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
@@ -152,7 +153,12 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val continueWatchingSnapshot = resolveActiveProfileContinueWatchingSnapshot()
+        val needsContinueWatchingSnapshot = normalizedKeys.any(::feedKeyNeedsContinueWatchingSnapshot)
+        val continueWatchingSnapshot = if (needsContinueWatchingSnapshot) {
+            resolveActiveProfileContinueWatchingSnapshot()
+        } else {
+            null
+        }
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -179,7 +185,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
             when {
                 key == CONTINUE_WATCHING_FEED_KEY -> {
                     val option = optionByKey[key] ?: return@mapNotNull null
-                    val items = buildContinueWatchingItems(continueWatchingSnapshot)
+                    val items = buildContinueWatchingItems(continueWatchingSnapshot ?: ContinueWatchingSnapshot())
                     if (items.isEmpty()) null else AndroidTvFeedRow(
                         option = option,
                         items = items
@@ -227,7 +233,12 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val continueWatchingSnapshot = resolveActiveProfileContinueWatchingSnapshot()
+        val needsContinueWatchingSnapshot = feedKeyNeedsContinueWatchingSnapshot(normalizedKey)
+        val continueWatchingSnapshot = if (needsContinueWatchingSnapshot) {
+            resolveActiveProfileContinueWatchingSnapshot()
+        } else {
+            null
+        }
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -244,7 +255,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
             val option = optionByKey[normalizedKey] ?: return null
             return AndroidTvFeedRow(
                 option = option,
-                items = buildContinueWatchingItems(continueWatchingSnapshot)
+                items = buildContinueWatchingItems(continueWatchingSnapshot ?: ContinueWatchingSnapshot())
             )
         }
 
@@ -323,13 +334,15 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val activeProfileId = profileManager.activeProfileId.value
         if (activeProfileId <= 0) return ContinueWatchingSnapshot()
 
-        return runCatching {
+        return try {
             withTimeoutOrNull(CONTINUE_WATCHING_SNAPSHOT_TIMEOUT_MS) {
                 continueWatchingSnapshotService
                     .observeProfileSnapshot(activeProfileId)
                     .first()
             } ?: ContinueWatchingSnapshot()
-        }.getOrElse { error ->
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
             Log.w(
                 TAG,
                 "Falling back to empty Android TV continue-watching feed for profile=$activeProfileId",
@@ -337,6 +350,15 @@ class AndroidTvFeedCatalogService @Inject constructor(
             )
             ContinueWatchingSnapshot()
         }
+    }
+
+    private fun feedKeyNeedsContinueWatchingSnapshot(key: String): Boolean {
+        return key == CONTINUE_WATCHING_FEED_KEY ||
+            key == catalogGlobalKey(
+                TRAKT_RAIL_ADDON_ID,
+                ContentType.SERIES.toApiString(),
+                TraktCatalogIds.UP_NEXT
+            )
     }
 
     private fun buildFeedOptions(
