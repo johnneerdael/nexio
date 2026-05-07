@@ -338,10 +338,6 @@ class LogcatRuntimeTraceSink(
             "lookupFailedCount" to payload["lookupFailedCount"],
             "lookupErrorCount" to payload["lookupErrorCount"],
             "lookupResultTypes" to payload["lookupResultTypes"],
-            "decisionFound" to payload["decisionFound"],
-            "decisionKeyHash" to payload["decisionKeyHash"],
-            "posterKind" to payload["posterKind"],
-            "posterProviderTag" to payload["posterProviderTag"],
             "authoritative" to payload["authoritative"],
             "loadState" to payload["loadState"],
             "cacheLoaded" to payload["cacheLoaded"],
@@ -354,10 +350,10 @@ class LogcatRuntimeTraceSink(
             "lastLoadReason" to payload["lastLoadReason"],
             "lastLoadErrorClass" to payload["lastLoadErrorClass"],
             "droppedDecisionCount" to payload["droppedDecisionCount"],
-            "lookupErrorClass" to payload["lookupErrorClass"],
             "quarantinedDecisionCount" to payload["quarantinedDecisionCount"],
             "errorTopFrame" to payload["errorTopFrame"],
-            "rehydrateRequestCount" to payload["rehydrateRequestCount"]
+            "rehydrateRequestCount" to payload["rehydrateRequestCount"],
+            "missingDecisionSamples" to payload["missingDecisionSamples"]
         )
         "home.snapshot_sanitize_artwork" -> linkedMapOf(
             "scope" to payload["scope"],

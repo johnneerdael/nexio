@@ -3,6 +3,7 @@ package com.nexio.tv.core.trace
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -456,10 +457,6 @@ class LogcatRuntimeTraceSinkTest {
             "lookupFailedCount" to 0,
             "lookupErrorCount" to 0,
             "lookupResultTypes" to "found=0|missing_authoritative=3|cache_not_authoritative=0|lookup_failed=0",
-            "decisionFound" to false,
-            "decisionKeyHash" to "abc123",
-            "posterKind" to "decision",
-            "posterProviderTag" to "rpdb",
             "authoritative" to true,
             "loadState" to "LoadedAuthoritative",
             "cacheLoaded" to true,
@@ -486,8 +483,6 @@ class LogcatRuntimeTraceSinkTest {
         assertTrue(msg.contains("decisionLookupCount=3"))
         assertTrue(msg.contains("missingDecisionCount=3"))
         assertTrue(msg.contains("lookupResultTypes=found=0|missing_authoritative=3|cache_not_authoritative=0|lookup_failed=0"))
-        assertTrue(msg.contains("decisionFound=false"))
-        assertTrue(msg.contains("decisionKeyHash=abc123"))
         assertTrue(msg.contains("authoritative=true"))
         assertTrue(msg.contains("loadState=LoadedAuthoritative"))
         assertTrue(msg.contains("cacheLoaded=true"))
@@ -500,6 +495,12 @@ class LogcatRuntimeTraceSinkTest {
         assertTrue(msg.contains("quarantinedDecisionCount=1"))
         assertTrue(msg.contains("errorTopFrame=DecisionStore.kt:42"))
         assertTrue(msg.contains("rehydrateRequestCount=0"))
+        assertTrue(msg.contains("missingDecisionSamples=catalogRows[0].items[0]:decision:rpdb"))
+        assertFalse(msg.contains("decisionFound="))
+        assertFalse(msg.contains("decisionKeyHash="))
+        assertFalse(msg.contains("posterKind="))
+        assertFalse(msg.contains("posterProviderTag="))
+        assertFalse(msg.contains("lookupErrorClass="))
     }
 
     @Test
