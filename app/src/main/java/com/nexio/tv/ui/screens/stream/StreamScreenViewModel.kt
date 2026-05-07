@@ -119,6 +119,7 @@ class StreamScreenViewModel @Inject constructor(
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
     private val title: String = savedStateHandle["title"] ?: ""
+    private val streamVideoId: String? = savedStateHandle.getOptionalString("streamVideoId")
     private val poster: String? = savedStateHandle.getOptionalString("poster")
     private val backdrop: String? = savedStateHandle.getOptionalString("backdrop")
     private val logo: String? = savedStateHandle.getOptionalString("logo")
@@ -143,6 +144,7 @@ class StreamScreenViewModel @Inject constructor(
     private val deterministicAutoplay: Boolean = savedStateHandle.get<String>("deterministicAutoplay")
         ?.toBooleanStrictOrNull()
         ?: false
+    private val streamFetchVideoId: String = streamVideoId?.takeIf { it.isNotBlank() } ?: videoId
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
 
     private val _uiState = MutableStateFlow(
@@ -608,7 +610,7 @@ class StreamScreenViewModel @Inject constructor(
 
                 streamRepository.getStreamsFromAllAddons(
                     type = contentType,
-                    videoId = videoId,
+                    videoId = streamFetchVideoId,
                     season = season,
                     episode = episode,
                     installedAddons = installedAddons,

@@ -272,8 +272,9 @@ fun MetaDetailsScreen(
         year: String?,
         runtime: Int?,
         originalLanguage: String?,
-        deterministicAutoplay: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+        deterministicAutoplay: Boolean,
+        streamVideoId: String?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onPlayEpisodeWithManualStreamSelection: (
         videoId: String,
         contentType: String,
@@ -286,8 +287,9 @@ fun MetaDetailsScreen(
         episode: Int?,
         episodeName: String?,
         runtime: Int?,
-        originalLanguage: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _ -> }
+        originalLanguage: String?,
+        streamVideoId: String?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -663,7 +665,12 @@ fun MetaDetailsScreen(
                                     null,
                                     playbackRuntime,
                                     meta.language,
-                                    uiState.deterministicAutoplayEnabled
+                                    uiState.deterministicAutoplayEnabled,
+                                    resolveImdbStreamVideoId(
+                                        imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        season = video.season,
+                                        episode = video.episode
+                                    )
                                 )
                             }
                         },
@@ -686,7 +693,12 @@ fun MetaDetailsScreen(
                                     yearString,
                                     null,
                                     meta.language,
-                                    uiState.deterministicAutoplayEnabled
+                                    uiState.deterministicAutoplayEnabled,
+                                    resolveImdbStreamVideoId(
+                                        imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        season = null,
+                                        episode = null
+                                    )
                                 )
                             }
                         },
@@ -710,7 +722,12 @@ fun MetaDetailsScreen(
                                     video.episode,
                                     video.title,
                                     playbackRuntime,
-                                    meta.language
+                                    meta.language,
+                                    resolveImdbStreamVideoId(
+                                        imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        season = video.season,
+                                        episode = video.episode
+                                    )
                                 )
                             }
                         },
@@ -2570,4 +2587,25 @@ private fun NoOfficialAppDialog(
             Text(stringResource(R.string.action_close))
         }
     }
+}
+
+internal fun resolveImdbStreamVideoId(
+    imdbSidecarId: String?,
+    season: Int?,
+    episode: Int?
+): String? {
+    val imdbId = normalizeImdbSidecarId(imdbSidecarId) ?: return null
+    return if (season != null && episode != null) {
+        "$imdbId:$season:$episode"
+    } else {
+        imdbId
+    }
+}
+
+private fun normalizeImdbSidecarId(rawId: String?): String? {
+    if (rawId.isNullOrBlank()) return null
+    return Regex("""tt\d+""", RegexOption.IGNORE_CASE)
+        .find(rawId.trim())
+        ?.value
+        ?.lowercase()
 }

@@ -67,6 +67,18 @@ class MetaDetailsKitsuEpisodeSupportTest {
         assertEquals(listOf(1, 2), videos.map { it.episode })
     }
 
+    @Test
+    fun `resolveImdbStreamVideoId builds episode stream id without replacing primary ids`() {
+        assertEquals(
+            "tt14016574:1:2",
+            resolveImdbStreamVideoId(
+                imdbSidecarId = "imdb:tt14016574",
+                season = 1,
+                episode = 2
+            )
+        )
+    }
+
     private fun meta(
         rawType: String,
         type: ContentType,
