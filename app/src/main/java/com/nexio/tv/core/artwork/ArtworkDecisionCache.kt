@@ -124,7 +124,11 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheD
         requiredContext: ArtworkDecisionAuthorityContext?
     ): ArtworkDecisionLookupResult =
         decisions[key]?.let(ArtworkDecisionLookupResult::Found)
-            ?: ArtworkDecisionLookupResult.MissingAuthoritative
+            ?: if (loadState().isAuthoritativeForMissing(requiredContext)) {
+                ArtworkDecisionLookupResult.MissingAuthoritative
+            } else {
+                ArtworkDecisionLookupResult.CacheNotAuthoritative
+            }
 
     override fun loadState(): ArtworkDecisionStoreLoadState =
         ArtworkDecisionStoreLoadState.LoadedAuthoritative(

@@ -1,6 +1,10 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
@@ -218,8 +222,9 @@ class DurableArtworkDecisionCache(
                 )
                 return
             }
-            val dto = gson.fromJson(raw, StoreDto::class.java)
-            if (dto == null) {
+            val storeJson = JsonParser.parseString(raw).asJsonObject
+            val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
+            if (storedSchemaVersion == null) {
                 val loadState = failedNonAuthoritativeState(errorClass = null)
                 traceDecisionStoreLoad(
                     success = false,
@@ -230,13 +235,14 @@ class DurableArtworkDecisionCache(
                     droppedDecisionCount = 0,
                     quarantinedDecisionCount = 0,
                     filePresent = true,
-                    reason = "null_store"
+                    reason = "missing_schema_version"
                 )
                 return
             }
-            lastStoredSchemaVersion = dto.schemaVersion
-            if (dto.schemaVersion != SCHEMA_VERSION) {
-                val droppedDecisionCount = dto.decisions.orEmpty().size
+            lastStoredSchemaVersion = storedSchemaVersion
+            val decisionElements = storeJson.arrayOrEmpty("decisions")
+            if (storedSchemaVersion != SCHEMA_VERSION) {
+                val droppedDecisionCount = decisionElements.size()
                 val loadState = failedNonAuthoritativeState(errorClass = null)
                 traceDecisionStoreLoad(
                     success = false,
@@ -248,27 +254,30 @@ class DurableArtworkDecisionCache(
                     quarantinedDecisionCount = 0,
                     filePresent = true,
                     reason = "schema_version_mismatch",
-                    storedSchemaVersion = dto.schemaVersion
+                    storedSchemaVersion = storedSchemaVersion
                 )
                 return
             }
 
             var droppedDecisionCount = 0
             var quarantinedDecisionCount = 0
-            dto.decisions.orEmpty().forEach { decision ->
-                val restored = decision.toDomainOrNull()
+            decisionElements.forEach { decisionElement ->
+                val restored = runCatching {
+                    gson.fromJson(decisionElement, DecisionDto::class.java)?.toDomainOrNull()
+                }.getOrNull()
                 if (restored == null) {
                     droppedDecisionCount += 1
                     quarantinedDecisionCount += 1
                     if (firstQuarantinedDecisionKeyHash == null) {
-                        firstQuarantinedDecisionKeyHash = decision.safeKeyForHash()
+                        firstQuarantinedDecisionKeyHash = decisionElement.safeDecisionKeyHash()
                     }
                 } else {
                     decisions[restored.decisionKey] = restored
                 }
             }
-            dto.previewLinks.orEmpty().forEach { link ->
+            storeJson.arrayOrEmpty("previewLinks").forEach { linkElement ->
                 runCatching {
+                    val link = requireNotNull(gson.fromJson(linkElement, PreviewLinkDto::class.java))
                     previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
                         ArtworkDecisionKey(link.canonicalKey)
                 }.onFailure {
@@ -487,6 +496,19 @@ class DurableArtworkDecisionCache(
         val bytes: Long?
     )
 
+    private fun JsonObject.intOrNull(name: String): Int? =
+        runCatching { get(name)?.asInt }.getOrNull()
+
+    private fun JsonObject.arrayOrEmpty(name: String): JsonArray =
+        runCatching { getAsJsonArray(name) }.getOrNull() ?: JsonArray()
+
+    private fun JsonElement.safeDecisionKeyHash(): String {
+        val decisionKey = runCatching {
+            asJsonObject.get("decisionKey")?.takeIf { element -> element.isJsonPrimitive }?.asString
+        }.getOrNull()
+        return artworkDecisionShortSha256(decisionKey ?: toString())
+    }
+
     private fun loadedAuthoritativeState(
         droppedDecisionCount: Int,
         quarantinedDecisionCount: Int
@@ -619,9 +641,6 @@ class DurableArtworkDecisionCache(
                 staleUntilMs = staleUntilMs
             )
         }.getOrNull()
-
-        fun safeKeyForHash(): String =
-            artworkDecisionShortSha256(decisionKey ?: hashCode().toString())
 
         companion object {
             fun fromDomain(decision: ArtworkDecision): DecisionDto =

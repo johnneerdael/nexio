@@ -1,6 +1,9 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -22,6 +25,7 @@ class ArtworkDecisionCacheTest {
     fun `in memory lookup returns found or missing authoritative`() {
         val key = ArtworkDecisionKey("lookup-in-memory")
         val decision = decision(key, ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"))
+        val mismatchedContext = authorityContext()
 
         cache.put(decision)
 
@@ -30,6 +34,41 @@ class ArtworkDecisionCacheTest {
             ArtworkDecisionLookupResult.MissingAuthoritative,
             cache.lookup(ArtworkDecisionKey("lookup-in-memory-missing"))
         )
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            cache.lookup(ArtworkDecisionKey("lookup-in-memory-missing"), mismatchedContext)
+        )
+    }
+
+    @Test
+    fun `default lookup returns lookup failed when get throws`() {
+        val throwingCache = object : ArtworkDecisionCache {
+            override fun get(key: ArtworkDecisionKey): ArtworkDecision? {
+                error("lookup exploded")
+            }
+
+            override fun put(decision: ArtworkDecision) = Unit
+            override fun remove(key: ArtworkDecisionKey) = Unit
+            override fun linkPreviewToCanonical(
+                previewKey: ArtworkDecisionKey,
+                canonicalKey: ArtworkDecisionKey
+            ) = Unit
+            override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? = null
+            override fun invalidateBySettingsHash(settingsHash: String) = Unit
+            override fun invalidateByCredentialHash(credentialHash: String) = Unit
+            override fun invalidateArtworkPolicy(
+                settingsHashes: Set<String>,
+                credentialHashes: Set<String>
+            ) = Unit
+            override fun invalidatePremiumArtworkPolicy() = Unit
+        }
+
+        val result = throwingCache.lookup(ArtworkDecisionKey("throwing-lookup"))
+
+        assertTrue(result is ArtworkDecisionLookupResult.LookupFailed)
+        result as ArtworkDecisionLookupResult.LookupFailed
+        assertEquals("IllegalStateException", result.errorClass)
+        assertNotNull(result.errorMessageHash)
     }
 
     @Test
@@ -273,6 +312,45 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable missing file load is authoritative and missing lookup is authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.root.resolve("missing-artwork-decisions.json")
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        assertEquals(
+            ArtworkDecisionLookupResult.MissingAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("missing-file-missing"))
+        )
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedAuthoritative", diagnostics.loadStateName)
+        assertTrue(diagnostics.authoritative)
+        assertEquals(false, diagnostics.storeFilePresent)
+        assertEquals(0, diagnostics.droppedDecisionCount)
+        assertEquals(0, diagnostics.quarantinedDecisionCount)
+    }
+
+    @Test
+    fun `durable blank file load is authoritative and missing lookup is authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText("  \n  ")
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        assertEquals(
+            ArtworkDecisionLookupResult.MissingAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("blank-file-missing"))
+        )
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedAuthoritative", diagnostics.loadStateName)
+        assertTrue(diagnostics.authoritative)
+        assertEquals(true, diagnostics.storeFilePresent)
+        assertEquals(0, diagnostics.droppedDecisionCount)
+        assertEquals(0, diagnostics.quarantinedDecisionCount)
+    }
+
+    @Test
     fun `durable malformed decision is quarantined while valid decisions remain usable`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -308,6 +386,48 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable malformed dto parse value is quarantined while valid decisions remain usable`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+        val store = JsonParser.parseString(file.readText()).asJsonObject
+        val validDecision = store.getAsJsonArray("decisions").first().asJsonObject
+        val malformedDecision = validDecision.deepCopy().asJsonObject
+        malformedDecision.add("policyVersion", JsonObject())
+        store.add("decisions", JsonArray().apply {
+            add(validDecision)
+            add(malformedDecision)
+        })
+        file.writeText(Gson().toJson(store))
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("durable-dto-parse-missing"))
+        )
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
+        assertNotNull(diagnostics.firstQuarantinedDecisionKeyHash)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(true, payload["success"])
+        assertEquals("LoadedPartialNonAuthoritative", payload["loadState"])
+        assertEquals(1, payload["decisionCount"])
+        assertEquals(1, payload["quarantinedDecisionCount"])
+    }
+
+    @Test
     fun `durable top level parse failure is failed non authoritative`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -335,6 +455,40 @@ class ArtworkDecisionCacheTest {
         assertEquals("FailedNonAuthoritative", payload["loadState"])
         assertNotNull(payload["errorMessageHash"])
         assertNotNull(payload["errorTopFrame"])
+    }
+
+    @Test
+    fun `durable schema mismatch is failed non authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        DurableArtworkDecisionCache(file = file, gson = Gson()).put(durableRpdbDecision())
+        val store = JsonParser.parseString(file.readText()).asJsonObject
+        store.addProperty("schemaVersion", 0)
+        file.writeText(Gson().toJson(store))
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("schema-mismatch-missing"))
+        )
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("FailedNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+        assertEquals(false, diagnostics.lastLoadSuccess)
+        assertEquals("schema_version_mismatch", diagnostics.lastLoadReason)
+        assertEquals(0, diagnostics.storedSchemaVersion)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(false, payload["success"])
+        assertEquals(false, payload["authoritative"])
+        assertEquals("FailedNonAuthoritative", payload["loadState"])
+        assertEquals("schema_version_mismatch", payload["reason"])
+        assertEquals(0, payload["storedSchemaVersion"])
     }
 
     @Test
