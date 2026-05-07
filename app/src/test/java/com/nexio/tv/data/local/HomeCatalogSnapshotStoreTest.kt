@@ -254,13 +254,29 @@ class HomeCatalogSnapshotStoreTest {
     @Test
     fun `write sanitizes raw premium provider URL host variants from persisted JSON`() {
         val cases = listOf(
-            "http://api.ratingposterdb.com/rpdb-secret/imdb/poster-default/tt123.jpg" to "api.ratingposterdb.com",
-            "https://api.ratingposterdb.com:443/rpdb-secret/imdb/poster-default/tt123.jpg" to "api.ratingposterdb.com",
-            "http://api.top-posters.com/top-secret/imdb/poster-default/tt123.jpg" to "api.top-posters.com",
-            "https://api.top-posters.com:443/top-secret/imdb/poster-default/tt123.jpg" to "api.top-posters.com"
+            Triple(
+                "http://api.ratingposterdb.com/rpdb-secret/imdb/poster-default/tt123.jpg",
+                "api.ratingposterdb.com",
+                "rpdb"
+            ),
+            Triple(
+                "https://api.ratingposterdb.com:443/rpdb-secret/imdb/poster-default/tt123.jpg",
+                "api.ratingposterdb.com",
+                "rpdb"
+            ),
+            Triple(
+                "http://api.top-posters.com/top-secret/imdb/poster-default/tt123.jpg",
+                "api.top-posters.com",
+                "top_posters"
+            ),
+            Triple(
+                "https://api.top-posters.com:443/top-secret/imdb/poster-default/tt123.jpg",
+                "api.top-posters.com",
+                "top_posters"
+            )
         )
 
-        cases.forEachIndexed { index, (posterUrl, host) ->
+        cases.forEachIndexed { index, (posterUrl, host, providerTag) ->
             val snapshotPrefs = InMemorySharedPreferences()
             val localePrefs = localePrefs("en")
             val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -274,7 +290,7 @@ class HomeCatalogSnapshotStoreTest {
             )
             val snapshot = sampleSnapshotWithPoster(
                 poster = posterUrl,
-                posterProviderTag = "rpdb"
+                posterProviderTag = providerTag
             )
 
             store.write(snapshot, "RPDB:12345")
@@ -282,7 +298,7 @@ class HomeCatalogSnapshotStoreTest {
             val raw = persistedSnapshotJson(snapshotPrefs)
             assertFalse("case $index should not persist premium host", raw.contains(host))
             assertFalse("case $index should not persist premium key", raw.contains("secret"))
-            assertFalse("case $index should clear provider tag", raw.contains("\"posterProviderTag\":\"rpdb\""))
+            assertFalse("case $index should clear provider tag", raw.contains("\"posterProviderTag\":\"$providerTag\""))
         }
     }
 
