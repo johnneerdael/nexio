@@ -27,14 +27,18 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Test
 
 class AndroidTvFeedCatalogServiceTmdbTest {
@@ -150,6 +154,30 @@ class AndroidTvFeedCatalogServiceTmdbTest {
     }
 
     @Test
+    fun `resolving selected TMDB feed does not wait for continue watching snapshot`() = runTest {
+        val tmdbRow = tmdbRow(
+            catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+            items = listOf(meta("tmdb:1", "Movie"))
+        )
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val fixture = fixture(
+            tmdbSnapshot = currentTmdbSnapshot(tmdbPrefs, TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
+            tmdbPrefs = tmdbPrefs,
+            continueWatchingSnapshotFlow = emptyFlow()
+        )
+
+        val row = withTimeout(100) {
+            fixture.service.resolveFeed("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}")
+        }
+
+        assertEquals(listOf("tmdb:1"), row?.items?.map { it.id })
+        verify(exactly = 0) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(any()) }
+    }
+
+    @Test
     fun `resolving selected TMDB rows refreshes only selected TMDB catalog ids`() = runTest {
         val tmdbPrefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(
@@ -189,6 +217,34 @@ class AndroidTvFeedCatalogServiceTmdbTest {
     }
 
     @Test
+    fun `resolving selected TMDB rows does not wait for continue watching snapshot`() = runTest {
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val fixture = fixture(
+            tmdbSnapshot = currentTmdbSnapshot(
+                tmdbPrefs,
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(meta("tmdb:1", "Movie"))
+                )
+            ),
+            tmdbPrefs = tmdbPrefs,
+            continueWatchingSnapshotFlow = emptyFlow()
+        )
+
+        val rows = withTimeout(100) {
+            fixture.service.resolveSelectedRows(
+                listOf("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}")
+            )
+        }
+
+        assertEquals(listOf("tmdb:1"), rows.single().items.map { it.id })
+        verify(exactly = 0) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(any()) }
+    }
+
+    @Test
     fun `resolving continue watching feed does not refresh default enabled TMDB catalogs`() = runTest {
         val fixture = fixture(
             tmdbSnapshot = TmdbDiscoverySnapshot(),
@@ -215,6 +271,24 @@ class AndroidTvFeedCatalogServiceTmdbTest {
 
         coVerify(exactly = 0) {
             fixture.tmdbDiscoveryService.refreshCatalogs(any(), force = false)
+        }
+    }
+
+    @Test
+    fun `resolving continue watching feed rethrows parent cancellation`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingSnapshotFlow = flow {
+                throw CancellationException("parent cancelled")
+            }
+        )
+
+        try {
+            fixture.service.resolveFeed(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+            fail("Expected parent cancellation to propagate")
+        } catch (error: CancellationException) {
+            assertEquals("parent cancelled", error.message)
         }
     }
 
@@ -313,13 +387,15 @@ class AndroidTvFeedCatalogServiceTmdbTest {
                 tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
                 continueWatchingSnapshotService = continueWatchingSnapshotService
             ),
-            tmdbDiscoveryService = tmdbDiscoveryService
+            tmdbDiscoveryService = tmdbDiscoveryService,
+            continueWatchingSnapshotService = continueWatchingSnapshotService
         )
     }
 
     private data class ServiceFixture(
         val service: AndroidTvFeedCatalogService,
-        val tmdbDiscoveryService: TmdbDiscoveryService
+        val tmdbDiscoveryService: TmdbDiscoveryService,
+        val continueWatchingSnapshotService: ContinueWatchingSnapshotService
     )
 
     private fun tmdbRow(
