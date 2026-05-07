@@ -252,6 +252,41 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
+    fun `write sanitizes raw premium provider URL host variants from persisted JSON`() {
+        val cases = listOf(
+            "http://api.ratingposterdb.com/rpdb-secret/imdb/poster-default/tt123.jpg" to "api.ratingposterdb.com",
+            "https://api.ratingposterdb.com:443/rpdb-secret/imdb/poster-default/tt123.jpg" to "api.ratingposterdb.com",
+            "http://api.top-posters.com/top-secret/imdb/poster-default/tt123.jpg" to "api.top-posters.com",
+            "https://api.top-posters.com:443/top-secret/imdb/poster-default/tt123.jpg" to "api.top-posters.com"
+        )
+
+        cases.forEachIndexed { index, (posterUrl, host) ->
+            val snapshotPrefs = InMemorySharedPreferences()
+            val localePrefs = localePrefs("en")
+            val metadataStore = mockk<MetadataDiskCacheStore>()
+            every { metadataStore.currentLanguageEpoch() } returns 0
+            val posterResolver = mockk<PosterRatingsUrlResolver>()
+            val store = HomeCatalogSnapshotStore(
+                context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+                metadataDiskCacheStore = metadataStore,
+                posterRatingsUrlResolver = posterResolver,
+                artworkDecisionCache = InMemoryArtworkDecisionCache()
+            )
+            val snapshot = sampleSnapshotWithPoster(
+                poster = posterUrl,
+                posterProviderTag = "rpdb"
+            )
+
+            store.write(snapshot, "RPDB:12345")
+
+            val raw = persistedSnapshotJson(snapshotPrefs)
+            assertFalse("case $index should not persist premium host", raw.contains(host))
+            assertFalse("case $index should not persist premium key", raw.contains("secret"))
+            assertFalse("case $index should clear provider tag", raw.contains("\"posterProviderTag\":\"rpdb\""))
+        }
+    }
+
+    @Test
     fun `write sanitizes legacy integration poster refs from persisted JSON`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
@@ -403,6 +438,31 @@ class HomeCatalogSnapshotStoreTest {
             "nexio-artwork://decision/mismatched-provider-decision",
             "top_posters"
         )
+    }
+
+    @Test
+    fun `provider tag mismatch rejects found decision ref`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(sampleArtworkDecision(ArtworkDecisionKey("found-mismatched-provider-decision")))
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/found-mismatched-provider-decision",
+            posterProviderTag = "top_posters"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        assertNull(store.read("RPDB:12345"))
     }
 
     @Test

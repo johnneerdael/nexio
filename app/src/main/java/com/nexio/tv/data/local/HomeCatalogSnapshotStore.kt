@@ -25,6 +25,7 @@ import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -83,9 +84,9 @@ class HomeCatalogSnapshotStore private constructor(
         private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
         private const val LEGACY_INTEGRATION_POSTER_PREFIX = "integration-poster://"
         private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
-        private val PREMIUM_PROVIDER_URL_PREFIXES = listOf(
-            "https://api.ratingposterdb.com/",
-            "https://api.top-posters.com/"
+        private val PREMIUM_PROVIDER_HOSTS = setOf(
+            "api.ratingposterdb.com",
+            "api.top-posters.com"
         )
     }
 
@@ -137,8 +138,14 @@ class HomeCatalogSnapshotStore private constructor(
                     )
                     return null
                 }
-            val sanitized = decoded.sanitize()
-            val restored = sanitized.takeIf { it.hasValidPosterProviderTags(requiredPosterProviderTag) }
+            val sanitizeResult = decoded.sanitizeForSnapshot()
+            val sanitized = sanitizeResult.snapshot
+            val restored = sanitized.takeIf {
+                it.hasValidPosterProviderTags(
+                    requiredPosterProviderTag,
+                    providerTagMismatchExemptPosterRefs = sanitizeResult.providerTagMismatchExemptPosterRefs
+                )
+            }
             traceSnapshot(
                 eventType = "home.snapshot_read",
                 payload = mapOf(
@@ -317,7 +324,10 @@ class HomeCatalogSnapshotStore private constructor(
             ?.lowercase()
     }
 
-    private fun Snapshot.hasValidPosterProviderTags(requiredTag: String?): Boolean {
+    private fun Snapshot.hasValidPosterProviderTags(
+        requiredTag: String?,
+        providerTagMismatchExemptPosterRefs: Set<String> = emptySet()
+    ): Boolean {
         if (requiredTag == null) return true
         return sequence {
             catalogRows.forEach { row -> yieldAll(row.items) }
@@ -326,11 +336,13 @@ class HomeCatalogSnapshotStore private constructor(
         }.all { item ->
             item.posterProviderTag == null ||
                 item.posterProviderTag == requiredTag ||
-                item.poster?.trim()?.let(::isDecisionRef) == true
+                item.poster?.trim() in providerTagMismatchExemptPosterRefs
         }
     }
 
-    private fun Snapshot.sanitize(): Snapshot {
+    private fun Snapshot.sanitize(): Snapshot = sanitizeForSnapshot().snapshot
+
+    private fun Snapshot.sanitizeForSnapshot(): SnapshotSanitizeResult {
         val traceState = SnapshotSanitizeTraceState()
         val sanitizedCatalogRows = sanitizeCatalogRows(catalogRows as List<*>, "catalogRows", traceState)
         val sanitizedFullCatalogRows = sanitizeCatalogRows(fullCatalogRows as List<*>, "fullCatalogRows", traceState)
@@ -349,11 +361,14 @@ class HomeCatalogSnapshotStore private constructor(
         }
         traceState.emitIfNeeded()
 
-        return Snapshot(
-            catalogRows = sanitizedCatalogRows,
-            fullCatalogRows = sanitizedFullCatalogRows,
-            heroItems = sanitizedHeroItems,
-            orderedGroupKeys = orderedGroupKeys.distinct()
+        return SnapshotSanitizeResult(
+            snapshot = Snapshot(
+                catalogRows = sanitizedCatalogRows,
+                fullCatalogRows = sanitizedFullCatalogRows,
+                heroItems = sanitizedHeroItems,
+                orderedGroupKeys = orderedGroupKeys.distinct()
+            ),
+            providerTagMismatchExemptPosterRefs = traceState.providerTagMismatchExemptPosterRefs.toSet()
         )
     }
 
@@ -411,6 +426,9 @@ class HomeCatalogSnapshotStore private constructor(
         } else {
             null
         }
+        if (decisionLookup?.preserveNonAuthoritativeRef == true) {
+            traceState.recordProviderTagMismatchExemptPosterRef(posterRef)
+        }
         val reason = clearReasonForPosterRef(posterRef, decisionLookup?.clearMissingDecisionRef)
         if (posterRef.isBlank() || reason == null) {
             return this
@@ -435,9 +453,11 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun isRawPremiumProviderUrl(ref: String): Boolean {
-        return PREMIUM_PROVIDER_URL_PREFIXES.any { prefix ->
-            ref.startsWith(prefix, ignoreCase = true)
-        }
+        val uri = runCatching { URI(ref.trim()) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase() ?: return false
+        if (scheme != "http" && scheme != "https") return false
+        val host = uri.host?.lowercase() ?: return false
+        return host in PREMIUM_PROVIDER_HOSTS
     }
 
     private fun isLegacyIntegrationPosterRef(ref: String): Boolean {
@@ -474,6 +494,7 @@ class HomeCatalogSnapshotStore private constructor(
             ?: return DecisionLookupProof(
                 decisionFound = false,
                 clearMissingDecisionRef = true,
+                preserveNonAuthoritativeRef = false,
                 decisionKeyHash = null,
                 lookupResultType = "blank_decision_key",
                 diagnostics = cacheDiagnostics()
@@ -512,6 +533,8 @@ class HomeCatalogSnapshotStore private constructor(
         return DecisionLookupProof(
             decisionFound = lookupResult is ArtworkDecisionLookupResult.Found,
             clearMissingDecisionRef = lookupResult is ArtworkDecisionLookupResult.MissingAuthoritative,
+            preserveNonAuthoritativeRef = lookupResult is ArtworkDecisionLookupResult.CacheNotAuthoritative ||
+                lookupResult is ArtworkDecisionLookupResult.LookupFailed,
             decisionKeyHash = decisionKeyHash,
             lookupResultType = lookupResult.lookupResultType(),
             diagnostics = cacheDiagnostics()
@@ -559,9 +582,15 @@ class HomeCatalogSnapshotStore private constructor(
     private data class DecisionLookupProof(
         val decisionFound: Boolean,
         val clearMissingDecisionRef: Boolean,
+        val preserveNonAuthoritativeRef: Boolean,
         val decisionKeyHash: String?,
         val lookupResultType: String,
         val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics?
+    )
+
+    private data class SnapshotSanitizeResult(
+        val snapshot: Snapshot,
+        val providerTagMismatchExemptPosterRefs: Set<String>
     )
 
     private inner class SnapshotSanitizeTraceState {
@@ -584,8 +613,15 @@ class HomeCatalogSnapshotStore private constructor(
         var legacyIntegrationCount: Int = 0
             private set
         private var latestDiagnostics: ArtworkDecisionCacheSnapshotDiagnostics? = null
+        private val mutableProviderTagMismatchExemptPosterRefs = mutableSetOf<String>()
+        val providerTagMismatchExemptPosterRefs: Set<String>
+            get() = mutableProviderTagMismatchExemptPosterRefs
         private val sanitizedSamples = mutableListOf<String>()
         private val missingDecisionSamples = mutableListOf<String>()
+
+        fun recordProviderTagMismatchExemptPosterRef(ref: String) {
+            mutableProviderTagMismatchExemptPosterRefs += ref
+        }
 
         fun recordDecisionLookup(
             scope: String,
