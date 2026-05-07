@@ -62,6 +62,7 @@ import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
@@ -240,7 +241,7 @@ fun ContentCard(
                 item.releaseInfo
                     ?.let { YEAR_REGEX.find(it)?.value }
                     ?.let { add(it) }
-                item.imdbRating?.let { add(String.format("%.1f", it)) }
+                item.imdbRating?.let { add(RatingDisplayFormatter.formatTitleRating(it)) }
             }
         }
     } else {

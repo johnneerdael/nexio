@@ -74,6 +74,14 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
 }
 
 fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
+    val cleanOverlayRating = sanitizedTitleRating()
+    val cleanBaseRating = base.imdbRating.sanitizedTitleRating()
+    val appliedRating = cleanOverlayRating ?: cleanBaseRating
+    val appliedRatingSource = when {
+        cleanOverlayRating != null -> ratingSource.orDefault()
+        cleanBaseRating != null -> base.ratingSource.orDefault()
+        else -> null
+    }
     return base.copy(
         name = title ?: base.name,
         logo = displayLogo ?: base.logo,
@@ -81,8 +89,8 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         genres = if (genres.isNotEmpty()) genres else base.genres,
         releaseInfo = releaseInfo ?: base.releaseInfo,
         runtime = runtime ?: base.runtime,
-        imdbRating = imdbRating ?: base.imdbRating,
-        ratingSource = if (imdbRating != null) ratingSource.orDefault() else base.ratingSource.orDefault(),
+        imdbRating = appliedRating,
+        ratingSource = appliedRatingSource,
         tomatoesRating = tomatoesRating ?: base.tomatoesRating,
         poster = displayPoster ?: base.poster,
         posterProviderTag = if (displayPoster != null) posterProviderTag else base.posterProviderTag,
@@ -93,6 +101,14 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
 
 fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {
     if (fallback == null) return this
+    val cleanPrimaryRating = sanitizedTitleRating()
+    val cleanFallbackRating = fallback.imdbRating.sanitizedTitleRating()
+    val mergedRating = cleanPrimaryRating ?: cleanFallbackRating
+    val mergedRatingSource = when {
+        cleanPrimaryRating != null -> ratingSource.orDefault()
+        cleanFallbackRating != null -> fallback.ratingSource.orDefault()
+        else -> null
+    }
     return copy(
         title = title ?: fallback.title,
         logo = logo ?: fallback.logo,
@@ -100,8 +116,8 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         genres = if (genres.isNotEmpty()) genres else fallback.genres,
         releaseInfo = releaseInfo ?: fallback.releaseInfo,
         runtime = runtime ?: fallback.runtime,
-        imdbRating = imdbRating ?: fallback.imdbRating,
-        ratingSource = if (imdbRating != null) ratingSource.orDefault() else fallback.ratingSource.orDefault(),
+        imdbRating = mergedRating,
+        ratingSource = mergedRatingSource,
         tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
         poster = poster ?: fallback.poster,
         posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
@@ -110,6 +126,12 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         artwork = mergeFallbackArtwork(fallback)
     )
 }
+
+private fun HomeDisplayMetadata.sanitizedTitleRating(): Float? =
+    RatingValueValidator.sanitizeTitleRating(imdbRating)
+
+private fun Float?.sanitizedTitleRating(): Float? =
+    RatingValueValidator.sanitizeTitleRating(this)
 
 private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
     val fallbackArtwork = fallback.artwork ?: return artwork

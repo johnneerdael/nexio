@@ -79,6 +79,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -482,7 +483,7 @@ private fun EpisodeCard(
         episodeRatingForThumbnailOverlay(episode, episodeRating)
     }
     val ratingLabel = remember(thumbnailOverlayRating) {
-        thumbnailOverlayRating?.value?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
+        thumbnailOverlayRating?.value?.takeIf { it > 0.0 }?.let { RatingDisplayFormatter.formatTitleRating(it) }
     }
     val ratingBadge = remember(thumbnailOverlayRating?.source) {
         thumbnailOverlayRating?.source?.let(::episodeRatingBadge)

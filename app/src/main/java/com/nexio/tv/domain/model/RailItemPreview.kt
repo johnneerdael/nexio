@@ -95,6 +95,18 @@ data class RatingSeed(
     val votes: Int? = null
 )
 
+data class RejectedPreviewRating(
+    val rawValue: Double,
+    val rawField: String,
+    val reason: String
+)
+
+data class PreviewRatingResolution(
+    val rating: Float?,
+    val source: ProviderId?,
+    val rejected: RejectedPreviewRating?
+)
+
 sealed interface TrailerHint {
     data class YouTube(val videoId: String) : TrailerHint
 }
@@ -128,9 +140,8 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         ?: stableIds.imdb
         ?: stableIds.tmdb?.let { "TMDB $it" }
         ?: sourceItemId
-    val ratingSource = display.rating?.provider.toTitleRatingSource()
-    val rating = display.ratingText?.toFloatOrNull()
-        ?: display.rating?.value?.toFloat()
+    val previewRating = display.toPreviewRating(fallbackProvider = sourceProvider)
+    val ratingSource = previewRating.source.toTitleRatingSource()
 
     return MetaPreview(
         id = bestSupportedRoutingId(),
@@ -144,7 +155,7 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         description = display.overview,
         releaseInfo = display.year?.toString() ?: display.releaseDate?.take(4),
         runtime = display.runtimeText,
-        imdbRating = rating,
+        imdbRating = previewRating.rating,
         ratingSource = ratingSource,
         tomatoesRating = display.tomatoesRating,
         genres = display.genres,
@@ -161,6 +172,52 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
     )
 }
 
+fun RailDisplaySeed.toPreviewRating(fallbackProvider: ProviderId? = null): PreviewRatingResolution {
+    val rawFromText = ratingText?.trim()?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+    val raw = rawFromText ?: rating?.value
+    val rawField = when {
+        rawFromText != null -> "ratingText"
+        rating != null -> "rating.value"
+        else -> null
+    }
+
+    if (raw == null || rawField == null) {
+        return PreviewRatingResolution(rating = null, source = null, rejected = null)
+    }
+
+    val source = (rating?.provider ?: fallbackProvider).takeIf { it.isTrustedTitleRatingProvider() }
+
+    if (source == null) {
+        return PreviewRatingResolution(
+            rating = null,
+            source = null,
+            rejected = RejectedPreviewRating(
+                rawValue = raw,
+                rawField = rawField,
+                reason = "MISSING_RATING_SOURCE"
+            )
+        )
+    }
+
+    return if (RatingValueValidator.validTitleRating(raw)) {
+        PreviewRatingResolution(
+            rating = raw.toFloat(),
+            source = source,
+            rejected = null
+        )
+    } else {
+        PreviewRatingResolution(
+            rating = null,
+            source = null,
+            rejected = RejectedPreviewRating(
+                rawValue = raw,
+                rawField = rawField,
+                reason = "OUT_OF_RANGE_TITLE_RATING"
+            )
+        )
+    }
+}
+
 fun RailItemPreview.bestSupportedRoutingId(): String = when {
     stableIds.kitsu != null && prefersKitsuRouting() -> "kitsu:${stableIds.kitsu}"
     itemType == ContentType.MOVIE && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
@@ -171,6 +228,9 @@ fun RailItemPreview.bestSupportedRoutingId(): String = when {
 
 private fun RailItemPreview.prefersKitsuRouting(): Boolean =
     sourceProvider == ProviderId.KITSU || railSource == RailSource.BUILT_IN_KITSU
+
+private fun ProviderId?.isTrustedTitleRatingProvider(): Boolean =
+    this == ProviderId.IMDB || this == ProviderId.TMDB
 
 private fun ProviderId?.toTitleRatingSource(): TitleRatingSource? = when (this) {
     ProviderId.IMDB -> TitleRatingSource.IMDB

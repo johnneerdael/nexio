@@ -7,7 +7,9 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.trace.TraceSessionManager
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
@@ -98,7 +100,7 @@ class ScreensaverCandidateRepository(
             overview = display.overview,
             genres = display.genres,
             runtime = display.runtimeText,
-            rating = rating,
+            rating = rating.validTitleRatingOrNull(),
             artwork = artwork,
             preferredImage = preferredImage,
             stableIds = stableIds,
@@ -118,7 +120,7 @@ class ScreensaverCandidateRepository(
             overview = display.overview,
             genres = display.genres,
             runtime = display.runtimeText,
-            rating = rating,
+            rating = rating.validTitleRatingOrNull(),
             artwork = artwork,
             trailerState = screensaverTrailerState(),
             stableIds = stableIds
@@ -164,6 +166,9 @@ class ScreensaverCandidateRepository(
 
     private fun ResolvedDisplayItem.preferredScreensaverArtwork(): ArtworkDisplayRef? =
         artwork.backdrop ?: artwork.poster
+
+    private fun TitleRating?.validTitleRatingOrNull(): TitleRating? =
+        this?.takeIf { rating -> RatingValueValidator.validTitleRating(rating.value) }
 
     private companion object {
         const val RESOLVED_DISPLAY_SURFACE_SOURCE = "RESOLVED_DISPLAY_SURFACE"

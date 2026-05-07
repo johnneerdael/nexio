@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.domain.model.RatingDisplayFormatter
+
 internal data class HomePosterTrailerPlayback(
     val itemId: String,
     val title: String,
@@ -52,9 +54,9 @@ internal fun com.nexio.tv.domain.model.MetaPreview.toHomeHeroPreview(): HeroPrev
         description = description,
         contentTypeText = null,
         yearText = releaseInfo,
-        imdbText = imdbRating?.let { String.format("%.1f", it) },
+        imdbText = imdbRating?.let { RatingDisplayFormatter.formatTitleRating(it) },
         ratingSource = ratingSource,
-        tomatoesText = tomatoesRating?.let { "${it.toInt()}%" },
+        tomatoesText = tomatoesRating?.let { RatingDisplayFormatter.formatPercentRating(it) },
         genres = genres,
         poster = poster,
         backdrop = background,

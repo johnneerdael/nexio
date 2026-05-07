@@ -48,6 +48,7 @@ class ScreensaverCandidateRepositoryTest {
             sourceRole = "PRIMARY"
         )
         val backdrop = artworkRef(key = "backdrop-550", imageType = ArtworkType.BACKDROP)
+        val logo = artworkRef(key = "logo-550", imageType = ArtworkType.LOGO)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -56,7 +57,8 @@ class ScreensaverCandidateRepositoryTest {
                     title = "Fight Club",
                     artwork = ArtworkBundle(
                         backdrop = backdrop,
-                        poster = artworkRef(key = "poster-550", imageType = ArtworkType.POSTER)
+                        poster = artworkRef(key = "poster-550", imageType = ArtworkType.POSTER),
+                        logo = logo
                     ),
                     sourceTrace = listOf(trace)
                 )
@@ -77,6 +79,7 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals("139m", candidate.runtime)
         assertEquals(8.8, candidate.rating?.value ?: 0.0, 0.0)
         assertSame(backdrop, candidate.preferredImage)
+        assertSame(logo, candidate.artwork.logo)
         assertEquals("tt0137523", candidate.stableIds.imdb)
         assertEquals(listOf(trace), candidate.trace)
     }
@@ -133,6 +136,31 @@ class ScreensaverCandidateRepositoryTest {
         )
 
         assertEquals(emptyList<ScreensaverSlideCandidate>(), repository.observeImageCandidates(1).first())
+    }
+
+    @Test
+    fun `image candidates clear invalid resolved ratings but preserve logo artwork`() = runTest {
+        val surface = testSurface()
+        val repository = testScreensaverCandidates(surface)
+        val logo = artworkRef(key = "logo-94997", imageType = ArtworkType.LOGO)
+        val backdrop = artworkRef(key = "backdrop-94997", imageType = ArtworkType.BACKDROP)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "series:tmdb:94997",
+                    title = "House of the Dragon",
+                    artwork = ArtworkBundle(backdrop = backdrop, logo = logo),
+                    rating = TitleRating(1767427.0, TitleRatingSource.TMDB)
+                )
+            )
+        )
+
+        val candidate = repository.observeImageCandidates(profileId = 1).first().single()
+
+        assertEquals(null, candidate.rating)
+        assertSame(logo, candidate.artwork.logo)
+        assertSame(backdrop, candidate.preferredImage)
     }
 
     @Test
@@ -422,9 +450,10 @@ class ScreensaverCandidateRepositoryTest {
     )
 
     private fun resolvedItem(
-        itemKey: String,
-        title: String?,
+        itemKey: String = "movie:tmdb:550",
+        title: String? = "Fight Club",
         artwork: ArtworkBundle = ArtworkBundle(backdrop = artworkRef("backdrop-550", ArtworkType.BACKDROP)),
+        rating: TitleRating? = TitleRating(8.8, TitleRatingSource.IMDB),
         sourceTrace: List<HydratedHomeFieldTrace> = emptyList(),
         fallbackTrailerYtIds: List<String> = emptyList(),
         trailerState: TrailerDisplayState = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds)
@@ -448,7 +477,7 @@ class ScreensaverCandidateRepositoryTest {
             runtimeText = "139m"
         ),
         artwork = artwork,
-        rating = TitleRating(8.8, TitleRatingSource.IMDB),
+        rating = rating,
         trailer = trailerState,
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = sourceTrace,

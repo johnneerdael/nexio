@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.FieldOwner
@@ -34,7 +35,6 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -110,7 +110,7 @@ class HomeResolvedSurfacePublishingTest {
         assertEquals("movie:550", published.itemKey)
         assertEquals("Canonical title", published.display.title)
         assertEquals("Canonical overview", published.display.overview)
-        assertNull(published.artwork.poster)
+        assertEquals("canonical-poster.jpg", published.artwork.poster.toLegacyArtworkString())
         assertEquals(8.4, published.rating?.value ?: 0.0, 0.001)
         assertEquals(TitleRatingSource.IMDB, published.rating?.source)
         assertEquals(HydrationState.CANONICAL_READY, published.hydrationState)

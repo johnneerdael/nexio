@@ -10,47 +10,63 @@ import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 
-internal fun MetaPreview.sanitizedForCache(): MetaPreview = copy(
-    poster = poster.sanitizedPremiumArtworkRef(),
-    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
-    ratingSource = ratingSource.orDefault(),
-    genres = genres.orEmpty(),
-    trailerYtIds = trailerYtIds.orEmpty(),
-    // Cast to nullable before Elvis so the compiler does not flag it as redundant.
-    // Gson can inject null into these non-null fields on legacy cached JSON missing those fields.
-    firstPaintSource = (firstPaintSource as FirstPaintSource?) ?: FirstPaintSource.ADDON_META_PREVIEW,
-    firstPaintStableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
-)
+internal fun MetaPreview.sanitizedForCache(): MetaPreview {
+    val cleanRating = imdbRating.sanitizedTitleRating()
+    val cleanPoster = poster.sanitizedPremiumArtworkRef()
+    return copy(
+        poster = cleanPoster,
+        posterProviderTag = posterProviderTag.takeIf { cleanPoster != null },
+        imdbRating = cleanRating,
+        ratingSource = ratingSource.sanitizedForTitleRating(cleanRating),
+        genres = genres.orEmpty(),
+        trailerYtIds = trailerYtIds.orEmpty(),
+        // Cast to nullable before Elvis so the compiler does not flag it as redundant.
+        // Gson can inject null into these non-null fields on legacy cached JSON missing those fields.
+        firstPaintSource = (firstPaintSource as FirstPaintSource?) ?: FirstPaintSource.ADDON_META_PREVIEW,
+        firstPaintStableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
+    )
+}
 
-internal fun HomeDisplayMetadata.sanitizedForCache(): HomeDisplayMetadata = copy(
-    poster = poster.sanitizedPremiumArtworkRef(),
-    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
-    ratingSource = ratingSource.orDefault(),
-    genres = genres.orEmpty()
-)
+internal fun HomeDisplayMetadata.sanitizedForCache(): HomeDisplayMetadata {
+    val cleanRating = imdbRating.sanitizedTitleRating()
+    val cleanPoster = poster.sanitizedPremiumArtworkRef()
+    return copy(
+        poster = cleanPoster,
+        posterProviderTag = posterProviderTag.takeIf { cleanPoster != null },
+        imdbRating = cleanRating,
+        ratingSource = ratingSource.sanitizedForTitleRating(cleanRating),
+        genres = genres.orEmpty()
+    )
+}
 
 internal fun CatalogRow.sanitizedForCache(): CatalogRow = copy(
     items = items.orEmpty().map { it.sanitizedForCache() }
 )
 
-internal fun Meta.sanitizedForCache(): Meta = copy(
-    poster = poster.sanitizedPremiumArtworkRef(),
-    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
-    ratingSource = ratingSource.orDefault(),
-    genres = genres.orEmpty(),
-    director = director.orEmpty(),
-    writer = writer.orEmpty(),
-    cast = cast.orEmpty(),
-    castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    videos = videos.orEmpty(),
-    productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    links = links.orEmpty(),
-    trailerYtIds = trailerYtIds.orEmpty()
-)
+internal fun Meta.sanitizedForCache(): Meta {
+    val cleanRating = imdbRating.sanitizedTitleRating()
+    val cleanPoster = poster.sanitizedPremiumArtworkRef()
+    return copy(
+        poster = cleanPoster,
+        posterProviderTag = posterProviderTag.takeIf { cleanPoster != null },
+        imdbRating = cleanRating,
+        ratingSource = ratingSource.sanitizedForTitleRating(cleanRating),
+        genres = genres.orEmpty(),
+        director = director.orEmpty(),
+        writer = writer.orEmpty(),
+        cast = cast.orEmpty(),
+        castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        videos = videos.orEmpty(),
+        productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        links = links.orEmpty(),
+        trailerYtIds = trailerYtIds.orEmpty()
+    )
+}
 
 private fun String?.sanitizedPremiumArtworkRef(): String? {
     val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
@@ -60,29 +76,52 @@ private fun String?.sanitizedPremiumArtworkRef(): String? {
     return value
 }
 
-internal fun TmdbEnrichment.sanitizedForCache(): TmdbEnrichment = copy(
-    ratingSource = ratingSource.orDefault(TitleRatingSource.TMDB),
-    genres = genres.orEmpty(),
-    directorMembers = directorMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    writerMembers = writerMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    director = director.orEmpty(),
-    writer = writer.orEmpty(),
-    productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() }
-)
+private fun Float?.sanitizedTitleRating(): Float? =
+    RatingValueValidator.sanitizeTitleRating(this)
 
-internal fun TvMetadataEnrichment.sanitizedForCache(): TvMetadataEnrichment = copy(
-    ratingSource = ratingSource.orDefault(),
-    genres = genres.orEmpty(),
-    airsDays = airsDays.orEmpty(),
-    aliases = aliases.orEmpty(),
-    contentRatings = contentRatings.orEmpty(),
-    remoteIds = remoteIds.orEmpty(),
-    castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
-    networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() }
-)
+private fun Double?.sanitizedTitleRating(): Double? =
+    RatingValueValidator.sanitizeTitleRating(this)
+
+private fun TitleRatingSource?.sanitizedForTitleRating(sanitized: Float?): TitleRatingSource? =
+    if (sanitized != null) this ?: TitleRatingSource.IMDB else null
+
+private fun TitleRatingSource?.sanitizedForTitleRating(
+    sanitized: Double?,
+    defaultSource: TitleRatingSource = TitleRatingSource.IMDB
+): TitleRatingSource? =
+    if (sanitized != null) this ?: defaultSource else null
+
+internal fun TmdbEnrichment.sanitizedForCache(): TmdbEnrichment {
+    val cleanRating = rating.sanitizedTitleRating()
+    return copy(
+        rating = cleanRating,
+        ratingSource = ratingSource.sanitizedForTitleRating(cleanRating, TitleRatingSource.TMDB),
+        genres = genres.orEmpty(),
+        directorMembers = directorMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        writerMembers = writerMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        director = director.orEmpty(),
+        writer = writer.orEmpty(),
+        productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() }
+    )
+}
+
+internal fun TvMetadataEnrichment.sanitizedForCache(): TvMetadataEnrichment {
+    val cleanRating = rating.sanitizedTitleRating()
+    return copy(
+        rating = cleanRating,
+        ratingSource = ratingSource.sanitizedForTitleRating(cleanRating),
+        genres = genres.orEmpty(),
+        airsDays = airsDays.orEmpty(),
+        aliases = aliases.orEmpty(),
+        contentRatings = contentRatings.orEmpty(),
+        remoteIds = remoteIds.orEmpty(),
+        castMembers = castMembers.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        productionCompanies = productionCompanies.orEmpty().mapNotNull { it.sanitizedOrNull() },
+        networks = networks.orEmpty().mapNotNull { it.sanitizedOrNull() }
+    )
+}
 
 private fun MetaCastMember.sanitizedOrNull(): MetaCastMember? {
     val cleanName = name.trim().takeIf { it.isNotBlank() } ?: return null

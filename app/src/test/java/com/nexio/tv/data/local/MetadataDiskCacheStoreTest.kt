@@ -177,7 +177,7 @@ class MetadataDiskCacheStoreTest {
         val meta = store.readMeta("movie:tt1", "en", "native")
 
         meta.hashCode()
-        assertEquals(TitleRatingSource.IMDB, meta?.ratingSource)
+        assertNull(meta?.ratingSource)
     }
 
     @Test
