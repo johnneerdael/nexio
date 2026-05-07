@@ -53,7 +53,7 @@ class HomeProfileSessionLifecycleContractTest {
 
     @Test
     fun `profile session snapshot is assigned before profile scoped reset`() {
-        val assignIndex = homeViewModelSource.indexOf(".onEach { session ->\n                    activeHomeProfileSessionSnapshot = session")
+        val assignIndex = homeViewModelSource.indexOf("activeHomeProfileSessionSnapshot = session")
         val resetIndex = homeViewModelSource.indexOf("resetProfileScopedHomeState(\"home_session:")
 
         assertTrue(assignIndex >= 0)
@@ -63,8 +63,45 @@ class HomeProfileSessionLifecycleContractTest {
 
     @Test
     fun `profile scoped reset is keyed by profile session identity not settings session id`() {
-        assertTrue(homeViewModelSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertTrue(homeViewModelSource.contains("val previousSession = activeHomeProfileSessionSnapshot"))
+        assertTrue(homeViewModelSource.contains("shouldResetProfileScopedHomeState("))
+        assertTrue(homeViewModelSource.contains("previousSession.profileSessionKey != nextSession.profileSessionKey"))
+        assertFalse(homeViewModelSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
         assertFalse(homeViewModelSource.contains(".distinctUntilChangedBy { it.sessionId }"))
+    }
+
+    @Test
+    fun `bootstrap to settings emission for same profile session does not require profile reset`() {
+        val bootstrapSession = HomeProfileSession.DefaultLegacy(
+            generation = 1L,
+            sessionId = "home-profile:1:runtime:1",
+            profileSessionKey = "profile:1:profile:1:runtime:1",
+            language = "en",
+            subtitleLanguage = null,
+            startedAtMs = 1L
+        )
+        val settingsSession = bootstrapSession.copy(
+            generation = 2L,
+            sessionId = "home-profile:1:runtime:2",
+            subtitleLanguage = "fr"
+        )
+        val switchedSession = HomeProfileSession.Secondary(
+            profileId = 2,
+            generation = 3L,
+            sessionId = "home-profile:2:runtime:3",
+            profileSessionKey = "profile:2:profile:2:runtime:2",
+            language = "en",
+            subtitleLanguage = null,
+            startedAtMs = 2L,
+            boundaryContext = com.nexio.tv.core.profile.SecondaryProfileRuntimeContext(
+                profileId = 2,
+                languageTag = "en",
+                generation = 2L
+            )
+        )
+
+        assertFalse(shouldResetProfileScopedHomeState(bootstrapSession, settingsSession))
+        assertTrue(shouldResetProfileScopedHomeState(settingsSession, switchedSession))
     }
 
     @Test
