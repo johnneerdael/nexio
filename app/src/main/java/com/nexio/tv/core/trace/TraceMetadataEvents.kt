@@ -509,6 +509,64 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitHomeProfileSessionStarted(
+        profileId: Int,
+        sessionId: String,
+        generation: Long
+    ) {
+        emitHomeProfileSessionEvent(
+            eventType = "home.profile_session_started",
+            profileId = profileId,
+            sessionId = sessionId,
+            payload = mapOf("generation" to generation)
+        )
+    }
+
+    fun emitHomeProfileSessionCancelled(
+        profileId: Int,
+        sessionId: String,
+        reason: String
+    ) {
+        emitHomeProfileSessionEvent(
+            eventType = "home.profile_session_cancelled",
+            profileId = profileId,
+            sessionId = sessionId,
+            payload = mapOf("reason" to reason)
+        )
+    }
+
+    fun emitHomeProfileEmissionIgnoredStale(
+        source: String,
+        profileId: Int,
+        sessionId: String
+    ) {
+        emitHomeProfileSessionEvent(
+            eventType = "home.profile_emission_ignored_stale",
+            profileId = profileId,
+            sessionId = sessionId,
+            payload = mapOf("source" to source)
+        )
+    }
+
+    fun emitHomeInitialGateStateChanged(
+        profileId: Int,
+        sessionId: String,
+        gate: String,
+        state: String,
+        reason: String
+    ) {
+        emitHomeProfileSessionEvent(
+            eventType = "home.initial_gate_state_changed",
+            profileId = profileId,
+            sessionId = sessionId,
+            payload = mapOf(
+                "gate" to gate,
+                "state" to state,
+                "reason" to reason
+            )
+        )
+    }
+
     fun emitTrailerPreviewRequest(
         itemId: String,
         itemType: String,
@@ -1039,6 +1097,29 @@ class TraceMetadataEvents(
         payload: Map<String, Any?>
     ) {
         emitTraceEvent(eventType, payload)
+    }
+
+    private fun emitHomeProfileSessionEvent(
+        eventType: String,
+        profileId: Int,
+        sessionId: String,
+        payload: Map<String, Any?>
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = mapOf(
+                    "profileHash" to TraceHash.of(sid, profileId.toString()),
+                    "sessionHash" to TraceHash.of(sid, sessionId)
+                ) + payload
+            )
+        )
     }
 
     private fun emitTraceEvent(

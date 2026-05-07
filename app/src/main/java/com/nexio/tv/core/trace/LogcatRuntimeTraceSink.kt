@@ -216,6 +216,28 @@ class LogcatRuntimeTraceSink(
             "reason" to payload["reason"],
             "trigger" to payload["trigger"]
         )
+        "home.profile_session_started" -> linkedMapOf(
+            "profile" to payload["profileHash"],
+            "session" to payload["sessionHash"],
+            "generation" to payload["generation"]
+        )
+        "home.profile_session_cancelled" -> linkedMapOf(
+            "profile" to payload["profileHash"],
+            "session" to payload["sessionHash"],
+            "reason" to payload["reason"]
+        )
+        "home.profile_emission_ignored_stale" -> linkedMapOf(
+            "profile" to payload["profileHash"],
+            "session" to payload["sessionHash"],
+            "source" to payload["source"]
+        )
+        "home.initial_gate_state_changed" -> linkedMapOf(
+            "profile" to payload["profileHash"],
+            "session" to payload["sessionHash"],
+            "gate" to payload["gate"],
+            "state" to payload["state"],
+            "reason" to payload["reason"]
+        )
         "screensaver.candidate_pool_built" -> linkedMapOf(
             "profile" to payload["profileHash"],
             "source" to payload["source"],

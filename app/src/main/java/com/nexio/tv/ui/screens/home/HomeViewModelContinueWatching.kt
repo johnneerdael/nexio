@@ -202,12 +202,18 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
         ).collectLatest { emission ->
             val session = emission.session
             if (!isCurrentHomeSession(session)) {
-                Log.d(HomeViewModel.TAG, "Skipping stale continue watching emission session=${session.sessionId}")
+                emitStaleContinueWatchingEmission("emission", session)
+                Log.d(HomeViewModel.TAG, "Skipping stale continue watching emission")
                 return@collectLatest
             }
             when (emission) {
                 is ProfileScopedEmission.Loading -> {
                     continueWatchingEnrichmentJob?.cancel()
+                    emitContinueWatchingInitialGateState(
+                        session = session,
+                        state = "loading",
+                        reason = "snapshot_observe_started"
+                    )
                     _uiState.update { state ->
                         state.copy(
                             continueWatchingItems = emptyList(),
@@ -223,7 +229,12 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     continueWatchingEnrichmentJob?.cancel()
                     Log.w(
                         HomeViewModel.TAG,
-                        "Continue watching snapshot failed for session=${session.sessionId}: ${emission.throwable.message}"
+                        "Continue watching snapshot failed: ${emission.throwable.message}"
+                    )
+                    emitContinueWatchingInitialGateState(
+                        session = session,
+                        state = "failed_nonblocking",
+                        reason = "snapshot_error"
                     )
                     _uiState.update { state ->
                         state.copy(
@@ -260,12 +271,38 @@ private fun HomeInitialReadiness.markContinueWatchingGateResolved(
         .markResolved(HomeInitialGate.CONTINUE_WATCHING, reason)
 }
 
+private fun HomeViewModel.emitContinueWatchingInitialGateState(
+    session: HomeProfileSession,
+    state: String,
+    reason: String
+) {
+    traceEvents.emitHomeInitialGateStateChanged(
+        profileId = session.profileId,
+        sessionId = session.sessionId,
+        gate = HomeInitialGate.CONTINUE_WATCHING.name,
+        state = state,
+        reason = reason
+    )
+}
+
+private fun HomeViewModel.emitStaleContinueWatchingEmission(
+    source: String,
+    session: HomeProfileSession
+) {
+    traceEvents.emitHomeProfileEmissionIgnoredStale(
+        source = source,
+        profileId = session.profileId,
+        sessionId = session.sessionId
+    )
+}
+
 private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     session: HomeProfileSession,
     snapshot: ContinueWatchingSnapshot
 ) {
     if (!isCurrentHomeSession(session)) {
-        Log.d(HomeViewModel.TAG, "Skipping stale continue watching snapshot session=${session.sessionId}")
+        emitStaleContinueWatchingEmission("snapshot_apply", session)
+        Log.d(HomeViewModel.TAG, "Skipping stale continue watching snapshot")
         return
     }
     continueWatchingEnrichmentJob?.cancel()
@@ -304,11 +341,13 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     }.filter { it.info.hasAired }
 
     if (!isCurrentHomeSession(session)) {
-        Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish session=${session.sessionId}")
+        emitStaleContinueWatchingEmission("publish", session)
+        Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish")
         return
     }
     if (snapshotVersion != continueWatchingSnapshotVersion) {
-        Log.d(HomeViewModel.TAG, "Skipping superseded continue watching publish session=${session.sessionId}")
+        emitStaleContinueWatchingEmission("publish_superseded", session)
+        Log.d(HomeViewModel.TAG, "Skipping superseded continue watching publish")
         return
     }
 
@@ -317,6 +356,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     } else {
         "first_snapshot"
     }
+    var continueWatchingGateResolved = false
     _uiState.update { state ->
         if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
         if (
@@ -327,6 +367,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         ) {
             state
         } else {
+            continueWatchingGateResolved = !state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
             state.copy(
                 continueWatchingItems = items,
                 traktUpNextItems = traktUpNextItems,
@@ -338,6 +379,13 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
             )
         }
     }
+    if (continueWatchingGateResolved) {
+        emitContinueWatchingInitialGateState(
+            session = session,
+            state = "resolved",
+            reason = readinessReason
+        )
+    }
 
     val settings = currentTmdbSettings
     if (
@@ -346,22 +394,37 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     ) {
         continueWatchingEnrichmentJob = viewModelScope.launch {
             try {
-                if (!isCurrentHomeSession(session)) return@launch
-                if (snapshotVersion != continueWatchingSnapshotVersion) return@launch
-                if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                val enrichedItems = enrichContinueWatchingItems(items, settings)
-                if (!isCurrentHomeSession(session)) return@launch
-                if (snapshotVersion != continueWatchingSnapshotVersion) return@launch
-                if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
                 if (!isCurrentHomeSession(session)) {
-                    Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment session=${session.sessionId}")
+                    emitStaleContinueWatchingEmission("enrichment_start", session)
                     return@launch
                 }
                 if (snapshotVersion != continueWatchingSnapshotVersion) {
-                    Log.d(HomeViewModel.TAG, "Skipping superseded continue watching enrichment session=${session.sessionId}")
+                    emitStaleContinueWatchingEmission("enrichment_start_superseded", session)
                     return@launch
                 }
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                val enrichedItems = enrichContinueWatchingItems(items, settings)
+                if (!isCurrentHomeSession(session)) {
+                    emitStaleContinueWatchingEmission("enrichment_items", session)
+                    return@launch
+                }
+                if (snapshotVersion != continueWatchingSnapshotVersion) {
+                    emitStaleContinueWatchingEmission("enrichment_items_superseded", session)
+                    return@launch
+                }
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                if (!isCurrentHomeSession(session)) {
+                    emitStaleContinueWatchingEmission("enrichment", session)
+                    Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment")
+                    return@launch
+                }
+                if (snapshotVersion != continueWatchingSnapshotVersion) {
+                    emitStaleContinueWatchingEmission("enrichment_superseded", session)
+                    Log.d(HomeViewModel.TAG, "Skipping superseded continue watching enrichment")
+                    return@launch
+                }
+                var enrichedContinueWatchingGateResolved = false
                 _uiState.update { state ->
                     if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
                     if (
@@ -372,6 +435,8 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     ) {
                         state
                     } else {
+                        enrichedContinueWatchingGateResolved =
+                            !state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
                         state.copy(
                             continueWatchingItems = enrichedItems,
                             traktUpNextItems = enrichedTraktItems,
@@ -382,6 +447,13 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                             initialContinueWatchingResolved = true
                         )
                     }
+                }
+                if (enrichedContinueWatchingGateResolved) {
+                    emitContinueWatchingInitialGateState(
+                        session = session,
+                        state = "resolved",
+                        reason = readinessReason
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
