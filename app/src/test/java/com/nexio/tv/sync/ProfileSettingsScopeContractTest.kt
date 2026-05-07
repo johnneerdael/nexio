@@ -497,6 +497,9 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homeViewModelSource.contains("isCurrentHomeProfileGeneration(session.generation)"))
         assertTrue(homeViewModelSource.contains("val capturedGeneration = homeProfileGeneration"))
         assertTrue(homePipelineSource.contains("deferredStartupRefreshJob?.cancel()"))
+        assertTrue(homePipelineSource.contains("homeReadiness = HomeInitialReadiness.started("))
+        assertTrue(homePipelineSource.contains("sessionId = activeHomeProfileSessionSnapshot.sessionId"))
+        assertTrue(homePipelineSource.contains("profileId = activeHomeProfileSessionSnapshot.profileId"))
         assertTrue(homePipelineSource.contains("loadActiveProfileDiskBackedHomeState("))
         assertTrue(homePipelineSource.contains("expectedGeneration: Long? = null"))
         assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
@@ -779,6 +782,7 @@ class ProfileSettingsScopeContractTest {
         val homeScreenSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt").readText()
         val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
 
+        assertTrue(homeStateSource.contains("val homeReadiness: HomeInitialReadiness = HomeInitialReadiness.started("))
         assertTrue(homeStateSource.contains("val initialContinueWatchingResolved: Boolean = false"))
         // F-G-01 path B + Task 3: profile ownership is enforced at the typed API boundary,
         // and Home drives Continue Watching from the active home session flow.
@@ -786,9 +790,13 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homeContinueWatchingSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
         assertTrue(homeContinueWatchingSource.contains("observeProfileSnapshot(session.profileId)"))
         assertTrue(!homeContinueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+        assertTrue(homeContinueWatchingSource.contains("HomeInitialReadiness"))
+        assertTrue(homeContinueWatchingSource.contains("markContinueWatchingGateResolved("))
         assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
+        assertTrue(homeViewModelSource.contains("homeReadiness = HomeInitialReadiness.started("))
         assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
-        assertTrue(homeScreenSource.contains("uiState.initialContinueWatchingResolved"))
+        assertTrue(homeScreenSource.contains("shouldShowFullHomeLoadingGate(uiState, startupContentGateTimedOut)"))
+        assertTrue(!homeScreenSource.contains("uiState.initialContinueWatchingResolved"))
     }
 
     @Test

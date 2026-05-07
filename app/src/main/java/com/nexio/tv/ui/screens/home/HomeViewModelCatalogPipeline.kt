@@ -284,6 +284,10 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
             continueWatchingItems = emptyList(),
             traktUpNextItems = emptyList(),
             modernHomePresentation = ModernHomePresentationState(),
+            homeReadiness = HomeInitialReadiness.started(
+                sessionId = activeHomeProfileSessionSnapshot.sessionId,
+                profileId = activeHomeProfileSessionSnapshot.profileId
+            ),
             initialContinueWatchingResolved = false,
             traktRecommendationRefs = emptyMap(),
             gridItems = emptyList(),

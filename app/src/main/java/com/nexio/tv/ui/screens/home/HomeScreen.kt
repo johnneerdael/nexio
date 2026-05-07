@@ -151,7 +151,11 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, startupContentGateTimedOut)
+    val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
+        uiState = uiState,
+        startupContentGateTimedOut = false
+    )
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
     val latestTraktRecommendationRefs by rememberUpdatedState(uiState.traktRecommendationRefs)
     val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
@@ -185,6 +189,16 @@ fun HomeScreen(
                 event = "home_startup_gate_timeout",
                 details = "timeoutMs=$HOME_STARTUP_CONTENT_TIMEOUT_MS"
             )
+        }
+    }
+
+    LaunchedEffect(shouldShowLoadingGate) {
+        if (shouldShowLoadingGate) {
+            showHomeContentWithAnimation = false
+        } else {
+            // Flip on the next frame so AnimatedVisibility can run enter transition.
+            kotlinx.coroutines.yield()
+            showHomeContentWithAnimation = true
         }
     }
 
@@ -244,7 +258,7 @@ fun HomeScreen(
             .background(NexioColors.Background)
     ) {
         when {
-            uiState.isLoading && !hasRenderableContent && !startupContentGateTimedOut -> {
+            shouldShowLoadingGate -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -298,82 +312,56 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldWaitForContinueWatching =
-                    uiState.homeLayout == HomeLayout.MODERN &&
-                        !uiState.initialContinueWatchingResolved &&
-                        uiState.error == null &&
-                        uiState.installedAddonsCount > 0
-                val shouldShowLoadingGate = (!hasRenderableContent || shouldWaitForContinueWatching) &&
-                    uiState.error == null &&
-                    !startupContentGateTimedOut
-                LaunchedEffect(shouldShowLoadingGate) {
-                    if (shouldShowLoadingGate) {
-                        showHomeContentWithAnimation = false
-                    } else {
-                        // Flip on the next frame so AnimatedVisibility can run enter transition.
-                        kotlinx.coroutines.yield()
-                        showHomeContentWithAnimation = true
-                    }
-                }
-                if (shouldShowLoadingGate) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator()
-                    }
-                } else {
-                    AnimatedVisibility(
-                        visible = showHomeContentWithAnimation,
-                        enter = fadeIn(animationSpec = tween(320)) +
-                            slideInVertically(
-                                initialOffsetY = { it / 24 },
-                                animationSpec = tween(320)
-                            )
-                    ) {
-                        when (uiState.homeLayout) {
-                            HomeLayout.CLASSIC -> ClassicHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onCatalogItemLongPress = onCatalogItemLongPress
-                            )
+                AnimatedVisibility(
+                    visible = showHomeContentWithAnimation,
+                    enter = fadeIn(animationSpec = tween(320)) +
+                        slideInVertically(
+                            initialOffsetY = { it / 24 },
+                            animationSpec = tween(320)
+                        )
+                ) {
+                    when (uiState.homeLayout) {
+                        HomeLayout.CLASSIC -> ClassicHomeRoute(
+                            viewModel = viewModel,
+                            uiState = uiState,
+                            posterCardStyle = posterCardStyle,
+                            onNavigateToDetail = onNavigateToDetail,
+                            onContinueWatchingClick = onContinueWatchingClick,
+                            onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                            onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
+                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                            isCatalogItemWatched = isCatalogItemWatched,
+                            onCatalogItemLongPress = onCatalogItemLongPress
+                        )
 
-                            HomeLayout.GRID -> GridHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onCatalogItemLongPress = onCatalogItemLongPress
-                            )
+                        HomeLayout.GRID -> GridHomeRoute(
+                            viewModel = viewModel,
+                            uiState = uiState,
+                            posterCardStyle = posterCardStyle,
+                            onNavigateToDetail = onNavigateToDetail,
+                            onContinueWatchingClick = onContinueWatchingClick,
+                            onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                            onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
+                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                            isCatalogItemWatched = isCatalogItemWatched,
+                            onCatalogItemLongPress = onCatalogItemLongPress
+                        )
 
-                            HomeLayout.MODERN -> ModernHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                idleScreensaverVisible = idleScreensaverVisible,
-                                startupSplashVisible = startupSplashVisible,
-                                externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
-                                onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
-                                onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onCatalogItemLongPress = onCatalogItemLongPress
-                            )
-                        }
+                        HomeLayout.MODERN -> ModernHomeRoute(
+                            viewModel = viewModel,
+                            uiState = uiState,
+                            idleScreensaverVisible = idleScreensaverVisible,
+                            startupSplashVisible = startupSplashVisible,
+                            externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
+                            onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
+                            onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
+                            onNavigateToDetail = onNavigateToDetail,
+                            onContinueWatchingClick = onContinueWatchingClick,
+                            onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                            onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
+                            isCatalogItemWatched = isCatalogItemWatched,
+                            onCatalogItemLongPress = onCatalogItemLongPress
+                        )
                     }
                 }
             }

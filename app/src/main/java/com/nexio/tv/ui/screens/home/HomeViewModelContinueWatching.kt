@@ -252,6 +252,14 @@ private fun HomeInitialReadiness.forHomeSession(session: HomeProfileSession): Ho
     }
 }
 
+private fun HomeInitialReadiness.markContinueWatchingGateResolved(
+    session: HomeProfileSession,
+    reason: String
+): HomeInitialReadiness {
+    return forHomeSession(session)
+        .markResolved(HomeInitialGate.CONTINUE_WATCHING, reason)
+}
+
 private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     session: HomeProfileSession,
     snapshot: ContinueWatchingSnapshot
@@ -322,9 +330,10 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
             state.copy(
                 continueWatchingItems = items,
                 traktUpNextItems = traktUpNextItems,
-                homeReadiness = state.homeReadiness
-                    .forHomeSession(session)
-                    .markResolved(HomeInitialGate.CONTINUE_WATCHING, readinessReason),
+                homeReadiness = state.homeReadiness.markContinueWatchingGateResolved(
+                    session = session,
+                    reason = readinessReason
+                ),
                 initialContinueWatchingResolved = true
             )
         }
@@ -366,9 +375,10 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                         state.copy(
                             continueWatchingItems = enrichedItems,
                             traktUpNextItems = enrichedTraktItems,
-                            homeReadiness = state.homeReadiness
-                                .forHomeSession(session)
-                                .markResolved(HomeInitialGate.CONTINUE_WATCHING, readinessReason),
+                            homeReadiness = state.homeReadiness.markContinueWatchingGateResolved(
+                                session = session,
+                                reason = readinessReason
+                            ),
                             initialContinueWatchingResolved = true
                         )
                     }
