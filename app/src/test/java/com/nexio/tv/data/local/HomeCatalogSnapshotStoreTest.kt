@@ -500,6 +500,11 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(3, payload["missingDecisionCount"])
         assertEquals(0, payload["rawPremiumCount"])
         assertEquals(0, payload["legacyIntegrationCount"])
+        assertEquals("clear_poster_ref", payload["action"])
+        assertEquals("missing_decision=3", payload["reasons"])
+        assertEquals(true, payload["destructive"])
+        assertEquals(false, payload["writeBackAllowed"])
+        assertEquals("clear", payload["posterProviderTagAction"])
         assertTrue((payload["samples"] as String).contains("missing_decision:decision:rpdb:missing_authoritative"))
     }
 
@@ -521,7 +526,11 @@ class HomeCatalogSnapshotStoreTest {
                 lastLoadSuccess = true,
                 lastLoadReason = null,
                 lastLoadErrorClass = null,
-                droppedDecisionCount = 0
+                droppedDecisionCount = 0,
+                loadStateName = "LoadedAuthoritative",
+                authoritative = true,
+                quarantinedDecisionCount = 0,
+                errorTopFrame = null
             )
         )
         val decisionKey = ArtworkDecisionKey("diagnostic-missing-decision")
@@ -563,6 +572,11 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(null, lookupPayload["lastLoadReason"])
         assertEquals(null, lookupPayload["lastLoadErrorClass"])
         assertEquals(0, lookupPayload["droppedDecisionCount"])
+        assertEquals(true, lookupPayload["authoritative"])
+        assertEquals("LoadedAuthoritative", lookupPayload["loadState"])
+        assertEquals(0, lookupPayload["quarantinedDecisionCount"])
+        assertEquals(null, lookupPayload["errorTopFrame"])
+        assertEquals(0, lookupPayload["rehydrateRequestCount"])
         assertEquals(
             "found=0|missing_authoritative=3|cache_not_authoritative=0|lookup_failed=0",
             lookupPayload["lookupResultTypes"]

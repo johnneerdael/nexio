@@ -547,6 +547,7 @@ class HomeCatalogSnapshotStore private constructor(
                 lookupErrorClass = lookupErrorClass
             )
             if (rehydrateReason != null) {
+                traceState.recordRehydrateRequest()
                 traceSnapshot(
                     eventType = "home.snapshot_artwork_rehydrate_requested",
                     payload = mapOf(
@@ -612,12 +613,15 @@ class HomeCatalogSnapshotStore private constructor(
             private set
         var legacyIntegrationCount: Int = 0
             private set
+        var rehydrateRequestCount: Int = 0
+            private set
         private var latestDiagnostics: ArtworkDecisionCacheSnapshotDiagnostics? = null
         private val mutableProviderTagMismatchExemptPosterRefs = mutableSetOf<String>()
         val providerTagMismatchExemptPosterRefs: Set<String>
             get() = mutableProviderTagMismatchExemptPosterRefs
         private val sanitizedSamples = mutableListOf<String>()
         private val missingDecisionSamples = mutableListOf<String>()
+        private val sanitizeReasonCounts = linkedMapOf<String, Int>()
 
         fun recordProviderTagMismatchExemptPosterRef(ref: String) {
             mutableProviderTagMismatchExemptPosterRefs += ref
@@ -649,6 +653,10 @@ class HomeCatalogSnapshotStore private constructor(
             }
         }
 
+        fun recordRehydrateRequest() {
+            rehydrateRequestCount += 1
+        }
+
         fun recordSanitized(
             scope: String,
             reason: String,
@@ -661,6 +669,7 @@ class HomeCatalogSnapshotStore private constructor(
                 "raw_premium_url" -> rawPremiumCount += 1
                 "legacy_integration_ref" -> legacyIntegrationCount += 1
             }
+            sanitizeReasonCounts[reason] = (sanitizeReasonCounts[reason] ?: 0) + 1
             rememberSample(sanitizedSamples, "$scope:$reason:$posterKind:${posterProviderTag.orEmpty()}:$lookupResultType")
         }
 
@@ -693,6 +702,11 @@ class HomeCatalogSnapshotStore private constructor(
                     "lastLoadReason" to diagnostics?.lastLoadReason,
                     "lastLoadErrorClass" to diagnostics?.lastLoadErrorClass,
                     "droppedDecisionCount" to diagnostics?.droppedDecisionCount,
+                    "authoritative" to diagnostics?.authoritative,
+                    "loadState" to diagnostics?.loadStateName,
+                    "quarantinedDecisionCount" to diagnostics?.quarantinedDecisionCount,
+                    "errorTopFrame" to diagnostics?.errorTopFrame,
+                    "rehydrateRequestCount" to rehydrateRequestCount,
                     "missingDecisionSamples" to missingDecisionSamples.joinToString("|")
                 )
             )
@@ -705,6 +719,11 @@ class HomeCatalogSnapshotStore private constructor(
                         "rawPremiumCount" to rawPremiumCount,
                         "legacyIntegrationCount" to legacyIntegrationCount,
                         "missingDecisionCount" to missingDecisionCount,
+                        "action" to "clear_poster_ref",
+                        "reasons" to sanitizeReasonCounts.entries.joinToString("|") { (reason, count) -> "$reason=$count" },
+                        "destructive" to true,
+                        "writeBackAllowed" to false,
+                        "posterProviderTagAction" to "clear",
                         "samples" to sanitizedSamples.joinToString("|")
                     )
                 )
