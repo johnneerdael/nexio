@@ -11,6 +11,7 @@ import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.server.AddonConfigServer
 import com.nexio.tv.core.server.DeviceIpAddress
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.repository.resolveAutoPreset
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -87,7 +88,8 @@ class AddonManagerViewModel @Inject constructor(
 
             when (val result = addonRepository.fetchAddon(normalizedUrl)) {
                 is NetworkResult.Success -> {
-                    addonRepository.addAddon(normalizedUrl, parserPreset)
+                    val effectivePreset = resolveAutoPreset(result.data.id, parserPreset)
+                    addonRepository.addAddon(normalizedUrl, effectivePreset)
                     _uiState.update {
                         it.copy(
                             isInstalling = false,
