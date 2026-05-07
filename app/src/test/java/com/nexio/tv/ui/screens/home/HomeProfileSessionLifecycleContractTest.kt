@@ -32,6 +32,8 @@ class HomeProfileSessionLifecycleContractTest {
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeProfileSessionCoordinator.kt")
     private val homeViewModelSource =
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+    private val homeViewModelInitSource =
+        homeViewModelSource.initBlock()
     private val continueWatchingSource =
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
     private val catalogPipelineSource =
@@ -478,7 +480,8 @@ class HomeProfileSessionLifecycleContractTest {
 
     @Test
     fun `installed addon observer remains shared across profile sessions`() {
-        assertTrue(homeViewModelSource.contains("observeInstalledAddons()"))
+        assertTrue(homeViewModelInitSource.contains("loadContinueWatching()"))
+        assertTrue(homeViewModelInitSource.contains("observeInstalledAddons()"))
         assertTrue(observeInstalledAddonsPipelineSource.contains("addonRepository.getInstalledAddons()"))
         assertFalse(observeInstalledAddonsPipelineSource.contains("activeHomeProfileSession"))
         assertFalse(observeInstalledAddonsPipelineSource.contains("flatMapLatest"))
@@ -514,6 +517,25 @@ class HomeProfileSessionLifecycleContractTest {
             }
         }
         error("Unterminated HomeViewModel.$name body")
+    }
+
+    private fun String.initBlock(): String {
+        val initIndex = indexOf("\n    init {")
+        assertTrue("Missing HomeViewModel init block", initIndex >= 0)
+        val bodyStart = indexOf('{', initIndex)
+        assertTrue("Missing HomeViewModel init body", bodyStart >= 0)
+
+        var depth = 0
+        for (index in bodyStart until length) {
+            when (this[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) return substring(bodyStart, index + 1)
+                }
+            }
+        }
+        error("Unterminated HomeViewModel init body")
     }
 
     private fun assertNoSharedCacheEvictionCalls(source: String, receivers: List<String>) {
