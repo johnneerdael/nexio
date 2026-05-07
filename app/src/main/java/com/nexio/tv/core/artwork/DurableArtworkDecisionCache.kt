@@ -72,21 +72,33 @@ class DurableArtworkDecisionCache(
     ): ArtworkDecisionLookupResult = synchronized(lock) {
         runCatching {
             ensureLoadedLocked()
-            decisions[key]?.let(ArtworkDecisionLookupResult::Found)
-                ?: if (currentLoadState.isAuthoritativeForMissing(requiredContext)) {
-                    ArtworkDecisionLookupResult.MissingAuthoritative
-                } else {
-                    ArtworkDecisionLookupResult.CacheNotAuthoritative
-                }
+            decisions[key]?.let(ArtworkDecisionLookupResult::Found) ?: if (
+                currentLoadState.isAuthoritativeForMissing(requiredContext)
+            ) {
+                ArtworkDecisionLookupResult.MissingAuthoritative(
+                    decisionKey = key,
+                    loadState = currentLoadState as ArtworkDecisionStoreLoadState.LoadedAuthoritative
+                )
+            } else {
+                ArtworkDecisionLookupResult.CacheNotAuthoritative(
+                    decisionKey = key,
+                    loadState = currentLoadState,
+                    reason = currentLoadState.nonAuthoritativeReason(requiredContext),
+                    errorClass = (currentLoadState as? ArtworkDecisionStoreLoadState.FailedNonAuthoritative)
+                        ?.errorClass
+                )
+            }
         }.getOrElse { error ->
             ArtworkDecisionLookupResult.LookupFailed(
+                decisionKey = key,
                 errorClass = error.javaClass.simpleName,
-                errorMessageHash = error.message?.let(::artworkDecisionShortSha256)
+                messageHash = error.message?.let(::artworkDecisionShortSha256)
             )
         }
     }
 
     override fun loadState(): ArtworkDecisionStoreLoadState = synchronized(lock) {
+        ensureLoadedLocked()
         currentLoadState
     }
 
@@ -225,7 +237,7 @@ class DurableArtworkDecisionCache(
             val storeJson = JsonParser.parseString(raw).asJsonObject
             val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
             if (storedSchemaVersion == null) {
-                val loadState = failedNonAuthoritativeState(errorClass = null)
+                val loadState = failedNonAuthoritativeState(errorClass = "MissingSchemaVersion")
                 traceDecisionStoreLoad(
                     success = false,
                     authoritative = false,
@@ -243,7 +255,7 @@ class DurableArtworkDecisionCache(
             val decisionElements = storeJson.arrayOrEmpty("decisions")
             if (storedSchemaVersion != SCHEMA_VERSION) {
                 val droppedDecisionCount = decisionElements.size()
-                val loadState = failedNonAuthoritativeState(errorClass = null)
+                val loadState = failedNonAuthoritativeState(errorClass = "SchemaVersionMismatch")
                 traceDecisionStoreLoad(
                     success = false,
                     authoritative = false,
@@ -251,7 +263,7 @@ class DurableArtworkDecisionCache(
                     decisionCount = 0,
                     linkCount = 0,
                     droppedDecisionCount = droppedDecisionCount,
-                    quarantinedDecisionCount = 0,
+                    quarantinedDecisionCount = droppedDecisionCount,
                     filePresent = true,
                     reason = "schema_version_mismatch",
                     storedSchemaVersion = storedSchemaVersion
@@ -303,9 +315,9 @@ class DurableArtworkDecisionCache(
         }.onFailure { error ->
             decisions.clear()
             previewToCanonical.clear()
-            val loadState = failedNonAuthoritativeState(errorClass = error.javaClass.simpleName)
             lastLoadErrorMessageHash = error.message?.let(::artworkDecisionShortSha256)
             lastLoadErrorTopFrame = error.stackTrace.firstOrNull()?.toTopFrameString()
+            val loadState = failedNonAuthoritativeState(errorClass = error.javaClass.simpleName)
             traceDecisionStoreLoad(
                 success = false,
                 authoritative = false,
@@ -514,9 +526,12 @@ class DurableArtworkDecisionCache(
         quarantinedDecisionCount: Int
     ): ArtworkDecisionStoreLoadState.LoadedAuthoritative =
         ArtworkDecisionStoreLoadState.LoadedAuthoritative(
-            authorityContext = authorityContext,
+            decisionCount = decisions.size,
             droppedDecisionCount = droppedDecisionCount,
-            quarantinedDecisionCount = quarantinedDecisionCount
+            quarantinedDecisionCount = quarantinedDecisionCount,
+            schemaVersion = SCHEMA_VERSION,
+            storedSchemaVersion = lastStoredSchemaVersion,
+            authorityContext = authorityContext
         )
 
     private fun loadedPartialNonAuthoritativeState(
@@ -524,17 +539,26 @@ class DurableArtworkDecisionCache(
         quarantinedDecisionCount: Int
     ): ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative =
         ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative(
-            authorityContext = authorityContext,
+            decisionCount = decisions.size,
             droppedDecisionCount = droppedDecisionCount,
-            quarantinedDecisionCount = quarantinedDecisionCount
+            quarantinedDecisionCount = quarantinedDecisionCount,
+            schemaVersion = SCHEMA_VERSION,
+            storedSchemaVersion = lastStoredSchemaVersion,
+            authorityContext = authorityContext,
+            errorClass = lastLoadErrorClass,
+            errorMessageHash = lastLoadErrorMessageHash,
+            errorTopFrame = lastLoadErrorTopFrame,
+            firstQuarantinedDecisionKeyHash = firstQuarantinedDecisionKeyHash
         )
 
     private fun failedNonAuthoritativeState(
-        errorClass: String?
+        errorClass: String
     ): ArtworkDecisionStoreLoadState.FailedNonAuthoritative =
         ArtworkDecisionStoreLoadState.FailedNonAuthoritative(
-            authorityContext = authorityContext,
-            errorClass = errorClass
+            errorClass = errorClass,
+            errorMessageHash = lastLoadErrorMessageHash,
+            errorTopFrame = lastLoadErrorTopFrame,
+            authorityContext = authorityContext
         )
 
     private fun ArtworkDecisionStoreLoadState.nameForDiagnostics(): String = when (this) {

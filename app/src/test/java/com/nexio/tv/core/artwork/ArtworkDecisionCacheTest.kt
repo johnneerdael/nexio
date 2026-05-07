@@ -30,13 +30,13 @@ class ArtworkDecisionCacheTest {
         cache.put(decision)
 
         assertEquals(ArtworkDecisionLookupResult.Found(decision), cache.lookup(key))
-        assertEquals(
-            ArtworkDecisionLookupResult.MissingAuthoritative,
-            cache.lookup(ArtworkDecisionKey("lookup-in-memory-missing"))
-        )
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            cache.lookup(ArtworkDecisionKey("lookup-in-memory-missing"), mismatchedContext)
+        val missingKey = ArtworkDecisionKey("lookup-in-memory-missing")
+        assertMissingAuthoritative(cache.lookup(missingKey), missingKey)
+        assertCacheNotAuthoritative(
+            result = cache.lookup(missingKey, mismatchedContext),
+            key = missingKey,
+            reason = "authority_context_mismatch",
+            requiredContext = mismatchedContext
         )
     }
 
@@ -67,8 +67,9 @@ class ArtworkDecisionCacheTest {
 
         assertTrue(result is ArtworkDecisionLookupResult.LookupFailed)
         result as ArtworkDecisionLookupResult.LookupFailed
+        assertEquals(ArtworkDecisionKey("throwing-lookup"), result.decisionKey)
         assertEquals("IllegalStateException", result.errorClass)
-        assertNotNull(result.errorMessageHash)
+        assertNotNull(result.messageHash)
     }
 
     @Test
@@ -77,6 +78,7 @@ class ArtworkDecisionCacheTest {
 
         assertTrue(
             ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                decisionCount = 0,
                 authorityContext = context,
                 droppedDecisionCount = 0,
                 quarantinedDecisionCount = 0
@@ -84,6 +86,7 @@ class ArtworkDecisionCacheTest {
         )
         assertFalse(
             ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                decisionCount = 0,
                 authorityContext = context,
                 droppedDecisionCount = 1,
                 quarantinedDecisionCount = 0
@@ -91,6 +94,7 @@ class ArtworkDecisionCacheTest {
         )
         assertFalse(
             ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                decisionCount = 0,
                 authorityContext = context,
                 droppedDecisionCount = 0,
                 quarantinedDecisionCount = 1
@@ -302,10 +306,8 @@ class ArtworkDecisionCacheTest {
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
 
         assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
-        assertEquals(
-            ArtworkDecisionLookupResult.MissingAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("durable-clean-missing"))
-        )
+        val missingKey = ArtworkDecisionKey("durable-clean-missing")
+        assertMissingAuthoritative(restarted.lookup(missingKey), missingKey)
         assertEquals(ArtworkDecisionStoreLoadState.LoadedAuthoritative::class, restarted.loadState()::class)
         assertTrue(restarted.loadState().isAuthoritativeForMissing())
         assertTrue(restarted.snapshotDiagnostics().authoritative)
@@ -317,10 +319,8 @@ class ArtworkDecisionCacheTest {
         val file = temp.root.resolve("missing-artwork-decisions.json")
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
 
-        assertEquals(
-            ArtworkDecisionLookupResult.MissingAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("missing-file-missing"))
-        )
+        val missingKey = ArtworkDecisionKey("missing-file-missing")
+        assertMissingAuthoritative(restarted.lookup(missingKey), missingKey)
 
         val diagnostics = restarted.snapshotDiagnostics()
         assertEquals("LoadedAuthoritative", diagnostics.loadStateName)
@@ -337,10 +337,8 @@ class ArtworkDecisionCacheTest {
         file.writeText("  \n  ")
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
 
-        assertEquals(
-            ArtworkDecisionLookupResult.MissingAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("blank-file-missing"))
-        )
+        val missingKey = ArtworkDecisionKey("blank-file-missing")
+        assertMissingAuthoritative(restarted.lookup(missingKey), missingKey)
 
         val diagnostics = restarted.snapshotDiagnostics()
         assertEquals("LoadedAuthoritative", diagnostics.loadStateName)
@@ -364,9 +362,11 @@ class ArtworkDecisionCacheTest {
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
 
         assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("durable-partial-missing"))
+        val missingKey = ArtworkDecisionKey("durable-partial-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "partial_load"
         )
         val diagnostics = restarted.snapshotDiagnostics()
         assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
@@ -407,9 +407,11 @@ class ArtworkDecisionCacheTest {
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
 
         assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("durable-dto-parse-missing"))
+        val missingKey = ArtworkDecisionKey("durable-dto-parse-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "partial_load"
         )
 
         val diagnostics = restarted.snapshotDiagnostics()
@@ -436,9 +438,12 @@ class ArtworkDecisionCacheTest {
         val traceSink = RecordingTraceSink()
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
 
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("parse-failure-missing"))
+        val missingKey = ArtworkDecisionKey("parse-failure-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "load_failed",
+            errorClass = "JsonSyntaxException"
         )
         assertEquals(ArtworkDecisionStoreLoadState.FailedNonAuthoritative::class, restarted.loadState()::class)
         val diagnostics = restarted.snapshotDiagnostics()
@@ -469,9 +474,12 @@ class ArtworkDecisionCacheTest {
         val traceSink = RecordingTraceSink()
         val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
 
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("schema-mismatch-missing"))
+        val missingKey = ArtworkDecisionKey("schema-mismatch-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "load_failed",
+            errorClass = "SchemaVersionMismatch"
         )
 
         val diagnostics = restarted.snapshotDiagnostics()
@@ -480,6 +488,8 @@ class ArtworkDecisionCacheTest {
         assertEquals(false, diagnostics.lastLoadSuccess)
         assertEquals("schema_version_mismatch", diagnostics.lastLoadReason)
         assertEquals(0, diagnostics.storedSchemaVersion)
+        assertEquals(1, diagnostics.droppedDecisionCount)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
 
         val payload = traceSink.events
             .single { event -> event.eventType == "artwork.decision_store_load" }
@@ -489,6 +499,8 @@ class ArtworkDecisionCacheTest {
         assertEquals("FailedNonAuthoritative", payload["loadState"])
         assertEquals("schema_version_mismatch", payload["reason"])
         assertEquals(0, payload["storedSchemaVersion"])
+        assertEquals(1, payload["droppedDecisionCount"])
+        assertEquals(1, payload["quarantinedDecisionCount"])
     }
 
     @Test
@@ -504,13 +516,14 @@ class ArtworkDecisionCacheTest {
         val mismatched = context!!.copy(imageLanguage = "nl")
 
         assertNotEquals(context, mismatched)
-        assertEquals(
-            ArtworkDecisionLookupResult.MissingAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("matching-context-missing"), context)
-        )
-        assertEquals(
-            ArtworkDecisionLookupResult.CacheNotAuthoritative,
-            restarted.lookup(ArtworkDecisionKey("mismatched-context-missing"), mismatched)
+        val matchingKey = ArtworkDecisionKey("matching-context-missing")
+        assertMissingAuthoritative(restarted.lookup(matchingKey, context), matchingKey)
+        val mismatchedKey = ArtworkDecisionKey("mismatched-context-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(mismatchedKey, mismatched),
+            key = mismatchedKey,
+            reason = "authority_context_mismatch",
+            requiredContext = mismatched
         )
     }
 
@@ -1038,4 +1051,31 @@ class ArtworkDecisionCacheTest {
             credentialHash = "credential",
             imageLanguage = "en"
         )
+
+    private fun assertMissingAuthoritative(
+        result: ArtworkDecisionLookupResult,
+        key: ArtworkDecisionKey
+    ) {
+        assertTrue(result is ArtworkDecisionLookupResult.MissingAuthoritative)
+        result as ArtworkDecisionLookupResult.MissingAuthoritative
+        assertEquals(key, result.decisionKey)
+        assertTrue(result.loadState.isAuthoritativeForMissing())
+    }
+
+    private fun assertCacheNotAuthoritative(
+        result: ArtworkDecisionLookupResult,
+        key: ArtworkDecisionKey,
+        reason: String?,
+        errorClass: String? = null,
+        requiredContext: ArtworkDecisionAuthorityContext? = null
+    ) {
+        assertTrue(result is ArtworkDecisionLookupResult.CacheNotAuthoritative)
+        result as ArtworkDecisionLookupResult.CacheNotAuthoritative
+        assertEquals(key, result.decisionKey)
+        assertEquals(reason, result.reason)
+        if (errorClass != null) {
+            assertEquals(errorClass, result.errorClass)
+        }
+        assertFalse(result.loadState.isAuthoritativeForMissing(requiredContext))
+    }
 }
