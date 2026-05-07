@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
@@ -190,5 +191,48 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
     fun `observeProfileSnapshot throws for negative profileId`() {
         val service = buildService()
         service.observeProfileSnapshot(profileId = -1)
+    }
+
+    @Test
+    fun `observeContinueWatching waits when requested profile snapshot is not available`() = runTest {
+        val service = buildService()
+        seedSnapshot(
+            service,
+            ProfileOwnedContinueWatchingSnapshot(
+                profileId = 1,
+                snapshot = ContinueWatchingSnapshot(
+                    resumeItems = listOf(sampleProgress("foreign-profile-item")),
+                    updatedAtMs = 10L
+                )
+            )
+        )
+
+        try {
+            withTimeout(100) {
+                service.observeContinueWatching(profileId = 2).first()
+            }
+            fail("Expected observeContinueWatching to wait for a matching profile snapshot")
+        } catch (_: TimeoutCancellationException) {
+            // Expected: foreign-profile snapshots must not be reported as empty current-profile data.
+        }
+    }
+
+    private fun sampleProgress(id: String): WatchProgress {
+        return WatchProgress(
+            contentId = id,
+            contentType = "movie",
+            name = id,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = id,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 100L,
+            duration = 1_000L,
+            lastWatched = 1L,
+            progressPercent = 10f
+        )
     }
 }

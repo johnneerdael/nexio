@@ -1,6 +1,7 @@
 package com.nexio.tv.core.recommendations
 
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.io.File
 
@@ -32,6 +33,21 @@ class AndroidTvFeedCatalogProfileScopedTest {
             "F-G-01 part 2: AndroidTvFeedCatalogService must scope CW subscription to active profile " +
                 "(observeProfileSnapshot/observeContinueWatching call, or .filter on profileId after observeSnapshot)",
             isProfileScoped
+        )
+    }
+
+    @Test
+    fun `AndroidTvFeedCatalogService uses explicit continue watching fallback policy`() {
+        val src = File("app/src/main/java/com/nexio/tv/core/recommendations/AndroidTvFeedCatalogService.kt")
+        require(src.exists()) { "Source not found at ${src.absolutePath}" }
+        val text = src.readText()
+
+        assertTrue(text.contains("resolveActiveProfileContinueWatchingSnapshot()"))
+        assertTrue(text.contains("withTimeoutOrNull(CONTINUE_WATCHING_SNAPSHOT_TIMEOUT_MS)"))
+        assertTrue(text.contains("ContinueWatchingSnapshot()"))
+        assertFalse(
+            "AndroidTvFeedCatalogService must not resolve CW snapshots through a direct service assignment without fallback",
+            text.contains("val continueWatchingSnapshot = continueWatchingSnapshotService")
         )
     }
 }

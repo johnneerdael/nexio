@@ -368,9 +368,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     fun observeContinueWatching(profileId: Int): Flow<List<ContinueWatchingRecord>> {
         require(profileId > 0) { "profileId must be positive" }
-        return observeSnapshot().map { owned ->
-            if (owned.profileId == profileId) owned.toContinueWatchingRecords() else emptyList()
-        }
+        return observeSnapshot()
+            .filter { it.profileId == profileId }
+            .map { owned -> owned.toContinueWatchingRecords() }
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {

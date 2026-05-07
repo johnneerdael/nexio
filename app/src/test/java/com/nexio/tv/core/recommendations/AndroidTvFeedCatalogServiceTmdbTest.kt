@@ -27,9 +27,12 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -215,6 +218,38 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         }
     }
 
+    @Test
+    fun `resolving continue watching feed falls back when profile snapshot is unavailable`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingSnapshotFlow = emptyFlow()
+        )
+
+        val row = withTimeout(1_000) {
+            fixture.service.resolveFeed(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+        }
+
+        assertEquals(emptyList<MetaPreview>(), row?.items)
+    }
+
+    @Test
+    fun `resolving selected continue watching rows falls back when profile snapshot is unavailable`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingSnapshotFlow = emptyFlow()
+        )
+
+        val rows = withTimeout(1_000) {
+            fixture.service.resolveSelectedRows(
+                listOf(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+            )
+        }
+
+        assertEquals(emptyList<AndroidTvFeedRow>(), rows)
+    }
+
     private fun service(
         tmdbSnapshot: TmdbDiscoverySnapshot,
         tmdbPrefs: TmdbCatalogPreferences
@@ -224,7 +259,8 @@ class AndroidTvFeedCatalogServiceTmdbTest {
 
     private fun fixture(
         tmdbSnapshot: TmdbDiscoverySnapshot,
-        tmdbPrefs: TmdbCatalogPreferences
+        tmdbPrefs: TmdbCatalogPreferences,
+        continueWatchingSnapshotFlow: Flow<ContinueWatchingSnapshot> = flowOf(ContinueWatchingSnapshot())
     ): ServiceFixture {
         val addonRepository = mockk<AddonRepository>(relaxed = true) {
             every { getInstalledAddons() } returns flowOf(emptyList())
@@ -255,7 +291,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             every { catalogPreferences } returns flowOf(tmdbPrefs)
         }
         val continueWatchingSnapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true) {
-            every { observeProfileSnapshot(1) } returns flowOf(ContinueWatchingSnapshot())
+            every { observeProfileSnapshot(1) } returns continueWatchingSnapshotFlow
             coEvery { ensureFresh(force = false) } returns Unit
         }
 
