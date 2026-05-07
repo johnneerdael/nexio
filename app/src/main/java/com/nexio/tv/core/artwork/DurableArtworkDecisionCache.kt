@@ -24,6 +24,7 @@ class DurableArtworkDecisionCache(
 ) : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
     private val lock = Any()
     private var loaded = false
+    private var currentLoadState: ArtworkDecisionStoreLoadState = ArtworkDecisionStoreLoadState.NotLoaded
     private val decisions = linkedMapOf<ArtworkDecisionKey, ArtworkDecision>()
     private val previewToCanonical = linkedMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
     private val traceSequence = AtomicLong(0L)
@@ -41,10 +42,48 @@ class DurableArtworkDecisionCache(
     private var lastLoadReason: String? = null
     private var lastLoadErrorClass: String? = null
     private var lastDroppedDecisionCount: Int? = null
+    private var lastQuarantinedDecisionCount: Int? = null
+    private var lastStoredSchemaVersion: Int? = null
+    private var lastLoadErrorMessageHash: String? = null
+    private var lastLoadErrorTopFrame: String? = null
+    private var firstQuarantinedDecisionKeyHash: String? = null
+    private val authorityContext: ArtworkDecisionAuthorityContext
+        get() = ArtworkDecisionAuthorityContext(
+            storeIdHash = artworkDecisionShortSha256(file.absolutePath),
+            schemaVersion = SCHEMA_VERSION,
+            providerPolicyHash = null,
+            settingsHash = null,
+            credentialHash = null,
+            imageLanguage = null
+        )
 
     override fun get(key: ArtworkDecisionKey): ArtworkDecision? = synchronized(lock) {
         ensureLoadedLocked()
         decisions[key]
+    }
+
+    override fun lookup(
+        key: ArtworkDecisionKey,
+        requiredContext: ArtworkDecisionAuthorityContext?
+    ): ArtworkDecisionLookupResult = synchronized(lock) {
+        runCatching {
+            ensureLoadedLocked()
+            decisions[key]?.let(ArtworkDecisionLookupResult::Found)
+                ?: if (currentLoadState.isAuthoritativeForMissing(requiredContext)) {
+                    ArtworkDecisionLookupResult.MissingAuthoritative
+                } else {
+                    ArtworkDecisionLookupResult.CacheNotAuthoritative
+                }
+        }.getOrElse { error ->
+            ArtworkDecisionLookupResult.LookupFailed(
+                errorClass = error.javaClass.simpleName,
+                errorMessageHash = error.message?.let(::artworkDecisionShortSha256)
+            )
+        }
+    }
+
+    override fun loadState(): ArtworkDecisionStoreLoadState = synchronized(lock) {
+        currentLoadState
     }
 
     override fun put(decision: ArtworkDecision) = synchronized(lock) {
@@ -131,19 +170,33 @@ class DurableArtworkDecisionCache(
             lastLoadSuccess = lastLoadSuccess,
             lastLoadReason = lastLoadReason,
             lastLoadErrorClass = lastLoadErrorClass,
-            droppedDecisionCount = lastDroppedDecisionCount
+            droppedDecisionCount = lastDroppedDecisionCount,
+            loadStateName = currentLoadState.nameForDiagnostics(),
+            authoritative = currentLoadState.isAuthoritativeForMissing(),
+            schemaVersion = SCHEMA_VERSION,
+            storedSchemaVersion = lastStoredSchemaVersion,
+            quarantinedDecisionCount = lastQuarantinedDecisionCount,
+            errorMessageHash = lastLoadErrorMessageHash,
+            errorTopFrame = lastLoadErrorTopFrame,
+            firstQuarantinedDecisionKeyHash = firstQuarantinedDecisionKeyHash,
+            authorityContext = authorityContext
         )
     }
 
     private fun ensureLoadedLocked() {
         if (loaded) return
         loaded = true
+        currentLoadState = ArtworkDecisionStoreLoadState.Loading
         if (!file.isFile) {
+            val loadState = loadedAuthoritativeState(droppedDecisionCount = 0, quarantinedDecisionCount = 0)
             traceDecisionStoreLoad(
                 success = true,
+                authoritative = true,
+                loadState = loadState,
                 decisionCount = 0,
                 linkCount = 0,
                 droppedDecisionCount = 0,
+                quarantinedDecisionCount = 0,
                 filePresent = false
             )
             return
@@ -152,48 +205,68 @@ class DurableArtworkDecisionCache(
         runCatching {
             val raw = file.readText()
             if (raw.isBlank()) {
+                val loadState = loadedAuthoritativeState(droppedDecisionCount = 0, quarantinedDecisionCount = 0)
                 traceDecisionStoreLoad(
                     success = true,
+                    authoritative = true,
+                    loadState = loadState,
                     decisionCount = 0,
                     linkCount = 0,
                     droppedDecisionCount = 0,
+                    quarantinedDecisionCount = 0,
                     filePresent = true
                 )
                 return
             }
             val dto = gson.fromJson(raw, StoreDto::class.java)
             if (dto == null) {
+                val loadState = failedNonAuthoritativeState(errorClass = null)
                 traceDecisionStoreLoad(
                     success = false,
+                    authoritative = false,
+                    loadState = loadState,
                     decisionCount = 0,
                     linkCount = 0,
                     droppedDecisionCount = 0,
+                    quarantinedDecisionCount = 0,
                     filePresent = true,
                     reason = "null_store"
                 )
                 return
             }
+            lastStoredSchemaVersion = dto.schemaVersion
             if (dto.schemaVersion != SCHEMA_VERSION) {
+                val droppedDecisionCount = dto.decisions.orEmpty().size
+                val loadState = failedNonAuthoritativeState(errorClass = null)
                 traceDecisionStoreLoad(
                     success = false,
+                    authoritative = false,
+                    loadState = loadState,
                     decisionCount = 0,
                     linkCount = 0,
-                    droppedDecisionCount = dto.decisions.orEmpty().size,
+                    droppedDecisionCount = droppedDecisionCount,
+                    quarantinedDecisionCount = 0,
                     filePresent = true,
                     reason = "schema_version_mismatch",
-                    schemaVersion = dto.schemaVersion
+                    storedSchemaVersion = dto.schemaVersion
                 )
                 return
             }
 
             var droppedDecisionCount = 0
-            dto.decisions.orEmpty()
-                .mapNotNull { decision ->
-                    decision.toDomainOrNull().also { restored ->
-                        if (restored == null) droppedDecisionCount += 1
+            var quarantinedDecisionCount = 0
+            dto.decisions.orEmpty().forEach { decision ->
+                val restored = decision.toDomainOrNull()
+                if (restored == null) {
+                    droppedDecisionCount += 1
+                    quarantinedDecisionCount += 1
+                    if (firstQuarantinedDecisionKeyHash == null) {
+                        firstQuarantinedDecisionKeyHash = decision.safeKeyForHash()
                     }
+                } else {
+                    decisions[restored.decisionKey] = restored
                 }
-                .forEach { decision -> decisions[decision.decisionKey] = decision }
+            }
             dto.previewLinks.orEmpty().forEach { link ->
                 runCatching {
                     previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
@@ -202,23 +275,41 @@ class DurableArtworkDecisionCache(
                     // Broken preview links are non-authoritative; decisions remain usable.
                 }
             }
+            val loadState =
+                if (droppedDecisionCount == 0 && quarantinedDecisionCount == 0) {
+                    loadedAuthoritativeState(droppedDecisionCount, quarantinedDecisionCount)
+                } else {
+                    loadedPartialNonAuthoritativeState(droppedDecisionCount, quarantinedDecisionCount)
+                }
             traceDecisionStoreLoad(
                 success = true,
+                authoritative = loadState.isAuthoritativeForMissing(),
+                loadState = loadState,
                 decisionCount = decisions.size,
                 linkCount = previewToCanonical.size,
                 droppedDecisionCount = droppedDecisionCount,
+                quarantinedDecisionCount = quarantinedDecisionCount,
                 filePresent = true
             )
         }.onFailure { error ->
             decisions.clear()
             previewToCanonical.clear()
+            val loadState = failedNonAuthoritativeState(errorClass = error.javaClass.simpleName)
+            lastLoadErrorMessageHash = error.message?.let(::artworkDecisionShortSha256)
+            lastLoadErrorTopFrame = error.stackTrace.firstOrNull()?.toTopFrameString()
             traceDecisionStoreLoad(
                 success = false,
+                authoritative = false,
+                loadState = loadState,
                 decisionCount = 0,
                 linkCount = 0,
                 droppedDecisionCount = 0,
+                quarantinedDecisionCount = 0,
                 filePresent = true,
-                errorClass = error.javaClass.simpleName
+                reason = "exception",
+                errorClass = error.javaClass.simpleName,
+                errorMessageHash = lastLoadErrorMessageHash,
+                errorTopFrame = lastLoadErrorTopFrame
             )
         }
     }
@@ -337,32 +428,46 @@ class DurableArtworkDecisionCache(
 
     private fun traceDecisionStoreLoad(
         success: Boolean,
+        authoritative: Boolean,
+        loadState: ArtworkDecisionStoreLoadState,
         decisionCount: Int,
         linkCount: Int,
         droppedDecisionCount: Int,
+        quarantinedDecisionCount: Int,
         filePresent: Boolean,
         reason: String? = null,
-        schemaVersion: Int? = null,
-        errorClass: String? = null
+        storedSchemaVersion: Int? = lastStoredSchemaVersion,
+        errorClass: String? = null,
+        errorMessageHash: String? = lastLoadErrorMessageHash,
+        errorTopFrame: String? = lastLoadErrorTopFrame
     ) {
         val fileStats = currentFileStats()
+        currentLoadState = loadState
         lastLoadSuccess = success
         lastLoadReason = reason
         lastLoadErrorClass = errorClass
         lastDroppedDecisionCount = droppedDecisionCount
+        lastQuarantinedDecisionCount = quarantinedDecisionCount
         traceArtwork(
             eventType = "artwork.decision_store_load",
             payload = mapOf(
                 "success" to success,
+                "authoritative" to authoritative,
+                "loadState" to loadState.nameForDiagnostics(),
                 "filePresent" to filePresent,
                 "fileReadable" to fileStats.readable,
                 "fileBytes" to fileStats.bytes,
                 "decisionCount" to decisionCount,
                 "linkCount" to linkCount,
                 "droppedDecisionCount" to droppedDecisionCount,
+                "quarantinedDecisionCount" to quarantinedDecisionCount,
                 "reason" to reason,
-                "schemaVersion" to schemaVersion,
-                "errorClass" to errorClass
+                "schemaVersion" to SCHEMA_VERSION,
+                "storedSchemaVersion" to storedSchemaVersion,
+                "errorClass" to errorClass,
+                "errorMessageHash" to errorMessageHash,
+                "errorTopFrame" to errorTopFrame,
+                "firstQuarantinedDecisionKeyHash" to firstQuarantinedDecisionKeyHash
             )
         )
     }
@@ -381,6 +486,45 @@ class DurableArtworkDecisionCache(
         val readable: Boolean,
         val bytes: Long?
     )
+
+    private fun loadedAuthoritativeState(
+        droppedDecisionCount: Int,
+        quarantinedDecisionCount: Int
+    ): ArtworkDecisionStoreLoadState.LoadedAuthoritative =
+        ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+            authorityContext = authorityContext,
+            droppedDecisionCount = droppedDecisionCount,
+            quarantinedDecisionCount = quarantinedDecisionCount
+        )
+
+    private fun loadedPartialNonAuthoritativeState(
+        droppedDecisionCount: Int,
+        quarantinedDecisionCount: Int
+    ): ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative =
+        ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative(
+            authorityContext = authorityContext,
+            droppedDecisionCount = droppedDecisionCount,
+            quarantinedDecisionCount = quarantinedDecisionCount
+        )
+
+    private fun failedNonAuthoritativeState(
+        errorClass: String?
+    ): ArtworkDecisionStoreLoadState.FailedNonAuthoritative =
+        ArtworkDecisionStoreLoadState.FailedNonAuthoritative(
+            authorityContext = authorityContext,
+            errorClass = errorClass
+        )
+
+    private fun ArtworkDecisionStoreLoadState.nameForDiagnostics(): String = when (this) {
+        ArtworkDecisionStoreLoadState.NotLoaded -> "NotLoaded"
+        ArtworkDecisionStoreLoadState.Loading -> "Loading"
+        is ArtworkDecisionStoreLoadState.LoadedAuthoritative -> "LoadedAuthoritative"
+        is ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative -> "LoadedPartialNonAuthoritative"
+        is ArtworkDecisionStoreLoadState.FailedNonAuthoritative -> "FailedNonAuthoritative"
+    }
+
+    private fun StackTraceElement.toTopFrameString(): String =
+        "$className.$methodName:$lineNumber"
 
     private fun traceDecisionStoreWrite(
         success: Boolean,
@@ -432,21 +576,21 @@ class DurableArtworkDecisionCache(
 
     private data class DecisionDto(
         @SerializedName("decisionKey")
-        val decisionKey: String,
+        val decisionKey: String?,
         @SerializedName("owner")
-        val owner: OwnerDto,
+        val owner: OwnerDto?,
         @SerializedName("canonicalContentId")
         val canonicalContentId: String?,
         @SerializedName("imageType")
-        val imageType: String,
+        val imageType: String?,
         @SerializedName("selectedCandidate")
-        val selectedCandidate: CandidateDto,
+        val selectedCandidate: CandidateDto?,
         @SerializedName("rejectedCandidates")
         val rejectedCandidates: List<RejectedDto>?,
         @SerializedName("policyVersion")
         val policyVersion: Int,
         @SerializedName("imageLanguage")
-        val imageLanguage: String,
+        val imageLanguage: String?,
         @SerializedName("settingsHash")
         val settingsHash: String?,
         @SerializedName("credentialHash")
@@ -460,14 +604,14 @@ class DurableArtworkDecisionCache(
     ) {
         fun toDomainOrNull(): ArtworkDecision? = runCatching {
             ArtworkDecision(
-                decisionKey = ArtworkDecisionKey(decisionKey),
-                ownerKey = owner.toDomain(),
+                decisionKey = ArtworkDecisionKey(requireNotNull(decisionKey)),
+                ownerKey = requireNotNull(owner).toDomain(),
                 canonicalContentId = canonicalContentId,
-                imageType = ArtworkType.valueOf(imageType),
-                selectedCandidate = selectedCandidate.toDomain(),
+                imageType = ArtworkType.valueOf(requireNotNull(imageType)),
+                selectedCandidate = requireNotNull(selectedCandidate).toDomain(),
                 rejectedCandidates = rejectedCandidates.orEmpty().map { rejected -> rejected.toDomain() },
                 policyVersion = policyVersion,
-                imageLanguage = imageLanguage,
+                imageLanguage = requireNotNull(imageLanguage),
                 settingsHash = settingsHash,
                 credentialHash = credentialHash,
                 createdAtMs = createdAtMs,
@@ -475,6 +619,9 @@ class DurableArtworkDecisionCache(
                 staleUntilMs = staleUntilMs
             )
         }.getOrNull()
+
+        fun safeKeyForHash(): String =
+            artworkDecisionShortSha256(decisionKey ?: hashCode().toString())
 
         companion object {
             fun fromDomain(decision: ArtworkDecision): DecisionDto =
