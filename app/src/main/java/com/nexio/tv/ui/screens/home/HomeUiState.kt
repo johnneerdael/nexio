@@ -17,6 +17,10 @@ data class HomeUiState(
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
+    val homeReadiness: HomeInitialReadiness = HomeInitialReadiness.started(
+        sessionId = "profile:1:initial",
+        profileId = 1
+    ),
     val initialContinueWatchingResolved: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
