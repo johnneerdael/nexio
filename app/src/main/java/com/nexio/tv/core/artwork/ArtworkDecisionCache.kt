@@ -15,7 +15,24 @@ interface ArtworkDecisionCache {
     fun invalidatePremiumArtworkPolicy()
 }
 
-class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
+interface ArtworkDecisionCacheDiagnostics {
+    fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics
+}
+
+data class ArtworkDecisionCacheSnapshotDiagnostics(
+    val loaded: Boolean,
+    val decisionCount: Int,
+    val linkCount: Int,
+    val storeFilePresent: Boolean?,
+    val storeFileReadable: Boolean?,
+    val storeFileBytes: Long?,
+    val lastLoadSuccess: Boolean?,
+    val lastLoadReason: String?,
+    val lastLoadErrorClass: String?,
+    val droppedDecisionCount: Int?
+)
+
+class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
     private val decisions = mutableMapOf<ArtworkDecisionKey, ArtworkDecision>()
     private val previewToCanonical = mutableMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
 
@@ -94,4 +111,19 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
             }
         }
     }
+
+    @Synchronized
+    override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics =
+        ArtworkDecisionCacheSnapshotDiagnostics(
+            loaded = true,
+            decisionCount = decisions.size,
+            linkCount = previewToCanonical.size,
+            storeFilePresent = null,
+            storeFileReadable = null,
+            storeFileBytes = null,
+            lastLoadSuccess = true,
+            lastLoadReason = null,
+            lastLoadErrorClass = null,
+            droppedDecisionCount = 0
+        )
 }

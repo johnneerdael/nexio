@@ -323,6 +323,72 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `artwork decision store load event writes to IntRuntime tag with file stats`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("artwork.decision_store_load", mapOf(
+            "success" to true,
+            "filePresent" to true,
+            "fileReadable" to true,
+            "fileBytes" to 81920L,
+            "decisionCount" to 748,
+            "linkCount" to 2,
+            "droppedDecisionCount" to 0,
+            "reason" to null,
+            "schemaVersion" to 1,
+            "errorClass" to null
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=artwork.decision_store_load"))
+        assertTrue(msg.contains("success=true"))
+        assertTrue(msg.contains("filePresent=true"))
+        assertTrue(msg.contains("fileReadable=true"))
+        assertTrue(msg.contains("fileBytes=81920"))
+        assertTrue(msg.contains("decisionCount=748"))
+        assertTrue(msg.contains("linkCount=2"))
+        assertTrue(msg.contains("droppedDecisionCount=0"))
+    }
+
+    @Test
+    fun `home snapshot decision lookup event writes to MetaRoute tag with cache diagnostics`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("home.snapshot_decision_lookup", mapOf(
+            "scope" to "catalogRows[0].items[0]",
+            "decisionFound" to false,
+            "decisionKeyHash" to "abc123",
+            "posterKind" to "decision",
+            "posterProviderTag" to "rpdb",
+            "cacheLoaded" to true,
+            "cacheDecisionCount" to 748,
+            "cacheLinkCount" to 2,
+            "storeFilePresent" to true,
+            "storeFileReadable" to true,
+            "storeFileBytes" to 81920L,
+            "lastLoadSuccess" to true,
+            "lastLoadReason" to null,
+            "lastLoadErrorClass" to null,
+            "droppedDecisionCount" to 0
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=home.snapshot_decision_lookup"))
+        assertTrue(msg.contains("scope=catalogRows[0].items[0]"))
+        assertTrue(msg.contains("decisionFound=false"))
+        assertTrue(msg.contains("decisionKeyHash=abc123"))
+        assertTrue(msg.contains("cacheLoaded=true"))
+        assertTrue(msg.contains("cacheDecisionCount=748"))
+        assertTrue(msg.contains("cacheLinkCount=2"))
+        assertTrue(msg.contains("storeFilePresent=true"))
+        assertTrue(msg.contains("storeFileReadable=true"))
+        assertTrue(msg.contains("storeFileBytes=81920"))
+        assertTrue(msg.contains("lastLoadSuccess=true"))
+    }
+
+    @Test
     fun `home snapshot sanitization event writes to MetaRoute tag`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("home.snapshot_sanitize_artwork", mapOf(

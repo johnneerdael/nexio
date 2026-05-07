@@ -177,6 +177,8 @@ class LogcatRuntimeTraceSink(
         "artwork.decision_store_load" -> linkedMapOf(
             "success" to payload["success"],
             "filePresent" to payload["filePresent"],
+            "fileReadable" to payload["fileReadable"],
+            "fileBytes" to payload["fileBytes"],
             "decisionCount" to payload["decisionCount"],
             "linkCount" to payload["linkCount"],
             "droppedDecisionCount" to payload["droppedDecisionCount"],
@@ -222,6 +224,24 @@ class LogcatRuntimeTraceSink(
             "fullCatalogRowCount" to payload["fullCatalogRowCount"],
             "heroItemCount" to payload["heroItemCount"],
             "errorClass" to payload["errorClass"]
+        )
+        "home.snapshot_decision_lookup" -> linkedMapOf(
+            "scope" to payload["scope"],
+            "decisionFound" to payload["decisionFound"],
+            "decisionKeyHash" to payload["decisionKeyHash"],
+            "posterKind" to payload["posterKind"],
+            "posterProviderTag" to payload["posterProviderTag"],
+            "cacheLoaded" to payload["cacheLoaded"],
+            "cacheDecisionCount" to payload["cacheDecisionCount"],
+            "cacheLinkCount" to payload["cacheLinkCount"],
+            "storeFilePresent" to payload["storeFilePresent"],
+            "storeFileReadable" to payload["storeFileReadable"],
+            "storeFileBytes" to payload["storeFileBytes"],
+            "lastLoadSuccess" to payload["lastLoadSuccess"],
+            "lastLoadReason" to payload["lastLoadReason"],
+            "lastLoadErrorClass" to payload["lastLoadErrorClass"],
+            "droppedDecisionCount" to payload["droppedDecisionCount"],
+            "lookupErrorClass" to payload["lookupErrorClass"]
         )
         "home.snapshot_sanitize_artwork" -> linkedMapOf(
             "scope" to payload["scope"],

@@ -2,7 +2,10 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import com.nexio.tv.core.artwork.ArtworkDecision
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
+import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
 import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkSourceRole
@@ -337,6 +340,68 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
+    fun `read logs decision lookup diagnostics when snapshot decision is missing`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = DiagnosticArtworkDecisionCache(
+            diagnostics = ArtworkDecisionCacheSnapshotDiagnostics(
+                loaded = true,
+                decisionCount = 748,
+                linkCount = 2,
+                storeFilePresent = true,
+                storeFileReadable = true,
+                storeFileBytes = 81_920L,
+                lastLoadSuccess = true,
+                lastLoadReason = null,
+                lastLoadErrorClass = null,
+                droppedDecisionCount = 0
+            )
+        )
+        val decisionKey = ArtworkDecisionKey("diagnostic-missing-decision")
+        cache.put(sampleArtworkDecision(decisionKey))
+        val traceSink = RecordingTraceSink()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache,
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/diagnostic-missing-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+        cache.remove(decisionKey)
+        store.read("RPDB:12345")
+
+        val lookupPayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_decision_lookup" }
+            .first { event -> (event.payload as Map<*, *>)["decisionFound"] == false }
+            .payload as Map<*, *>
+        assertEquals("catalogRows[0].items[0]", lookupPayload["scope"])
+        assertEquals(false, lookupPayload["decisionFound"])
+        assertEquals("rpdb", lookupPayload["posterProviderTag"])
+        assertEquals("decision", lookupPayload["posterKind"])
+        assertEquals(true, lookupPayload["cacheLoaded"])
+        assertEquals(748, lookupPayload["cacheDecisionCount"])
+        assertEquals(2, lookupPayload["cacheLinkCount"])
+        assertEquals(true, lookupPayload["storeFilePresent"])
+        assertEquals(true, lookupPayload["storeFileReadable"])
+        assertEquals(81_920L, lookupPayload["storeFileBytes"])
+        assertEquals(true, lookupPayload["lastLoadSuccess"])
+        assertEquals(null, lookupPayload["lastLoadReason"])
+        assertEquals(null, lookupPayload["lastLoadErrorClass"])
+        assertEquals(0, lookupPayload["droppedDecisionCount"])
+        assertTrue((lookupPayload["decisionKeyHash"] as String).isNotBlank())
+        assertFalse((lookupPayload["decisionKeyHash"] as String).contains("diagnostic-missing-decision"))
+    }
+
+    @Test
     fun `read preserves valid decision refs backed by cache`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
@@ -502,6 +567,34 @@ class HomeCatalogSnapshotStoreTest {
                 }
             }
         }
+    }
+
+    private class DiagnosticArtworkDecisionCache(
+        private val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics
+    ) : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
+        private val delegate = InMemoryArtworkDecisionCache()
+
+        override fun get(key: ArtworkDecisionKey): ArtworkDecision? = delegate.get(key)
+        override fun put(decision: ArtworkDecision) = delegate.put(decision)
+        override fun remove(key: ArtworkDecisionKey) = delegate.remove(key)
+        override fun linkPreviewToCanonical(
+            previewKey: ArtworkDecisionKey,
+            canonicalKey: ArtworkDecisionKey
+        ) = delegate.linkPreviewToCanonical(previewKey, canonicalKey)
+        override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? =
+            delegate.getCanonicalForPreview(previewKey)
+
+        override fun invalidateBySettingsHash(settingsHash: String) =
+            delegate.invalidateBySettingsHash(settingsHash)
+
+        override fun invalidateByCredentialHash(credentialHash: String) =
+            delegate.invalidateByCredentialHash(credentialHash)
+
+        override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) =
+            delegate.invalidateArtworkPolicy(settingsHashes, credentialHashes)
+
+        override fun invalidatePremiumArtworkPolicy() = delegate.invalidatePremiumArtworkPolicy()
+        override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics = diagnostics
     }
 
 }
