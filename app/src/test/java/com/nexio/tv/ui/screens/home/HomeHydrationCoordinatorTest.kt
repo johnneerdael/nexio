@@ -125,7 +125,12 @@ class HomeHydrationCoordinatorTest {
         )
         assertTrue(aliasesSlot.captured.containsAll(listOf("movie:550", "movie:imdb:tt0137523", "movie:tmdb:550", "movie:tvdb:81189", "movie:kitsu:42")))
         assertEquals(
-            listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
+            listOf(
+                "home.hydration_started",
+                "home.hydration_overlay_written",
+                "home.rating_and_artwork_surface",
+                "home.hydration_applied"
+            ),
             sink.events.map { it.eventType }
         )
         coVerify(exactly = 0) {
@@ -332,6 +337,148 @@ class HomeHydrationCoordinatorTest {
         assertEquals("hydrated-logo-url-or-key", overlaySlot.captured.fields.displayLogo)
         assertSame(hydratedBackdrop, overlaySlot.captured.fields.artwork?.backdrop)
         assertNull(overlaySlot.captured.fields.artwork?.logo)
+    }
+
+    @Test
+    fun `hydration emits rating and artwork surface trace`() = runTest {
+        val sink = RecordingTraceSink()
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        coEvery { store.upsert(any(), any()) } returns Unit
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "House of the Dragon",
+                imdbRating = 8.3f,
+                ratingSource = TitleRatingSource.TMDB,
+                artwork = ArtworkBundle(logo = artworkRef("tvdb-logo", ArtworkType.LOGO))
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
+        val preview = preview(
+            id = "tmdb:94997",
+            type = ContentType.SERIES,
+            rating = null,
+            artwork = ArtworkBundle()
+        )
+
+        HomeHydrationCoordinator(
+            metadataRouterFacade = facade,
+            overlayStore = store,
+            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+        ).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val event = sink.events.last { it.eventType == "home.rating_and_artwork_surface" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = event.payload as Map<String, Any?>
+        assertFalse(payload.containsKey("itemKey"))
+        assertFalse(payload.containsKey("title"))
+        assertTrue((payload["itemKeyHash"] as String).isNotBlank())
+        assertFalse(payload.values.any { value -> value.toString().contains("series:tmdb:94997") })
+        assertFalse(payload.values.any { value -> value.toString().contains("tmdb:94997") })
+        assertFalse(payload.values.any { value -> value.toString().contains("House of the Dragon") })
+        assertEquals(false, payload["firstPaintLogoPresent"])
+        assertEquals(true, payload["hydratedLogoPresent"])
+        assertEquals(8.3f, payload["hydratedRatingValue"])
+        assertEquals("TMDB", payload["hydratedRatingSource"])
+        assertEquals(null, payload["firstPaintTmdbId"])
+        assertTrue((payload["firstPaintTmdbIdHash"] as String).isNotBlank())
+    }
+
+    @Test
+    fun `hydration trace uses sanitized first paint rating state`() = runTest {
+        val sink = RecordingTraceSink()
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        coEvery { store.upsert(any(), any()) } returns Unit
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            displayMetadata = HomeDisplayMetadata(title = "House of the Dragon")
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
+        val preview = preview(
+            id = "tmdb:94997",
+            type = ContentType.SERIES,
+            rating = 1767427f,
+            artwork = ArtworkBundle()
+        )
+
+        HomeHydrationCoordinator(
+            metadataRouterFacade = facade,
+            overlayStore = store,
+            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+        ).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val event = sink.events.last { it.eventType == "home.rating_and_artwork_surface" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = event.payload as Map<String, Any?>
+        assertFalse(payload.containsKey("itemKey"))
+        assertFalse(payload.containsKey("title"))
+        assertTrue((payload["itemKeyHash"] as String).isNotBlank())
+        assertFalse(payload.values.any { value -> value.toString().contains("series:tmdb:94997") })
+        assertFalse(payload.values.any { value -> value.toString().contains("tmdb:94997") })
+        assertFalse(payload.values.any { value -> value.toString().contains("House of the Dragon") })
+        assertEquals(null, payload["firstPaintRatingValue"])
+        assertEquals(false, payload["firstPaintRatingAccepted"])
+        assertEquals("OUT_OF_RANGE_TITLE_RATING", payload["firstPaintRatingRejectReason"])
+    }
+
+    @Test
+    fun `hydration trace sanitizes invalid hydrated rating state`() = runTest {
+        val sink = RecordingTraceSink()
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        coEvery { store.upsert(any(), any()) } returns Unit
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "House of the Dragon",
+                imdbRating = 1767427f,
+                ratingSource = TitleRatingSource.TMDB
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
+        val preview = preview(
+            id = "tmdb:94997",
+            type = ContentType.SERIES,
+            rating = null,
+            artwork = ArtworkBundle()
+        )
+
+        HomeHydrationCoordinator(
+            metadataRouterFacade = facade,
+            overlayStore = store,
+            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+        ).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val event = sink.events.last { it.eventType == "home.rating_and_artwork_surface" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = event.payload as Map<String, Any?>
+        assertFalse(payload.containsKey("title"))
+        assertFalse(payload.values.any { value -> value.toString().contains("House of the Dragon") })
+        assertEquals(null, payload["hydratedRatingValue"])
+        assertEquals(null, payload["hydratedRatingSource"])
     }
 
     @Test
@@ -545,7 +692,12 @@ class HomeHydrationCoordinatorTest {
         assertEquals(8.4f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
         assertTrue(aliasesSlot.captured.containsAll(listOf("movie:550", "movie:imdb:tt0137523", "movie:tmdb:550")))
         assertEquals(
-            listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
+            listOf(
+                "home.hydration_started",
+                "home.hydration_overlay_written",
+                "home.rating_and_artwork_surface",
+                "home.hydration_applied"
+            ),
             sink.events.map { it.eventType }
         )
         val appliedPayload = sink.events.last().payload as Map<*, *>
@@ -588,7 +740,12 @@ class HomeHydrationCoordinatorTest {
         assertEquals("550", overlaySlot.captured.canonicalId)
         assertEquals("tt0137523", overlaySlot.captured.imdbId)
         assertEquals(
-            listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
+            listOf(
+                "home.hydration_started",
+                "home.hydration_overlay_written",
+                "home.rating_and_artwork_surface",
+                "home.hydration_applied"
+            ),
             sink.events.map { it.eventType }
         )
     }
@@ -684,7 +841,11 @@ class HomeHydrationCoordinatorTest {
         assertNull(result)
         assertEquals("550", overlaySlot.captured.canonicalId)
         assertEquals(
-            listOf("home.hydration_started", "home.hydration_overlay_written"),
+            listOf(
+                "home.hydration_started",
+                "home.hydration_overlay_written",
+                "home.rating_and_artwork_surface"
+            ),
             sink.events.map { it.eventType }
         )
     }

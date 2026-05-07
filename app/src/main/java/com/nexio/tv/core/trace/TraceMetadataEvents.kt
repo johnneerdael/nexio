@@ -479,6 +479,49 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitHomeRatingAndArtworkSurface(
+        surface: String,
+        itemKeyHash: String,
+        firstPaintRatingValue: Float?,
+        firstPaintRatingAccepted: Boolean,
+        firstPaintRatingRejectReason: String?,
+        firstPaintLogoPresent: Boolean,
+        firstPaintTmdbIdHash: String?,
+        firstPaintTvdbIdHash: String?,
+        firstPaintImdbIdHash: String?,
+        hydrationStarted: Boolean,
+        routeProvider: String?,
+        tvdbIdHash: String?,
+        overlayApplied: Boolean,
+        hydratedRatingValue: Float?,
+        hydratedRatingSource: String?,
+        hydratedLogoPresent: Boolean,
+        hydratedLogoSource: String?
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.rating_and_artwork_surface",
+            payload = mapOf(
+                "surface" to surface,
+                "itemKeyHash" to itemKeyHash,
+                "firstPaintRatingValue" to firstPaintRatingValue,
+                "firstPaintRatingAccepted" to firstPaintRatingAccepted,
+                "firstPaintRatingRejectReason" to optionalTraceValue(firstPaintRatingRejectReason),
+                "firstPaintLogoPresent" to firstPaintLogoPresent,
+                "firstPaintTmdbIdHash" to optionalTraceValue(firstPaintTmdbIdHash),
+                "firstPaintTvdbIdHash" to optionalTraceValue(firstPaintTvdbIdHash),
+                "firstPaintImdbIdHash" to optionalTraceValue(firstPaintImdbIdHash),
+                "hydrationStarted" to hydrationStarted,
+                "routeProvider" to optionalTraceValue(routeProvider),
+                "tvdbIdHash" to optionalTraceValue(tvdbIdHash),
+                "overlayApplied" to overlayApplied,
+                "hydratedRatingValue" to hydratedRatingValue,
+                "hydratedRatingSource" to hydratedRatingSource,
+                "hydratedLogoPresent" to hydratedLogoPresent,
+                "hydratedLogoSource" to optionalTraceValue(hydratedLogoSource)
+            )
+        )
+    }
+
     fun emitHomeHydrationIgnored(
         itemKey: String,
         reason: String,

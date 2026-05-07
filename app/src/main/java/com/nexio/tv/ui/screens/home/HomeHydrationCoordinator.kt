@@ -13,6 +13,7 @@ import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
+import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -23,6 +24,7 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -130,6 +132,39 @@ class HomeHydrationCoordinator @Inject constructor(
                 displayHash = overlay.displayHash
             )
             val overlayAccepted = onOverlayApplied(overlay)
+            val firstPaintMetadata = item.toHomeDisplayMetadata()
+            val previewRating = firstPaintMetadata.imdbRating
+            val acceptedPreviewRating = RatingValueValidator.validTitleRating(previewRating)
+            val sanitizedPreviewRating = RatingValueValidator.sanitizeTitleRating(previewRating)
+            val sanitizedHydratedRating = RatingValueValidator.sanitizeTitleRating(overlay.fields.imdbRating)
+            val hydratedTvdbId = overlay.canonicalId.takeIf { overlay.canonicalProvider == ProviderId.TVDB }
+                ?: bundle?.canonical?.tvdbSeriesId
+            traceEvents.emitHomeRatingAndArtworkSurface(
+                surface = "HOME",
+                itemKeyHash = TraceHash.of("home-rating-artwork", itemKey),
+                firstPaintRatingValue = sanitizedPreviewRating,
+                firstPaintRatingAccepted = acceptedPreviewRating,
+                firstPaintRatingRejectReason = if (previewRating != null && !acceptedPreviewRating) {
+                    "OUT_OF_RANGE_TITLE_RATING"
+                } else {
+                    null
+                },
+                firstPaintLogoPresent = firstPaintMetadata.displayLogo != null,
+                firstPaintTmdbIdHash = item.firstPaintStableIds.tmdbOrPreviewId(item.id)
+                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                firstPaintTvdbIdHash = item.firstPaintStableIds.tvdb
+                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                firstPaintImdbIdHash = item.firstPaintStableIds.imdb
+                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                hydrationStarted = true,
+                routeProvider = result.route?.provider?.name,
+                tvdbIdHash = hydratedTvdbId?.let { TraceHash.of("home-rating-artwork", it) },
+                overlayApplied = overlayAccepted,
+                hydratedRatingValue = sanitizedHydratedRating,
+                hydratedRatingSource = overlay.fields.ratingSource?.name.takeIf { sanitizedHydratedRating != null },
+                hydratedLogoPresent = overlay.fields.displayLogo != null,
+                hydratedLogoSource = overlay.fields.artwork?.logo?.trace?.selectedProvider
+            )
             if (!overlayAccepted) {
                 return null
             }
@@ -143,7 +178,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 trigger = trigger.name,
                 priority = priority.name,
                 workClass = WORK_CLASS_BACKGROUND_HYDRATION,
-                changedFields = changedFields(item.toHomeDisplayMetadata(), overlay.fields),
+                changedFields = changedFields(firstPaintMetadata, overlay.fields),
                 displayHashBefore = item.displayHashForHomeOverlay(),
                 displayHashAfter = overlay.displayHash,
                 rowOrderChanged = false,
@@ -310,6 +345,9 @@ class HomeHydrationCoordinator @Inject constructor(
             ?.takeIf { it.isNotEmpty() }
             ?.substringAfter(':')
             ?.takeIf { it.isNotBlank() }
+
+    private fun ProviderIds.tmdbOrPreviewId(previewId: String): String? =
+        tmdb ?: previewId.takeIf { it.startsWith("tmdb:") }?.providerNativeId()
 
     private fun ResolvedMetadataDocument.homeFieldTrace(
         fallbackProvider: MetadataPrimaryProvider?
