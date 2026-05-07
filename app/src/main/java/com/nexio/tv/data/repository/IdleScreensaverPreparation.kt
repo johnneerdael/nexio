@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
@@ -26,7 +27,9 @@ internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaver
         description = overview?.takeIf { it.isNotBlank() },
         releaseInfo = subtitle?.takeIf { it.isNotBlank() },
         runtime = runtime?.takeIf { it.isNotBlank() },
-        imdbRating = rating?.value?.toFloat(),
+        imdbRating = rating?.value
+            ?.takeIf { RatingValueValidator.validTitleRating(it) }
+            ?.toFloat(),
         tomatoesRating = null,
         modeData = IdleScreensaverModeData(
             image = IdleScreensaverImageModeData(fallbackArtwork = fallbackArtwork)
@@ -54,7 +57,9 @@ internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): Id
         description = overview?.takeIf { it.isNotBlank() },
         releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
         runtime = runtime?.takeIf { it.isNotBlank() },
-        imdbRating = rating?.value?.toFloat(),
+        imdbRating = rating?.value
+            ?.takeIf { RatingValueValidator.validTitleRating(it) }
+            ?.toFloat(),
         tomatoesRating = null,
         trailerState = trailerState,
         stableIds = stableIds

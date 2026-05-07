@@ -59,7 +59,7 @@ class HomeResolvedDisplayMapperTest {
         assertEquals("Final Home Overview", resolved.display.overview)
         assertEquals("tt0137523", resolved.imdbId)
         assertEquals("550", resolved.stableIds.tmdb)
-        assertEquals(8.8, resolved.rating?.value ?: 0.0, 0.0)
+        assertEquals(8.8, resolved.rating?.value ?: 0.0, 0.000001)
         assertNotNull(resolved.artwork.backdrop)
         assertEquals("top_posters", resolved.artwork.backdrop?.trace?.selectedProvider)
         assertEquals(HydrationState.CANONICAL_READY, resolved.hydrationState)
@@ -211,6 +211,26 @@ class HomeResolvedDisplayMapperTest {
         assertEquals(TrailerPlaybackRef.YouTubeId("trailer-a"), resolved.trailer.selectedPlaybackRef)
         assertEquals("fallback_youtube_id", resolved.trailer.availabilityReason)
         assertEquals("home", resolved.trailer.surface)
+    }
+
+    @Test
+    fun `mapper does not publish out of range preview rating to resolved surface`() {
+        val finalItem = preview(
+            id = "tmdb:94997",
+            title = "House of the Dragon",
+            overview = "Overview",
+            rating = 1767427f,
+            artwork = ArtworkBundle(),
+            stableIds = ProviderIds(tmdb = "94997")
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(finalItem)),
+            overlaysByItemKey = emptyMap(),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(null, resolved.rating)
     }
 
     private fun preview(

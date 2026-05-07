@@ -136,6 +136,31 @@ class ScreensaverCandidateRepositoryTest {
     }
 
     @Test
+    fun `image candidates clear invalid resolved ratings but preserve logo artwork`() = runTest {
+        val surface = testSurface()
+        val repository = testScreensaverCandidates(surface)
+        val logo = artworkRef(key = "logo-94997", imageType = ArtworkType.LOGO)
+        val backdrop = artworkRef(key = "backdrop-94997", imageType = ArtworkType.BACKDROP)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "series:tmdb:94997",
+                    title = "House of the Dragon",
+                    artwork = ArtworkBundle(backdrop = backdrop, logo = logo),
+                    rating = TitleRating(1767427.0, TitleRatingSource.TMDB)
+                )
+            )
+        )
+
+        val candidate = repository.observeImageCandidates(profileId = 1).first().single()
+
+        assertEquals(null, candidate.rating)
+        assertSame(logo, candidate.artwork.logo)
+        assertSame(backdrop, candidate.preferredImage)
+    }
+
+    @Test
     fun `trailer candidates come from resolved items even when trailer ids are empty`() = runTest {
         val surface = testSurface()
         val repository = testScreensaverCandidates(surface)
@@ -422,9 +447,10 @@ class ScreensaverCandidateRepositoryTest {
     )
 
     private fun resolvedItem(
-        itemKey: String,
-        title: String?,
+        itemKey: String = "movie:tmdb:550",
+        title: String? = "Fight Club",
         artwork: ArtworkBundle = ArtworkBundle(backdrop = artworkRef("backdrop-550", ArtworkType.BACKDROP)),
+        rating: TitleRating? = TitleRating(8.8, TitleRatingSource.IMDB),
         sourceTrace: List<HydratedHomeFieldTrace> = emptyList(),
         fallbackTrailerYtIds: List<String> = emptyList(),
         trailerState: TrailerDisplayState = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds)
@@ -448,7 +474,7 @@ class ScreensaverCandidateRepositoryTest {
             runtimeText = "139m"
         ),
         artwork = artwork,
-        rating = TitleRating(8.8, TitleRatingSource.IMDB),
+        rating = rating,
         trailer = trailerState,
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = sourceTrace,
