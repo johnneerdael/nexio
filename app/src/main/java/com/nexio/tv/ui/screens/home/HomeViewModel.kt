@@ -390,6 +390,7 @@ class HomeViewModel @Inject constructor(
         get() = trailerSelectedFallbackYtIdsState
 
     init {
+        emitInitialHomeProfileSessionStarted()
         observeStartupPerfTelemetry()
         observePlaybackWorkGate()
         observeLocaleChangesForMetadata()
@@ -523,6 +524,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun emitInitialHomeProfileSessionStarted() {
+        val session = activeHomeProfileSessionSnapshot
+        traceEvents.emitHomeProfileSessionStarted(
+            profileId = session.profileId,
+            sessionId = session.sessionId,
+            generation = session.generation
+        )
+    }
+
     private fun observeTrackingProviderState() {
         viewModelScope.launch {
             trackingProviderStateService.state.collectLatest { state ->
@@ -550,9 +560,7 @@ class HomeViewModel @Inject constructor(
                         previousSession = previousSession,
                         nextSession = session
                     )
-                    val sessionIdentifierChanged = shouldResetHomeState ||
-                        previousSession.sessionId != session.sessionId
-                    if (sessionIdentifierChanged) {
+                    if (shouldResetHomeState) {
                         traceEvents.emitHomeProfileSessionCancelled(
                             profileId = previousSession.profileId,
                             sessionId = previousSession.sessionId,
@@ -560,7 +568,7 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                     activeHomeProfileSessionSnapshot = session
-                    if (sessionIdentifierChanged) {
+                    if (shouldResetHomeState) {
                         traceEvents.emitHomeProfileSessionStarted(
                             profileId = session.profileId,
                             sessionId = session.sessionId,

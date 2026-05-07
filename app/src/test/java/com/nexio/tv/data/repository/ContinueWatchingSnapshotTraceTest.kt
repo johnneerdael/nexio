@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,6 +57,44 @@ class ContinueWatchingSnapshotTraceTest {
     }
 
     @Test
+    fun `home profile session trace helpers emit hashed payload identifiers`() {
+        val sink = RecordingTraceSink()
+        val traceEvents = TraceMetadataEvents(sink) { "trace-session" }
+        val profileId = 2
+        val sessionId = "home-profile:2:runtime:7"
+
+        traceEvents.emitHomeProfileSessionStarted(profileId, sessionId, generation = 1L)
+        traceEvents.emitHomeProfileSessionCancelled(profileId, sessionId, reason = "profile_session_replaced")
+        traceEvents.emitHomeProfileEmissionIgnoredStale("snapshot_apply", profileId, sessionId)
+        traceEvents.emitHomeInitialGateStateChanged(
+            profileId = profileId,
+            sessionId = sessionId,
+            gate = "CONTINUE_WATCHING",
+            state = "resolved",
+            reason = "first_snapshot"
+        )
+
+        assertEquals(
+            listOf(
+                "home.profile_session_started",
+                "home.profile_session_cancelled",
+                "home.profile_emission_ignored_stale",
+                "home.initial_gate_state_changed"
+            ),
+            sink.events.map { it.eventType }
+        )
+        sink.events.forEach { event ->
+            val payload = event.payload as Map<*, *>
+            assertTrue(payload.containsKey("profileHash"))
+            assertTrue(payload.containsKey("sessionHash"))
+            assertFalse(payload.containsKey("profileId"))
+            assertFalse(payload.containsKey("sessionId"))
+            assertFalse(payload["profileHash"] == profileId.toString())
+            assertFalse(payload["sessionHash"] == sessionId)
+        }
+    }
+
+    @Test
     fun `logcat sink exposes curated home profile session fields from hashes`() {
         val source = File("app/src/main/java/com/nexio/tv/core/trace/LogcatRuntimeTraceSink.kt").readText()
 
@@ -86,8 +125,12 @@ class ContinueWatchingSnapshotTraceTest {
         assertTrue(homeViewModelSource.contains("traceEvents.emitHomeProfileSessionCancelled("))
         assertTrue(homeViewModelSource.contains("activeHomeProfileSessionSnapshot = session"))
         assertTrue(homeViewModelSource.contains("traceEvents.emitHomeProfileSessionStarted("))
+        assertTrue(homeViewModelSource.contains("emitInitialHomeProfileSessionStarted()"))
+        assertFalse(homeViewModelSource.contains("previousSession.sessionId != session.sessionId"))
         assertTrue(continueWatchingSource.contains("traceEvents.emitHomeInitialGateStateChanged("))
         assertTrue(continueWatchingSource.contains("traceEvents.emitHomeProfileEmissionIgnoredStale("))
+        assertFalse(continueWatchingSource.contains("var continueWatchingGateResolved"))
+        assertFalse(continueWatchingSource.contains("var enrichedContinueWatchingGateResolved"))
         assertFalse(continueWatchingSource.contains("session=\${session.sessionId}"))
     }
 }

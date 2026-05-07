@@ -296,6 +296,26 @@ private fun HomeViewModel.emitStaleContinueWatchingEmission(
     )
 }
 
+private fun HomeViewModel.emitContinueWatchingResolvedGateTransition(
+    session: HomeProfileSession,
+    before: HomeInitialReadiness,
+    after: HomeInitialReadiness,
+    reason: String
+) {
+    if (
+        !before.isResolved(HomeInitialGate.CONTINUE_WATCHING) &&
+        after.profileId == session.profileId &&
+        after.sessionId == session.sessionId &&
+        after.isResolved(HomeInitialGate.CONTINUE_WATCHING)
+    ) {
+        emitContinueWatchingInitialGateState(
+            session = session,
+            state = "resolved",
+            reason = reason
+        )
+    }
+}
+
 private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     session: HomeProfileSession,
     snapshot: ContinueWatchingSnapshot
@@ -356,7 +376,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     } else {
         "first_snapshot"
     }
-    var continueWatchingGateResolved = false
+    val readinessBeforePublish = _uiState.value.homeReadiness
     _uiState.update { state ->
         if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
         if (
@@ -367,7 +387,6 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         ) {
             state
         } else {
-            continueWatchingGateResolved = !state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
             state.copy(
                 continueWatchingItems = items,
                 traktUpNextItems = traktUpNextItems,
@@ -379,13 +398,12 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
             )
         }
     }
-    if (continueWatchingGateResolved) {
-        emitContinueWatchingInitialGateState(
-            session = session,
-            state = "resolved",
-            reason = readinessReason
-        )
-    }
+    emitContinueWatchingResolvedGateTransition(
+        session = session,
+        before = readinessBeforePublish,
+        after = _uiState.value.homeReadiness,
+        reason = readinessReason
+    )
 
     val settings = currentTmdbSettings
     if (
@@ -424,7 +442,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     Log.d(HomeViewModel.TAG, "Skipping superseded continue watching enrichment")
                     return@launch
                 }
-                var enrichedContinueWatchingGateResolved = false
+                val readinessBeforeEnrichedPublish = _uiState.value.homeReadiness
                 _uiState.update { state ->
                     if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
                     if (
@@ -435,8 +453,6 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     ) {
                         state
                     } else {
-                        enrichedContinueWatchingGateResolved =
-                            !state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
                         state.copy(
                             continueWatchingItems = enrichedItems,
                             traktUpNextItems = enrichedTraktItems,
@@ -448,13 +464,12 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                         )
                     }
                 }
-                if (enrichedContinueWatchingGateResolved) {
-                    emitContinueWatchingInitialGateState(
-                        session = session,
-                        state = "resolved",
-                        reason = readinessReason
-                    )
-                }
+                emitContinueWatchingResolvedGateTransition(
+                    session = session,
+                    before = readinessBeforeEnrichedPublish,
+                    after = _uiState.value.homeReadiness,
+                    reason = readinessReason
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
