@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
@@ -16,7 +15,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.lang.reflect.Modifier
 
 class ArtworkDecisionCacheTest {
     private val cache = InMemoryArtworkDecisionCache()
@@ -480,6 +478,83 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable malformed rejected candidate quarantines whole decision record`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val validDecision = durableRpdbDecision().copy(
+            decisionKey = ArtworkDecisionKey("valid-decision-with-clean-rejected-candidates"),
+            rejectedCandidates = emptyList()
+        )
+        val malformedDecision = durableRpdbDecision()
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        first.put(validDecision)
+        first.put(malformedDecision)
+        val store = JsonParser.parseString(file.readText()).asJsonObject
+        val decisions = store.getAsJsonArray("decisions")
+        decisions
+            .first { element ->
+                element.asJsonObject.get("decisionKey").asString == malformedDecision.decisionKey.value
+            }
+            .asJsonObject
+            .add("rejectedCandidates", JsonArray().apply { add(JsonObject()) })
+        file.writeText(Gson().toJson(store))
+
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        assertEquals(
+            ArtworkDecisionLookupResult.Found(validDecision),
+            restarted.lookup(validDecision.decisionKey)
+        )
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(malformedDecision.decisionKey),
+            key = malformedDecision.decisionKey,
+            reason = "partial_load"
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
+    }
+
+    @Test
+    fun `durable wrong type rejected candidates quarantines whole decision record`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val validDecision = durableRpdbDecision().copy(
+            decisionKey = ArtworkDecisionKey("valid-decision-before-wrong-type-rejected-candidates"),
+            rejectedCandidates = emptyList()
+        )
+        val malformedDecision = durableRpdbDecision()
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        first.put(validDecision)
+        first.put(malformedDecision)
+        val store = JsonParser.parseString(file.readText()).asJsonObject
+        store.getAsJsonArray("decisions")
+            .first { element ->
+                element.asJsonObject.get("decisionKey").asString == malformedDecision.decisionKey.value
+            }
+            .asJsonObject
+            .add("rejectedCandidates", JsonObject())
+        file.writeText(Gson().toJson(store))
+
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        assertEquals(
+            ArtworkDecisionLookupResult.Found(validDecision),
+            restarted.lookup(validDecision.decisionKey)
+        )
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(malformedDecision.decisionKey),
+            key = malformedDecision.decisionKey,
+            reason = "partial_load"
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
+    }
+
+    @Test
     fun `durable malformed preview link makes load partial while valid decisions remain usable`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -552,6 +627,100 @@ class ArtworkDecisionCacheTest {
         assertEquals("FailedNonAuthoritative", payload["loadState"])
         assertNotNull(payload["errorMessageHash"])
         assertNotNull(payload["errorTopFrame"])
+    }
+
+    @Test
+    fun `durable wrong type top level decisions is failed non authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText(
+            """
+                {
+                  "schemaVersion": 1,
+                  "decisions": {},
+                  "previewLinks": []
+                }
+            """.trimIndent()
+        )
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        val missingKey = ArtworkDecisionKey("wrong-type-decisions-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "load_failed",
+            errorClass = "IllegalStateException"
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("FailedNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(false, payload["success"])
+        assertEquals(false, payload["authoritative"])
+        assertEquals("FailedNonAuthoritative", payload["loadState"])
+        assertEquals("IllegalStateException", payload["errorClass"])
+    }
+
+    @Test
+    fun `durable missing top level decisions is failed non authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText(
+            """
+                {
+                  "schemaVersion": 1,
+                  "previewLinks": []
+                }
+            """.trimIndent()
+        )
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        val missingKey = ArtworkDecisionKey("missing-top-level-decisions")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "load_failed",
+            errorClass = "IllegalArgumentException"
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("FailedNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+    }
+
+    @Test
+    fun `durable null top level decisions is failed non authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText(
+            """
+                {
+                  "schemaVersion": 1,
+                  "decisions": null,
+                  "previewLinks": []
+                }
+            """.trimIndent()
+        )
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        val missingKey = ArtworkDecisionKey("null-top-level-decisions")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "load_failed",
+            errorClass = "IllegalArgumentException"
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("FailedNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
     }
 
     @Test
@@ -763,7 +932,8 @@ class ArtworkDecisionCacheTest {
             writesAfterFirstPut,
             traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
         )
-        assertEquals(decision, cache.get(decision.decisionKey))
+        val restored = cache.get(decision.decisionKey)
+        assertEquals("restored legacy decision differs: $restored", decision, restored)
     }
 
     @Test
@@ -799,6 +969,62 @@ class ArtworkDecisionCacheTest {
         decisions.forEach { decision ->
             assertEquals(decision, restarted.get(decision.decisionKey))
         }
+    }
+
+    @Test
+    fun `durable cache batches poster decision writes while keeping read your write`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val traceSink = RecordingTraceSink()
+        val cache = DurableArtworkDecisionCache(
+            file = file,
+            gson = Gson(),
+            traceSink = traceSink,
+            thumbnailWriteDebounceMs = 60_000L
+        )
+        val decisions = (1..5).map(::durablePosterDecision)
+
+        decisions.forEach(cache::put)
+
+        assertEquals(
+            0,
+            traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
+        )
+        decisions.forEach { decision ->
+            assertEquals(decision, cache.get(decision.decisionKey))
+        }
+
+        cache.flushPendingWritesForTest()
+
+        assertEquals(
+            1,
+            traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
+        )
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+        decisions.forEach { decision ->
+            assertEquals(decision, restarted.get(decision.decisionKey))
+        }
+    }
+
+    @Test
+    fun `durable cache restores legacy obfuscated release JSON`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val decision = durableRpdbDecision().copy(rejectedCandidates = emptyList())
+        val traceSink = RecordingTraceSink()
+        file.writeText(legacyObfuscatedStoreJson(decision))
+
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        val restored = cache.get(decision.decisionKey)
+        assertEquals("restored legacy decision differs: $restored", decision, restored)
+        val loadPayload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(true, loadPayload["success"])
+        assertEquals(true, loadPayload["authoritative"])
+        assertEquals("LoadedAuthoritative", loadPayload["loadState"])
+        assertEquals(1, loadPayload["decisionCount"])
     }
 
     @Test
@@ -915,97 +1141,6 @@ class ArtworkDecisionCacheTest {
         assertTrue(raw.contains("\"credentialHash\""))
     }
 
-    @Test
-    fun `durable cache persisted DTO fields declare stable serialized names`() {
-        assertSerializedNames(
-            className = "StoreDto",
-            expected = mapOf(
-                "schemaVersion" to "schemaVersion",
-                "decisions" to "decisions",
-                "previewLinks" to "previewLinks"
-            )
-        )
-        assertSerializedNames(
-            className = "PreviewLinkDto",
-            expected = mapOf(
-                "previewKey" to "previewKey",
-                "canonicalKey" to "canonicalKey"
-            )
-        )
-        assertSerializedNames(
-            className = "DecisionDto",
-            expected = mapOf(
-                "decisionKey" to "decisionKey",
-                "owner" to "owner",
-                "canonicalContentId" to "canonicalContentId",
-                "imageType" to "imageType",
-                "selectedCandidate" to "selectedCandidate",
-                "rejectedCandidates" to "rejectedCandidates",
-                "policyVersion" to "policyVersion",
-                "imageLanguage" to "imageLanguage",
-                "settingsHash" to "settingsHash",
-                "credentialHash" to "credentialHash",
-                "createdAtMs" to "createdAtMs",
-                "expiresAtMs" to "expiresAtMs",
-                "staleUntilMs" to "staleUntilMs"
-            )
-        )
-        assertSerializedNames(
-            className = "OwnerDto",
-            expected = mapOf(
-                "type" to "type",
-                "contentId" to "contentId",
-                "itemKey" to "itemKey",
-                "sourcePayloadHash" to "sourcePayloadHash"
-            )
-        )
-        assertSerializedNames(
-            className = "CandidateDto",
-            expected = mapOf(
-                "provider" to "provider",
-                "sourceRole" to "sourceRole",
-                "sourceHash" to "sourceHash",
-                "redactedSourceForTrace" to "redactedSourceForTrace",
-                "providerTemplate" to "providerTemplate",
-                "priority" to "priority"
-            )
-        )
-        assertSerializedNames(
-            className = "RejectedDto",
-            expected = mapOf(
-                "provider" to "provider",
-                "sourceRole" to "sourceRole",
-                "reason" to "reason",
-                "sourceHash" to "sourceHash",
-                "redactedSourceForTrace" to "redactedSourceForTrace",
-                "providerTemplate" to "providerTemplate",
-                "priority" to "priority"
-            )
-        )
-        assertSerializedNames(
-            className = "TemplateDto",
-            expected = mapOf(
-                "provider" to "provider",
-                "imageType" to "imageType",
-                "idType" to "idType",
-                "mediaId" to "mediaId",
-                "providerPathHash" to "providerPathHash",
-                "settingsHash" to "settingsHash",
-                "credentialHash" to "credentialHash",
-                "imageLanguage" to "imageLanguage",
-                "policyVersion" to "policyVersion",
-                "pathParams" to "pathParams"
-            )
-        )
-        assertSerializedNames(
-            className = "ProviderDto",
-            expected = mapOf(
-                "type" to "type",
-                "integrationProvider" to "integrationProvider"
-            )
-        )
-    }
-
     private fun decision(
         key: ArtworkDecisionKey,
         ownerKey: ArtworkOwnerKey,
@@ -1114,24 +1249,65 @@ class ArtworkDecisionCacheTest {
             staleUntilMs = 3_000L + index
         )
 
-    private fun assertSerializedNames(
-        className: String,
-        expected: Map<String, String>
-    ) {
-        val dtoClass = Class.forName(
-            "${DurableArtworkDecisionCache::class.qualifiedName}$$className"
+    private fun durablePosterDecision(index: Int): ArtworkDecision =
+        durableRpdbDecision().copy(
+            decisionKey = ArtworkDecisionKey(
+                "artwork-decision:poster:canonical:imdb:tt1594013$index:provider:RPDB:" +
+                    "premium:true:settings:settingshash:credential:credentialhash:imageLang:en:policy:1"
+            ),
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt1594013$index"),
+            canonicalContentId = "imdb:tt1594013$index",
+            selectedCandidate = durableRpdbDecision().selectedCandidate.copy(
+                providerTemplate = durableRpdbDecision().selectedCandidate.providerTemplate?.copy(
+                    mediaId = "tt1594013$index"
+                )
+            )
         )
-        val persistedFields = dtoClass.declaredFields
-            .filter { field -> !field.isSynthetic && !Modifier.isStatic(field.modifiers) }
-            .associateBy { field -> field.name }
 
-        assertEquals(expected.keys, persistedFields.keys)
-        expected.forEach { (fieldName, serializedName) ->
-            val annotation = persistedFields
-                .getValue(fieldName)
-                .getAnnotation(SerializedName::class.java)
-            assertEquals(serializedName, annotation?.value)
-        }
+    private fun legacyObfuscatedStoreJson(decision: ArtworkDecision): String {
+        val candidate = decision.selectedCandidate
+        val template = requireNotNull(candidate.providerTemplate)
+        val provider = requireNotNull(candidate.provider) as ArtworkProviderId.RuntimeProvider
+        val templateProvider = template.provider as ArtworkProviderId.RuntimeProvider
+        return """
+            {
+              "a": [
+                {
+                  "a": "${decision.decisionKey.value}",
+                  "b": {"a": "canonical", "b": "${(decision.ownerKey as ArtworkOwnerKey.CanonicalContent).contentId}"},
+                  "c": "${decision.canonicalContentId}",
+                  "d": "${decision.imageType.name}",
+                  "e": {
+                    "a": {"a": "runtime", "b": "${provider.providerId.name}"},
+                    "b": "${candidate.sourceRole.name}",
+                    "c": "${candidate.sourceHash}",
+                    "e": {
+                      "a": {"a": "runtime", "b": "${templateProvider.providerId.name}"},
+                      "b": "${template.imageType.name}",
+                      "c": "${template.idType}",
+                      "d": "${template.mediaId}",
+                      "e": "${template.providerPathHash}",
+                      "f": "${template.settingsHash}",
+                      "g": "${template.credentialHash}",
+                      "h": "${template.imageLanguage}",
+                      "i": ${template.policyVersion},
+                      "j": {}
+                    },
+                    "f": ${candidate.priority}
+                  },
+                  "f": [],
+                  "g": ${decision.policyVersion},
+                  "h": "${decision.imageLanguage}",
+                  "i": "${decision.settingsHash}",
+                  "j": "${decision.credentialHash}",
+                  "k": ${decision.createdAtMs},
+                  "l": ${decision.expiresAtMs},
+                  "m": ${decision.staleUntilMs}
+                }
+              ],
+              "b": []
+            }
+        """.trimIndent()
     }
 
     private fun authorityContext(): ArtworkDecisionAuthorityContext =

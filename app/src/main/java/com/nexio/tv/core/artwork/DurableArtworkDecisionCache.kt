@@ -3,9 +3,9 @@ package com.nexio.tv.core.artwork
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.google.gson.annotations.SerializedName
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceSink
@@ -239,24 +239,34 @@ class DurableArtworkDecisionCache(
             }
             val storeJson = JsonParser.parseString(raw).asJsonObject
             val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
+            val legacyObfuscatedStore = storedSchemaVersion == null && storeJson.has("a")
             if (storedSchemaVersion == null) {
-                val loadState = failedNonAuthoritativeState(errorClass = "MissingSchemaVersion")
-                traceDecisionStoreLoad(
-                    success = false,
-                    authoritative = false,
-                    loadState = loadState,
-                    decisionCount = 0,
-                    linkCount = 0,
-                    droppedDecisionCount = 0,
-                    quarantinedDecisionCount = 0,
-                    filePresent = true,
-                    reason = "missing_schema_version"
-                )
-                return
+                if (!legacyObfuscatedStore) {
+                    val loadState = failedNonAuthoritativeState(errorClass = "MissingSchemaVersion")
+                    traceDecisionStoreLoad(
+                        success = false,
+                        authoritative = false,
+                        loadState = loadState,
+                        decisionCount = 0,
+                        linkCount = 0,
+                        droppedDecisionCount = 0,
+                        quarantinedDecisionCount = 0,
+                        filePresent = true,
+                        reason = "missing_schema_version"
+                    )
+                    return
+                }
+                lastStoredSchemaVersion = SCHEMA_VERSION
+            } else {
+                lastStoredSchemaVersion = storedSchemaVersion
             }
-            lastStoredSchemaVersion = storedSchemaVersion
-            val decisionElements = storeJson.arrayOrEmpty("decisions")
-            if (storedSchemaVersion != SCHEMA_VERSION) {
+            val decisionElements =
+                if (legacyObfuscatedStore) {
+                    storeJson.requiredArray("a")
+                } else {
+                    storeJson.requiredArray("decisions")
+                }
+            if (storedSchemaVersion != null && storedSchemaVersion != SCHEMA_VERSION) {
                 val droppedDecisionCount = decisionElements.size()
                 val loadState = failedNonAuthoritativeState(errorClass = "SchemaVersionMismatch")
                 traceDecisionStoreLoad(
@@ -278,7 +288,7 @@ class DurableArtworkDecisionCache(
             var quarantinedDecisionCount = 0
             decisionElements.forEach { decisionElement ->
                 val restored = runCatching {
-                    gson.fromJson(decisionElement, DecisionDto::class.java)?.toDomainOrNull()
+                    decisionElement.asJsonObjectOrNull()?.toDecisionDomainOrNull()
                 }.getOrNull()
                 if (restored == null) {
                     droppedDecisionCount += 1
@@ -290,11 +300,17 @@ class DurableArtworkDecisionCache(
                     decisions[restored.decisionKey] = restored
                 }
             }
-            storeJson.arrayOrEmpty("previewLinks").forEach { linkElement ->
+            val previewLinkElements =
+                if (legacyObfuscatedStore) {
+                    storeJson.requiredArray("b")
+                } else {
+                    storeJson.requiredArray("previewLinks")
+                }
+            previewLinkElements.forEach { linkElement ->
                 runCatching {
-                    val link = requireNotNull(gson.fromJson(linkElement, PreviewLinkDto::class.java))
-                    previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
-                        ArtworkDecisionKey(link.canonicalKey)
+                    val link = requireNotNull(linkElement.asJsonObjectOrNull())
+                    previewToCanonical[ArtworkDecisionKey(requireNotNull(link.stringOrNull("previewKey", "a")))] =
+                        ArtworkDecisionKey(requireNotNull(link.stringOrNull("canonicalKey", "b")))
                 }.onFailure {
                     droppedDecisionCount += 1
                     quarantinedDecisionCount += 1
@@ -385,7 +401,7 @@ class DurableArtworkDecisionCache(
     }
 
     private fun persistAfterPutLocked(decision: ArtworkDecision) {
-        if (decision.imageType == ArtworkType.THUMBNAIL && thumbnailWriteDebounceMs > 0L) {
+        if (thumbnailWriteDebounceMs > 0L) {
             scheduleThumbnailPersistLocked()
         } else {
             persistNowLocked()
@@ -435,18 +451,8 @@ class DurableArtworkDecisionCache(
             val parent = file.parentFile
             if (parent != null && !parent.exists()) parent.mkdirs()
 
-            val dto = StoreDto(
-                schemaVersion = SCHEMA_VERSION,
-                decisions = decisions.values.map(DecisionDto::fromDomain),
-                previewLinks = previewToCanonical.map { (previewKey, canonicalKey) ->
-                    PreviewLinkDto(
-                        previewKey = previewKey.value,
-                        canonicalKey = canonicalKey.value
-                    )
-                }
-            )
             tempFile = File(parent ?: File("."), "${file.name}.tmp")
-            tempFile.writeText(gson.toJson(dto))
+            tempFile.writeText(gson.toJson(toStoreJson()))
             try {
                 Files.move(
                     tempFile.toPath(),
@@ -532,11 +538,240 @@ class DurableArtworkDecisionCache(
         val bytes: Long?
     )
 
-    private fun JsonObject.intOrNull(name: String): Int? =
-        runCatching { get(name)?.asInt }.getOrNull()
+    private fun JsonObject.arrayOrEmpty(name: String, legacyName: String? = null): JsonArray =
+        elementOrNull(name, legacyName)
+            ?.takeUnless { it.isJsonNull }
+            ?.asJsonArray
+            ?: JsonArray()
 
-    private fun JsonObject.arrayOrEmpty(name: String): JsonArray =
-        runCatching { getAsJsonArray(name) }.getOrNull() ?: JsonArray()
+    private fun JsonObject.requiredArray(name: String): JsonArray {
+        val element = requireNotNull(get(name)) { "Missing required array $name" }
+        require(!element.isJsonNull) { "Null required array $name" }
+        return element.asJsonArray
+    }
+
+    private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
+        takeIf { it.isJsonObject }?.asJsonObject
+
+    private fun JsonObject.elementOrNull(name: String, legacyName: String? = null): JsonElement? =
+        get(name) ?: legacyName?.let(::get)
+
+    private fun JsonObject.stringOrNull(name: String, legacyName: String? = null): String? =
+        runCatching {
+            elementOrNull(name, legacyName)
+                ?.takeUnless { it is JsonNull || it.isJsonNull }
+                ?.asString
+        }.getOrNull()
+
+    private fun JsonObject.intOrNull(name: String, legacyName: String? = null): Int? =
+        runCatching {
+            elementOrNull(name, legacyName)
+                ?.takeUnless { it is JsonNull || it.isJsonNull }
+                ?.asInt
+        }.getOrNull()
+
+    private fun JsonObject.longOrNull(name: String, legacyName: String? = null): Long? =
+        runCatching {
+            elementOrNull(name, legacyName)
+                ?.takeUnless { it is JsonNull || it.isJsonNull }
+                ?.asLong
+        }.getOrNull()
+
+    private fun JsonObject.objectOrNull(name: String, legacyName: String? = null): JsonObject? =
+        runCatching {
+            elementOrNull(name, legacyName)?.asJsonObjectOrNull()
+        }.getOrNull()
+
+    private fun JsonObject.toDecisionDomainOrNull(): ArtworkDecision? = runCatching {
+        ArtworkDecision(
+            decisionKey = ArtworkDecisionKey(requireNotNull(stringOrNull("decisionKey", "a"))),
+            ownerKey = requireNotNull(objectOrNull("owner", "b")).toOwnerDomain(),
+            canonicalContentId = stringOrNull("canonicalContentId", "c"),
+            imageType = ArtworkType.valueOf(requireNotNull(stringOrNull("imageType", "d"))),
+            selectedCandidate = requireNotNull(objectOrNull("selectedCandidate", "e")).toCandidateDomain(),
+            rejectedCandidates = arrayOrEmpty("rejectedCandidates", "f").map { element ->
+                requireNotNull(element.asJsonObjectOrNull()?.toRejectedDomainOrNull())
+            },
+            policyVersion = requireNotNull(intOrNull("policyVersion", "g")),
+            imageLanguage = requireNotNull(stringOrNull("imageLanguage", "h")),
+            settingsHash = stringOrNull("settingsHash", "i"),
+            credentialHash = stringOrNull("credentialHash", "j"),
+            createdAtMs = requireNotNull(longOrNull("createdAtMs", "k")),
+            expiresAtMs = requireNotNull(longOrNull("expiresAtMs", "l")),
+            staleUntilMs = longOrNull("staleUntilMs", "m")
+        )
+    }.getOrNull()
+
+    private fun JsonObject.toOwnerDomain(): ArtworkOwnerKey = when (val type = requireNotNull(stringOrNull("type", "a"))) {
+        "canonical" -> ArtworkOwnerKey.CanonicalContent(requireNotNull(stringOrNull("contentId", "b")))
+        "preview" -> ArtworkOwnerKey.PreviewItem(
+            itemKey = requireNotNull(stringOrNull("itemKey", "c")),
+            sourcePayloadHash = requireNotNull(stringOrNull("sourcePayloadHash", "d"))
+        )
+        else -> error("Unknown owner type $type")
+    }
+
+    private fun JsonObject.toCandidateDomain(): PersistedArtworkCandidate =
+        PersistedArtworkCandidate(
+            provider = objectOrNull("provider", "a")?.toProviderDomain(),
+            sourceRole = ArtworkSourceRole.valueOf(requireNotNull(stringOrNull("sourceRole", "b"))),
+            sourceHash = stringOrNull("sourceHash", "c"),
+            redactedSourceForTrace = stringOrNull("redactedSourceForTrace", "d"),
+            providerTemplate = objectOrNull("providerTemplate", "e")?.toTemplateDomain(),
+            priority = requireNotNull(intOrNull("priority", "f"))
+        )
+
+    private fun JsonObject.toRejectedDomainOrNull(): RejectedArtworkCandidate? = runCatching {
+        RejectedArtworkCandidate(
+            provider = objectOrNull("provider", "a")?.toProviderDomain(),
+            sourceRole = ArtworkSourceRole.valueOf(requireNotNull(stringOrNull("sourceRole", "b"))),
+            reason = requireNotNull(stringOrNull("reason", "c")),
+            sourceHash = stringOrNull("sourceHash", "d"),
+            redactedSourceForTrace = stringOrNull("redactedSourceForTrace", "e"),
+            providerTemplate = objectOrNull("providerTemplate", "f")?.toTemplateDomain(),
+            priority = requireNotNull(intOrNull("priority", "g"))
+        )
+    }.getOrNull()
+
+    private fun JsonObject.toTemplateDomain(): PersistedProviderTemplate =
+        PersistedProviderTemplate(
+            provider = requireNotNull(objectOrNull("provider", "a")).toProviderDomain(),
+            imageType = ArtworkType.valueOf(requireNotNull(stringOrNull("imageType", "b"))),
+            idType = requireNotNull(stringOrNull("idType", "c")),
+            mediaId = requireNotNull(stringOrNull("mediaId", "d")),
+            providerPathHash = stringOrNull("providerPathHash", "e"),
+            settingsHash = stringOrNull("settingsHash", "f"),
+            credentialHash = stringOrNull("credentialHash", "g"),
+            imageLanguage = requireNotNull(stringOrNull("imageLanguage", "h")),
+            policyVersion = requireNotNull(intOrNull("policyVersion", "i")),
+            pathParams = objectOrNull("pathParams", "j")
+                ?.entrySet()
+                ?.associate { (key, value) -> key to value.asString }
+                .orEmpty()
+        )
+
+    private fun JsonObject.toProviderDomain(): ArtworkProviderId = when (val type = requireNotNull(stringOrNull("type", "a"))) {
+        "runtime" -> ArtworkProviderId.RuntimeProvider(
+            IntegrationProvider.valueOf(requireNotNull(stringOrNull("integrationProvider", "b")))
+        )
+        "rail_preview" -> ArtworkProviderId.RailPreview
+        "addon_preview" -> ArtworkProviderId.AddonPreview
+        "placeholder" -> ArtworkProviderId.Placeholder
+        else -> error("Unknown provider type $type")
+    }
+
+    private fun toStoreJson(): JsonObject = JsonObject().apply {
+        addProperty("schemaVersion", SCHEMA_VERSION)
+        add("decisions", JsonArray().apply {
+            decisions.values.forEach { decision -> add(decision.toJson()) }
+        })
+        add("previewLinks", JsonArray().apply {
+            previewToCanonical.forEach { (previewKey, canonicalKey) ->
+                add(JsonObject().apply {
+                    addProperty("previewKey", previewKey.value)
+                    addProperty("canonicalKey", canonicalKey.value)
+                })
+            }
+        })
+    }
+
+    private fun ArtworkDecision.toJson(): JsonObject = JsonObject().apply {
+        addProperty("decisionKey", decisionKey.value)
+        add("owner", ownerKey.toJson())
+        addNullableProperty("canonicalContentId", canonicalContentId)
+        addProperty("imageType", imageType.name)
+        add("selectedCandidate", selectedCandidate.toJson())
+        add("rejectedCandidates", JsonArray().apply {
+            rejectedCandidates.forEach { rejected -> add(rejected.toJson()) }
+        })
+        addProperty("policyVersion", policyVersion)
+        addProperty("imageLanguage", imageLanguage)
+        addNullableProperty("settingsHash", settingsHash)
+        addNullableProperty("credentialHash", credentialHash)
+        addProperty("createdAtMs", createdAtMs)
+        addProperty("expiresAtMs", expiresAtMs)
+        addNullableProperty("staleUntilMs", staleUntilMs)
+    }
+
+    private fun ArtworkOwnerKey.toJson(): JsonObject = JsonObject().apply {
+        when (this@toJson) {
+            is ArtworkOwnerKey.CanonicalContent -> {
+                addProperty("type", "canonical")
+                addProperty("contentId", contentId)
+                add("itemKey", JsonNull.INSTANCE)
+                add("sourcePayloadHash", JsonNull.INSTANCE)
+            }
+            is ArtworkOwnerKey.PreviewItem -> {
+                addProperty("type", "preview")
+                add("contentId", JsonNull.INSTANCE)
+                addProperty("itemKey", itemKey)
+                addProperty("sourcePayloadHash", sourcePayloadHash)
+            }
+        }
+    }
+
+    private fun PersistedArtworkCandidate.toJson(): JsonObject = JsonObject().apply {
+        add("provider", provider?.toJson() ?: JsonNull.INSTANCE)
+        addProperty("sourceRole", sourceRole.name)
+        addNullableProperty("sourceHash", sourceHash)
+        addNullableProperty("redactedSourceForTrace", redactedSourceForTrace)
+        add("providerTemplate", providerTemplate?.toJson() ?: JsonNull.INSTANCE)
+        addProperty("priority", priority)
+    }
+
+    private fun RejectedArtworkCandidate.toJson(): JsonObject = JsonObject().apply {
+        add("provider", provider?.toJson() ?: JsonNull.INSTANCE)
+        addProperty("sourceRole", sourceRole.name)
+        addProperty("reason", reason)
+        addNullableProperty("sourceHash", sourceHash)
+        addNullableProperty("redactedSourceForTrace", redactedSourceForTrace)
+        add("providerTemplate", providerTemplate?.toJson() ?: JsonNull.INSTANCE)
+        addProperty("priority", priority)
+    }
+
+    private fun PersistedProviderTemplate.toJson(): JsonObject = JsonObject().apply {
+        add("provider", provider.toJson())
+        addProperty("imageType", imageType.name)
+        addProperty("idType", idType)
+        addProperty("mediaId", mediaId)
+        addNullableProperty("providerPathHash", providerPathHash)
+        addNullableProperty("settingsHash", settingsHash)
+        addNullableProperty("credentialHash", credentialHash)
+        addProperty("imageLanguage", imageLanguage)
+        addProperty("policyVersion", policyVersion)
+        add("pathParams", JsonObject().apply {
+            pathParams.forEach { (key, value) -> addProperty(key, value) }
+        })
+    }
+
+    private fun ArtworkProviderId.toJson(): JsonObject = JsonObject().apply {
+        when (this@toJson) {
+            is ArtworkProviderId.RuntimeProvider -> {
+                addProperty("type", "runtime")
+                addProperty("integrationProvider", providerId.name)
+            }
+            ArtworkProviderId.RailPreview -> {
+                addProperty("type", "rail_preview")
+                add("integrationProvider", JsonNull.INSTANCE)
+            }
+            ArtworkProviderId.AddonPreview -> {
+                addProperty("type", "addon_preview")
+                add("integrationProvider", JsonNull.INSTANCE)
+            }
+            ArtworkProviderId.Placeholder -> {
+                addProperty("type", "placeholder")
+                add("integrationProvider", JsonNull.INSTANCE)
+            }
+        }
+    }
+
+    private fun JsonObject.addNullableProperty(name: String, value: String?) {
+        if (value == null) add(name, JsonNull.INSTANCE) else addProperty(name, value)
+    }
+
+    private fun JsonObject.addNullableProperty(name: String, value: Long?) {
+        if (value == null) add(name, JsonNull.INSTANCE) else addProperty(name, value)
+    }
 
     private fun JsonElement.safeDecisionKeyHash(): String {
         val decisionKey = runCatching {
@@ -633,294 +868,6 @@ class DurableArtworkDecisionCache(
                 payload = payload
             )
         )
-    }
-
-    private data class StoreDto(
-        @SerializedName("schemaVersion")
-        val schemaVersion: Int,
-        @SerializedName("decisions")
-        val decisions: List<DecisionDto>?,
-        @SerializedName("previewLinks")
-        val previewLinks: List<PreviewLinkDto>?
-    )
-
-    private data class PreviewLinkDto(
-        @SerializedName("previewKey")
-        val previewKey: String,
-        @SerializedName("canonicalKey")
-        val canonicalKey: String
-    )
-
-    private data class DecisionDto(
-        @SerializedName("decisionKey")
-        val decisionKey: String?,
-        @SerializedName("owner")
-        val owner: OwnerDto?,
-        @SerializedName("canonicalContentId")
-        val canonicalContentId: String?,
-        @SerializedName("imageType")
-        val imageType: String?,
-        @SerializedName("selectedCandidate")
-        val selectedCandidate: CandidateDto?,
-        @SerializedName("rejectedCandidates")
-        val rejectedCandidates: List<RejectedDto>?,
-        @SerializedName("policyVersion")
-        val policyVersion: Int,
-        @SerializedName("imageLanguage")
-        val imageLanguage: String?,
-        @SerializedName("settingsHash")
-        val settingsHash: String?,
-        @SerializedName("credentialHash")
-        val credentialHash: String?,
-        @SerializedName("createdAtMs")
-        val createdAtMs: Long,
-        @SerializedName("expiresAtMs")
-        val expiresAtMs: Long,
-        @SerializedName("staleUntilMs")
-        val staleUntilMs: Long?
-    ) {
-        fun toDomainOrNull(): ArtworkDecision? = runCatching {
-            ArtworkDecision(
-                decisionKey = ArtworkDecisionKey(requireNotNull(decisionKey)),
-                ownerKey = requireNotNull(owner).toDomain(),
-                canonicalContentId = canonicalContentId,
-                imageType = ArtworkType.valueOf(requireNotNull(imageType)),
-                selectedCandidate = requireNotNull(selectedCandidate).toDomain(),
-                rejectedCandidates = rejectedCandidates.orEmpty().map { rejected -> rejected.toDomain() },
-                policyVersion = policyVersion,
-                imageLanguage = requireNotNull(imageLanguage),
-                settingsHash = settingsHash,
-                credentialHash = credentialHash,
-                createdAtMs = createdAtMs,
-                expiresAtMs = expiresAtMs,
-                staleUntilMs = staleUntilMs
-            )
-        }.getOrNull()
-
-        companion object {
-            fun fromDomain(decision: ArtworkDecision): DecisionDto =
-                DecisionDto(
-                    decisionKey = decision.decisionKey.value,
-                    owner = OwnerDto.fromDomain(decision.ownerKey),
-                    canonicalContentId = decision.canonicalContentId,
-                    imageType = decision.imageType.name,
-                    selectedCandidate = CandidateDto.fromDomain(decision.selectedCandidate),
-                    rejectedCandidates = decision.rejectedCandidates.map(RejectedDto::fromDomain),
-                    policyVersion = decision.policyVersion,
-                    imageLanguage = decision.imageLanguage,
-                    settingsHash = decision.settingsHash,
-                    credentialHash = decision.credentialHash,
-                    createdAtMs = decision.createdAtMs,
-                    expiresAtMs = decision.expiresAtMs,
-                    staleUntilMs = decision.staleUntilMs
-                )
-        }
-    }
-
-    private data class OwnerDto(
-        @SerializedName("type")
-        val type: String,
-        @SerializedName("contentId")
-        val contentId: String?,
-        @SerializedName("itemKey")
-        val itemKey: String?,
-        @SerializedName("sourcePayloadHash")
-        val sourcePayloadHash: String?
-    ) {
-        fun toDomain(): ArtworkOwnerKey = when (type) {
-            "canonical" -> ArtworkOwnerKey.CanonicalContent(requireNotNull(contentId))
-            "preview" -> ArtworkOwnerKey.PreviewItem(
-                itemKey = requireNotNull(itemKey),
-                sourcePayloadHash = requireNotNull(sourcePayloadHash)
-            )
-            else -> error("Unknown owner type $type")
-        }
-
-        companion object {
-            fun fromDomain(owner: ArtworkOwnerKey): OwnerDto = when (owner) {
-                is ArtworkOwnerKey.CanonicalContent -> OwnerDto(
-                    type = "canonical",
-                    contentId = owner.contentId,
-                    itemKey = null,
-                    sourcePayloadHash = null
-                )
-                is ArtworkOwnerKey.PreviewItem -> OwnerDto(
-                    type = "preview",
-                    contentId = null,
-                    itemKey = owner.itemKey,
-                    sourcePayloadHash = owner.sourcePayloadHash
-                )
-            }
-        }
-    }
-
-    private data class CandidateDto(
-        @SerializedName("provider")
-        val provider: ProviderDto?,
-        @SerializedName("sourceRole")
-        val sourceRole: String,
-        @SerializedName("sourceHash")
-        val sourceHash: String?,
-        @SerializedName("redactedSourceForTrace")
-        val redactedSourceForTrace: String?,
-        @SerializedName("providerTemplate")
-        val providerTemplate: TemplateDto?,
-        @SerializedName("priority")
-        val priority: Int
-    ) {
-        fun toDomain(): PersistedArtworkCandidate =
-            PersistedArtworkCandidate(
-                provider = provider?.toDomain(),
-                sourceRole = ArtworkSourceRole.valueOf(sourceRole),
-                sourceHash = sourceHash,
-                redactedSourceForTrace = redactedSourceForTrace,
-                providerTemplate = providerTemplate?.toDomain(),
-                priority = priority
-            )
-
-        companion object {
-            fun fromDomain(candidate: PersistedArtworkCandidate): CandidateDto =
-                CandidateDto(
-                    provider = candidate.provider?.let(ProviderDto::fromDomain),
-                    sourceRole = candidate.sourceRole.name,
-                    sourceHash = candidate.sourceHash,
-                    redactedSourceForTrace = candidate.redactedSourceForTrace,
-                    providerTemplate = candidate.providerTemplate?.let(TemplateDto::fromDomain),
-                    priority = candidate.priority
-                )
-        }
-    }
-
-    private data class RejectedDto(
-        @SerializedName("provider")
-        val provider: ProviderDto?,
-        @SerializedName("sourceRole")
-        val sourceRole: String,
-        @SerializedName("reason")
-        val reason: String,
-        @SerializedName("sourceHash")
-        val sourceHash: String?,
-        @SerializedName("redactedSourceForTrace")
-        val redactedSourceForTrace: String?,
-        @SerializedName("providerTemplate")
-        val providerTemplate: TemplateDto?,
-        @SerializedName("priority")
-        val priority: Int
-    ) {
-        fun toDomain(): RejectedArtworkCandidate =
-            RejectedArtworkCandidate(
-                provider = provider?.toDomain(),
-                sourceRole = ArtworkSourceRole.valueOf(sourceRole),
-                reason = reason,
-                sourceHash = sourceHash,
-                redactedSourceForTrace = redactedSourceForTrace,
-                providerTemplate = providerTemplate?.toDomain(),
-                priority = priority
-            )
-
-        companion object {
-            fun fromDomain(rejected: RejectedArtworkCandidate): RejectedDto =
-                RejectedDto(
-                    provider = rejected.provider?.let(ProviderDto::fromDomain),
-                    sourceRole = rejected.sourceRole.name,
-                    reason = rejected.reason,
-                    sourceHash = rejected.sourceHash,
-                    redactedSourceForTrace = rejected.redactedSourceForTrace,
-                    providerTemplate = rejected.providerTemplate?.let(TemplateDto::fromDomain),
-                    priority = rejected.priority
-                )
-        }
-    }
-
-    private data class TemplateDto(
-        @SerializedName("provider")
-        val provider: ProviderDto,
-        @SerializedName("imageType")
-        val imageType: String,
-        @SerializedName("idType")
-        val idType: String,
-        @SerializedName("mediaId")
-        val mediaId: String,
-        @SerializedName("providerPathHash")
-        val providerPathHash: String?,
-        @SerializedName("settingsHash")
-        val settingsHash: String?,
-        @SerializedName("credentialHash")
-        val credentialHash: String?,
-        @SerializedName("imageLanguage")
-        val imageLanguage: String,
-        @SerializedName("policyVersion")
-        val policyVersion: Int,
-        @SerializedName("pathParams")
-        val pathParams: Map<String, String>?
-    ) {
-        fun toDomain(): PersistedProviderTemplate =
-            PersistedProviderTemplate(
-                provider = provider.toDomain(),
-                imageType = ArtworkType.valueOf(imageType),
-                idType = idType,
-                mediaId = mediaId,
-                providerPathHash = providerPathHash,
-                settingsHash = settingsHash,
-                credentialHash = credentialHash,
-                imageLanguage = imageLanguage,
-                policyVersion = policyVersion,
-                pathParams = pathParams.orEmpty()
-            )
-
-        companion object {
-            fun fromDomain(template: PersistedProviderTemplate): TemplateDto =
-                TemplateDto(
-                    provider = ProviderDto.fromDomain(template.provider),
-                    imageType = template.imageType.name,
-                    idType = template.idType,
-                    mediaId = template.mediaId,
-                    providerPathHash = template.providerPathHash,
-                    settingsHash = template.settingsHash,
-                    credentialHash = template.credentialHash,
-                    imageLanguage = template.imageLanguage,
-                    policyVersion = template.policyVersion,
-                    pathParams = template.pathParams
-                )
-        }
-    }
-
-    private data class ProviderDto(
-        @SerializedName("type")
-        val type: String,
-        @SerializedName("integrationProvider")
-        val integrationProvider: String?
-    ) {
-        fun toDomain(): ArtworkProviderId = when (type) {
-            "runtime" -> ArtworkProviderId.RuntimeProvider(
-                IntegrationProvider.valueOf(requireNotNull(integrationProvider))
-            )
-            "rail_preview" -> ArtworkProviderId.RailPreview
-            "addon_preview" -> ArtworkProviderId.AddonPreview
-            "placeholder" -> ArtworkProviderId.Placeholder
-            else -> error("Unknown provider type $type")
-        }
-
-        companion object {
-            fun fromDomain(provider: ArtworkProviderId): ProviderDto = when (provider) {
-                is ArtworkProviderId.RuntimeProvider -> ProviderDto(
-                    type = "runtime",
-                    integrationProvider = provider.providerId.name
-                )
-                ArtworkProviderId.RailPreview -> ProviderDto(
-                    type = "rail_preview",
-                    integrationProvider = null
-                )
-                ArtworkProviderId.AddonPreview -> ProviderDto(
-                    type = "addon_preview",
-                    integrationProvider = null
-                )
-                ArtworkProviderId.Placeholder -> ProviderDto(
-                    type = "placeholder",
-                    integrationProvider = null
-                )
-            }
-        }
     }
 
     private fun ArtworkDecision.hasSameDurablePayload(other: ArtworkDecision): Boolean =
