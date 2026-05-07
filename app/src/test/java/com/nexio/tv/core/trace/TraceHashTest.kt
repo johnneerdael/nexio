@@ -19,4 +19,15 @@ class TraceHashTest {
     fun `hash is exactly 12 chars`() {
         assertEquals(12, TraceHash.of("salt", "anything").length)
     }
+
+    @Test
+    fun `metadata event hashes are scoped by active trace session`() {
+        val firstSession = TraceMetadataEvents(NoopRuntimeTraceSink) { "trace-session-a" }
+        val secondSession = TraceMetadataEvents(NoopRuntimeTraceSink) { "trace-session-b" }
+
+        assertNotEquals(
+            firstSession.hashForActiveSession("home-rating-artwork", "tmdb:94997"),
+            secondSession.hashForActiveSession("home-rating-artwork", "tmdb:94997")
+        )
+    }
 }

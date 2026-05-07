@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -13,7 +14,6 @@ import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
-import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -141,7 +141,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 ?: bundle?.canonical?.tvdbSeriesId
             traceEvents.emitHomeRatingAndArtworkSurface(
                 surface = "HOME",
-                itemKeyHash = TraceHash.of("home-rating-artwork", itemKey),
+                itemKeyHash = traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, itemKey),
                 firstPaintRatingValue = sanitizedPreviewRating,
                 firstPaintRatingAccepted = acceptedPreviewRating,
                 firstPaintRatingRejectReason = if (previewRating != null && !acceptedPreviewRating) {
@@ -151,14 +151,16 @@ class HomeHydrationCoordinator @Inject constructor(
                 },
                 firstPaintLogoPresent = firstPaintMetadata.displayLogo != null,
                 firstPaintTmdbIdHash = item.firstPaintStableIds.tmdbOrPreviewId(item.id)
-                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
                 firstPaintTvdbIdHash = item.firstPaintStableIds.tvdb
-                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
                 firstPaintImdbIdHash = item.firstPaintStableIds.imdb
-                    ?.let { TraceHash.of("home-rating-artwork", it) },
+                    ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
                 hydrationStarted = true,
                 routeProvider = result.route?.provider?.name,
-                tvdbIdHash = hydratedTvdbId?.let { TraceHash.of("home-rating-artwork", it) },
+                tvdbIdHash = hydratedTvdbId?.let {
+                    traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it)
+                },
                 overlayApplied = overlayAccepted,
                 hydratedRatingValue = sanitizedHydratedRating,
                 hydratedRatingSource = overlay.fields.ratingSource?.name.takeIf { sanitizedHydratedRating != null },
@@ -202,7 +204,9 @@ class HomeHydrationCoordinator @Inject constructor(
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
-        val fields = displayMetadata.mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
+        val fields = displayMetadata
+            .sanitizeHydratedTitleRating()
+            .mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -233,21 +237,36 @@ class HomeHydrationCoordinator @Inject constructor(
     private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
         firstPaintArtwork: ArtworkBundle?
     ): HomeDisplayMetadata {
-        if (firstPaintArtwork == null) return this
         val hydratedArtwork = artwork
-        val merged = ArtworkBundle(
-            poster = hydratedArtwork?.poster ?: firstPaintArtwork.poster.takeIf { displayPoster == null },
-            backdrop = hydratedArtwork?.backdrop ?: firstPaintArtwork.backdrop.takeIf { displayBackdrop == null },
-            logo = hydratedArtwork?.logo ?: firstPaintArtwork.logo.takeIf { displayLogo == null },
-            thumbnail = hydratedArtwork?.thumbnail ?: firstPaintArtwork.thumbnail.takeIf { displayThumbnail == null }
-        )
-        val mergedOrNull = merged.takeUnless {
+        val merged = firstPaintArtwork?.let { fallback ->
+            ArtworkBundle(
+                poster = hydratedArtwork?.poster ?: fallback.poster.takeIf { displayPoster == null },
+                backdrop = hydratedArtwork?.backdrop ?: fallback.backdrop.takeIf { displayBackdrop == null },
+                logo = hydratedArtwork?.logo ?: fallback.logo.takeIf { displayLogo == null },
+                thumbnail = hydratedArtwork?.thumbnail ?: fallback.thumbnail.takeIf { displayThumbnail == null }
+            )
+        } ?: hydratedArtwork
+        val mergedOrNull = merged?.takeUnless {
             it.poster == null &&
                 it.backdrop == null &&
                 it.logo == null &&
                 it.thumbnail == null
         }
-        return copy(artwork = mergedOrNull)
+        return copy(
+            poster = mergedOrNull?.poster.toLegacyArtworkString() ?: poster,
+            backdrop = mergedOrNull?.backdrop.toLegacyArtworkString() ?: backdrop,
+            logo = mergedOrNull?.logo.toLegacyArtworkString() ?: logo,
+            thumbnail = mergedOrNull?.thumbnail.toLegacyArtworkString() ?: thumbnail,
+            artwork = mergedOrNull
+        )
+    }
+
+    private fun HomeDisplayMetadata.sanitizeHydratedTitleRating(): HomeDisplayMetadata {
+        val cleanRating = RatingValueValidator.sanitizeTitleRating(imdbRating)
+        return copy(
+            imdbRating = cleanRating,
+            ratingSource = ratingSource.takeIf { cleanRating != null }
+        )
     }
 
     private fun failed(
@@ -480,6 +499,7 @@ class HomeHydrationCoordinator @Inject constructor(
 
     private companion object {
         const val HOME_OVERLAY_POLICY_VERSION = 1
+        const val HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE = "home-rating-artwork"
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L
         const val OVERLAY_EXPIRES_MS = 7L * 24L * 60L * 60L * 1000L
