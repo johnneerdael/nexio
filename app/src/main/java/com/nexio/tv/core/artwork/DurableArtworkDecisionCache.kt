@@ -109,6 +109,7 @@ class DurableArtworkDecisionCache(
             return@synchronized
         }
         decisions[decision.decisionKey] = decision
+        refreshLoadedStateAfterMutationLocked()
         traceArtwork(
             eventType = "artwork.decision_put",
             payload = mapOf(
@@ -130,6 +131,7 @@ class DurableArtworkDecisionCache(
         ensureLoadedLocked()
         decisions.remove(key)
         removeLinksForLocked(setOf(key))
+        refreshLoadedStateAfterMutationLocked()
         persistNowLocked()
     }
 
@@ -139,6 +141,7 @@ class DurableArtworkDecisionCache(
     ) = synchronized(lock) {
         ensureLoadedLocked()
         previewToCanonical[previewKey] = canonicalKey
+        refreshLoadedStateAfterMutationLocked()
         persistNowLocked()
     }
 
@@ -293,7 +296,11 @@ class DurableArtworkDecisionCache(
                     previewToCanonical[ArtworkDecisionKey(link.previewKey)] =
                         ArtworkDecisionKey(link.canonicalKey)
                 }.onFailure {
-                    // Broken preview links are non-authoritative; decisions remain usable.
+                    droppedDecisionCount += 1
+                    quarantinedDecisionCount += 1
+                    if (firstQuarantinedDecisionKeyHash == null) {
+                        firstQuarantinedDecisionKeyHash = linkElement.safePreviewLinkKeyHash()
+                    }
                 }
             }
             val loadState =
@@ -343,6 +350,7 @@ class DurableArtworkDecisionCache(
 
         deletedKeys.forEach(decisions::remove)
         removeLinksForLocked(deletedKeys)
+        refreshLoadedStateAfterMutationLocked()
         persistNowLocked()
     }
 
@@ -353,6 +361,22 @@ class DurableArtworkDecisionCache(
             if (previewKey in keys || canonicalKey in keys) {
                 links.remove()
             }
+        }
+    }
+
+    private fun refreshLoadedStateAfterMutationLocked() {
+        currentLoadState = when (val state = currentLoadState) {
+            is ArtworkDecisionStoreLoadState.LoadedAuthoritative ->
+                loadedAuthoritativeState(
+                    droppedDecisionCount = state.droppedDecisionCount,
+                    quarantinedDecisionCount = state.quarantinedDecisionCount
+                )
+            is ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative ->
+                loadedPartialNonAuthoritativeState(
+                    droppedDecisionCount = state.droppedDecisionCount,
+                    quarantinedDecisionCount = state.quarantinedDecisionCount
+                )
+            else -> state
         }
     }
 
@@ -519,6 +543,13 @@ class DurableArtworkDecisionCache(
             asJsonObject.get("decisionKey")?.takeIf { element -> element.isJsonPrimitive }?.asString
         }.getOrNull()
         return artworkDecisionShortSha256(decisionKey ?: toString())
+    }
+
+    private fun JsonElement.safePreviewLinkKeyHash(): String {
+        val previewKey = runCatching {
+            asJsonObject.get("previewKey")?.takeIf { element -> element.isJsonPrimitive }?.asString
+        }.getOrNull()
+        return artworkDecisionShortSha256(previewKey ?: toString())
     }
 
     private fun loadedAuthoritativeState(
