@@ -6,6 +6,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
+import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.integration.RailKeyFactory
@@ -22,6 +24,7 @@ import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -380,7 +383,18 @@ class HomeCatalogSnapshotStore private constructor(
 
     private fun MetaPreview.sanitizePremiumArtworkForSnapshot(scope: String): MetaPreview {
         val posterRef = poster?.trim().orEmpty()
-        val reason = clearReasonForPosterRef(posterRef)
+        val posterKind = posterKind(posterRef)
+        val decisionLookup = if (isDecisionRef(posterRef)) {
+            lookupDurableDecision(
+                ref = posterRef,
+                scope = scope,
+                posterKind = posterKind,
+                posterProviderTag = posterProviderTag
+            )
+        } else {
+            null
+        }
+        val reason = clearReasonForPosterRef(posterRef, decisionLookup?.decisionFound)
         if (posterRef.isBlank() || reason == null) {
             return this
         }
@@ -389,19 +403,19 @@ class HomeCatalogSnapshotStore private constructor(
             payload = mapOf(
                 "scope" to scope,
                 "reason" to reason,
-                "posterKind" to posterKind(posterRef),
+                "posterKind" to posterKind,
                 "posterProviderTag" to posterProviderTag,
-                "decisionFound" to if (isDecisionRef(posterRef)) hasDurableDecision(posterRef) else null
+                "decisionFound" to decisionLookup?.decisionFound
             )
         )
         return copy(poster = null, posterProviderTag = null)
     }
 
-    private fun clearReasonForPosterRef(ref: String): String? {
+    private fun clearReasonForPosterRef(ref: String, decisionFound: Boolean?): String? {
         return when {
             isRawPremiumProviderUrl(ref) -> "raw_premium_url"
             isLegacyIntegrationPosterRef(ref) -> "legacy_integration_ref"
-            isMissingDecisionRef(ref) -> "missing_decision"
+            isMissingDecisionRef(ref, decisionFound) -> "missing_decision"
             else -> null
         }
     }
@@ -416,8 +430,8 @@ class HomeCatalogSnapshotStore private constructor(
         return ref.startsWith(LEGACY_INTEGRATION_POSTER_PREFIX, ignoreCase = true)
     }
 
-    private fun isMissingDecisionRef(ref: String): Boolean {
-        return isDecisionRef(ref) && !hasDurableDecision(ref)
+    private fun isMissingDecisionRef(ref: String, decisionFound: Boolean?): Boolean {
+        return isDecisionRef(ref) && decisionFound != true
     }
 
     private fun isDecisionRef(ref: String): Boolean {
@@ -434,15 +448,95 @@ class HomeCatalogSnapshotStore private constructor(
         }
     }
 
-    private fun hasDurableDecision(ref: String): Boolean {
+    private fun lookupDurableDecision(
+        ref: String,
+        scope: String,
+        posterKind: String,
+        posterProviderTag: String?
+    ): DecisionLookupProof {
         val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
             .takeIf { it.isNotBlank() }
-            ?: return false
+            ?: return DecisionLookupProof(
+                decisionFound = false,
+                decisionKeyHash = null,
+                diagnostics = cacheDiagnostics()
+            ).also { proof ->
+                traceDecisionLookup(
+                    scope = scope,
+                    posterKind = posterKind,
+                    posterProviderTag = posterProviderTag,
+                    proof = proof,
+                    lookupErrorClass = "BlankDecisionKey"
+                )
+            }
 
-        return runCatching {
+        var lookupErrorClass: String? = null
+        val decisionFound = runCatching {
             artworkDecisionCache.get(ArtworkDecisionKey(keyValue)) != null
+        }.onFailure { error ->
+            lookupErrorClass = error.javaClass.simpleName
         }.getOrDefault(false)
+
+        return DecisionLookupProof(
+            decisionFound = decisionFound,
+            decisionKeyHash = keyValue.sha256Short(),
+            diagnostics = cacheDiagnostics()
+        ).also { proof ->
+            traceDecisionLookup(
+                scope = scope,
+                posterKind = posterKind,
+                posterProviderTag = posterProviderTag,
+                proof = proof,
+                lookupErrorClass = lookupErrorClass
+            )
+        }
     }
+
+    private fun traceDecisionLookup(
+        scope: String,
+        posterKind: String,
+        posterProviderTag: String?,
+        proof: DecisionLookupProof,
+        lookupErrorClass: String?
+    ) {
+        val diagnostics = proof.diagnostics
+        traceSnapshot(
+            eventType = "home.snapshot_decision_lookup",
+            payload = mapOf(
+                "scope" to scope,
+                "decisionFound" to proof.decisionFound,
+                "decisionKeyHash" to proof.decisionKeyHash,
+                "posterKind" to posterKind,
+                "posterProviderTag" to posterProviderTag,
+                "cacheLoaded" to diagnostics?.loaded,
+                "cacheDecisionCount" to diagnostics?.decisionCount,
+                "cacheLinkCount" to diagnostics?.linkCount,
+                "storeFilePresent" to diagnostics?.storeFilePresent,
+                "storeFileReadable" to diagnostics?.storeFileReadable,
+                "storeFileBytes" to diagnostics?.storeFileBytes,
+                "lastLoadSuccess" to diagnostics?.lastLoadSuccess,
+                "lastLoadReason" to diagnostics?.lastLoadReason,
+                "lastLoadErrorClass" to diagnostics?.lastLoadErrorClass,
+                "droppedDecisionCount" to diagnostics?.droppedDecisionCount,
+                "lookupErrorClass" to lookupErrorClass
+            )
+        )
+    }
+
+    private fun cacheDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics? =
+        (artworkDecisionCache as? ArtworkDecisionCacheDiagnostics)?.snapshotDiagnostics()
+
+    private fun String.sha256Short(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { byte -> "%02x".format(byte) }.take(16)
+    }
+
+    private data class DecisionLookupProof(
+        val decisionFound: Boolean,
+        val decisionKeyHash: String?,
+        val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics?
+    )
 
     private fun traceSnapshot(
         eventType: String,

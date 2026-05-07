@@ -258,6 +258,53 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable cache exposes load diagnostics after lookup`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+        first.put(decision)
+        val persistedBytes = file.length()
+
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+        assertEquals(decision.decisionKey, restarted.get(decision.decisionKey)?.decisionKey)
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals(true, diagnostics.loaded)
+        assertEquals(true, diagnostics.lastLoadSuccess)
+        assertEquals(null, diagnostics.lastLoadReason)
+        assertEquals(null, diagnostics.lastLoadErrorClass)
+        assertEquals(true, diagnostics.storeFilePresent)
+        assertEquals(true, diagnostics.storeFileReadable)
+        assertEquals(persistedBytes, diagnostics.storeFileBytes)
+        assertEquals(1, diagnostics.decisionCount)
+        assertEquals(0, diagnostics.linkCount)
+        assertEquals(0, diagnostics.droppedDecisionCount)
+    }
+
+    @Test
+    fun `durable cache load trace includes file stats`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+        first.put(decision)
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        restarted.get(decision.decisionKey)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(true, payload["success"])
+        assertEquals(true, payload["filePresent"])
+        assertEquals(true, payload["fileReadable"])
+        assertEquals(file.length(), payload["fileBytes"])
+        assertEquals(1, payload["decisionCount"])
+    }
+
+    @Test
     fun `durable cache emits put and write trace events`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")

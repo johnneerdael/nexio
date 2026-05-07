@@ -115,6 +115,7 @@ class LogcatTraceChannelTest {
     fun `home snapshot events map to META_ROUTE`() {
         assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_read"))
         assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_write"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_decision_lookup"))
         assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_sanitize_artwork"))
     }
 

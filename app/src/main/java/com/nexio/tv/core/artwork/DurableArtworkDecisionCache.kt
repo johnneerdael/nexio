@@ -16,12 +16,16 @@ class DurableArtworkDecisionCache(
     private val file: File,
     private val gson: Gson,
     private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
-) : ArtworkDecisionCache {
+) : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
     private val lock = Any()
     private var loaded = false
     private val decisions = linkedMapOf<ArtworkDecisionKey, ArtworkDecision>()
     private val previewToCanonical = linkedMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
     private val traceSequence = AtomicLong(0L)
+    private var lastLoadSuccess: Boolean? = null
+    private var lastLoadReason: String? = null
+    private var lastLoadErrorClass: String? = null
+    private var lastDroppedDecisionCount: Int? = null
 
     override fun get(key: ArtworkDecisionKey): ArtworkDecision? = synchronized(lock) {
         ensureLoadedLocked()
@@ -94,6 +98,22 @@ class DurableArtworkDecisionCache(
         invalidateMatchingLocked { decision ->
             decision.settingsHash != null || decision.credentialHash != null
         }
+    }
+
+    override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics = synchronized(lock) {
+        val fileStats = currentFileStats()
+        ArtworkDecisionCacheSnapshotDiagnostics(
+            loaded = loaded,
+            decisionCount = decisions.size,
+            linkCount = previewToCanonical.size,
+            storeFilePresent = fileStats.present,
+            storeFileReadable = fileStats.readable,
+            storeFileBytes = fileStats.bytes,
+            lastLoadSuccess = lastLoadSuccess,
+            lastLoadReason = lastLoadReason,
+            lastLoadErrorClass = lastLoadErrorClass,
+            droppedDecisionCount = lastDroppedDecisionCount
+        )
     }
 
     private fun ensureLoadedLocked() {
@@ -257,11 +277,18 @@ class DurableArtworkDecisionCache(
         schemaVersion: Int? = null,
         errorClass: String? = null
     ) {
+        val fileStats = currentFileStats()
+        lastLoadSuccess = success
+        lastLoadReason = reason
+        lastLoadErrorClass = errorClass
+        lastDroppedDecisionCount = droppedDecisionCount
         traceArtwork(
             eventType = "artwork.decision_store_load",
             payload = mapOf(
                 "success" to success,
                 "filePresent" to filePresent,
+                "fileReadable" to fileStats.readable,
+                "fileBytes" to fileStats.bytes,
                 "decisionCount" to decisionCount,
                 "linkCount" to linkCount,
                 "droppedDecisionCount" to droppedDecisionCount,
@@ -271,6 +298,21 @@ class DurableArtworkDecisionCache(
             )
         )
     }
+
+    private fun currentFileStats(): FileStats {
+        val present = file.exists()
+        return FileStats(
+            present = present,
+            readable = present && file.canRead(),
+            bytes = if (present && file.isFile) file.length() else null
+        )
+    }
+
+    private data class FileStats(
+        val present: Boolean,
+        val readable: Boolean,
+        val bytes: Long?
+    )
 
     private fun traceDecisionStoreWrite(
         success: Boolean,
