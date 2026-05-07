@@ -58,6 +58,7 @@ import coil.size.Dimension
 import coil.size.Size
 import com.nexio.tv.R
 import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import kotlinx.coroutines.coroutineScope
@@ -436,7 +437,7 @@ internal fun buildScreensaverPrimaryMetaSegments(slide: IdleScreensaverSlide): L
             add(
                 ScreensaverPrimaryMetaSegment.Rating(
                     kind = ScreensaverPrimaryMetaSegment.Rating.Kind.IMDB,
-                    text = String.format("%.1f", rating)
+                    text = RatingDisplayFormatter.formatTitleRating(rating)
                 )
             )
         }
@@ -491,9 +492,8 @@ private fun ScreensaverMetaDivider() {
     )
 }
 
-private fun formatScreensaverAggregateRating(rating: Double): String {
-    return if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
-}
+private fun formatScreensaverAggregateRating(rating: Double): String =
+    RatingDisplayFormatter.formatPercentRating(rating)
 
 private class ScreensaverBackgroundLayer(
     slide: IdleScreensaverSlide,

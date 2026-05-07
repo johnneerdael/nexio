@@ -24,6 +24,7 @@ import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
 import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.ui.theme.NexioColors
+import java.util.Locale
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -456,10 +457,10 @@ internal fun resolveDiskSpoolProbeStatus(
 
 private fun formatStorageSize(bytes: Long): String {
     val gb = bytes / (1024.0 * 1024.0 * 1024.0)
-    if (gb >= 10.0) return String.format("%.0f GB", gb)
-    if (gb >= 1.0) return String.format("%.1f GB", gb)
+    if (gb >= 10.0) return String.format(Locale.US, "%.0f GB", gb)
+    if (gb >= 1.0) return String.format(Locale.US, "%.1f GB", gb)
     val mb = bytes / (1024.0 * 1024.0)
-    return String.format("%.0f MB", mb)
+    return String.format(Locale.US, "%.0f MB", mb)
 }
 
 private fun mbpsToMBpsInt(mbps: Double): Int {

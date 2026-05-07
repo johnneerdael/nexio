@@ -56,6 +56,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.NextToWatch
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
@@ -726,7 +727,7 @@ private fun MetaInfoRow(
                             modifier = Modifier.size(30.dp),
                         contentScale = ContentScale.Fit
                     )
-                    val ratingText = remember(rating) { String.format("%.1f", rating) }
+                    val ratingText = remember(rating) { RatingDisplayFormatter.formatTitleRating(rating) }
                     Text(
                         text = ratingText,
                         style = MaterialTheme.typography.labelLarge,
@@ -840,10 +841,8 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
 
 private fun formatMDBListRating(provider: String, rating: Double): String {
     return when (provider) {
-        "imdb", "tmdb", "letterboxd" -> String.format("%.1f", rating)
-        else -> {
-            if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
-        }
+        "imdb", "tmdb", "letterboxd" -> RatingDisplayFormatter.formatTitleRating(rating)
+        else -> RatingDisplayFormatter.formatPercentRating(rating)
     }
 }
 
