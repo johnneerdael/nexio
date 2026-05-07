@@ -48,6 +48,7 @@ import androidx.tv.material3.Text
 import com.nexio.tv.R
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -299,7 +300,7 @@ private fun ReviewRatingBadge(rating: Double) {
             .padding(horizontal = 10.dp, vertical = 3.dp)
     ) {
         Text(
-            text = String.format("%.1f/10", rating),
+            text = "${RatingDisplayFormatter.formatTitleRating(rating)}/10",
             style = MaterialTheme.typography.labelSmall,
             color = contentColor
         )

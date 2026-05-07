@@ -36,6 +36,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -89,7 +90,7 @@ fun EpisodeRatingsSection(
             val season = episode.season ?: return@mapNotNull null
             val episodeNumber = episode.episode ?: return@mapNotNull null
             val rating = ratings[season to episodeNumber]
-            val ratingText = rating?.let { String.format("%.1f", it) } ?: "—"
+            val ratingText = rating?.let { RatingDisplayFormatter.formatTitleRating(it) } ?: "—"
             val chipColor = rating?.let(::ratingColor) ?: defaultChipColor
             val chipTextColor = rating?.let(::ratingTextColor) ?: defaultChipTextColor
             EpisodeRatingChipUi(

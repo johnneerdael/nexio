@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository.benchmark
 
+import java.util.Locale
+
 object BenchmarkAwareScoringReportRenderer {
 
     fun renderSummaryMarkdown(summary: BenchmarkAwareEvaluationSummary): String {
@@ -81,7 +83,7 @@ object BenchmarkAwareScoringReportRenderer {
         }
     }
 
-    private fun formatPercent(value: Double): String = "%.1f%%".format(value * 100.0)
+    private fun formatPercent(value: Double): String = String.format(Locale.US, "%.1f%%", value * 100.0)
 
     private fun yesNo(value: Boolean): String = if (value) "yes" else "no"
 }
