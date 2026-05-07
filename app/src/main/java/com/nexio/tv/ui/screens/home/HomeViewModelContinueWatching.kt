@@ -15,6 +15,7 @@ import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
+import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.TrackingScrobbleItem
@@ -30,10 +31,17 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -143,102 +151,215 @@ internal suspend fun <T, R> mapContinueWatchingEnrichmentWithLimit(
     }.awaitAll()
 }
 
+internal sealed interface ProfileScopedEmission<out T> {
+    val session: HomeProfileSession
+
+    data class Loading(
+        override val session: HomeProfileSession
+    ) : ProfileScopedEmission<Nothing>
+
+    data class Success<T>(
+        override val session: HomeProfileSession,
+        val value: T
+    ) : ProfileScopedEmission<T>
+
+    data class Error(
+        override val session: HomeProfileSession,
+        val throwable: Throwable
+    ) : ProfileScopedEmission<Nothing>
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun continueWatchingProfileScopedEmissions(
+    activeHomeProfileSession: Flow<HomeProfileSession>,
+    observeProfileSnapshot: (Int) -> Flow<ContinueWatchingSnapshot>
+): Flow<ProfileScopedEmission<ContinueWatchingSnapshot>> {
+    return activeHomeProfileSession
+        .distinctUntilChangedBy { it.profileSessionKey }
+        .flatMapLatest { session ->
+            observeProfileSnapshot(session.profileId)
+                .map<ContinueWatchingSnapshot, ProfileScopedEmission<ContinueWatchingSnapshot>> { snapshot ->
+                    ProfileScopedEmission.Success(session = session, value = snapshot)
+                }
+                .onStart {
+                    emit(ProfileScopedEmission.Loading(session))
+                }
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    emit(ProfileScopedEmission.Error(session = session, throwable = error))
+                }
+        }
+}
+
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
-        // F-G-01 path B: profile-scope the subscription at the typed API boundary.
-        // observeProfileSnapshot(profileId) filters upstream so only snapshots for the
-        // active profile reach this collector — no manual .filter or unwrapping needed.
-        continueWatchingSnapshotService.observeProfileSnapshot(activeHomeProfileSession.profileId)
-            .collectLatest { snapshot ->
-            val capturedGeneration = homeProfileGeneration
-            val timeline = buildMixedContinueWatchingTimeline(
-                resumeItems = snapshot.resumeItems,
-                nextUpItems = snapshot.nextUpItems,
-                resumeRef = ::resumeRefForContinueWatching,
-                nextUpRef = ::nextUpRefForContinueWatching
-            )
-            val nowMs = System.currentTimeMillis()
-            val rawItems = timeline.map { row ->
-                when (row) {
-                    is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
-                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
-                }
-            }.filter { item ->
-                item !is ContinueWatchingItem.NextUp || item.info.hasAired
+        continueWatchingProfileScopedEmissions(
+            activeHomeProfileSession = activeHomeProfileSession,
+            observeProfileSnapshot = { profileId ->
+                continueWatchingSnapshotService.observeProfileSnapshot(profileId)
             }
-            // Apply anime projection dedup: kitsu:X S3E1 and tvdb:Y S3E1 that map to the same
-            // projected coordinate collapse to one entry, eliminating cross-source duplicates.
-            val projectedKeys = try {
-                resolveProjectedContinueWatchingIdentityKeys(rawItems, animeSeasonProjectionResolver)
-            } catch (_: Exception) {
-                emptyMap<Int, String>()
-            }
-            val items = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
-                val idx = rawItems.indexOfFirst { it === item }
-                projectedKeys[idx] ?: item.contentId()
-            }
-            val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
-                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
-            }.filter { it.info.hasAired }
-
-            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
-                Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish generation=$capturedGeneration")
+        ).collectLatest { emission ->
+            val session = emission.session
+            if (!isCurrentHomeSession(session)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale continue watching emission session=${session.sessionId}")
                 return@collectLatest
             }
-
-            _uiState.update { state ->
-                if (
-                    state.continueWatchingItems == items &&
-                    state.traktUpNextItems == traktUpNextItems &&
-                    state.initialContinueWatchingResolved
-                ) {
-                    state
-                } else {
-                    state.copy(
-                        continueWatchingItems = items,
-                        traktUpNextItems = traktUpNextItems,
-                        initialContinueWatchingResolved = true
-                    )
-                }
-            }
-
-            val settings = currentTmdbSettings
-            if (
-                shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings) &&
-                isNonPlaybackHomeWorkAllowed()
-            ) {
-                continueWatchingEnrichmentJob?.cancel()
-                continueWatchingEnrichmentJob = viewModelScope.launch {
-                    try {
-                        if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                        val enrichedItems = enrichContinueWatchingItems(items, settings)
-                        if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                        val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
-                        if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
-                            Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment generation=$capturedGeneration")
-                            return@launch
-                        }
-                        _uiState.update { state ->
-                            if (
-                                state.continueWatchingItems == enrichedItems &&
-                                state.traktUpNextItems == enrichedTraktItems &&
-                                state.initialContinueWatchingResolved
-                            ) {
-                                state
-                            } else {
-                                state.copy(
-                                    continueWatchingItems = enrichedItems,
-                                    traktUpNextItems = enrichedTraktItems,
-                                    initialContinueWatchingResolved = true
-                                )
-                            }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
+            when (emission) {
+                is ProfileScopedEmission.Loading -> {
+                    continueWatchingEnrichmentJob?.cancel()
+                    _uiState.update { state ->
+                        state.copy(
+                            continueWatchingItems = emptyList(),
+                            traktUpNextItems = emptyList(),
+                            homeReadiness = HomeInitialReadiness
+                                .started(sessionId = session.sessionId, profileId = session.profileId)
+                                .markLoading(HomeInitialGate.CONTINUE_WATCHING),
+                            initialContinueWatchingResolved = false
+                        )
                     }
                 }
+                is ProfileScopedEmission.Error -> {
+                    continueWatchingEnrichmentJob?.cancel()
+                    Log.w(
+                        HomeViewModel.TAG,
+                        "Continue watching snapshot failed for session=${session.sessionId}: ${emission.throwable.message}"
+                    )
+                    _uiState.update { state ->
+                        state.copy(
+                            continueWatchingItems = emptyList(),
+                            traktUpNextItems = emptyList(),
+                            homeReadiness = state.homeReadiness
+                                .forHomeSession(session)
+                                .markFailedNonBlocking(HomeInitialGate.CONTINUE_WATCHING, "snapshot_error"),
+                            initialContinueWatchingResolved = true
+                        )
+                    }
+                }
+                is ProfileScopedEmission.Success -> {
+                    applyContinueWatchingSnapshotForSession(session, emission.value)
+                }
+            }
+        }
+    }
+}
+
+private fun HomeInitialReadiness.forHomeSession(session: HomeProfileSession): HomeInitialReadiness {
+    return if (sessionId == session.sessionId && profileId == session.profileId) {
+        this
+    } else {
+        HomeInitialReadiness.started(sessionId = session.sessionId, profileId = session.profileId)
+    }
+}
+
+private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
+    session: HomeProfileSession,
+    snapshot: ContinueWatchingSnapshot
+) {
+    if (!isCurrentHomeSession(session)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale continue watching snapshot session=${session.sessionId}")
+        return
+    }
+    val timeline = buildMixedContinueWatchingTimeline(
+        resumeItems = snapshot.resumeItems,
+        nextUpItems = snapshot.nextUpItems,
+        resumeRef = ::resumeRefForContinueWatching,
+        nextUpRef = ::nextUpRefForContinueWatching
+    )
+    val nowMs = System.currentTimeMillis()
+    val rawItems = timeline.map { row ->
+        when (row) {
+            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
+            is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+        }
+    }.filter { item ->
+        item !is ContinueWatchingItem.NextUp || item.info.hasAired
+    }
+    // Apply anime projection dedup: kitsu:X S3E1 and tvdb:Y S3E1 that map to the same
+    // projected coordinate collapse to one entry, eliminating cross-source duplicates.
+    val projectedKeys = try {
+        resolveProjectedContinueWatchingIdentityKeys(rawItems, animeSeasonProjectionResolver)
+    } catch (_: Exception) {
+        emptyMap<Int, String>()
+    }
+    val items = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
+        val idx = rawItems.indexOfFirst { it === item }
+        projectedKeys[idx] ?: item.contentId()
+    }
+    val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
+        entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+    }.filter { it.info.hasAired }
+
+    if (!isCurrentHomeSession(session)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish session=${session.sessionId}")
+        return
+    }
+
+    val readinessReason = if (items.isEmpty() && traktUpNextItems.isEmpty()) {
+        "first_snapshot_empty"
+    } else {
+        "first_snapshot"
+    }
+    _uiState.update { state ->
+        if (
+            state.continueWatchingItems == items &&
+            state.traktUpNextItems == traktUpNextItems &&
+            state.initialContinueWatchingResolved &&
+            state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
+        ) {
+            state
+        } else {
+            state.copy(
+                continueWatchingItems = items,
+                traktUpNextItems = traktUpNextItems,
+                homeReadiness = state.homeReadiness
+                    .forHomeSession(session)
+                    .markResolved(HomeInitialGate.CONTINUE_WATCHING, readinessReason),
+                initialContinueWatchingResolved = true
+            )
+        }
+    }
+
+    val settings = currentTmdbSettings
+    if (
+        shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings) &&
+        isNonPlaybackHomeWorkAllowed()
+    ) {
+        continueWatchingEnrichmentJob?.cancel()
+        continueWatchingEnrichmentJob = viewModelScope.launch {
+            try {
+                if (!isCurrentHomeSession(session)) return@launch
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                val enrichedItems = enrichContinueWatchingItems(items, settings)
+                if (!isCurrentHomeSession(session)) return@launch
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                if (!isCurrentHomeSession(session)) {
+                    Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment session=${session.sessionId}")
+                    return@launch
+                }
+                _uiState.update { state ->
+                    if (
+                        state.continueWatchingItems == enrichedItems &&
+                        state.traktUpNextItems == enrichedTraktItems &&
+                        state.initialContinueWatchingResolved &&
+                        state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
+                    ) {
+                        state
+                    } else {
+                        state.copy(
+                            continueWatchingItems = enrichedItems,
+                            traktUpNextItems = enrichedTraktItems,
+                            homeReadiness = state.homeReadiness
+                                .forHomeSession(session)
+                                .markResolved(HomeInitialGate.CONTINUE_WATCHING, readinessReason),
+                            initialContinueWatchingResolved = true
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
             }
         }
     }
