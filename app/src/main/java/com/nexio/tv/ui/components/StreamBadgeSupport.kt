@@ -1,8 +1,18 @@
 package com.nexio.tv.ui.components
 
+import androidx.annotation.DrawableRes
+import com.nexio.tv.R
 import com.nexio.tv.core.stream.ParsedStreamInfo
 import com.nexio.tv.core.stream.StreamTransportKind
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
+
+@DrawableRes
+fun providerIconFor(stream: Stream): Int? = when (stream.addonParserPreset) {
+    AddonParserPreset.NEXIO_TORII -> R.drawable.ic_addon_nexiotorii
+    AddonParserPreset.NEXIO_NAGARE -> R.drawable.ic_addon_nexionagare
+    else -> null
+}
 
 internal enum class StreamBadgeKind {
     CACHED,
