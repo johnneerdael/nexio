@@ -158,7 +158,9 @@ fun HomeScreen(
     val activity = context as? android.app.Activity
     val hasRenderableContent = hasRenderableHomeContent(uiState)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
-    var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
+    var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
+        mutableStateOf(false)
+    }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
@@ -184,7 +186,7 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(shouldArmStartupTimeout) {
+    LaunchedEffect(uiState.homeReadiness.sessionId, shouldArmStartupTimeout) {
         if (!shouldArmStartupTimeout) {
             startupContentGateTimedOut = false
             return@LaunchedEffect

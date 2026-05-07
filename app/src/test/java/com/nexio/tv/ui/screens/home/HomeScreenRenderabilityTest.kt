@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.PosterShape
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class HomeScreenRenderabilityTest {
 
@@ -105,6 +106,14 @@ class HomeScreenRenderabilityTest {
 
         assertFalse(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
         assertTrue(shouldShowHomeEmptyState(state, startupContentGateTimedOut = false))
+    }
+
+    @Test
+    fun `startup timeout state is scoped to home readiness session`() {
+        val source = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt").readText()
+
+        assertTrue(source.contains("rememberSaveable(uiState.homeReadiness.sessionId)"))
+        assertTrue(source.contains("LaunchedEffect(uiState.homeReadiness.sessionId, shouldArmStartupTimeout)"))
     }
 
     private fun loadingRow(): CatalogRow {
