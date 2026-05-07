@@ -246,6 +246,7 @@ class HomeViewModelFocusHydrationTest {
             currentLanguageTagProvider = { currentLanguage },
             traceEvents = TraceMetadataEvents(traceSink) { "home-trace" }
         )
+        advanceUntilIdle()
         viewModel.homeProfileGeneration = 7L
 
         viewModel.hydrateVisibleHomeItemsWithCoordinator(
