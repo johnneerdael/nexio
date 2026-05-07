@@ -84,6 +84,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -543,9 +544,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             activeHomeProfileSession
                 .drop(1)
-                .distinctUntilChangedBy { it.sessionId }
-                .collectLatest { session ->
+                .onEach { session ->
                     activeHomeProfileSessionSnapshot = session
+                }
+                .distinctUntilChangedBy { it.profileSessionKey }
+                .collectLatest { session ->
                     profileSwitchDiskHydrationActive = true
                     suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                     resetProfileScopedHomeState("home_session:${session.profileId}")
