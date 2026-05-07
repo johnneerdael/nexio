@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -108,6 +109,58 @@ class HomeProfileSessionLifecycleContractTest {
             assertEquals("nl", session.language)
             assertEquals("fr", session.subtitleLanguage)
             assertTrue(session.sessionId.contains("profile:2:runtime"))
+        } finally {
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
+    fun `home profile session bootstrap does not claim default subtitle before settings emit`() = runTest {
+        val activeProfileSession = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 1L,
+                startedAtMs = 100L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        }
+        val profileBoundary = mockk<ProfileBoundary> {
+            every { currentLanguageTag() } returns "en"
+        }
+        val playerSettings = MutableSharedFlow<PlayerSettings>()
+        val coordinator = HomeProfileSessionCoordinator(
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = profileBoundary,
+            localeTags = flowOf("en"),
+            playerSettings = playerSettings,
+            nowMs = { 1234L }
+        )
+
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { 11L })
+            advanceUntilIdle()
+
+            assertEquals(1, activeSession.value.profileId)
+            assertEquals("en", activeSession.value.language)
+            assertEquals(null, activeSession.value.subtitleLanguage)
+
+            playerSettings.emit(
+                PlayerSettings(
+                    subtitleStyle = SubtitleStyleSettings(
+                        preferredLanguage = "fr",
+                        secondaryPreferredLanguage = "de"
+                    )
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals("fr", activeSession.value.subtitleLanguage)
         } finally {
             sessionScope.cancel()
         }
