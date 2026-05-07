@@ -502,7 +502,10 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
         assertTrue(homePipelineSource.contains("expectedProfileSession: ActiveProfileSession"))
         assertTrue(homePipelineSource.contains("Skipping stale serialized home refresh"))
-        assertTrue(homeContinueWatchingSource.contains("val capturedGeneration = homeProfileGeneration"))
+        assertTrue(!homeContinueWatchingSource.contains("val capturedGeneration = homeProfileGeneration"))
+        assertTrue(homeContinueWatchingSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertTrue(homeContinueWatchingSource.contains("isCurrentHomeSession(session)"))
+        assertTrue(homeContinueWatchingSource.contains("continueWatchingSnapshotVersion"))
         assertTrue(homeContinueWatchingSource.contains("Skipping stale continue watching publish"))
         assertTrue(homeContinueWatchingSource.contains("Skipping stale continue watching enrichment"))
     }
