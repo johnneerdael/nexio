@@ -86,6 +86,7 @@ class HomeScreenRenderabilityTest {
         )
 
         assertTrue(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
+        assertFalse(shouldShowHomeEmptyState(state, startupContentGateTimedOut = false))
     }
 
     @Test
@@ -103,6 +104,7 @@ class HomeScreenRenderabilityTest {
         )
 
         assertFalse(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
+        assertTrue(shouldShowHomeEmptyState(state, startupContentGateTimedOut = false))
     }
 
     private fun loadingRow(): CatalogRow {

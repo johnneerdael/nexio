@@ -113,6 +113,17 @@ internal fun hasRenderableHomeContent(uiState: HomeUiState): Boolean {
         uiState.heroItems.isNotEmpty()
 }
 
+internal fun shouldShowHomeEmptyState(
+    uiState: HomeUiState,
+    startupContentGateTimedOut: Boolean
+): Boolean {
+    return !startupContentGateTimedOut &&
+        !shouldShowFullHomeLoadingGate(uiState, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState) &&
+        !uiState.isLoading &&
+        uiState.error == null
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -298,6 +309,19 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.home_no_catalog_addons),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NexioColors.TextSecondary
+                    )
+                }
+            }
+
+            shouldShowHomeEmptyState(uiState, startupContentGateTimedOut) -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.catalog_order_empty),
                         style = MaterialTheme.typography.bodyLarge,
                         color = NexioColors.TextSecondary
                     )
