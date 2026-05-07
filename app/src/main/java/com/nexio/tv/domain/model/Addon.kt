@@ -7,7 +7,9 @@ enum class AddonParserPreset {
     GENERIC,
     STREMTHRU,
     TORRENTIO,
-    WEBSTREAMR
+    WEBSTREAMR,
+    NEXIO_TORII,
+    NEXIO_NAGARE
 }
 
 @Immutable

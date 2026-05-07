@@ -148,6 +148,8 @@ object AioStrictStreamParser {
         when (stream.addonParserPreset) {
             AddonParserPreset.STREMTHRU -> deriveStremThruFilename(description)?.let { return it }
             AddonParserPreset.WEBSTREAMR -> deriveWebStreamrFilename(stream, description)?.let { return it }
+            AddonParserPreset.NEXIO_TORII,
+            AddonParserPreset.NEXIO_NAGARE -> deriveStremThruFilename(description)?.let { return it }
             AddonParserPreset.TORRENTIO,
             AddonParserPreset.GENERIC -> Unit
         }
@@ -262,6 +264,8 @@ object AioStrictStreamParser {
         return when (preset) {
             AddonParserPreset.STREMTHRU -> listOf("🔍")
             AddonParserPreset.WEBSTREAMR -> listOf("🔗")
+            AddonParserPreset.NEXIO_TORII,
+            AddonParserPreset.NEXIO_NAGARE -> listOf("📡")
             AddonParserPreset.TORRENTIO,
             AddonParserPreset.GENERIC -> genericIndexerEmojis
         }
