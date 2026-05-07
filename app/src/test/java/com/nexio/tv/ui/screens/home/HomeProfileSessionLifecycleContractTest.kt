@@ -8,7 +8,10 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,6 +21,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeProfileSessionLifecycleContractTest {
@@ -94,14 +98,69 @@ class HomeProfileSessionLifecycleContractTest {
             nowMs = { 1234L }
         )
 
-        val activeSession = coordinator.start(this, generationProvider = { 11L })
-        advanceUntilIdle()
-        val session = activeSession.value
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { 11L })
+            advanceUntilIdle()
+            val session = activeSession.value
 
-        assertEquals(2, session.profileId)
-        assertEquals("nl", session.language)
-        assertEquals("fr", session.subtitleLanguage)
-        assertTrue(session.sessionId.contains("profile:2:runtime"))
+            assertEquals(2, session.profileId)
+            assertEquals("nl", session.language)
+            assertEquals("fr", session.subtitleLanguage)
+            assertTrue(session.sessionId.contains("profile:2:runtime"))
+        } finally {
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
+    fun `home profile session updates on first profile session change after start`() = runTest {
+        val activeProfileSession = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 1L,
+                startedAtMs = 100L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        }
+        val profileBoundary = mockk<ProfileBoundary> {
+            every { currentLanguageTag() } returns "en"
+            every { contextFor(ProfileModeRoute.SecondaryProfileRoute(2)) } returns
+                com.nexio.tv.core.profile.SecondaryProfileRuntimeContext(
+                    profileId = 2,
+                    languageTag = "en",
+                    generation = 2L
+                )
+        }
+        val coordinator = HomeProfileSessionCoordinator(
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = profileBoundary,
+            localeTags = flowOf("en"),
+            playerSettings = flowOf(PlayerSettings()),
+            nowMs = { 1234L }
+        )
+
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { 11L })
+            activeProfileSession.value = com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 2,
+                sessionId = "profile:2:runtime",
+                sessionOrdinal = 2L,
+                startedAtMs = 200L
+            )
+            advanceUntilIdle()
+
+            assertEquals(2, activeSession.value.profileId)
+            assertTrue(activeSession.value.sessionId.contains("profile:2:runtime"))
+        } finally {
+            sessionScope.cancel()
+        }
     }
 
     @Test

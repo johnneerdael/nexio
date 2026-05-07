@@ -32,5 +32,6 @@ internal sealed interface HomeProfileSession {
     ) : HomeProfileSession
 }
 
+// Temporary Task 2 compatibility shim for staged migration; remove when Task 3 updates remaining callers.
 internal val StateFlow<HomeProfileSession>.profileId: Int
     get() = value.profileId
