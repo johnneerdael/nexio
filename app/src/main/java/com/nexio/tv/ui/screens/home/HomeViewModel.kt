@@ -18,7 +18,6 @@ import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
@@ -82,6 +81,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -133,6 +133,7 @@ class HomeViewModel @Inject constructor(
     internal val profileManager: ProfileManager,
     internal val profileModeRouter: ProfileModeRouter,
     internal val profileBoundary: ProfileBoundary,
+    internal val homeProfileSessionCoordinator: HomeProfileSessionCoordinator,
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
@@ -363,7 +364,9 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var homeProfileGeneration: Long = 0L
     internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
-    internal var activeHomeProfileSession = startHomeProfileSession(profileManager.activeProfileId.value)
+    internal val activeHomeProfileSession: StateFlow<HomeProfileSession> =
+        homeProfileSessionCoordinator.start(viewModelScope, ::advanceHomeProfileGeneration)
+    internal var activeHomeProfileSessionSnapshot: HomeProfileSession = activeHomeProfileSession.value
 
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
@@ -538,18 +541,18 @@ class HomeViewModel @Inject constructor(
 
     private fun observeProfileSwitches() {
         viewModelScope.launch {
-            profileManager.activeProfileId
+            activeHomeProfileSession
                 .drop(1)
-                .distinctUntilChanged()
-                .collectLatest { profileId ->
-                    val session = startHomeProfileSession(profileId)
+                .distinctUntilChangedBy { it.sessionId }
+                .collectLatest { session ->
+                    activeHomeProfileSessionSnapshot = session
                     profileSwitchDiskHydrationActive = true
                     suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
-                    resetProfileScopedHomeState("profile_switch:$profileId")
+                    resetProfileScopedHomeState("home_session:${session.profileId}")
                     try {
                         continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
                         val hasDiskCacheState = loadActiveProfileDiskBackedHomeState(
-                            reason = "profile_switch:$profileId",
+                            reason = "home_session:${session.profileId}",
                             expectedGeneration = session.generation
                         )
                         if (isCurrentHomeProfileGeneration(session.generation)) {
@@ -783,19 +786,9 @@ class HomeViewModel @Inject constructor(
         return homeProfileGeneration
     }
 
-    internal fun startHomeProfileSession(profileId: Int): HomeProfileSession {
-        val generation = advanceHomeProfileGeneration()
-        val session = when (val route = profileModeRouter.routeFor(profileId)) {
-            ProfileModeRoute.DefaultLegacyRoute -> HomeProfileSession.DefaultLegacy(generation = generation)
-            is ProfileModeRoute.SecondaryProfileRoute -> HomeProfileSession.Secondary(
-                profileId = profileId,
-                generation = generation,
-                boundaryContext = profileBoundary.contextFor(route)
-            )
-            is ProfileModeRoute.InvalidProfileRoute -> error("Invalid active home profile id ${route.profileId}")
-        }
-        activeHomeProfileSession = session
-        return session
+    internal fun isCurrentHomeSession(session: HomeProfileSession): Boolean {
+        return activeHomeProfileSession.value.sessionId == session.sessionId &&
+            isCurrentHomeProfileGeneration(session.generation)
     }
 
     internal fun isCurrentHomeProfileGeneration(generation: Long): Boolean {

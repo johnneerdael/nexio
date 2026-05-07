@@ -25,6 +25,7 @@ import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
@@ -69,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -1193,10 +1195,10 @@ class HomeViewModelFocusHydrationTest {
      * All collaborators except [metadataRouterFacade] use [mockk(relaxed = true)] so the
      * [HomeViewModel.init] block can launch its observers without crashing.
      * [ProfileManager] is set to profile 1 (the default legacy profile) so
-     * [HomeViewModel.startHomeProfileSession] resolves [ProfileModeRoute.DefaultLegacyRoute].
+     * [HomeProfileSessionCoordinator] resolves [ProfileModeRoute.DefaultLegacyRoute].
      *
      * We use a real [ProfileModeRouter] (not mocked) so the sealed-interface [when]
-     * expression in [HomeViewModel.startHomeProfileSession] matches correctly.
+     * expression in [HomeProfileSessionCoordinator] matches correctly.
      *
      * [Dispatchers.Main] must be set to a test dispatcher (done in [setUp]/[tearDown]) so
      * that [viewModelScope] uses the test scheduler and [advanceUntilIdle] drains coroutines.
@@ -1306,6 +1308,14 @@ class HomeViewModelFocusHydrationTest {
             profileManager = profileManagerWithSwitch,
             profileModeRouter = profileModeRouter,
             profileBoundary = profileBoundary,
+            homeProfileSessionCoordinator = HomeProfileSessionCoordinator(
+                profileManager = profileManagerWithSwitch,
+                profileModeRouter = profileModeRouter,
+                profileBoundary = profileBoundary,
+                localeTags = flowOf("en"),
+                playerSettings = flowOf(PlayerSettings()),
+                nowMs = { 1L }
+            ),
             trackingProviderStateService = mockk(relaxed = true),
             playbackIdleGateState = playbackIdleGateState,
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
