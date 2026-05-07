@@ -745,10 +745,12 @@ class ProfileSettingsScopeContractTest {
         assertTrue(serviceSource.contains("val profileId: Int = 1"))
         assertTrue(serviceSource.contains("ProfileOwnedContinueWatchingSnapshot"))
         assertTrue(serviceSource.contains("rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)"))
-        // F-G-01 path B: profile ownership is enforced at the typed API boundary via
-        // observeProfileSnapshot(profileId) rather than a manual filter in the collector.
-        assertTrue(homeSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
-        assertTrue(homeSource.contains("observeProfileSnapshot"))
+        // F-G-01 path B + Task 3: profile ownership is enforced at the typed API boundary,
+        // and Home restarts the collector from activeHomeProfileSession session identity.
+        assertTrue(homeSource.contains("continueWatchingProfileScopedEmissions("))
+        assertTrue(homeSource.contains(".flatMapLatest { session ->"))
+        assertTrue(homeSource.contains("observeProfileSnapshot(session.profileId)"))
+        assertTrue(!homeSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
     }
 
     @Test
@@ -775,9 +777,12 @@ class ProfileSettingsScopeContractTest {
         val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
 
         assertTrue(homeStateSource.contains("val initialContinueWatchingResolved: Boolean = false"))
-        // F-G-01 path B: profile ownership is enforced at the typed API boundary via
-        // observeProfileSnapshot(profileId) rather than a manual filter/unwrap in the collector.
-        assertTrue(homeContinueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+        // F-G-01 path B + Task 3: profile ownership is enforced at the typed API boundary,
+        // and Home drives Continue Watching from the active home session flow.
+        assertTrue(homeContinueWatchingSource.contains("continueWatchingProfileScopedEmissions("))
+        assertTrue(homeContinueWatchingSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertTrue(homeContinueWatchingSource.contains("observeProfileSnapshot(session.profileId)"))
+        assertTrue(!homeContinueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
         assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
         assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
         assertTrue(homeScreenSource.contains("uiState.initialContinueWatchingResolved"))

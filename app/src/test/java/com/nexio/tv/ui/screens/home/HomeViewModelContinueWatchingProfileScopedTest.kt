@@ -257,6 +257,20 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         assertFalse(source.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
     }
 
+    @Test
+    fun `accepted continue watching snapshot cancels previous enrichment before eligibility check`() {
+        check(sourceFile.exists()) { "expected source at ${sourceFile.absolutePath}" }
+        val source = sourceFile.readText()
+        val functionStart = source.indexOf("private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession")
+        val cancelIndex = source.indexOf("continueWatchingEnrichmentJob?.cancel()", functionStart)
+        val eligibilityIndex = source.indexOf("shouldEnrichContinueWatchingProviderMetadata", functionStart)
+
+        assertTrue(functionStart >= 0)
+        assertTrue(cancelIndex >= 0)
+        assertTrue(eligibilityIndex >= 0)
+        assertTrue(cancelIndex < eligibilityIndex)
+    }
+
     private fun homeSession(
         profileId: Int,
         profileSessionKey: String,

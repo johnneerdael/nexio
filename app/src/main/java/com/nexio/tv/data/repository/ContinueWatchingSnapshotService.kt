@@ -364,7 +364,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return observeSnapshot()
             .filter { it.profileId == profileId }
             .map { it.snapshot }
-            .onStart { emit(ContinueWatchingSnapshot()) }
+            .onStart {
+                val current = snapshotState.value
+                if (!persistedSnapshotReady.value || current.profileId != profileId) {
+                    emit(ContinueWatchingSnapshot())
+                }
+            }
     }
 
     fun observeContinueWatching(profileId: Int): Flow<List<ContinueWatchingRecord>> {

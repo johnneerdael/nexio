@@ -293,6 +293,8 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish session=${session.sessionId}")
         return
     }
+    continueWatchingEnrichmentJob?.cancel()
+    continueWatchingEnrichmentJob = null
 
     val readinessReason = if (items.isEmpty() && traktUpNextItems.isEmpty()) {
         "first_snapshot_empty"
@@ -324,7 +326,6 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings) &&
         isNonPlaybackHomeWorkAllowed()
     ) {
-        continueWatchingEnrichmentJob?.cancel()
         continueWatchingEnrichmentJob = viewModelScope.launch {
             try {
                 if (!isCurrentHomeSession(session)) return@launch
