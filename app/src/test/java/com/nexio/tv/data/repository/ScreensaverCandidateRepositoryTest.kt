@@ -48,6 +48,7 @@ class ScreensaverCandidateRepositoryTest {
             sourceRole = "PRIMARY"
         )
         val backdrop = artworkRef(key = "backdrop-550", imageType = ArtworkType.BACKDROP)
+        val logo = artworkRef(key = "logo-550", imageType = ArtworkType.LOGO)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -56,7 +57,8 @@ class ScreensaverCandidateRepositoryTest {
                     title = "Fight Club",
                     artwork = ArtworkBundle(
                         backdrop = backdrop,
-                        poster = artworkRef(key = "poster-550", imageType = ArtworkType.POSTER)
+                        poster = artworkRef(key = "poster-550", imageType = ArtworkType.POSTER),
+                        logo = logo
                     ),
                     sourceTrace = listOf(trace)
                 )
@@ -77,6 +79,7 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals("139m", candidate.runtime)
         assertEquals(8.8, candidate.rating?.value ?: 0.0, 0.0)
         assertSame(backdrop, candidate.preferredImage)
+        assertSame(logo, candidate.artwork.logo)
         assertEquals("tt0137523", candidate.stableIds.imdb)
         assertEquals(listOf(trace), candidate.trace)
     }

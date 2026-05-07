@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -166,9 +167,7 @@ class HomeHydrationCoordinator @Inject constructor(
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
-        val fields = displayMetadata.copy(
-            artwork = displayMetadata.artwork ?: item.artwork
-        )
+        val fields = displayMetadata.mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -194,6 +193,26 @@ class HomeHydrationCoordinator @Inject constructor(
             expiresAtMs = nowMs + OVERLAY_EXPIRES_MS,
             state = HomeItemHydrationState.CANONICAL_READY
         )
+    }
+
+    private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
+        firstPaintArtwork: ArtworkBundle?
+    ): HomeDisplayMetadata {
+        if (firstPaintArtwork == null) return this
+        val hydratedArtwork = artwork
+        val merged = ArtworkBundle(
+            poster = hydratedArtwork?.poster ?: firstPaintArtwork.poster.takeIf { displayPoster == null },
+            backdrop = hydratedArtwork?.backdrop ?: firstPaintArtwork.backdrop.takeIf { displayBackdrop == null },
+            logo = hydratedArtwork?.logo ?: firstPaintArtwork.logo.takeIf { displayLogo == null },
+            thumbnail = hydratedArtwork?.thumbnail ?: firstPaintArtwork.thumbnail.takeIf { displayThumbnail == null }
+        )
+        val mergedOrNull = merged.takeUnless {
+            it.poster == null &&
+                it.backdrop == null &&
+                it.logo == null &&
+                it.thumbnail == null
+        }
+        return copy(artwork = mergedOrNull)
     }
 
     private fun failed(
