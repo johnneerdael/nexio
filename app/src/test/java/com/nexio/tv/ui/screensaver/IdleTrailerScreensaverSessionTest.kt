@@ -153,7 +153,7 @@ class IdleTrailerScreensaverSessionTest {
     }
 
     @Test
-    fun `prepare trailer screensaver session can resolve candidate without preexisting youtube ids`() = runBlocking {
+    fun `prepare trailer screensaver session ignores candidates without produced trailer refs`() = runBlocking {
         val candidates = listOf(
             IdleTrailerScreensaverCandidate(
                 itemId = "tvdb:81189",
@@ -177,21 +177,15 @@ class IdleTrailerScreensaverSessionTest {
         val session = prepareIdleTrailerScreensaverSessionFromCandidates(
             candidates = candidates,
             shuffleCandidates = { it }
-        ) { candidate, playbackRef ->
-            if (candidate.itemId == "tvdb:81189" && playbackRef is TrailerPlaybackRef.ItemLookup) {
-                TrailerPlaybackSource(videoUrl = "https://video.example/breaking-bad.m3u8")
-            } else {
-                null
-            }
+        ) { _, _ ->
+            TrailerPlaybackSource(videoUrl = "https://video.example/breaking-bad.m3u8")
         }
 
-        requireNotNull(session)
-        assertEquals("tvdb:81189", session.initialPlayback.candidate.itemId)
-        assertTrue(session.initialPlayback.playbackRef is TrailerPlaybackRef.ItemLookup)
+        assertNull(session)
     }
 
     @Test
-    fun `candidate without selected playback ref uses item lookup with fallback ids instead of direct youtube ref`() = runBlocking {
+    fun `candidate without selected playback ref uses produced youtube fallback ids directly`() = runBlocking {
         val candidates = listOf(
             buildCandidate("movie-1", listOf("abc123def45"))
         )
@@ -202,7 +196,7 @@ class IdleTrailerScreensaverSessionTest {
             shuffleCandidates = { it }
         ) { _, playbackRef ->
             attemptedRefs += playbackRef
-            if (playbackRef is TrailerPlaybackRef.ItemLookup) {
+            if (playbackRef is TrailerPlaybackRef.YouTubeId) {
                 TrailerPlaybackSource(videoUrl = "https://video.example.com/by-item.m3u8")
             } else {
                 null
@@ -210,9 +204,8 @@ class IdleTrailerScreensaverSessionTest {
         }
 
         requireNotNull(session)
-        val lookupRef = attemptedRefs.single() as TrailerPlaybackRef.ItemLookup
-        assertEquals(listOf("abc123def45"), lookupRef.fallbackYtIds)
-        assertEquals(lookupRef, session.initialPlayback.playbackRef)
+        assertEquals(listOf(TrailerPlaybackRef.YouTubeId("abc123def45")), attemptedRefs)
+        assertEquals(TrailerPlaybackRef.YouTubeId("abc123def45"), session.initialPlayback.playbackRef)
     }
 
     @Test
@@ -321,5 +314,9 @@ class IdleTrailerScreensaverSessionTest {
         }
 
     private fun TrailerPlaybackRef.fallbackTrailerIdsForTest(): List<String> =
-        (this as TrailerPlaybackRef.ItemLookup).fallbackYtIds
+        when (this) {
+            is TrailerPlaybackRef.YouTubeId -> listOf(videoId)
+            is TrailerPlaybackRef.ItemLookup -> fallbackYtIds
+            else -> emptyList()
+        }
 }

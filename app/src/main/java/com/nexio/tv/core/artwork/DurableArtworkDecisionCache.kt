@@ -10,18 +10,33 @@ import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 class DurableArtworkDecisionCache(
     private val file: File,
     private val gson: Gson,
-    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink,
+    private val thumbnailWriteDebounceMs: Long = 0L
 ) : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
     private val lock = Any()
     private var loaded = false
     private val decisions = linkedMapOf<ArtworkDecisionKey, ArtworkDecision>()
     private val previewToCanonical = linkedMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
     private val traceSequence = AtomicLong(0L)
+    private val flushExecutor: ScheduledExecutorService? =
+        if (thumbnailWriteDebounceMs > 0L) {
+            Executors.newSingleThreadScheduledExecutor { runnable ->
+                Thread(runnable, "ArtworkDecisionCacheFlush").apply { isDaemon = true }
+            }
+        } else {
+            null
+        }
+    private var pendingFlush: ScheduledFuture<*>? = null
+    private var dirty = false
     private var lastLoadSuccess: Boolean? = null
     private var lastLoadReason: String? = null
     private var lastLoadErrorClass: String? = null
@@ -34,6 +49,10 @@ class DurableArtworkDecisionCache(
 
     override fun put(decision: ArtworkDecision) = synchronized(lock) {
         ensureLoadedLocked()
+        val existing = decisions[decision.decisionKey]
+        if (existing != null && existing.hasSameDurablePayload(decision)) {
+            return@synchronized
+        }
         decisions[decision.decisionKey] = decision
         traceArtwork(
             eventType = "artwork.decision_put",
@@ -49,14 +68,14 @@ class DurableArtworkDecisionCache(
                 }
             )
         )
-        persistLocked()
+        persistAfterPutLocked(decision)
     }
 
     override fun remove(key: ArtworkDecisionKey) = synchronized(lock) {
         ensureLoadedLocked()
         decisions.remove(key)
         removeLinksForLocked(setOf(key))
-        persistLocked()
+        persistNowLocked()
     }
 
     override fun linkPreviewToCanonical(
@@ -65,7 +84,7 @@ class DurableArtworkDecisionCache(
     ) = synchronized(lock) {
         ensureLoadedLocked()
         previewToCanonical[previewKey] = canonicalKey
-        persistLocked()
+        persistNowLocked()
     }
 
     override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? = synchronized(lock) {
@@ -212,7 +231,7 @@ class DurableArtworkDecisionCache(
 
         deletedKeys.forEach(decisions::remove)
         removeLinksForLocked(deletedKeys)
-        persistLocked()
+        persistNowLocked()
     }
 
     private fun removeLinksForLocked(keys: Set<ArtworkDecisionKey>) {
@@ -223,6 +242,55 @@ class DurableArtworkDecisionCache(
                 links.remove()
             }
         }
+    }
+
+    internal fun flushPendingWritesForTest() = synchronized(lock) {
+        flushPendingWritesLocked()
+    }
+
+    private fun persistAfterPutLocked(decision: ArtworkDecision) {
+        if (decision.imageType == ArtworkType.THUMBNAIL && thumbnailWriteDebounceMs > 0L) {
+            scheduleThumbnailPersistLocked()
+        } else {
+            persistNowLocked()
+        }
+    }
+
+    private fun scheduleThumbnailPersistLocked() {
+        dirty = true
+        val currentFlush = pendingFlush
+        if (currentFlush != null && !currentFlush.isDone && !currentFlush.isCancelled) return
+
+        val executor = flushExecutor
+        if (executor == null) {
+            flushPendingWritesLocked()
+            return
+        }
+
+        pendingFlush = executor.schedule(
+            {
+                synchronized(lock) {
+                    flushPendingWritesLocked()
+                }
+            },
+            thumbnailWriteDebounceMs,
+            TimeUnit.MILLISECONDS
+        )
+    }
+
+    private fun flushPendingWritesLocked() {
+        pendingFlush?.cancel(false)
+        pendingFlush = null
+        if (!dirty) return
+        dirty = false
+        persistLocked()
+    }
+
+    private fun persistNowLocked() {
+        pendingFlush?.cancel(false)
+        pendingFlush = null
+        dirty = false
+        persistLocked()
     }
 
     private fun persistLocked() {
@@ -633,6 +701,18 @@ class DurableArtworkDecisionCache(
             }
         }
     }
+
+    private fun ArtworkDecision.hasSameDurablePayload(other: ArtworkDecision): Boolean =
+        decisionKey == other.decisionKey &&
+            ownerKey == other.ownerKey &&
+            canonicalContentId == other.canonicalContentId &&
+            imageType == other.imageType &&
+            selectedCandidate == other.selectedCandidate &&
+            rejectedCandidates == other.rejectedCandidates &&
+            policyVersion == other.policyVersion &&
+            imageLanguage == other.imageLanguage &&
+            settingsHash == other.settingsHash &&
+            credentialHash == other.credentialHash
 
     companion object {
         private const val SCHEMA_VERSION = 1

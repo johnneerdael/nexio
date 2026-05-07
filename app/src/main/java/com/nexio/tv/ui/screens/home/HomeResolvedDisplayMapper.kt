@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
@@ -8,6 +11,7 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.HydrationState
@@ -76,7 +80,7 @@ internal object HomeResolvedDisplayMapper {
                 genres = fields.genres,
                 runtimeText = fields.runtime
             ),
-            artwork = fields.artwork ?: ArtworkBundle(),
+            artwork = fields.toResolvedArtworkBundle(),
             rating = fields.imdbRating?.let { value -> TitleRating(value.toString().toDouble(), ratingSource) },
             trailer = trailerState,
             hydrationState = when {
@@ -178,7 +182,7 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
             genres = fields.genres,
             runtimeText = fields.runtime
         ),
-        artwork = fields.artwork ?: ArtworkBundle(),
+        artwork = fields.toResolvedArtworkBundle(),
         rating = fields.imdbRating?.let { value -> TitleRating(value.toDouble(), ratingSource) },
         trailer = TrailerDisplayState(),
         hydrationState = if (state == HomeItemHydrationState.STALE_READY) {
@@ -198,6 +202,28 @@ private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
         ContentType.TV -> MetadataMediaKind.SERIES
         else -> MetadataMediaKind.UNKNOWN
     }
+
+private fun HomeDisplayMetadata.toResolvedArtworkBundle(): ArtworkBundle {
+    val structured = artwork ?: ArtworkBundle()
+    return ArtworkBundle(
+        poster = structured.poster ?: poster.toLegacyArtworkRef(ArtworkType.POSTER),
+        backdrop = structured.backdrop ?: backdrop.toLegacyArtworkRef(ArtworkType.BACKDROP),
+        logo = structured.logo ?: logo.toLegacyArtworkRef(ArtworkType.LOGO),
+        thumbnail = structured.thumbnail ?: thumbnail.toLegacyArtworkRef(ArtworkType.THUMBNAIL)
+    )
+}
+
+private fun String?.toLegacyArtworkRef(imageType: ArtworkType): ArtworkDisplayRef.LegacyString? =
+    this
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { value ->
+            ArtworkDisplayRef.LegacyString(
+                value = value,
+                imageType = imageType,
+                trace = ArtworkTrace.empty()
+            )
+        }
 
 private fun HydratedHomeOverlay.stableIdsFromCanonical(): ProviderIds =
     when (canonicalProvider) {

@@ -104,6 +104,7 @@ internal suspend fun prepareIdleTrailerScreensaverSessionFromCandidates(
 ): IdleTrailerScreensaverSessionStart? {
     val orderedCandidates = shuffleCandidates(
         candidates
+            .filter { candidate -> candidate.trailerState.hasTrailerResolutionPath() }
             .distinctBy { "${it.itemType}:${it.itemId}" }
     )
     if (orderedCandidates.isEmpty()) return null
@@ -203,18 +204,11 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
 
 private fun IdleTrailerScreensaverCandidate.playbackRefsForSession(): List<TrailerPlaybackRef> {
     return trailerState.selectedPlaybackRef?.let { listOf(it) } ?: run {
-        listOf(
-            TrailerPlaybackRef.ItemLookup(
-                title = title,
-                year = extractIdleTrailerReleaseYear(releaseInfo),
-                stableIds = stableIds,
-                type = itemType,
-                contentId = trailerResolverContentId(),
-                fallbackYtIds = trailerState.fallbackTrailerYtIds.mapNotNull { id ->
-                    id.trim().takeIf(String::isNotEmpty)
-                }.distinct()
-            )
-        )
+        trailerState.fallbackTrailerYtIds.mapNotNull { id ->
+            id.trim()
+                .takeIf(String::isNotEmpty)
+                ?.let(TrailerPlaybackRef::YouTubeId)
+        }.distinct()
     }
 }
 

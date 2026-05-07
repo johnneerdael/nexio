@@ -331,6 +331,68 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable cache skips timestamp only duplicate decision write`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val traceSink = RecordingTraceSink()
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+        val decision = durableRpdbDecision()
+        val refreshedTimestampDecision = decision.copy(
+            createdAtMs = decision.createdAtMs + 1_000L,
+            expiresAtMs = decision.expiresAtMs + 1_000L,
+            staleUntilMs = decision.staleUntilMs?.plus(1_000L)
+        )
+
+        cache.put(decision)
+        val writesAfterFirstPut = traceSink.events.count { event ->
+            event.eventType == "artwork.decision_store_write"
+        }
+
+        cache.put(refreshedTimestampDecision)
+
+        assertEquals(
+            writesAfterFirstPut,
+            traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
+        )
+        assertEquals(decision, cache.get(decision.decisionKey))
+    }
+
+    @Test
+    fun `durable cache batches thumbnail decision writes while keeping read your write`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val traceSink = RecordingTraceSink()
+        val cache = DurableArtworkDecisionCache(
+            file = file,
+            gson = Gson(),
+            traceSink = traceSink,
+            thumbnailWriteDebounceMs = 60_000L
+        )
+        val decisions = (1..5).map(::durableThumbnailDecision)
+
+        decisions.forEach(cache::put)
+
+        assertEquals(
+            0,
+            traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
+        )
+        decisions.forEach { decision ->
+            assertEquals(decision, cache.get(decision.decisionKey))
+        }
+
+        cache.flushPendingWritesForTest()
+
+        assertEquals(
+            1,
+            traceSink.events.count { event -> event.eventType == "artwork.decision_store_write" }
+        )
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+        decisions.forEach { decision ->
+            assertEquals(decision, restarted.get(decision.decisionKey))
+        }
+    }
+
+    @Test
     fun `durable cache remove deletes persisted decision`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -604,6 +666,43 @@ class ArtworkDecisionCacheTest {
             createdAtMs = 1_000L,
             expiresAtMs = 2_000L,
             staleUntilMs = 3_000L
+        )
+
+    private fun durableThumbnailDecision(index: Int): ArtworkDecision =
+        ArtworkDecision(
+            decisionKey = ArtworkDecisionKey(
+                "artwork-decision:thumbnail:canonical:tt0239195:S1E$index:provider:TVDB:" +
+                    "premium:false:settings:settingshash:credential:none:imageLang:en:policy:1"
+            ),
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tt0239195:S1E$index"),
+            canonicalContentId = "tt0239195:S1E$index",
+            imageType = ArtworkType.THUMBNAIL,
+            selectedCandidate = PersistedArtworkCandidate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+                sourceRole = ArtworkSourceRole.PRIMARY,
+                sourceHash = "thumbnail-sourcehash-$index",
+                redactedSourceForTrace = "https://artwork.example.test/thumb-$index.jpg",
+                providerTemplate = PersistedProviderTemplate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+                    imageType = ArtworkType.THUMBNAIL,
+                    idType = "tvdb",
+                    mediaId = "episode-$index",
+                    providerPathHash = "thumbnail-pathhash-$index",
+                    settingsHash = "settingshash",
+                    credentialHash = null,
+                    imageLanguage = "en",
+                    policyVersion = 1
+                ),
+                priority = 10
+            ),
+            rejectedCandidates = emptyList(),
+            policyVersion = 1,
+            imageLanguage = "en",
+            settingsHash = "settingshash",
+            credentialHash = null,
+            createdAtMs = 1_000L + index,
+            expiresAtMs = 2_000L + index,
+            staleUntilMs = 3_000L + index
         )
 
     private fun assertSerializedNames(

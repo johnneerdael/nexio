@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 internal fun shouldRunHomeBackgroundWork(snapshot: PlaybackIdleGateSnapshot): Boolean =
-    !snapshot.hasActiveSession
+    !snapshot.hasActiveSession && !snapshot.idleTrailerPlaybackActive
 
 internal fun HomeViewModel.isNonPlaybackHomeWorkAllowed(): Boolean =
     shouldRunHomeBackgroundWork(playbackIdleGateState.snapshot.value)

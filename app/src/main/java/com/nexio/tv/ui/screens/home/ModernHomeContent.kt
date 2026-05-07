@@ -219,6 +219,29 @@ internal data class ModernHomeTrailerEndedState(
     val heroFullscreenHintTimedOut: Boolean = false
 )
 
+internal data class ModernHomeTrailerAutoplayGateTrace(
+    val stage: String,
+    val focusKey: String? = null,
+    val itemId: String? = null,
+    val itemType: String? = null,
+    val autoplayEnabled: Boolean,
+    val delaySeconds: Int,
+    val screensaverVisible: Boolean,
+    val startupSplashVisible: Boolean,
+    val externalTakeoverActive: Boolean,
+    val selectionStillFocused: Boolean = false,
+    val lifecycleResumed: Boolean = false,
+    val trailerPlaybackUnlocked: Boolean = false,
+    val hasTrailerMetadata: Boolean = false,
+    val hasResolvedPreview: Boolean = false,
+    val hasResolvedExternalPreview: Boolean = false,
+    val loading: Boolean = false,
+    val negativeCached: Boolean = false,
+    val alreadyRetried: Boolean = false,
+    val shouldProceed: Boolean,
+    val reason: String
+)
+
 internal fun handleModernHomeTrailerEnded(
     focusedTrailerFocusKey: String?,
     activeItemIndex: Int,
@@ -266,6 +289,23 @@ internal fun shouldUnlockModernHomeTrailerAutoplay(
     selectionStillFocused &&
     lifecycleResumed
 
+internal fun modernHomeTrailerAutoplayUnlockReason(
+    autoplayEnabled: Boolean,
+    screensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
+    externalTrailerTakeoverActive: Boolean,
+    selectionStillFocused: Boolean,
+    lifecycleResumed: Boolean
+): String = when {
+    !autoplayEnabled -> "autoplay_disabled"
+    screensaverVisible -> "screensaver_visible"
+    startupSplashVisible -> "startup_splash_visible"
+    externalTrailerTakeoverActive -> "external_takeover"
+    !selectionStillFocused -> "focus_changed"
+    !lifecycleResumed -> "lifecycle_not_resumed"
+    else -> "unlock"
+}
+
 internal fun shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
     trailerPlaybackUnlocked: Boolean,
     hasTrailerMetadataAvailable: Boolean,
@@ -275,12 +315,30 @@ internal fun shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
     externalTrailerTakeoverActive: Boolean,
     alreadyRetriedAfterUnlock: Boolean
 ): Boolean = trailerPlaybackUnlocked &&
-    hasTrailerMetadataAvailable &&
     !hasResolvedPreview &&
     !hasResolvedExternalPreview &&
     !isCurrentlyLoading &&
     !externalTrailerTakeoverActive &&
     !alreadyRetriedAfterUnlock
+
+internal fun modernHomeTrailerAutoplayRequestReason(
+    trailerPlaybackUnlocked: Boolean,
+    hasResolvedPreview: Boolean,
+    hasResolvedExternalPreview: Boolean,
+    isCurrentlyLoading: Boolean,
+    externalTrailerTakeoverActive: Boolean,
+    alreadyRetriedAfterUnlock: Boolean,
+    negativeCached: Boolean
+): String = when {
+    !trailerPlaybackUnlocked -> "locked"
+    hasResolvedPreview -> "playback_already_resolved"
+    hasResolvedExternalPreview -> "external_already_resolved"
+    isCurrentlyLoading -> "loading"
+    externalTrailerTakeoverActive -> "external_takeover"
+    alreadyRetriedAfterUnlock -> "already_retried"
+    negativeCached -> "retry_preview"
+    else -> "request_preview"
+}
 
 internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
     requestedTarget: com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget,
@@ -322,6 +380,7 @@ internal fun ModernHomeContent(
     externalTrailerTakeoverActive: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
+    onTrailerAutoplayGateEvaluated: (ModernHomeTrailerAutoplayGateTrace) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -420,7 +479,37 @@ internal fun ModernHomeContent(
         externalTrailerTakeoverActive
     ) {
         unlockedTrailerFocusKey = null
-        val selection = focusedTrailerSelection ?: return@LaunchedEffect
+        val selection = focusedTrailerSelection
+        if (selection == null) {
+            onTrailerAutoplayGateEvaluated(
+                ModernHomeTrailerAutoplayGateTrace(
+                    stage = "unlock_wait",
+                    autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                    delaySeconds = contentState.homeTrailerAutoplayDelaySeconds,
+                    screensaverVisible = idleScreensaverVisible,
+                    startupSplashVisible = startupSplashVisible,
+                    externalTakeoverActive = externalTrailerTakeoverActive,
+                    shouldProceed = false,
+                    reason = "no_selection"
+                )
+            )
+            return@LaunchedEffect
+        }
+        onTrailerAutoplayGateEvaluated(
+            ModernHomeTrailerAutoplayGateTrace(
+                stage = "unlock_wait",
+                focusKey = selection.focusKey,
+                itemId = selection.itemId,
+                itemType = selection.itemType,
+                autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                delaySeconds = contentState.homeTrailerAutoplayDelaySeconds,
+                screensaverVisible = idleScreensaverVisible,
+                startupSplashVisible = startupSplashVisible,
+                externalTakeoverActive = externalTrailerTakeoverActive,
+                shouldProceed = true,
+                reason = "waiting"
+            )
+        )
         modernHomeDebugLog(
             "heroAutoplayUnlock wait focusKey=${selection.focusKey} itemId=${selection.itemId} type=${selection.itemType} autoplay=${contentState.homeTrailerAutoplayEnabled} delay=${contentState.homeTrailerAutoplayDelaySeconds} splash=$startupSplashVisible"
         )
@@ -434,6 +523,30 @@ internal fun ModernHomeContent(
             externalTrailerTakeoverActive = externalTrailerTakeoverActive,
             selectionStillFocused = selectionStillFocused,
             lifecycleResumed = lifecycleResumed
+        )
+        onTrailerAutoplayGateEvaluated(
+            ModernHomeTrailerAutoplayGateTrace(
+                stage = "unlock_eval",
+                focusKey = selection.focusKey,
+                itemId = selection.itemId,
+                itemType = selection.itemType,
+                autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                delaySeconds = contentState.homeTrailerAutoplayDelaySeconds,
+                screensaverVisible = idleScreensaverVisible,
+                startupSplashVisible = startupSplashVisible,
+                externalTakeoverActive = externalTrailerTakeoverActive,
+                selectionStillFocused = selectionStillFocused,
+                lifecycleResumed = lifecycleResumed,
+                shouldProceed = shouldUnlock,
+                reason = modernHomeTrailerAutoplayUnlockReason(
+                    autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                    screensaverVisible = idleScreensaverVisible,
+                    startupSplashVisible = startupSplashVisible,
+                    externalTrailerTakeoverActive = externalTrailerTakeoverActive,
+                    selectionStillFocused = selectionStillFocused,
+                    lifecycleResumed = lifecycleResumed
+                )
+            )
         )
         modernHomeDebugLog(
             "heroAutoplayUnlock eval focusKey=${selection.focusKey} itemId=${selection.itemId} selectionStillFocused=$selectionStillFocused lifecycleResumed=$lifecycleResumed screensaver=$idleScreensaverVisible splash=$startupSplashVisible shouldUnlock=$shouldUnlock"
@@ -586,7 +699,22 @@ internal fun ModernHomeContent(
         contentState.trailerPreviewNegativeCacheIds,
         contentState.trailerMetadataAvailableKeys
     ) {
-        val selection = focusedTrailerSelection ?: return@LaunchedEffect
+        val selection = focusedTrailerSelection
+        if (selection == null) {
+            onTrailerAutoplayGateEvaluated(
+                ModernHomeTrailerAutoplayGateTrace(
+                    stage = "request_eval",
+                    autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                    delaySeconds = contentState.homeTrailerAutoplayDelaySeconds,
+                    screensaverVisible = idleScreensaverVisible,
+                    startupSplashVisible = startupSplashVisible,
+                    externalTakeoverActive = externalTrailerTakeoverActive,
+                    shouldProceed = false,
+                    reason = "no_selection"
+                )
+            )
+            return@LaunchedEffect
+        }
         val hasTrailerMetadataAvailable = homeTrailerAvailabilityKey(
             selection.itemId,
             selection.itemType
@@ -594,6 +722,7 @@ internal fun ModernHomeContent(
         val hasResolvedPreview = !contentState.trailerPreviewUrls[selection.itemId].isNullOrBlank()
         val hasResolvedExternalPreview = !contentState.trailerPreviewExternalUrls[selection.itemId].isNullOrBlank()
         val isCurrentlyLoading = selection.itemId in contentState.trailerPreviewLoadingIds
+        val negativeCached = selection.itemId in contentState.trailerPreviewNegativeCacheIds
         val alreadyRetriedAfterUnlock = autoplayUnlockRetriedFocusKey == selection.focusKey
         val trailerPlaybackUnlocked = unlockedTrailerFocusKey == selection.focusKey
         val shouldRequest = shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
@@ -604,6 +733,36 @@ internal fun ModernHomeContent(
             isCurrentlyLoading = isCurrentlyLoading,
             externalTrailerTakeoverActive = externalTrailerTakeoverActive,
             alreadyRetriedAfterUnlock = alreadyRetriedAfterUnlock
+        )
+        onTrailerAutoplayGateEvaluated(
+            ModernHomeTrailerAutoplayGateTrace(
+                stage = "request_eval",
+                focusKey = selection.focusKey,
+                itemId = selection.itemId,
+                itemType = selection.itemType,
+                autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                delaySeconds = contentState.homeTrailerAutoplayDelaySeconds,
+                screensaverVisible = idleScreensaverVisible,
+                startupSplashVisible = startupSplashVisible,
+                externalTakeoverActive = externalTrailerTakeoverActive,
+                trailerPlaybackUnlocked = trailerPlaybackUnlocked,
+                hasTrailerMetadata = hasTrailerMetadataAvailable,
+                hasResolvedPreview = hasResolvedPreview,
+                hasResolvedExternalPreview = hasResolvedExternalPreview,
+                loading = isCurrentlyLoading,
+                negativeCached = negativeCached,
+                alreadyRetried = alreadyRetriedAfterUnlock,
+                shouldProceed = shouldRequest,
+                reason = modernHomeTrailerAutoplayRequestReason(
+                    trailerPlaybackUnlocked = trailerPlaybackUnlocked,
+                    hasResolvedPreview = hasResolvedPreview,
+                    hasResolvedExternalPreview = hasResolvedExternalPreview,
+                    isCurrentlyLoading = isCurrentlyLoading,
+                    externalTrailerTakeoverActive = externalTrailerTakeoverActive,
+                    alreadyRetriedAfterUnlock = alreadyRetriedAfterUnlock,
+                    negativeCached = negativeCached
+                )
+            )
         )
         modernHomeDebugLog(
             "heroAutoplayRequest eval focusKey=${selection.focusKey} itemId=${selection.itemId} unlocked=$trailerPlaybackUnlocked metadata=$hasTrailerMetadataAvailable resolved=$hasResolvedPreview external=$hasResolvedExternalPreview loading=$isCurrentlyLoading retried=$alreadyRetriedAfterUnlock shouldRequest=$shouldRequest"

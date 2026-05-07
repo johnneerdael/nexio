@@ -21,7 +21,11 @@ import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -59,6 +63,8 @@ class IdleScreensaverRepositoryTest {
         assertEquals("tmdb:550", slide.itemId)
         assertEquals("movie", slide.itemType)
         assertEquals("Fight Club", slide.title)
+        assertEquals(listOf("Drama", "Thriller"), slide.genres)
+        assertEquals("139m", slide.runtime)
         assertEquals("nexio-artwork://asset/fight-club-backdrop", slide.backgroundArtwork.toLegacyArtworkString())
         assertEquals(
             listOf("nexio-artwork://asset/fight-club-backdrop"),
@@ -115,6 +121,8 @@ class IdleScreensaverRepositoryTest {
                     title = "Breaking Bad",
                     releaseInfo = "2008",
                     overview = "A chemistry teacher...",
+                    genres = listOf("Crime", "Drama"),
+                    runtime = "47m",
                     rating = TitleRating(
                         value = 9.5,
                         source = TitleRatingSource.IMDB
@@ -134,8 +142,77 @@ class IdleScreensaverRepositoryTest {
         repository.warmFromCache()
 
         assertEquals(1, repository.trailerCandidates.value.size)
+        val trailerCandidate = repository.trailerCandidates.value.single()
+        assertEquals("Breaking Bad", trailerCandidate.title)
+        assertEquals(listOf("Crime", "Drama"), trailerCandidate.genres)
+        assertEquals("47m", trailerCandidate.runtime)
+        assertEquals("81189", trailerCandidate.stableIds.tvdb)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `observeResolvedSurface replaces startup placeholder when home surface publishes candidates`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        val candidateSnapshots = MutableStateFlow(
+            ScreensaverCandidatesSnapshot(
+                imageCandidates = emptyList(),
+                trailerCandidates = emptyList()
+            )
+        )
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 1) } returns candidateSnapshots.value
+        every { candidateRepository.observeCandidates(profileId = 1) } returns candidateSnapshots
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 1 }
+        )
+
+        repository.warmFromCache()
+        val job = launch {
+            repository.observeResolvedSurface(profileId = 1)
+        }
+        advanceUntilIdle()
+
+        assertEquals("__placeholder__", repository.slides.value.single().itemId)
+        assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
+
+        val artwork = artworkRef(assetKey = "breaking-bad-backdrop", imageType = ArtworkType.BACKDROP)
+        candidateSnapshots.value = ScreensaverCandidatesSnapshot(
+            imageCandidates = listOf(
+                candidate(
+                    itemKey = "series:tvdb:81189",
+                    contentId = "tvdb:81189",
+                    itemType = "series",
+                    preferredImage = artwork,
+                    title = "Breaking Bad",
+                    rating = TitleRating(9.5, TitleRatingSource.IMDB)
+                )
+            ),
+            trailerCandidates = listOf(
+                ScreensaverTrailerCandidate(
+                    itemKey = "series:tvdb:81189",
+                    contentId = "tvdb:81189",
+                    itemType = "series",
+                    title = "Breaking Bad",
+                    releaseInfo = "2008",
+                    overview = "A chemistry teacher...",
+                    rating = TitleRating(
+                        value = 9.5,
+                        source = TitleRatingSource.IMDB
+                    ),
+                    artwork = ArtworkBundle(backdrop = artwork),
+                    trailerState = TrailerDisplayState(
+                        fallbackTrailerYtIds = listOf("HhesaQXLuRY")
+                    ),
+                    stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals("tvdb:81189", repository.slides.value.single().itemId)
         assertEquals("Breaking Bad", repository.trailerCandidates.value.single().title)
-        assertEquals("81189", repository.trailerCandidates.value.single().stableIds.tvdb)
+        assertEquals("HhesaQXLuRY", repository.trailerCandidates.value.single().trailerState.fallbackTrailerYtIds.single())
+        job.cancel()
     }
 
     @Test
@@ -219,6 +296,8 @@ class IdleScreensaverRepositoryTest {
         title = title,
         subtitle = "1999",
         overview = "Overview",
+        genres = listOf("Drama", "Thriller"),
+        runtime = "139m",
         rating = rating,
         artwork = ArtworkBundle(backdrop = preferredImage),
         preferredImage = preferredImage,

@@ -1,5 +1,11 @@
 package com.nexio.tv.data.integration.metadata
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -20,7 +26,12 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import androidx.test.ext.junit.runners.AndroidJUnit4
 
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 class TmdbTrailerMetadataAdapterTest {
 
     private val sampleVideo = TmdbVideoResult(
@@ -60,6 +71,40 @@ class TmdbTrailerMetadataAdapterTest {
         assertEquals(ResolverType.TRAILERS, candidate.resolverType)
         val trailers = candidate.fields[ResolvedField.TRAILERS]?.value
         assertEquals(listOf(sampleVideo), trailers)
+    }
+
+    @Test
+    fun `MOVIE_VIDEOS stores TMDB trailer candidate in media clip store`() = runTest {
+        val provider = mockk<TrailerTmdbProvider>()
+        coEvery { provider.getTmdbApiKey() } returns "k"
+        coEvery { provider.fetchMovieVideos(550, "en-US", "k") } returns listOf(sampleVideo)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = MediaClipStore(
+            context = context,
+            prefsName = "tmdb_trailer_adapter_media_clip_${System.nanoTime()}",
+            clock = { 1_000_000L }
+        )
+        val adapter = TmdbTrailerMetadataAdapter(provider, mediaClipStore = store)
+
+        adapter.execute(
+            route = movieRoute(),
+            step = step(TmdbApiShapes.MOVIE_VIDEOS)
+        )
+
+        val identity = ContentIdentity(
+            contentId = "tmdb:550",
+            itemType = "movie",
+            stableIds = com.nexio.tv.domain.model.ProviderIds(tmdb = "550")
+        )
+        val clips = store.getCandidates(
+            identity = identity,
+            scope = MediaClipScope.Title(identity),
+            clipTypes = setOf(MediaClipType.TRAILER),
+            language = "en"
+        )
+        assertEquals(1, clips.size)
+        assertEquals("TMDB", clips.single().provider)
+        assertEquals("abc123", clips.single().externalVideoId)
     }
 
     @Test

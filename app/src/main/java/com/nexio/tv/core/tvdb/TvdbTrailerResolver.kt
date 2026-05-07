@@ -90,7 +90,7 @@ class TvdbTrailerResolver @Inject constructor(
         val candidates = fetchAndMapCandidates(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
 
         val recapCandidates = candidates.filter {
-            it.isRecap && (it.seasonNumber == null || it.seasonNumber == seasonNumber)
+            it.isRecap && it.seasonNumber == seasonNumber
         }
         if (recapCandidates.isEmpty()) {
             return@withContext TvdbTrailerLookupResult.Missing

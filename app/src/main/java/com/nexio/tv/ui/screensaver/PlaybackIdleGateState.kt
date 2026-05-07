@@ -5,11 +5,11 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 
 data class PlaybackIdleGateSnapshot(
     val hasActiveSession: Boolean = false,
-    val isPausedByUser: Boolean = false
+    val isPausedByUser: Boolean = false,
+    val idleTrailerPlaybackActive: Boolean = false
 )
 
 @Singleton
@@ -17,33 +17,49 @@ class PlaybackIdleGateState @Inject constructor() {
     private val _snapshot = MutableStateFlow(PlaybackIdleGateSnapshot())
     val snapshot: StateFlow<PlaybackIdleGateSnapshot> = _snapshot.asStateFlow()
 
+    private var playerSessionActive = false
+    private var inAppTrailerPlaybackActive = false
+    private var idleTrailerPlaybackActive = false
+    private var pausedByUser = false
+
     fun onPlayerSessionStarted() {
-        _snapshot.value = PlaybackIdleGateSnapshot(
-            hasActiveSession = true,
-            isPausedByUser = false
-        )
+        playerSessionActive = true
+        pausedByUser = false
+        publishSnapshot()
     }
 
     fun onUserPauseStateChanged(isPausedByUser: Boolean) {
-        _snapshot.update { current ->
-            current.copy(
-                hasActiveSession = current.hasActiveSession,
-                isPausedByUser = current.hasActiveSession && isPausedByUser
-            )
-        }
+        pausedByUser = playerSessionActive && isPausedByUser
+        publishSnapshot()
     }
 
     fun onPlaybackResumed() {
-        _snapshot.update { current ->
-            if (!current.hasActiveSession) {
-                current
-            } else {
-                current.copy(isPausedByUser = false)
-            }
-        }
+        if (!playerSessionActive) return
+        pausedByUser = false
+        publishSnapshot()
     }
 
     fun onPlayerSessionEnded() {
-        _snapshot.value = PlaybackIdleGateSnapshot()
+        playerSessionActive = false
+        pausedByUser = false
+        publishSnapshot()
+    }
+
+    fun onInAppTrailerPlaybackActiveChanged(active: Boolean) {
+        inAppTrailerPlaybackActive = active
+        publishSnapshot()
+    }
+
+    fun onIdleTrailerPlaybackActiveChanged(active: Boolean) {
+        idleTrailerPlaybackActive = active
+        publishSnapshot()
+    }
+
+    private fun publishSnapshot() {
+        _snapshot.value = PlaybackIdleGateSnapshot(
+            hasActiveSession = playerSessionActive || inAppTrailerPlaybackActive,
+            isPausedByUser = playerSessionActive && pausedByUser,
+            idleTrailerPlaybackActive = idleTrailerPlaybackActive
+        )
     }
 }

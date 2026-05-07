@@ -8,6 +8,8 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.data.trailer.TrailerPlaybackSource
+import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -354,6 +356,86 @@ class HomeViewModelPresentationPipelineTest {
                 itemId = "tt15940132",
                 trailerPreviewUrls = emptyMap(),
                 trailerPreviewExternalUrls = mapOf("tt15940132" to "stremio:///detail/movie/tt15940132")
+            )
+        )
+    }
+
+    @Test
+    fun `publishing home trailer preview playback source fills internal media urls`() {
+        val videoUrls = mutableMapOf<String, String>()
+        val audioUrls = mutableMapOf<String, String>()
+        val userAgents = mutableMapOf<String, String>()
+        val externalUrls = mutableMapOf<String, String>()
+        val negativeCache = mutableMapOf<String, Boolean>()
+
+        val published = publishHomeTrailerPreviewResolution(
+            itemId = "tt15940132",
+            result = TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(
+                    videoUrl = "https://cdn.example/video.m3u8",
+                    audioUrl = "https://cdn.example/audio.m3u8",
+                    userAgent = "NexioTest"
+                )
+            ),
+            trailerPreviewUrls = videoUrls,
+            trailerPreviewAudioUrls = audioUrls,
+            trailerPreviewUserAgents = userAgents,
+            trailerPreviewExternalUrls = externalUrls,
+            trailerPreviewNegativeCache = negativeCache
+        )
+
+        assertEquals(true, published)
+        assertEquals("https://cdn.example/video.m3u8", videoUrls["tt15940132"])
+        assertEquals("https://cdn.example/audio.m3u8", audioUrls["tt15940132"])
+        assertEquals("NexioTest", userAgents["tt15940132"])
+        assertEquals(false, externalUrls.containsKey("tt15940132"))
+        assertEquals(false, negativeCache.containsKey("tt15940132"))
+    }
+
+    @Test
+    fun `publishing home trailer preview external source clears stale internal media urls`() {
+        val videoUrls = mutableMapOf("tt15940132" to "https://cdn.example/stale.m3u8")
+        val audioUrls = mutableMapOf("tt15940132" to "https://cdn.example/stale-audio.m3u8")
+        val userAgents = mutableMapOf("tt15940132" to "Stale")
+        val externalUrls = mutableMapOf<String, String>()
+        val negativeCache = mutableMapOf("tt15940132" to true)
+
+        val published = publishHomeTrailerPreviewResolution(
+            itemId = "tt15940132",
+            result = TrailerResolutionResult.External("stremio:///detail/movie/tt15940132"),
+            trailerPreviewUrls = videoUrls,
+            trailerPreviewAudioUrls = audioUrls,
+            trailerPreviewUserAgents = userAgents,
+            trailerPreviewExternalUrls = externalUrls,
+            trailerPreviewNegativeCache = negativeCache
+        )
+
+        assertEquals(true, published)
+        assertEquals(false, videoUrls.containsKey("tt15940132"))
+        assertEquals(false, audioUrls.containsKey("tt15940132"))
+        assertEquals(false, userAgents.containsKey("tt15940132"))
+        assertEquals("stremio:///detail/movie/tt15940132", externalUrls["tt15940132"])
+        assertEquals(false, negativeCache.containsKey("tt15940132"))
+    }
+
+    @Test
+    fun `home trailer surface trace emits only when summary changes`() {
+        val summary = HomeTrailerSurfaceTraceSummary(
+            itemCount = 220,
+            selectedRefCount = 0,
+            youtubeRefCount = 0,
+            inAppRefCount = 0,
+            externalRefCount = 0,
+            fallbackIdCount = 0
+        )
+
+        assertEquals(true, shouldEmitHomeTrailerSurfaceTrace(previous = null, current = summary))
+        assertEquals(false, shouldEmitHomeTrailerSurfaceTrace(previous = summary, current = summary))
+        assertEquals(
+            true,
+            shouldEmitHomeTrailerSurfaceTrace(
+                previous = summary,
+                current = summary.copy(selectedRefCount = 1, youtubeRefCount = 1)
             )
         )
     }

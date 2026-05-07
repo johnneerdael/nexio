@@ -12,10 +12,13 @@ import com.nexio.tv.data.local.SimklCatalogPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.MDBListCustomCatalog
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -74,6 +77,19 @@ private data class SyntheticCatalogOrderGroup(
     val rows: List<CatalogRow>
 )
 
+internal fun tmdbTrendingScreensaverRows(
+    tmdbSnapshot: TmdbDiscoverySnapshot,
+    persistedTmdbGroups: List<PersistedSyntheticCatalogGroup>
+): List<CatalogRow> {
+    val liveRowsByCatalog = tmdbSnapshot.rowsByCatalog
+    val persistedRowsByCatalog = persistedTmdbGroups
+        .flatMap { group -> group.rows }
+        .associateBy { row -> row.catalogId }
+    return TMDB_TRENDING_SCREENSAVER_CATALOG_IDS.mapNotNull { catalogId ->
+        liveRowsByCatalog[catalogId] ?: persistedRowsByCatalog[catalogId]
+    }.filter { row -> row.items.isNotEmpty() }
+}
+
 internal data class HydratedHomeOverlaySnapshotComponents(
     val displayRows: List<CatalogRow>,
     val fullRows: List<CatalogRow>,
@@ -88,6 +104,10 @@ private const val TRAKT_ROW_NAME_UP_NEXT = "Trakt Up Next"
 private const val TRAKT_ROW_NAME_TRENDING_MOVIES = "Trakt Trending Movies"
 private const val TRAKT_ROW_NAME_TRENDING_SHOWS = "Trakt Trending Shows"
 private const val TRAKT_ROW_NAME_POPULAR_MOVIES = "Trakt Popular Movies"
+private val TMDB_TRENDING_SCREENSAVER_CATALOG_IDS = listOf(
+    TmdbCatalogIds.TRENDING_MOVIES,
+    TmdbCatalogIds.TRENDING_SERIES
+)
 private const val TRAKT_ROW_NAME_POPULAR_SHOWS = "Trakt Popular Shows"
 private const val TRAKT_ROW_NAME_RECOMMENDED_MOVIES = "Trakt Recommended Movies"
 private const val TRAKT_ROW_NAME_RECOMMENDED_SHOWS = "Trakt Recommended Shows"
@@ -2816,8 +2836,18 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             baseHeroItems.isEmpty() &&
             fullRowsFiltered.isEmpty() &&
             refreshInProgress
+    val screensaverSourceRows = tmdbTrendingScreensaverRows(
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        persistedTmdbGroups = persistedTmdbSyntheticGroups
+    )
 
     if (shouldKeepVisibleContent) {
+        publishTmdbTrendingScreensaverSurface(
+            profileSession = profileSessionForSurface,
+            overlaysByItemKey = currentHydratedHomeOverlays,
+            sourceRows = screensaverSourceRows
+        )
+        observeHydratedHomeOverlaysForRows(displayRows + fullRowsFiltered + screensaverSourceRows)
         _uiState.update { it.copy(isLoading = true, error = null) }
         return
     }
@@ -2844,9 +2874,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
             rows = _uiState.value.catalogRows,
             overlaysByItemKey = currentHydratedHomeOverlays,
-            resolveTrailer = metadataRouterFacade::resolveTrailer
+            resolveTrailer = null
         )
-        syncHomeTrailerAvailabilityFromResolvedItems(resolvedItemsForSurface)
         resolvedDisplaySurfaceRepository.publishResolvedItems(
             surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
             profileSession = profileSessionForSurface,
@@ -2858,7 +2887,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         pendingRestoredCatalogSnapshot = null
     }
 
-    observeHydratedHomeOverlaysForRows(displayRows + fullRowsFiltered)
+    publishTmdbTrendingScreensaverSurface(
+        profileSession = profileSessionForSurface,
+        overlaysByItemKey = currentHydratedHomeOverlays,
+        sourceRows = screensaverSourceRows
+    )
+
+    observeHydratedHomeOverlaysForRows(displayRows + fullRowsFiltered + screensaverSourceRows)
 
     _uiState.update { state ->
         state.copy(
@@ -2925,6 +2960,46 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     }
 }
 
+internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
+    profileSession: ActiveProfileSession,
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    sourceRows: List<CatalogRow> = tmdbTrendingScreensaverRows(
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        persistedTmdbGroups = persistedTmdbSyntheticGroups
+    )
+) {
+    val rows = rowsForResolvedDisplaySurface(sourceRows, overlaysByItemKey)
+    val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+        rows = rows,
+        overlaysByItemKey = overlaysByItemKey,
+        resolveTrailer = null
+    )
+    val published = resolvedDisplaySurfaceRepository.publishResolvedItems(
+        surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+        profileSession = profileSession,
+        items = resolvedItems
+    )
+    if (!published) return
+    traceEvents.emitScreensaverSurfacePublished(
+        surface = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+        published = published,
+        itemCount = resolvedItems.size,
+        logoCount = resolvedItems.count { item -> item.artwork.logo != null },
+        trailerCandidateCount = resolvedItems.count { item -> item.hasScreensaverTrailerResolutionPath() },
+        selectedRefCount = resolvedItems.count { item -> item.trailer.selectedPlaybackRef != null },
+        fallbackIdCount = resolvedItems.sumOf { item -> item.trailer.fallbackTrailerYtIds.size }
+    )
+}
+
+private fun com.nexio.tv.domain.model.ResolvedDisplayItem.hasScreensaverTrailerResolutionPath(): Boolean =
+    trailer.selectedPlaybackRef != null ||
+        trailer.fallbackTrailerYtIds.any { id -> id.isNotBlank() } ||
+        stableIds.tvdb?.isNotBlank() == true ||
+        stableIds.tmdb?.isNotBlank() == true ||
+        stableIds.imdb?.isNotBlank() == true ||
+        stableIds.kitsu?.isNotBlank() == true ||
+        contentId.isNotBlank()
+
 internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
@@ -2978,7 +3053,16 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
             error = null
         )
     }
-    observeHydratedHomeOverlaysForRows(composedSnapshot.displayRows + composedSnapshot.fullRows)
+    val screensaverSourceRows = tmdbTrendingScreensaverRows(
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        persistedTmdbGroups = persistedTmdbSyntheticGroups
+    )
+    publishTmdbTrendingScreensaverSurface(
+        profileSession = profileManager.activeProfileSession.value,
+        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
+        sourceRows = screensaverSourceRows
+    )
+    observeHydratedHomeOverlaysForRows(composedSnapshot.displayRows + composedSnapshot.fullRows + screensaverSourceRows)
     refreshTrailerMetadataAvailabilityPipeline(composedSnapshot.displayRows)
 }
 

@@ -187,6 +187,18 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `visible image screensaver can upgrade when trailer candidates arrive after initial show`() {
+        assertTrue(
+            shouldPrepareTrailerSessionForVisibleScreensaver(
+                idleScreensaverVisible = true,
+                trailerScreensaverEnabled = true,
+                trailerSessionReady = false,
+                trailerCandidateCount = 40
+            )
+        )
+    }
+
+    @Test
     fun `presentation mode stays image when trailer feature is disabled`() {
         val trailerSession = IdleTrailerScreensaverSessionStart(
             candidates = listOf(buildTrailerCandidate("movie-1")),

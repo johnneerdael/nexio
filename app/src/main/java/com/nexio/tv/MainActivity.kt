@@ -125,6 +125,7 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -167,6 +168,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -203,12 +205,33 @@ internal suspend fun resolveIdleTrailerScreensaverPlaybackSource(
     candidate: IdleTrailerScreensaverCandidate,
     playbackRef: TrailerPlaybackRef,
     resolveTrailer: suspend (TrailerResolveRequest) -> TrailerResolution,
-    resolvePlaybackSource: suspend (TrailerPlaybackRef) -> TrailerResolutionResult?
+    resolvePlaybackSource: suspend (TrailerPlaybackRef) -> TrailerResolutionResult?,
+    traceEvents: TraceMetadataEvents? = null
 ): TrailerPlaybackSource? {
     val request = candidate.toTrailerResolverRequest(playbackRef)
-    val selectedRef = resolveTrailer(request).selected ?: return null
+    val selectedRef = resolveTrailer(request).selected
+    if (selectedRef == null) {
+        traceEvents?.emitScreensaverTrailerPlaybackResolution(
+            itemId = candidate.itemId,
+            itemType = candidate.itemType,
+            inputRef = playbackRef.traceRefKind(),
+            selectedRef = null,
+            result = "null",
+            reason = "no_selected_ref"
+        )
+        return null
+    }
     val result = resolvePlaybackSource(selectedRef)
-    return (result as? TrailerResolutionResult.Playback)?.source
+    val source = (result as? TrailerResolutionResult.Playback)?.source
+    traceEvents?.emitScreensaverTrailerPlaybackResolution(
+        itemId = candidate.itemId,
+        itemType = candidate.itemType,
+        inputRef = playbackRef.traceRefKind(),
+        selectedRef = selectedRef.traceRefKind(),
+        result = result.traceResultKind(),
+        reason = if (source == null) "no_playback_source" else "playback_ready"
+    )
+    return source
 }
 
 private fun IdleTrailerScreensaverCandidate.toTrailerResolverRequest(
@@ -234,7 +257,8 @@ private fun IdleTrailerScreensaverCandidate.toTrailerResolverRequest(
 private suspend fun TrailerService.resolveIdleTrailerScreensaverPlaybackSource(
     trailerResolver: TrailerResolver,
     candidate: IdleTrailerScreensaverCandidate,
-    playbackRef: TrailerPlaybackRef
+    playbackRef: TrailerPlaybackRef,
+    traceEvents: TraceMetadataEvents
 ): TrailerPlaybackSource? {
     return resolveIdleTrailerScreensaverPlaybackSource(
         candidate = candidate,
@@ -248,8 +272,22 @@ private suspend fun TrailerService.resolveIdleTrailerScreensaverPlaybackSource(
                 title = candidate.title,
                 year = extractIdleTrailerReleaseYear(candidate.releaseInfo)
             )
-        }
+        },
+        traceEvents = traceEvents
     )
+}
+
+private fun TrailerPlaybackRef.traceRefKind(): String = when (this) {
+    is TrailerPlaybackRef.YouTubeId -> "youtube"
+    is TrailerPlaybackRef.ExternalUrl -> "external"
+    is TrailerPlaybackRef.InAppSource -> "in_app"
+    is TrailerPlaybackRef.ItemLookup -> "item_lookup"
+}
+
+private fun TrailerResolutionResult?.traceResultKind(): String = when (this) {
+    is TrailerResolutionResult.Playback -> "playback"
+    is TrailerResolutionResult.External -> "external"
+    null -> "null"
 }
 
 @AndroidEntryPoint
@@ -326,6 +364,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var trailerResolver: TrailerResolver
+
+    @Inject
+    lateinit var traceEvents: TraceMetadataEvents
 
     @Inject
     lateinit var idleScreensaverController: IdleScreensaverController
@@ -464,6 +505,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
         }
+        lifecycleScope.launch {
+            profileManager.activeProfileId
+                .collectLatest { profileId ->
+                    try {
+                        idleScreensaverRepository.observeResolvedSurface(profileId = profileId)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        Log.w("MainActivity", "Idle screensaver surface observation failed", error)
+                    }
+                }
+        }
         setContent {
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
@@ -563,6 +616,7 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(processProfileSelectionGatePassed)
                     }
                     val profiles by profileManager.profiles.collectAsState()
+                    val activeProfileId by profileManager.activeProfileId.collectAsState()
                     val shouldShowProfileSelection = shouldShowStartupProfileSelection(
                         hasPassedProfileSelectionGate = hasPassedProfileSelectionGate,
                         profileCount = profiles.size
@@ -664,6 +718,7 @@ class MainActivity : ComponentActivity() {
                     var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
+                    val idleTrailerPlaybackActive = idleScreensaverVisible && idleTrailerSessionStart != null
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -766,6 +821,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     LaunchedEffect(inAppTrailerPlaybackActive) {
+                        playbackIdleGateState.onInAppTrailerPlaybackActiveChanged(inAppTrailerPlaybackActive)
                         if (
                             shouldRegisterIdleInteractionForTrailerPlaybackTransition(
                                 previousActive = previousInAppTrailerPlaybackActive,
@@ -788,6 +844,10 @@ class MainActivity : ComponentActivity() {
                             idleScreensaverController.registerInteraction()
                         }
                         previousInAppTrailerPlaybackActive = inAppTrailerPlaybackActive
+                    }
+
+                    LaunchedEffect(idleTrailerPlaybackActive) {
+                        playbackIdleGateState.onIdleTrailerPlaybackActiveChanged(idleTrailerPlaybackActive)
                     }
 
                     LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
@@ -813,6 +873,60 @@ class MainActivity : ComponentActivity() {
                         if (!idleScreensaverVisible) {
                             idleTrailerSessionStart = null
                         }
+                    }
+
+                    LaunchedEffect(
+                        idleScreensaverVisible,
+                        idleTrailerCandidates.size,
+                        mainUiPrefs.trailerScreensaverEnabled,
+                        idleTrailerSessionStart
+                    ) {
+                        if (
+                            !shouldPrepareTrailerSessionForVisibleScreensaver(
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                trailerSessionReady = idleTrailerSessionStart != null,
+                                trailerCandidateCount = idleTrailerCandidates.size
+                            )
+                        ) {
+                            return@LaunchedEffect
+                        }
+                        idleTrailerSessionStart = com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSessionFromCandidates(
+                            candidates = idleTrailerCandidates
+                        ) { candidate, playbackRef ->
+                            trailerService.resolveIdleTrailerScreensaverPlaybackSource(
+                                trailerResolver = trailerResolver,
+                                candidate = candidate,
+                                playbackRef = playbackRef,
+                                traceEvents = traceEvents
+                            )
+                        }
+                        logIdleScreensaverDiagnostics(
+                            buildIdleScreensaverDiagnosticsMessage(
+                                event = "visible_trailer_upgrade_prepared",
+                                currentRoute = currentRoute,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                trailerSessionReady = idleTrailerSessionStart != null
+                            )
+                        )
+                        traceEvents.emitScreensaverSchedulerState(
+                            stage = "visible_trailer_upgrade_prepared",
+                            route = currentRoute,
+                            eligible = idleScreensaverEligible,
+                            visible = idleScreensaverVisible,
+                            slideCount = idleScreensaverSlides.size,
+                            trailerCandidateCount = idleTrailerCandidates.size,
+                            trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                            trailerSessionReady = idleTrailerSessionStart != null,
+                            lifecycleState = appLifecycleState.name,
+                            reason = if (idleTrailerSessionStart != null) "trailer_session_ready" else "trailer_resolution_failed"
+                        )
                     }
 
                     DisposableEffect(idleScreensaverVisible) {
@@ -858,6 +972,24 @@ class MainActivity : ComponentActivity() {
                                     trailerSessionReady = idleTrailerSessionStart != null
                                 )
                             )
+                            traceEvents.emitScreensaverSchedulerState(
+                                stage = "start_skipped",
+                                route = currentRoute,
+                                eligible = idleScreensaverEligible,
+                                visible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                trailerSessionReady = idleTrailerSessionStart != null,
+                                lifecycleState = appLifecycleState.name,
+                                reason = idleScreensaverScheduleBlockReason(
+                                    lifecycleState = appLifecycleState,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size
+                                )
+                            )
                             return@LaunchedEffect
                         }
                         val elapsed = (SystemClock.elapsedRealtime() - idleLastInteractionAtMs).coerceAtLeast(0L)
@@ -877,6 +1009,18 @@ class MainActivity : ComponentActivity() {
                                 remainingDelayMs = remainingDelayMs,
                                 trailerSessionReady = idleTrailerSessionStart != null
                             )
+                        )
+                        traceEvents.emitScreensaverSchedulerState(
+                            stage = "start_scheduled",
+                            route = currentRoute,
+                            eligible = idleScreensaverEligible,
+                            visible = idleScreensaverVisible,
+                            slideCount = idleScreensaverSlides.size,
+                            trailerCandidateCount = idleTrailerCandidates.size,
+                            trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                            trailerSessionReady = idleTrailerSessionStart != null,
+                            lifecycleState = appLifecycleState.name,
+                            reason = "waiting_for_timeout"
                         )
                         delay(remainingDelayMs)
                         if (!shouldScheduleIdleScreensaverStart(
@@ -901,6 +1045,24 @@ class MainActivity : ComponentActivity() {
                                     trailerSessionReady = idleTrailerSessionStart != null
                                 )
                             )
+                            traceEvents.emitScreensaverSchedulerState(
+                                stage = "start_aborted_after_delay",
+                                route = currentRoute,
+                                eligible = idleScreensaverEligible,
+                                visible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                trailerSessionReady = idleTrailerSessionStart != null,
+                                lifecycleState = appLifecycleState.name,
+                                reason = idleScreensaverScheduleBlockReason(
+                                    lifecycleState = appLifecycleState,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size
+                                )
+                            )
                             return@LaunchedEffect
                         }
                         idleTrailerSessionStart = if (mainUiPrefs.trailerScreensaverEnabled) {
@@ -910,7 +1072,8 @@ class MainActivity : ComponentActivity() {
                                 trailerService.resolveIdleTrailerScreensaverPlaybackSource(
                                     trailerResolver = trailerResolver,
                                     candidate = candidate,
-                                    playbackRef = playbackRef
+                                    playbackRef = playbackRef,
+                                    traceEvents = traceEvents
                                 )
                             }
                         } else {
@@ -930,6 +1093,22 @@ class MainActivity : ComponentActivity() {
                                 trailerSessionReady = idleTrailerSessionStart != null
                             )
                         )
+                        traceEvents.emitScreensaverSchedulerState(
+                            stage = "start_prepared",
+                            route = currentRoute,
+                            eligible = idleScreensaverEligible,
+                            visible = idleScreensaverVisible,
+                            slideCount = idleScreensaverSlides.size,
+                            trailerCandidateCount = idleTrailerCandidates.size,
+                            trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                            trailerSessionReady = idleTrailerSessionStart != null,
+                            lifecycleState = appLifecycleState.name,
+                            reason = when {
+                                !mainUiPrefs.trailerScreensaverEnabled -> "image_mode"
+                                idleTrailerSessionStart != null -> "trailer_session_ready"
+                                else -> "trailer_resolution_failed"
+                            }
+                        )
                         if (
                             idleScreensaverSlides.isNotEmpty() ||
                             idleTrailerSessionStart != null
@@ -947,6 +1126,18 @@ class MainActivity : ComponentActivity() {
                                     idleLastInteractionAtMs = idleLastInteractionAtMs,
                                     trailerSessionReady = idleTrailerSessionStart != null
                                 )
+                            )
+                            traceEvents.emitScreensaverSchedulerState(
+                                stage = "show_requested",
+                                route = currentRoute,
+                                eligible = idleScreensaverEligible,
+                                visible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                trailerSessionReady = idleTrailerSessionStart != null,
+                                lifecycleState = appLifecycleState.name,
+                                reason = "ready"
                             )
                             idleScreensaverController.show()
                         }
@@ -1054,7 +1245,7 @@ class MainActivity : ComponentActivity() {
                                 finishAndRemoveTask()
                             },
                             profiles = profiles,
-                            activeProfileId = profileManager.activeProfileId.collectAsState().value,
+                            activeProfileId = activeProfileId,
                             onSwitchProfile = { profileId ->
                                 processProfileSelectionGatePassed = true
                                 hasPassedProfileSelectionGate = true
@@ -1103,7 +1294,8 @@ class MainActivity : ComponentActivity() {
                                                 trailerService.resolveIdleTrailerScreensaverPlaybackSource(
                                                     trailerResolver = trailerResolver,
                                                     candidate = candidate,
-                                                    playbackRef = playbackRef
+                                                    playbackRef = playbackRef,
+                                                    traceEvents = traceEvents
                                                 )
                                             }
                                         )
@@ -1524,6 +1716,34 @@ internal fun shouldScheduleIdleScreensaverStart(
         idleScreensaverEligible &&
         !idleScreensaverVisible &&
         (slideCount > 0 || trailerCandidateCount > 0)
+}
+
+internal fun idleScreensaverScheduleBlockReason(
+    lifecycleState: Lifecycle.State,
+    idleScreensaverEligible: Boolean,
+    idleScreensaverVisible: Boolean,
+    slideCount: Int,
+    trailerCandidateCount: Int
+): String {
+    return when {
+        lifecycleState != Lifecycle.State.RESUMED -> "lifecycle_not_resumed"
+        !idleScreensaverEligible -> "ineligible"
+        idleScreensaverVisible -> "already_visible"
+        slideCount <= 0 && trailerCandidateCount <= 0 -> "empty_candidates"
+        else -> "unknown"
+    }
+}
+
+internal fun shouldPrepareTrailerSessionForVisibleScreensaver(
+    idleScreensaverVisible: Boolean,
+    trailerScreensaverEnabled: Boolean,
+    trailerSessionReady: Boolean,
+    trailerCandidateCount: Int
+): Boolean {
+    return idleScreensaverVisible &&
+        trailerScreensaverEnabled &&
+        !trailerSessionReady &&
+        trailerCandidateCount > 0
 }
 
 internal fun shouldRegisterIdleInteractionForTrailerPlaybackTransition(

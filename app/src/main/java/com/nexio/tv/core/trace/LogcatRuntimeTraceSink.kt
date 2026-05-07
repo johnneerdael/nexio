@@ -99,6 +99,82 @@ class LogcatRuntimeTraceSink(
             "imdbId" to payload["imdbId"],
             "networkExecuted" to payload["networkExecuted"]
         )
+        "metadata.trailer_preview_request" -> linkedMapOf(
+            "itemId" to payload["itemId"],
+            "itemType" to payload["itemType"],
+            "fallbackRef" to payload["fallbackRef"],
+            "published" to payload["published"],
+            "negativeCached" to payload["negativeCached"],
+            "forceRefresh" to payload["forceRefresh"]
+        )
+        "metadata.trailer_preview_state" -> linkedMapOf(
+            "itemId" to payload["itemId"],
+            "stage" to payload["stage"],
+            "published" to payload["published"],
+            "negativeCached" to payload["negativeCached"],
+            "loading" to payload["loading"],
+            "reason" to payload["reason"]
+        )
+        "metadata.trailer_surface_synced" -> linkedMapOf(
+            "surface" to payload["surface"],
+            "itemCount" to payload["itemCount"],
+            "selectedRefCount" to payload["selectedRefCount"],
+            "youtubeRefCount" to payload["youtubeRefCount"],
+            "inAppRefCount" to payload["inAppRefCount"],
+            "externalRefCount" to payload["externalRefCount"],
+            "fallbackIdCount" to payload["fallbackIdCount"]
+        )
+        "metadata.trailer_lookup_result" -> linkedMapOf(
+            "contentId" to payload["contentId"],
+            "itemType" to payload["itemType"],
+            "season" to payload["season"],
+            "fallbackCount" to payload["fallbackCount"],
+            "cacheDecision" to payload["cacheDecision"],
+            "result" to payload["result"],
+            "hasPlayback" to payload["hasPlayback"],
+            "hasExternal" to payload["hasExternal"]
+        )
+        "media_clip.candidate_stored" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "provider" to payload["provider"],
+            "clipType" to payload["clipType"],
+            "site" to payload["site"],
+            "videoId" to payload["videoId"],
+            "scope" to payload["scope"],
+            "cacheDecision" to payload["cacheDecision"]
+        )
+        "media_clip.candidate_selected" -> linkedMapOf(
+            "surface" to payload["surface"],
+            "itemKey" to payload["itemKey"],
+            "provider" to payload["provider"],
+            "clipType" to payload["clipType"],
+            "site" to payload["site"],
+            "videoId" to payload["videoId"],
+            "cacheDecision" to payload["cacheDecision"],
+            "playbackUrlResolvedAtPlayTime" to payload["playbackUrlResolvedAtPlayTime"]
+        )
+        "metadata.trailer_autoplay_gate" -> linkedMapOf(
+            "stage" to payload["stage"],
+            "focusKey" to payload["focusKey"],
+            "itemId" to payload["itemId"],
+            "itemType" to payload["itemType"],
+            "autoplay" to payload["autoplayEnabled"],
+            "delay" to payload["delaySeconds"],
+            "screensaver" to payload["screensaverVisible"],
+            "splash" to payload["startupSplashVisible"],
+            "takeover" to payload["externalTakeoverActive"],
+            "stillFocused" to payload["selectionStillFocused"],
+            "resumed" to payload["lifecycleResumed"],
+            "unlocked" to payload["trailerPlaybackUnlocked"],
+            "metadata" to payload["hasTrailerMetadata"],
+            "resolved" to payload["hasResolvedPreview"],
+            "external" to payload["hasResolvedExternalPreview"],
+            "loading" to payload["loading"],
+            "negative" to payload["negativeCached"],
+            "retried" to payload["alreadyRetried"],
+            "proceed" to payload["shouldProceed"],
+            "reason" to payload["reason"]
+        )
         "home.hydration_started" -> linkedMapOf(
             "railId" to payload["railId"],
             "itemKey" to payload["itemKey"],
@@ -158,6 +234,27 @@ class LogcatRuntimeTraceSink(
             "source" to payload["source"],
             "trailerSource" to payload["trailerSource"],
             "fallbackYouTubeIdsOnly" to payload["fallbackYouTubeIdsOnly"]
+        )
+        "screensaver.surface_published" -> linkedMapOf(
+            "surface" to payload["surface"],
+            "published" to payload["published"],
+            "itemCount" to payload["itemCount"],
+            "logoCount" to payload["logoCount"],
+            "trailerCandidateCount" to payload["trailerCandidateCount"],
+            "selectedRefCount" to payload["selectedRefCount"],
+            "fallbackIdCount" to payload["fallbackIdCount"]
+        )
+        "screensaver.scheduler_state" -> linkedMapOf(
+            "stage" to payload["stage"],
+            "route" to payload["route"],
+            "eligible" to payload["eligible"],
+            "visible" to payload["visible"],
+            "slideCount" to payload["slideCount"],
+            "trailerCandidateCount" to payload["trailerCandidateCount"],
+            "trailerEnabled" to payload["trailerEnabled"],
+            "trailerSessionReady" to payload["trailerSessionReady"],
+            "lifecycleState" to payload["lifecycleState"],
+            "reason" to payload["reason"]
         )
         "artwork.decision_lookup" -> linkedMapOf(
             "decisionKey" to payload["decisionKey"],
@@ -249,6 +346,21 @@ class LogcatRuntimeTraceSink(
             "posterKind" to payload["posterKind"],
             "posterProviderTag" to payload["posterProviderTag"],
             "decisionFound" to payload["decisionFound"]
+        )
+        "screensaver.trailer_playback_resolution" -> linkedMapOf(
+            "itemId" to payload["itemId"],
+            "itemType" to payload["itemType"],
+            "inputRef" to payload["inputRef"],
+            "selectedRef" to payload["selectedRef"],
+            "result" to payload["result"],
+            "reason" to payload["reason"]
+        )
+        "runtime.trailer_playback_source" -> linkedMapOf(
+            "ref" to payload["ref"],
+            "result" to payload["result"],
+            "hasVideo" to payload["hasVideo"],
+            "hasAudio" to payload["hasAudio"],
+            "hasUserAgent" to payload["hasUserAgent"]
         )
         "runtime.operation_start" -> linkedMapOf(
             "provider" to payload["provider"],

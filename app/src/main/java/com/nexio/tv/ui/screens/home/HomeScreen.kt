@@ -841,6 +841,32 @@ private fun ModernHomeRoute(
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }
     }
+    val traceTrailerAutoplayGate = remember(viewModel) {
+        { event: ModernHomeTrailerAutoplayGateTrace ->
+            viewModel.traceEvents.emitModernHomeTrailerAutoplayGate(
+                stage = event.stage,
+                focusKey = event.focusKey,
+                itemId = event.itemId,
+                itemType = event.itemType,
+                autoplayEnabled = event.autoplayEnabled,
+                delaySeconds = event.delaySeconds,
+                screensaverVisible = event.screensaverVisible,
+                startupSplashVisible = event.startupSplashVisible,
+                externalTakeoverActive = event.externalTakeoverActive,
+                selectionStillFocused = event.selectionStillFocused,
+                lifecycleResumed = event.lifecycleResumed,
+                trailerPlaybackUnlocked = event.trailerPlaybackUnlocked,
+                hasTrailerMetadata = event.hasTrailerMetadata,
+                hasResolvedPreview = event.hasResolvedPreview,
+                hasResolvedExternalPreview = event.hasResolvedExternalPreview,
+                loading = event.loading,
+                negativeCached = event.negativeCached,
+                alreadyRetried = event.alreadyRetried,
+                shouldProceed = event.shouldProceed,
+                reason = event.reason
+            )
+        }
+    }
     ModernHomeContent(
         contentState = modernContentState,
         idleScreensaverVisible = idleScreensaverVisible,
@@ -866,6 +892,7 @@ private fun ModernHomeRoute(
         externalTrailerTakeoverActive = externalTrailerTakeoverActive,
         onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
         onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
+        onTrailerAutoplayGateEvaluated = traceTrailerAutoplayGate,
         onSaveFocusState = saveModernFocusState
     )
 }

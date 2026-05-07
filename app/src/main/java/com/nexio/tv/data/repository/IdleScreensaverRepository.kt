@@ -14,6 +14,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -71,15 +72,31 @@ class IdleScreensaverRepository(
         refreshFromResolvedSurface("Prepared")
     }
 
+    suspend fun observeResolvedSurface(profileId: Int = activeProfileId()) {
+        screensaverCandidateRepository.observeCandidates(profileId).collect { snapshot ->
+            publishSnapshot(snapshot, "Observed")
+        }
+    }
+
     private suspend fun refreshFromResolvedSurface(logPrefix: String) {
+        val profileId = activeProfileId()
+        publishSnapshot(
+            snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId),
+            logPrefix = logPrefix
+        )
+    }
+
+    private suspend fun publishSnapshot(
+        snapshot: ScreensaverCandidatesSnapshot,
+        logPrefix: String
+    ) {
         refreshMutex.withLock {
-            val profileId = activeProfileId()
-            val snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId)
             val imageSlides = snapshot.imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
-            _slides.value = imageSlides.ifEmpty { listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE) }
-            _trailerCandidates.value = snapshot.trailerCandidates.mapNotNull { candidate ->
+            val trailerCandidates = snapshot.trailerCandidates.mapNotNull { candidate ->
                 candidate.toIdleTrailerScreensaverCandidate()
             }
+            _slides.value = imageSlides.ifEmpty { listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE) }
+            _trailerCandidates.value = trailerCandidates
             Log.d(
                 TAG,
                 "$logPrefix ${_slides.value.size} idle screensaver slides and " +

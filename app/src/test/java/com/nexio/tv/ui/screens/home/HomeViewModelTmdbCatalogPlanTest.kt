@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
@@ -111,6 +112,44 @@ class HomeViewModelTmdbCatalogPlanTest {
         )
 
         assertEquals(TmdbCatalogIds.TRENDING_MOVIES, homeCatalogGlobalKey(tmdbRow))
+    }
+
+    @Test
+    fun `tmdb trending screensaver rows use live trending rows with persisted cache fallback`() {
+        val liveMovieRow = tmdbRow(
+            catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+            items = listOf(meta("tmdb:1", "Live Trending Movie"))
+        )
+        val livePopularRow = tmdbRow(
+            catalogId = TmdbCatalogIds.POPULAR_MOVIES,
+            items = listOf(meta("tmdb:2", "Popular Movie"))
+        )
+        val persistedSeriesRow = tmdbRow(
+            catalogId = TmdbCatalogIds.TRENDING_SERIES,
+            items = listOf(meta("tmdb:3", "Persisted Trending Series"))
+        )
+
+        val rows = tmdbTrendingScreensaverRows(
+            tmdbSnapshot = TmdbDiscoverySnapshot(
+                rowsByCatalog = mapOf(
+                    TmdbCatalogIds.TRENDING_MOVIES to liveMovieRow,
+                    TmdbCatalogIds.POPULAR_MOVIES to livePopularRow
+                )
+            ),
+            persistedTmdbGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = TmdbCatalogIds.TRENDING_SERIES,
+                    rows = listOf(persistedSeriesRow)
+                )
+            )
+        )
+
+        assertEquals(
+            listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.TRENDING_SERIES),
+            rows.map { it.catalogId }
+        )
+        assertEquals("Live Trending Movie", rows[0].items.single().name)
+        assertEquals("Persisted Trending Series", rows[1].items.single().name)
     }
 
     private fun planFor(

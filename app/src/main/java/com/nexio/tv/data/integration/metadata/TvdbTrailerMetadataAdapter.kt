@@ -1,6 +1,15 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.media.ClipSite
+import com.nexio.tv.core.media.Confidence
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipCandidate
+import com.nexio.tv.core.media.MediaClipPlaybackRef
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipSource
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
@@ -14,6 +23,7 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverType
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
+import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,7 +37,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class TvdbTrailerMetadataAdapter @Inject constructor(
-    private val tvdbTrailerResolver: TvdbTrailerResolver
+    private val tvdbTrailerResolver: TvdbTrailerResolver,
+    private val mediaClipStore: MediaClipStore? = null
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
 
@@ -46,7 +57,18 @@ class TvdbTrailerMetadataAdapter @Inject constructor(
             title = null,
             year = null
         )) {
-            is TvdbTrailerLookupResult.ResolvedYouTube -> lookup.youtubeUrl
+            is TvdbTrailerLookupResult.ResolvedYouTube -> {
+                mediaClipStore?.storeCandidates(
+                    listOf(
+                        lookup.toMediaClipCandidate(
+                            tvdbId = tvdbId,
+                            route = route,
+                            step = step
+                        )
+                    )
+                )
+                lookup.youtubeUrl
+            }
             is TvdbTrailerLookupResult.Resolved -> when (val result = lookup.result) {
                 is com.nexio.tv.data.trailer.TrailerResolutionResult.External -> result.url
                 is com.nexio.tv.data.trailer.TrailerResolutionResult.Playback -> result.source.videoUrl
@@ -66,6 +88,34 @@ class TvdbTrailerMetadataAdapter @Inject constructor(
                     ResolvedField.TRAILERS to FieldValue(trailers, FieldOwner.TRAILERS)
                 )
             )
+        )
+    }
+
+    private fun TvdbTrailerLookupResult.ResolvedYouTube.toMediaClipCandidate(
+        tvdbId: Int,
+        route: MetadataRoute,
+        step: ProviderPlanStep
+    ): MediaClipCandidate {
+        val identity = ContentIdentity(
+            contentId = "tvdb:$tvdbId",
+            itemType = route.sourceContext.itemType ?: "series",
+            stableIds = ProviderIds(tvdb = tvdbId.toString())
+        )
+        return MediaClipCandidate(
+            clipId = "tvdb:$tvdbId:$videoId",
+            contentId = identity,
+            provider = "TVDB",
+            source = MediaClipSource.PROVIDER,
+            scope = MediaClipScope.Title(identity),
+            clipType = MediaClipType.TRAILER,
+            title = null,
+            language = route.language?.substringBefore('-')?.takeIf { it.isNotBlank() },
+            site = ClipSite.YOUTUBE,
+            externalVideoId = videoId,
+            playbackRef = MediaClipPlaybackRef.YouTubeId(videoId),
+            confidence = Confidence.HIGH,
+            sourceTrace = listOf(step.apiShapeId),
+            fetchedAtMs = System.currentTimeMillis()
         )
     }
 }
