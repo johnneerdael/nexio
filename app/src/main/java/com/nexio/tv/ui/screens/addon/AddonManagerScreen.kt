@@ -1111,5 +1111,7 @@ private fun AddonParserPreset.label(): String {
         AddonParserPreset.STREMTHRU -> "StremThru"
         AddonParserPreset.TORRENTIO -> "Torrentio"
         AddonParserPreset.WEBSTREAMR -> "WebStreamr"
+        AddonParserPreset.NEXIO_TORII -> "Nexio Torii"
+        AddonParserPreset.NEXIO_NAGARE -> "Nexio Nagare"
     }
 }
