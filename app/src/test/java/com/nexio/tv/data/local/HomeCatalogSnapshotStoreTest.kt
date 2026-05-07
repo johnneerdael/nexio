@@ -6,6 +6,8 @@ import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
+import com.nexio.tv.core.artwork.ArtworkDecisionLookupResult
+import com.nexio.tv.core.artwork.ArtworkDecisionStoreLoadState
 import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkSourceRole
@@ -275,7 +277,7 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
-    fun `read clears missing decision refs and tag`() {
+    fun `authoritative missing clears decision refs and tag`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -300,6 +302,107 @@ class HomeCatalogSnapshotStoreTest {
 
         val restored = store.read("RPDB:12345")
         assertClearedPosterFields(restored)
+    }
+
+    @Test
+    fun `non-authoritative cache preserves decision refs and provider tags`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = NonAuthoritativeArtworkDecisionCache()
+        val traceSink = RecordingTraceSink()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache,
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/non-authoritative-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val restored = store.read("RPDB:12345")
+        assertPosterFieldsPreserved(restored, "nexio-artwork://decision/non-authoritative-decision", "rpdb")
+
+        val rehydratePayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .first { payload -> payload["reason"] == "decision_cache_not_authoritative" }
+        assertEquals("decision", rehydratePayload["posterKind"])
+        assertEquals("rpdb", rehydratePayload["providerTag"])
+        assertTrue((rehydratePayload["decisionKeyHash"] as String).isNotBlank())
+        assertFalse((rehydratePayload["decisionKeyHash"] as String).contains("non-authoritative-decision"))
+    }
+
+    @Test
+    fun `lookup failure preserves decision ref and requests hydration`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = LookupFailedArtworkDecisionCache()
+        val traceSink = RecordingTraceSink()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache,
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/failed-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val restored = store.read("RPDB:12345")
+        assertPosterFieldsPreserved(restored, "nexio-artwork://decision/failed-decision", "rpdb")
+
+        val rehydratePayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .first { payload -> payload["reason"] == "lookup_failed" }
+        assertEquals("decision", rehydratePayload["posterKind"])
+        assertEquals("rpdb", rehydratePayload["providerTag"])
+        assertTrue((rehydratePayload["decisionKeyHash"] as String).isNotBlank())
+        assertFalse((rehydratePayload["decisionKeyHash"] as String).contains("failed-decision"))
+    }
+
+    @Test
+    fun `provider tag mismatch does not reject non-authoritative preserved decision ref`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = NonAuthoritativeArtworkDecisionCache()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/mismatched-provider-decision",
+            posterProviderTag = "top_posters"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val restored = store.read("RPDB:12345")
+        assertPosterFieldsPreserved(
+            restored,
+            "nexio-artwork://decision/mismatched-provider-decision",
+            "top_posters"
+        )
     }
 
     @Test
@@ -331,12 +434,13 @@ class HomeCatalogSnapshotStoreTest {
 
         val sanitizeEvents = traceSink.events
             .filter { event -> event.eventType == "home.snapshot_sanitize_artwork" }
-        assertEquals(3, sanitizeEvents.size)
+        assertEquals(1, sanitizeEvents.size)
         val payload = sanitizeEvents.first().payload as Map<*, *>
-        assertEquals("missing_decision", payload["reason"])
-        assertEquals("decision", payload["posterKind"])
-        assertEquals("rpdb", payload["posterProviderTag"])
-        assertEquals(false, payload["decisionFound"])
+        assertEquals(3, payload["sanitizedCount"])
+        assertEquals(3, payload["missingDecisionCount"])
+        assertEquals(0, payload["rawPremiumCount"])
+        assertEquals(0, payload["legacyIntegrationCount"])
+        assertTrue((payload["samples"] as String).contains("missing_decision:decision:rpdb:missing_authoritative"))
     }
 
     @Test
@@ -381,12 +485,14 @@ class HomeCatalogSnapshotStoreTest {
 
         val lookupPayload = traceSink.events
             .filter { event -> event.eventType == "home.snapshot_decision_lookup" }
-            .first { event -> (event.payload as Map<*, *>)["decisionFound"] == false }
+            .first { event -> (event.payload as Map<*, *>)["missingDecisionCount"] == 3 }
             .payload as Map<*, *>
-        assertEquals("catalogRows[0].items[0]", lookupPayload["scope"])
-        assertEquals(false, lookupPayload["decisionFound"])
-        assertEquals("rpdb", lookupPayload["posterProviderTag"])
-        assertEquals("decision", lookupPayload["posterKind"])
+        assertEquals("snapshot", lookupPayload["scope"])
+        assertEquals(3, lookupPayload["decisionLookupCount"])
+        assertEquals(0, lookupPayload["decisionFoundCount"])
+        assertEquals(3, lookupPayload["missingDecisionCount"])
+        assertEquals(0, lookupPayload["cacheNotAuthoritativeCount"])
+        assertEquals(0, lookupPayload["lookupErrorCount"])
         assertEquals(true, lookupPayload["cacheLoaded"])
         assertEquals(748, lookupPayload["cacheDecisionCount"])
         assertEquals(2, lookupPayload["cacheLinkCount"])
@@ -397,8 +503,11 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(null, lookupPayload["lastLoadReason"])
         assertEquals(null, lookupPayload["lastLoadErrorClass"])
         assertEquals(0, lookupPayload["droppedDecisionCount"])
-        assertTrue((lookupPayload["decisionKeyHash"] as String).isNotBlank())
-        assertFalse((lookupPayload["decisionKeyHash"] as String).contains("diagnostic-missing-decision"))
+        assertEquals(
+            "found=0|missing_authoritative=3|cache_not_authoritative=0|lookup_failed=0",
+            lookupPayload["lookupResultTypes"]
+        )
+        assertTrue((lookupPayload["missingDecisionSamples"] as String).contains("catalogRows[0].items[0]:decision:rpdb"))
     }
 
     @Test
@@ -547,6 +656,22 @@ class HomeCatalogSnapshotStoreTest {
         }
     }
 
+    private fun assertPosterFieldsPreserved(
+        snapshot: HomeCatalogSnapshotStore.Snapshot?,
+        expectedPoster: String,
+        expectedPosterProviderTag: String
+    ) {
+        val items = buildList {
+            add(snapshot?.catalogRows?.single()?.items?.single())
+            add(snapshot?.fullCatalogRows?.single()?.items?.single())
+            add(snapshot?.heroItems?.single())
+        }
+        items.forEach { item ->
+            assertEquals(expectedPoster, item?.poster)
+            assertEquals(expectedPosterProviderTag, item?.posterProviderTag)
+        }
+    }
+
     private fun localePrefs(tag: String): InMemorySharedPreferences {
         return InMemorySharedPreferences().also { prefs ->
             prefs.edit().putString("locale_tag", tag).apply()
@@ -595,6 +720,86 @@ class HomeCatalogSnapshotStoreTest {
 
         override fun invalidatePremiumArtworkPolicy() = delegate.invalidatePremiumArtworkPolicy()
         override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics = diagnostics
+    }
+
+    private class NonAuthoritativeArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
+        private val loadState = ArtworkDecisionStoreLoadState.LoadedPartialNonAuthoritative(
+            decisionCount = 0,
+            droppedDecisionCount = 1,
+            quarantinedDecisionCount = 0
+        )
+
+        override fun get(key: ArtworkDecisionKey): ArtworkDecision? = null
+        override fun loadState(): ArtworkDecisionStoreLoadState = loadState
+        override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics =
+            ArtworkDecisionCacheSnapshotDiagnostics(
+                loaded = true,
+                decisionCount = 0,
+                linkCount = 0,
+                storeFilePresent = true,
+                storeFileReadable = true,
+                storeFileBytes = 128L,
+                lastLoadSuccess = false,
+                lastLoadReason = "partial_load",
+                lastLoadErrorClass = "JsonParseException",
+                droppedDecisionCount = 1,
+                loadStateName = "LoadedPartialNonAuthoritative",
+                authoritative = false,
+                quarantinedDecisionCount = 0
+            )
+
+        override fun put(decision: ArtworkDecision) = Unit
+        override fun remove(key: ArtworkDecisionKey) = Unit
+        override fun linkPreviewToCanonical(
+            previewKey: ArtworkDecisionKey,
+            canonicalKey: ArtworkDecisionKey
+        ) = Unit
+        override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? = null
+        override fun invalidateBySettingsHash(settingsHash: String) = Unit
+        override fun invalidateByCredentialHash(credentialHash: String) = Unit
+        override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) = Unit
+        override fun invalidatePremiumArtworkPolicy() = Unit
+    }
+
+    private class LookupFailedArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
+        override fun get(key: ArtworkDecisionKey): ArtworkDecision? = null
+        override fun lookup(
+            key: ArtworkDecisionKey,
+            requiredContext: com.nexio.tv.core.artwork.ArtworkDecisionAuthorityContext?
+        ): ArtworkDecisionLookupResult =
+            ArtworkDecisionLookupResult.LookupFailed(
+                decisionKey = key,
+                errorClass = "IOException",
+                messageHash = "abc123"
+            )
+
+        override fun snapshotDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics =
+            ArtworkDecisionCacheSnapshotDiagnostics(
+                loaded = false,
+                decisionCount = 0,
+                linkCount = 0,
+                storeFilePresent = true,
+                storeFileReadable = false,
+                storeFileBytes = null,
+                lastLoadSuccess = false,
+                lastLoadReason = "load_failed",
+                lastLoadErrorClass = "IOException",
+                droppedDecisionCount = null,
+                loadStateName = "FailedNonAuthoritative",
+                authoritative = false
+            )
+
+        override fun put(decision: ArtworkDecision) = Unit
+        override fun remove(key: ArtworkDecisionKey) = Unit
+        override fun linkPreviewToCanonical(
+            previewKey: ArtworkDecisionKey,
+            canonicalKey: ArtworkDecisionKey
+        ) = Unit
+        override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? = null
+        override fun invalidateBySettingsHash(settingsHash: String) = Unit
+        override fun invalidateByCredentialHash(credentialHash: String) = Unit
+        override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) = Unit
+        override fun invalidatePremiumArtworkPolicy() = Unit
     }
 
 }
