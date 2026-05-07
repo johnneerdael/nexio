@@ -27,6 +27,7 @@ import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.model.Addon
@@ -1307,6 +1308,9 @@ class HomeViewModelFocusHydrationTest {
             profileBoundary = profileBoundary,
             trackingProviderStateService = mockk(relaxed = true),
             playbackIdleGateState = playbackIdleGateState,
+            resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
+                activeProfileSession = { profileSessionFlow.value }
+            ),
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
             homeHydrationCoordinator = homeHydrationCoordinator,

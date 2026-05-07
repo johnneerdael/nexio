@@ -6,12 +6,14 @@ import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
-import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
-import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -22,6 +24,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -74,6 +77,20 @@ private data class LayoutUiPrefs(
     val posterCardHeightDp: Int,
     val posterCardCornerRadiusDp: Int
 )
+
+internal data class HomeTrailerSurfaceTraceSummary(
+    val itemCount: Int,
+    val selectedRefCount: Int,
+    val youtubeRefCount: Int,
+    val inAppRefCount: Int,
+    val externalRefCount: Int,
+    val fallbackIdCount: Int
+)
+
+internal fun shouldEmitHomeTrailerSurfaceTrace(
+    previous: HomeTrailerSurfaceTraceSummary?,
+    current: HomeTrailerSurfaceTraceSummary
+): Boolean = previous != current
 
 @OptIn(FlowPreview::class)
 internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
@@ -248,28 +265,17 @@ internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List
         .forEach { item ->
             val key = homeTrailerAvailabilityKey(item.id, item.apiType)
             activeKeys += key
-            val resolution = metadataRouterFacade.resolveTrailer(
-                TrailerResolveRequest(
-                    itemKey = key,
-                    title = item.name,
-                    year = item.releaseInfo?.take(4)?.takeIf { it.length == 4 },
-                    stableIds = item.firstPaintStableIds,
-                    fallbackYtIds = item.trailerYtIds,
-                    surface = TrailerSurface.HOME,
-                    type = item.apiType,
-                    contentId = item.id
-                )
+            val selectedFallbackId = item.trailerYtIds.firstOrNull { id -> id.isNotBlank() }
+            val hasPublishedPreview = hasPublishedHomeTrailerPreview(
+                item.id,
+                trailerPreviewUrlsState,
+                trailerPreviewExternalUrlsState
             )
-            val selected = resolution.selected
-            if (selected != null) {
+            if (selectedFallbackId != null || hasPublishedPreview) {
                 trailerMetadataAvailableState[key] = true
-                when (selected) {
-                    is TrailerPlaybackRef.YouTubeId -> trailerSelectedFallbackYtIdsState[key] = selected.videoId
-                    else -> trailerSelectedFallbackYtIdsState.remove(key)
-                }
-                if (!hasPublishedHomeTrailerPreview(item.id, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
-                    trailerPreviewNegativeCache[item.id] = true
-                }
+                selectedFallbackId
+                    ?.let { trailerSelectedFallbackYtIdsState[key] = it }
+                    ?: trailerSelectedFallbackYtIdsState.remove(key)
             } else {
                 trailerMetadataAvailableState.remove(key)
                 trailerSelectedFallbackYtIdsState.remove(key)
@@ -296,11 +302,32 @@ internal fun HomeViewModel.syncHomeTrailerAvailabilityFromResolvedItems(items: L
     }
     trailerMetadataAvailableState.keys.retainAll(activeKeys)
     trailerSelectedFallbackYtIdsState.keys.retainAll(activeKeys)
+    val traceSummary = HomeTrailerSurfaceTraceSummary(
+        itemCount = items.size,
+        selectedRefCount = items.count { it.trailer.selectedPlaybackRef != null },
+        youtubeRefCount = items.count { it.trailer.selectedPlaybackRef is TrailerPlaybackRef.YouTubeId },
+        inAppRefCount = items.count { it.trailer.selectedPlaybackRef is TrailerPlaybackRef.InAppSource },
+        externalRefCount = items.count { it.trailer.selectedPlaybackRef is TrailerPlaybackRef.ExternalUrl },
+        fallbackIdCount = items.sumOf { it.trailer.normalizedFallbackTrailerIdCount() }
+    )
+    if (shouldEmitHomeTrailerSurfaceTrace(lastHomeTrailerSurfaceTraceSummary, traceSummary)) {
+        lastHomeTrailerSurfaceTraceSummary = traceSummary
+        traceEvents.emitTrailerSurfaceSynced(
+            surface = "home",
+            itemCount = traceSummary.itemCount,
+            selectedRefCount = traceSummary.selectedRefCount,
+            youtubeRefCount = traceSummary.youtubeRefCount,
+            inAppRefCount = traceSummary.inAppRefCount,
+            externalRefCount = traceSummary.externalRefCount,
+            fallbackIdCount = traceSummary.fallbackIdCount
+        )
+    }
 }
 
 internal fun HomeViewModel.clearTrailerMetadataAvailabilityPipeline() {
     trailerMetadataAvailableState.clear()
     trailerSelectedFallbackYtIdsState.clear()
+    lastHomeTrailerSurfaceTraceSummary = null
     trailerMetadataAvailabilityInFlightKeys.clear()
     val jobs = synchronized(trailerMetadataAvailabilityJobs) {
         trailerMetadataAvailabilityJobs.toList().also { trailerMetadataAvailabilityJobs.clear() }
@@ -328,13 +355,119 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 ) {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
+    val publishedBefore = hasPublishedHomeTrailerPreview(
+        itemId = itemId,
+        trailerPreviewUrls = trailerPreviewUrlsState,
+        trailerPreviewExternalUrls = trailerPreviewExternalUrlsState
+    )
+    traceEvents.emitTrailerPreviewRequest(
+        itemId = itemId,
+        itemType = apiType,
+        fallbackRef = fallbackYtId,
+        published = publishedBefore,
+        negativeCached = trailerPreviewNegativeCache.containsKey(itemId),
+        forceRefresh = forceRefresh
+    )
+
     if (activeTrailerPreviewItemId != itemId) {
         activeTrailerPreviewItemId = itemId
         trailerPreviewRequestVersion++
     }
-    trailerPreviewLoadingIds.remove(itemId)
-    if (!hasPublishedHomeTrailerPreview(itemId, trailerPreviewUrlsState, trailerPreviewExternalUrlsState)) {
-        trailerPreviewNegativeCache[itemId] = true
+    if (publishedBefore && !forceRefresh) {
+        trailerPreviewLoadingIds.remove(itemId)
+        traceEvents.emitTrailerPreviewState(
+            itemId = itemId,
+            stage = "request_completed",
+            published = true,
+            negativeCached = false,
+            loading = false,
+            reason = "already_published"
+        )
+        return
+    }
+    if (trailerPreviewNegativeCache.containsKey(itemId) && !forceRefresh) {
+        trailerPreviewLoadingIds.remove(itemId)
+        traceEvents.emitTrailerPreviewState(
+            itemId = itemId,
+            stage = "request_skipped",
+            published = false,
+            negativeCached = true,
+            loading = false,
+            reason = "negative_cached"
+        )
+        return
+    }
+
+    val requestVersion = trailerPreviewRequestVersion
+    trailerPreviewJob?.cancel()
+    trailerPreviewLoadingIds[itemId] = true
+    traceEvents.emitTrailerPreviewState(
+        itemId = itemId,
+        stage = "resolve_started",
+        published = false,
+        negativeCached = false,
+        loading = true,
+        reason = if (fallbackYtId.isNullOrBlank()) "metadata_lookup" else "fallback_ref"
+    )
+    trailerPreviewJob = viewModelScope.launch {
+        val result = try {
+            withContext(Dispatchers.IO) {
+                metadataRouterFacade.fetchTrailer(
+                    metadataRequest = homeTrailerPreviewMetadataRequest(
+                        itemId = itemId,
+                        title = title,
+                        releaseInfo = releaseInfo,
+                        apiType = apiType,
+                        languageTag = profileBoundary.currentLanguageTag()
+                    ),
+                    title = title,
+                    year = releaseInfo?.take(4)?.takeIf { it.length == 4 },
+                    tmdbId = itemId.normalizedTmdbIdOrNull(),
+                    type = apiType,
+                    contentId = itemId,
+                    fallbackYtIds = listOfNotNull(fallbackYtId?.trim()?.takeIf { it.isNotBlank() })
+                )
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            traceEvents.emitTrailerPreviewState(
+                itemId = itemId,
+                stage = "resolve_failed",
+                published = false,
+                negativeCached = false,
+                loading = false,
+                reason = error.javaClass.simpleName
+            )
+            null
+        }
+
+        val published = publishHomeTrailerPreviewResolution(
+            itemId = itemId,
+            result = result,
+            trailerPreviewUrls = trailerPreviewUrlsState,
+            trailerPreviewAudioUrls = trailerPreviewAudioUrlsState,
+            trailerPreviewUserAgents = trailerPreviewUserAgentsState,
+            trailerPreviewExternalUrls = trailerPreviewExternalUrlsState,
+            trailerPreviewNegativeCache = trailerPreviewNegativeCache
+        )
+        trailerPreviewLoadingIds.remove(itemId)
+        if (!published) {
+            trailerPreviewNegativeCache[itemId] = true
+        }
+        traceEvents.emitTrailerPreviewState(
+            itemId = itemId,
+            stage = "request_completed",
+            published = published,
+            negativeCached = trailerPreviewNegativeCache.containsKey(itemId),
+            loading = false,
+            reason = when {
+                requestVersion != trailerPreviewRequestVersion -> "stale_request_cached"
+                result is TrailerResolutionResult.Playback -> "playback_source"
+                result is TrailerResolutionResult.External -> "external_source"
+                else -> "no_source"
+            }
+        )
     }
 }
 
@@ -345,6 +478,71 @@ internal fun hasPublishedHomeTrailerPreview(
 ): Boolean =
     !trailerPreviewUrls[itemId].isNullOrBlank() ||
         !trailerPreviewExternalUrls[itemId].isNullOrBlank()
+
+internal fun publishHomeTrailerPreviewResolution(
+    itemId: String,
+    result: TrailerResolutionResult?,
+    trailerPreviewUrls: MutableMap<String, String>,
+    trailerPreviewAudioUrls: MutableMap<String, String>,
+    trailerPreviewUserAgents: MutableMap<String, String>,
+    trailerPreviewExternalUrls: MutableMap<String, String>,
+    trailerPreviewNegativeCache: MutableMap<String, Boolean>
+): Boolean {
+    return when (result) {
+        is TrailerResolutionResult.Playback -> {
+            trailerPreviewUrls[itemId] = result.source.videoUrl
+            result.source.audioUrl?.takeIf { it.isNotBlank() }?.let { trailerPreviewAudioUrls[itemId] = it }
+                ?: trailerPreviewAudioUrls.remove(itemId)
+            result.source.userAgent?.takeIf { it.isNotBlank() }?.let { trailerPreviewUserAgents[itemId] = it }
+                ?: trailerPreviewUserAgents.remove(itemId)
+            trailerPreviewExternalUrls.remove(itemId)
+            trailerPreviewNegativeCache.remove(itemId)
+            true
+        }
+        is TrailerResolutionResult.External -> {
+            trailerPreviewUrls.remove(itemId)
+            trailerPreviewAudioUrls.remove(itemId)
+            trailerPreviewUserAgents.remove(itemId)
+            trailerPreviewExternalUrls[itemId] = result.url
+            trailerPreviewNegativeCache.remove(itemId)
+            true
+        }
+        null -> false
+    }
+}
+
+private fun homeTrailerPreviewMetadataRequest(
+    itemId: String,
+    title: String,
+    releaseInfo: String?,
+    apiType: String,
+    languageTag: String?
+): MetadataRequest =
+    MetadataRequest(
+        contentId = itemId,
+        contentType = ContentType.fromString(apiType),
+        sourceContext = MetadataSourceContext(
+            itemType = apiType,
+            addonMetadata = HomeDisplayMetadata(
+                title = title,
+                releaseInfo = releaseInfo
+            )
+        ),
+        language = languageTag,
+        depth = MetadataDepth.DETAIL_MEDIA
+    )
+
+private fun String.normalizedTmdbIdOrNull(): String? {
+    val trimmed = trim()
+    return when {
+        trimmed.startsWith("tmdb:", ignoreCase = true) -> trimmed.substringAfter(":").takeIf { it.isNotBlank() }
+        trimmed.all { it.isDigit() } -> trimmed
+        else -> null
+    }
+}
+
+private fun TrailerDisplayState.normalizedFallbackTrailerIdCount(): Int =
+    fallbackTrailerYtIds.count { it.isNotBlank() }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     // Rail-preview-first hydration: RAIL_PREVIEW items are routed through the same

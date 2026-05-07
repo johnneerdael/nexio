@@ -210,8 +210,8 @@ class ModernHomeTrailerBehaviorTest {
     }
 
     @Test
-    fun `focused trailer preview does not request after autoplay unlock when metadata is missing`() {
-        assertFalse(
+    fun `focused trailer preview requests after autoplay unlock even before metadata availability is known`() {
+        assertTrue(
             shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
                 trailerPlaybackUnlocked = true,
                 hasTrailerMetadataAvailable = false,

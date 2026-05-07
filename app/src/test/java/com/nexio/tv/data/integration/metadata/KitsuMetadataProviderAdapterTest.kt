@@ -1,7 +1,13 @@
 package com.nexio.tv.data.integration.metadata
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -39,7 +45,12 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import androidx.test.ext.junit.runners.AndroidJUnit4
 
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 class KitsuMetadataProviderAdapterTest {
 
     @Test
@@ -147,6 +158,57 @@ class KitsuMetadataProviderAdapterTest {
                 mapper = any()
             )
         }
+    }
+
+    @Test
+    fun `ANIME_CORE emits youtubeVideoId as trailers field and stores Kitsu media clip`() = runTest {
+        val provider = mockk<KitsuIntegrationProvider>()
+        coEvery {
+            provider.fetchEnrichment(
+                rawId = "kitsu:12",
+                kitsuId = "12",
+                mediaKind = ContentMediaKind.SERIES,
+                mapper = any()
+            )
+        } coAnswers {
+            val mapper = arg<(KitsuAnimeResource) -> TvMetadataEnrichment?>(3)
+            mapper(
+                KitsuAnimeResource(
+                    id = "12",
+                    attributes = KitsuAnimeAttributes(
+                        canonicalTitle = "Cowboy Bebop",
+                        youtubeVideoId = "abc123"
+                    )
+                )
+            )
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = MediaClipStore(
+            context = context,
+            prefsName = "kitsu_adapter_media_clip_${System.nanoTime()}",
+            clock = { 1_000_000L }
+        )
+        val adapter = adapter(provider, mediaClipStore = store)
+
+        val result = adapter.execute(
+            route = kitsuRoute(itemType = "series"),
+            step = step(KitsuApiShapes.ANIME_CORE, ProviderPlanRole.PRIMARY_CORE)
+        )
+
+        assertEquals(listOf("abc123"), result.candidate?.fields?.get(ResolvedField.TRAILERS)?.value)
+        val identity = ContentIdentity(
+            contentId = "kitsu:12",
+            itemType = "series",
+            stableIds = com.nexio.tv.domain.model.ProviderIds(kitsu = "12")
+        )
+        val clips = store.getCandidates(
+            identity = identity,
+            scope = MediaClipScope.Title(identity),
+            clipTypes = setOf(MediaClipType.TRAILER),
+            language = "en"
+        )
+        assertEquals("abc123", clips.single().externalVideoId)
+        assertEquals("KITSU", clips.single().provider)
     }
 
     @Test
@@ -259,9 +321,13 @@ class KitsuMetadataProviderAdapterTest {
         assertEquals("8", companies.single().providerId)
     }
 
-    private fun adapter(provider: KitsuIntegrationProvider) = KitsuMetadataProviderAdapter(
+    private fun adapter(
+        provider: KitsuIntegrationProvider,
+        mediaClipStore: MediaClipStore? = null
+    ) = KitsuMetadataProviderAdapter(
         integrationProvider = provider,
-        traceEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
+        traceEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null },
+        mediaClipStore = mediaClipStore
     )
 
     private fun step(shape: String, role: ProviderPlanRole) = ProviderPlanStep(

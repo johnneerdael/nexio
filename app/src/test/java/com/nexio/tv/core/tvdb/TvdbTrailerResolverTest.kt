@@ -78,4 +78,74 @@ class TvdbTrailerResolverTest {
         coVerify(exactly = 0) { identityService.resolveSeriesByRemoteId(any(), any()) }
         coVerify(exactly = 0) { provider.fetchSeriesExtended(any(), any(), any()) }
     }
+
+    @Test
+    fun `season trailer is not claimed when tvdb trailer lacks season metadata`() = runTest {
+        val settingsDataStore = mockk<TvdbSettingsDataStore>()
+        every { settingsDataStore.settings } returns MutableStateFlow(TvdbSettings(enabled = true))
+        val identityService = mockk<TvdbIdentityService>()
+        coEvery {
+            identityService.resolveSeriesByTvdbId(100)
+        } returns TvdbSeriesIdentity(tvdbId = 100)
+        val provider = mockk<TvdbIntegrationProvider>()
+        coEvery {
+            provider.fetchSeriesExtended(tvdbId = 100, meta = null, short = false)
+        } returns TvdbSeriesExtendedRecord(
+            id = 100,
+            trailers = listOf(
+                TvdbTrailerRecord(name = "Season 5 Trailer", url = "https://youtu.be/abcdefghijk")
+            )
+        )
+        val resolver = TvdbTrailerResolver(
+            tvdbSettingsDataStore = settingsDataStore,
+            tvdbIdentityService = identityService,
+            tvdbIntegrationProvider = provider,
+            tvdbTrailerMapper = TvdbTrailerMapper()
+        )
+
+        val result = resolver.resolveSeasonTrailer(
+            contentId = "tvdb:100",
+            type = "tv",
+            seasonNumber = 5,
+            title = "Example",
+            year = "2026"
+        )
+
+        assertEquals(TvdbTrailerLookupResult.Missing, result)
+    }
+
+    @Test
+    fun `season recap is not claimed when tvdb trailer lacks season metadata`() = runTest {
+        val settingsDataStore = mockk<TvdbSettingsDataStore>()
+        every { settingsDataStore.settings } returns MutableStateFlow(TvdbSettings(enabled = true))
+        val identityService = mockk<TvdbIdentityService>()
+        coEvery {
+            identityService.resolveSeriesByTvdbId(100)
+        } returns TvdbSeriesIdentity(tvdbId = 100)
+        val provider = mockk<TvdbIntegrationProvider>()
+        coEvery {
+            provider.fetchSeriesExtended(tvdbId = 100, meta = null, short = false)
+        } returns TvdbSeriesExtendedRecord(
+            id = 100,
+            trailers = listOf(
+                TvdbTrailerRecord(name = "Season 5 Recap", url = "https://youtu.be/abcdefghijk")
+            )
+        )
+        val resolver = TvdbTrailerResolver(
+            tvdbSettingsDataStore = settingsDataStore,
+            tvdbIdentityService = identityService,
+            tvdbIntegrationProvider = provider,
+            tvdbTrailerMapper = TvdbTrailerMapper()
+        )
+
+        val result = resolver.resolveSeasonRecap(
+            contentId = "tvdb:100",
+            type = "tv",
+            seasonNumber = 5,
+            title = "Example",
+            year = "2026"
+        )
+
+        assertEquals(TvdbTrailerLookupResult.Missing, result)
+    }
 }

@@ -1,6 +1,15 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.media.ClipSite
+import com.nexio.tv.core.media.Confidence
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipCandidate
+import com.nexio.tv.core.media.MediaClipPlaybackRef
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipSource
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
@@ -13,6 +22,7 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverType
 import com.nexio.tv.data.integration.trailer.TrailerTmdbProvider
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,7 +37,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class TmdbTrailerMetadataAdapter @Inject constructor(
-    private val trailerTmdbProvider: TrailerTmdbProvider
+    private val trailerTmdbProvider: TrailerTmdbProvider,
+    private val mediaClipStore: MediaClipStore? = null
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
 
@@ -55,6 +66,16 @@ class TmdbTrailerMetadataAdapter @Inject constructor(
         if (videos.isEmpty()) {
             return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         }
+        mediaClipStore?.storeCandidates(
+            videos.mapNotNull { video ->
+                video.toMediaClipCandidate(
+                    route = route,
+                    step = step,
+                    tmdbId = tmdbId,
+                    language = language
+                )
+            }
+        )
         return ProviderStepResult(
             step = step,
             candidate = MetadataCandidate(
@@ -64,6 +85,55 @@ class TmdbTrailerMetadataAdapter @Inject constructor(
                     ResolvedField.TRAILERS to FieldValue(videos, FieldOwner.TRAILERS)
                 )
             )
+        )
+    }
+
+    private fun TmdbVideoResult.toMediaClipCandidate(
+        route: MetadataRoute,
+        step: ProviderPlanStep,
+        tmdbId: Int,
+        language: String
+    ): MediaClipCandidate? {
+        val videoId = key?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val identity = ContentIdentity(
+            contentId = "tmdb:$tmdbId",
+            itemType = when (route.mediaKind) {
+                com.nexio.tv.core.metadata.router.MetadataMediaKind.MOVIE -> "movie"
+                else -> "series"
+            },
+            stableIds = ProviderIds(tmdb = tmdbId.toString())
+        )
+        val scope = if (step.apiShapeId == TmdbApiShapes.SEASON_VIDEOS && route.seasonNumber != null) {
+            MediaClipScope.Season(identity, route.seasonNumber)
+        } else {
+            MediaClipScope.Title(identity)
+        }
+        val normalizedType = type?.trim()?.lowercase().orEmpty()
+        val siteIsYouTube = site.equals("YouTube", ignoreCase = true)
+        return MediaClipCandidate(
+            clipId = "tmdb:${route.mediaKind.name.lowercase()}:$tmdbId:${id ?: videoId}",
+            contentId = identity,
+            provider = "TMDB",
+            source = MediaClipSource.PROVIDER,
+            scope = scope,
+            clipType = when {
+                normalizedType == "trailer" -> MediaClipType.TRAILER
+                normalizedType == "teaser" -> MediaClipType.TEASER
+                normalizedType == "clip" -> MediaClipType.CLIP
+                else -> MediaClipType.UNKNOWN
+            },
+            title = name,
+            language = iso6391?.takeIf { it.isNotBlank() } ?: language.substringBefore('-').takeIf { it.isNotBlank() },
+            site = if (siteIsYouTube) ClipSite.YOUTUBE else ClipSite.PROVIDER,
+            externalVideoId = videoId,
+            playbackRef = if (siteIsYouTube) MediaClipPlaybackRef.YouTubeId(videoId) else null,
+            confidence = when {
+                normalizedType == "trailer" && official == true -> Confidence.HIGH
+                normalizedType == "trailer" || normalizedType == "teaser" -> Confidence.MEDIUM
+                else -> Confidence.LOW
+            },
+            sourceTrace = listOf(step.apiShapeId),
+            fetchedAtMs = System.currentTimeMillis()
         )
     }
 

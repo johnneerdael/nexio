@@ -328,9 +328,10 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun Snapshot.sanitize(): Snapshot {
-        val sanitizedCatalogRows = sanitizeCatalogRows(catalogRows as List<*>, "catalogRows")
-        val sanitizedFullCatalogRows = sanitizeCatalogRows(fullCatalogRows as List<*>, "fullCatalogRows")
-        val sanitizedHeroItems = sanitizeMetaPreviews(heroItems as List<*>, "heroItems")
+        val traceState = SnapshotSanitizeTraceState()
+        val sanitizedCatalogRows = sanitizeCatalogRows(catalogRows as List<*>, "catalogRows", traceState)
+        val sanitizedFullCatalogRows = sanitizeCatalogRows(fullCatalogRows as List<*>, "fullCatalogRows", traceState)
+        val sanitizedHeroItems = sanitizeMetaPreviews(heroItems as List<*>, "heroItems", traceState)
 
         val droppedCatalogRows = (catalogRows as List<*>).size - sanitizedCatalogRows.size
         val droppedFullCatalogRows = (fullCatalogRows as List<*>).size - sanitizedFullCatalogRows.size
@@ -343,6 +344,7 @@ class HomeCatalogSnapshotStore private constructor(
                     "catalogRows=$droppedCatalogRows fullCatalogRows=$droppedFullCatalogRows heroItems=$droppedHeroItems"
             )
         }
+        traceState.emitIfNeeded()
 
         return Snapshot(
             catalogRows = sanitizedCatalogRows,
@@ -352,7 +354,11 @@ class HomeCatalogSnapshotStore private constructor(
         )
     }
 
-    private fun sanitizeCatalogRows(values: List<*>, label: String): List<CatalogRow> {
+    private fun sanitizeCatalogRows(
+        values: List<*>,
+        label: String,
+        traceState: SnapshotSanitizeTraceState
+    ): List<CatalogRow> {
         return values.mapIndexedNotNull { index, value ->
             val row = value as? CatalogRow
             if (row == null) {
@@ -360,7 +366,7 @@ class HomeCatalogSnapshotStore private constructor(
                 return@mapIndexedNotNull null
             }
 
-            val sanitizedItems = sanitizeMetaPreviews(row.items as List<*>, "$label[$index].items")
+            val sanitizedItems = sanitizeMetaPreviews(row.items as List<*>, "$label[$index].items", traceState)
             if (sanitizedItems.size != (row.items as List<*>).size) {
                 Log.w(
                     TAG,
@@ -371,17 +377,24 @@ class HomeCatalogSnapshotStore private constructor(
         }
     }
 
-    private fun sanitizeMetaPreviews(values: List<*>, label: String): List<MetaPreview> {
+    private fun sanitizeMetaPreviews(
+        values: List<*>,
+        label: String,
+        traceState: SnapshotSanitizeTraceState
+    ): List<MetaPreview> {
         return values.mapIndexedNotNull { index, value ->
             val item = value as? MetaPreview
             if (item == null) {
                 Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
             }
-            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot("$label[$index]")
+            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot("$label[$index]", traceState)
         }
     }
 
-    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(scope: String): MetaPreview {
+    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(
+        scope: String,
+        traceState: SnapshotSanitizeTraceState
+    ): MetaPreview {
         val posterRef = poster?.trim().orEmpty()
         val posterKind = posterKind(posterRef)
         val decisionLookup = if (isDecisionRef(posterRef)) {
@@ -389,7 +402,8 @@ class HomeCatalogSnapshotStore private constructor(
                 ref = posterRef,
                 scope = scope,
                 posterKind = posterKind,
-                posterProviderTag = posterProviderTag
+                posterProviderTag = posterProviderTag,
+                traceState = traceState
             )
         } else {
             null
@@ -398,15 +412,12 @@ class HomeCatalogSnapshotStore private constructor(
         if (posterRef.isBlank() || reason == null) {
             return this
         }
-        traceSnapshot(
-            eventType = "home.snapshot_sanitize_artwork",
-            payload = mapOf(
-                "scope" to scope,
-                "reason" to reason,
-                "posterKind" to posterKind,
-                "posterProviderTag" to posterProviderTag,
-                "decisionFound" to decisionLookup?.decisionFound
-            )
+        traceState.recordSanitized(
+            scope = scope,
+            reason = reason,
+            posterKind = posterKind,
+            posterProviderTag = posterProviderTag,
+            decisionFound = decisionLookup?.decisionFound
         )
         return copy(poster = null, posterProviderTag = null)
     }
@@ -452,7 +463,8 @@ class HomeCatalogSnapshotStore private constructor(
         ref: String,
         scope: String,
         posterKind: String,
-        posterProviderTag: String?
+        posterProviderTag: String?,
+        traceState: SnapshotSanitizeTraceState
     ): DecisionLookupProof {
         val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
             .takeIf { it.isNotBlank() }
@@ -461,7 +473,7 @@ class HomeCatalogSnapshotStore private constructor(
                 decisionKeyHash = null,
                 diagnostics = cacheDiagnostics()
             ).also { proof ->
-                traceDecisionLookup(
+                traceState.recordDecisionLookup(
                     scope = scope,
                     posterKind = posterKind,
                     posterProviderTag = posterProviderTag,
@@ -482,7 +494,7 @@ class HomeCatalogSnapshotStore private constructor(
             decisionKeyHash = keyValue.sha256Short(),
             diagnostics = cacheDiagnostics()
         ).also { proof ->
-            traceDecisionLookup(
+            traceState.recordDecisionLookup(
                 scope = scope,
                 posterKind = posterKind,
                 posterProviderTag = posterProviderTag,
@@ -490,37 +502,6 @@ class HomeCatalogSnapshotStore private constructor(
                 lookupErrorClass = lookupErrorClass
             )
         }
-    }
-
-    private fun traceDecisionLookup(
-        scope: String,
-        posterKind: String,
-        posterProviderTag: String?,
-        proof: DecisionLookupProof,
-        lookupErrorClass: String?
-    ) {
-        val diagnostics = proof.diagnostics
-        traceSnapshot(
-            eventType = "home.snapshot_decision_lookup",
-            payload = mapOf(
-                "scope" to scope,
-                "decisionFound" to proof.decisionFound,
-                "decisionKeyHash" to proof.decisionKeyHash,
-                "posterKind" to posterKind,
-                "posterProviderTag" to posterProviderTag,
-                "cacheLoaded" to diagnostics?.loaded,
-                "cacheDecisionCount" to diagnostics?.decisionCount,
-                "cacheLinkCount" to diagnostics?.linkCount,
-                "storeFilePresent" to diagnostics?.storeFilePresent,
-                "storeFileReadable" to diagnostics?.storeFileReadable,
-                "storeFileBytes" to diagnostics?.storeFileBytes,
-                "lastLoadSuccess" to diagnostics?.lastLoadSuccess,
-                "lastLoadReason" to diagnostics?.lastLoadReason,
-                "lastLoadErrorClass" to diagnostics?.lastLoadErrorClass,
-                "droppedDecisionCount" to diagnostics?.droppedDecisionCount,
-                "lookupErrorClass" to lookupErrorClass
-            )
-        )
     }
 
     private fun cacheDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics? =
@@ -537,6 +518,106 @@ class HomeCatalogSnapshotStore private constructor(
         val decisionKeyHash: String?,
         val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics?
     )
+
+    private inner class SnapshotSanitizeTraceState {
+        var decisionLookupCount: Int = 0
+            private set
+        var decisionFoundCount: Int = 0
+            private set
+        var missingDecisionCount: Int = 0
+            private set
+        var lookupErrorCount: Int = 0
+            private set
+        var sanitizedCount: Int = 0
+            private set
+        var rawPremiumCount: Int = 0
+            private set
+        var legacyIntegrationCount: Int = 0
+            private set
+        private var latestDiagnostics: ArtworkDecisionCacheSnapshotDiagnostics? = null
+        private val sanitizedSamples = mutableListOf<String>()
+        private val missingDecisionSamples = mutableListOf<String>()
+
+        fun recordDecisionLookup(
+            scope: String,
+            posterKind: String,
+            posterProviderTag: String?,
+            proof: DecisionLookupProof,
+            lookupErrorClass: String?
+        ) {
+            decisionLookupCount += 1
+            latestDiagnostics = proof.diagnostics
+            if (proof.decisionFound) {
+                decisionFoundCount += 1
+            } else {
+                missingDecisionCount += 1
+                rememberSample(missingDecisionSamples, "$scope:$posterKind:${posterProviderTag.orEmpty()}")
+            }
+            if (lookupErrorClass != null) {
+                lookupErrorCount += 1
+            }
+        }
+
+        fun recordSanitized(
+            scope: String,
+            reason: String,
+            posterKind: String,
+            posterProviderTag: String?,
+            decisionFound: Boolean?
+        ) {
+            sanitizedCount += 1
+            when (reason) {
+                "raw_premium_url" -> rawPremiumCount += 1
+                "legacy_integration_ref" -> legacyIntegrationCount += 1
+            }
+            rememberSample(sanitizedSamples, "$scope:$reason:$posterKind:${posterProviderTag.orEmpty()}:$decisionFound")
+        }
+
+        fun emitIfNeeded() {
+            if (decisionLookupCount == 0 && sanitizedCount == 0) return
+            val diagnostics = latestDiagnostics
+            traceSnapshot(
+                eventType = "home.snapshot_decision_lookup",
+                payload = mapOf(
+                    "scope" to "snapshot",
+                    "decisionLookupCount" to decisionLookupCount,
+                    "decisionFoundCount" to decisionFoundCount,
+                    "missingDecisionCount" to missingDecisionCount,
+                    "lookupErrorCount" to lookupErrorCount,
+                    "cacheLoaded" to diagnostics?.loaded,
+                    "cacheDecisionCount" to diagnostics?.decisionCount,
+                    "cacheLinkCount" to diagnostics?.linkCount,
+                    "storeFilePresent" to diagnostics?.storeFilePresent,
+                    "storeFileReadable" to diagnostics?.storeFileReadable,
+                    "storeFileBytes" to diagnostics?.storeFileBytes,
+                    "lastLoadSuccess" to diagnostics?.lastLoadSuccess,
+                    "lastLoadReason" to diagnostics?.lastLoadReason,
+                    "lastLoadErrorClass" to diagnostics?.lastLoadErrorClass,
+                    "droppedDecisionCount" to diagnostics?.droppedDecisionCount,
+                    "missingDecisionSamples" to missingDecisionSamples.joinToString("|")
+                )
+            )
+            if (sanitizedCount > 0) {
+                traceSnapshot(
+                    eventType = "home.snapshot_sanitize_artwork",
+                    payload = mapOf(
+                        "scope" to "snapshot",
+                        "sanitizedCount" to sanitizedCount,
+                        "rawPremiumCount" to rawPremiumCount,
+                        "legacyIntegrationCount" to legacyIntegrationCount,
+                        "missingDecisionCount" to missingDecisionCount,
+                        "samples" to sanitizedSamples.joinToString("|")
+                    )
+                )
+            }
+        }
+
+        private fun rememberSample(samples: MutableList<String>, sample: String) {
+            if (samples.size < 5) {
+                samples += sample
+            }
+        }
+    }
 
     private fun traceSnapshot(
         eventType: String,

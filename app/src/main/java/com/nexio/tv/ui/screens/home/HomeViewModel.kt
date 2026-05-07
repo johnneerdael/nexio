@@ -135,7 +135,7 @@ class HomeViewModel @Inject constructor(
     internal val profileBoundary: ProfileBoundary,
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
-    internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(profileManager),
+    internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
     internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
     internal val integrationHydrationCoordinator: IntegrationHydrationCoordinator = NoOpIntegrationHydrationCoordinator,
@@ -286,6 +286,7 @@ class HomeViewModel @Inject constructor(
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
     internal var trailerPreviewJob: Job? = null
+    internal var lastHomeTrailerSurfaceTraceSummary: HomeTrailerSurfaceTraceSummary? = null
     internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())

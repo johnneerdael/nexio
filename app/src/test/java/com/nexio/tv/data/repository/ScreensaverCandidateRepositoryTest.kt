@@ -73,6 +73,8 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals("Fight Club", candidate.title)
         assertEquals("1999", candidate.subtitle)
         assertEquals("Overview", candidate.overview)
+        assertEquals(listOf("Drama", "Thriller"), candidate.genres)
+        assertEquals("139m", candidate.runtime)
         assertEquals(8.8, candidate.rating?.value ?: 0.0, 0.0)
         assertSame(backdrop, candidate.preferredImage)
         assertEquals("tt0137523", candidate.stableIds.imdb)
@@ -159,6 +161,10 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals("Breaking Bad", candidates.single().title)
         assertTrue(candidates.single().trailerState.fallbackTrailerYtIds.isEmpty())
         assertEquals("81189", candidates.single().stableIds.tvdb)
+        val lookup = candidates.single().trailerState.selectedPlaybackRef as TrailerPlaybackRef.ItemLookup
+        assertEquals("Breaking Bad", lookup.title)
+        assertEquals("tvdb:81189", lookup.contentId)
+        assertEquals("81189", lookup.stableIds.tvdb)
     }
 
     @Test
@@ -211,6 +217,8 @@ class ScreensaverCandidateRepositoryTest {
         val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
 
         assertEquals(trailerState.copy(fallbackTrailerYtIds = listOf("abc123")), candidate.trailerState)
+        assertEquals(listOf("Drama", "Thriller"), candidate.genres)
+        assertEquals("139m", candidate.runtime)
     }
 
     @Test
@@ -231,6 +239,7 @@ class ScreensaverCandidateRepositoryTest {
         val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
 
         assertTrue(candidate.trailerState.fallbackTrailerYtIds.isEmpty())
+        assertTrue(candidate.trailerState.selectedPlaybackRef is TrailerPlaybackRef.ItemLookup)
     }
 
     @Test
@@ -238,6 +247,7 @@ class ScreensaverCandidateRepositoryTest {
         val surface = testSurface()
         val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
             profileId = 1,
             items = listOf(
                 resolvedItem(
@@ -252,6 +262,34 @@ class ScreensaverCandidateRepositoryTest {
 
         assertEquals(listOf("movie:tmdb:550"), snapshot.imageCandidates.map { it.itemKey })
         assertEquals(listOf("abc123"), snapshot.trailerCandidates.single().trailerState.fallbackTrailerYtIds)
+    }
+
+    @Test
+    fun `candidate snapshot reads screensaver surface instead of visible home surface`() = runTest {
+        val surface = testSurface()
+        val repository = testScreensaverCandidates(surface)
+        surface.replaceForTest(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileId = 1,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:home", title = "Visible Home Item"))
+        )
+        surface.replaceForTest(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "movie:tmdb:trending",
+                    title = "Trending Screensaver Item",
+                    fallbackTrailerYtIds = listOf("abc123def45")
+                )
+            )
+        )
+
+        val snapshot = repository.getCandidatesSnapshot(profileId = 1)
+
+        assertEquals(listOf("movie:tmdb:trending"), snapshot.imageCandidates.map { it.itemKey })
+        assertEquals(listOf("movie:tmdb:trending"), snapshot.trailerCandidates.map { it.itemKey })
+        assertEquals(listOf("abc123def45"), snapshot.trailerCandidates.single().trailerState.fallbackTrailerYtIds)
     }
 
     @Test
@@ -406,7 +444,7 @@ class ScreensaverCandidateRepositoryTest {
             year = 1999,
             releaseDate = "1999",
             overview = "Overview",
-            genres = listOf("Drama"),
+            genres = listOf("Drama", "Thriller"),
             runtimeText = "139m"
         ),
         artwork = artwork,

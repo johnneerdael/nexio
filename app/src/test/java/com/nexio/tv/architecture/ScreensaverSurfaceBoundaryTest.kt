@@ -234,6 +234,29 @@ class ScreensaverSurfaceBoundaryTest {
         )
     }
 
+    @Test
+    fun `home view model uses injected resolved display surface repository`() {
+        val source = sourceOf("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt")
+        val code = source.withoutCommentsAndStrings()
+
+        assertEquals(
+            "HomeViewModel must publish into the injected ResolvedDisplaySurfaceRepository singleton observed by the screensaver.",
+            emptyList<String>(),
+            Regex("""ResolvedDisplaySurfaceRepository\s*\(""")
+                .findAll(code)
+                .map { it.value }
+                .toList()
+        )
+        assertEquals(
+            "ResolvedDisplaySurfaceRepository must not have a default constructor value in HomeViewModel.",
+            emptyList<String>(),
+            Regex("""resolvedDisplaySurfaceRepository:\s*ResolvedDisplaySurfaceRepository\s*=""")
+                .findAll(code)
+                .map { it.value }
+                .toList()
+        )
+    }
+
     private fun sourceOf(path: String): String {
         val file = File(path)
         require(file.exists()) { "Missing source file: $path" }

@@ -4,6 +4,8 @@ import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
@@ -40,6 +42,19 @@ private fun trailerWarnLog(message: String) {
     runCatching { Log.w(TAG, message) }
 }
 
+private fun TrailerPlaybackRef.traceRefKind(): String = when (this) {
+    is TrailerPlaybackRef.YouTubeId -> "youtube"
+    is TrailerPlaybackRef.ExternalUrl -> "external"
+    is TrailerPlaybackRef.InAppSource -> "in_app"
+    is TrailerPlaybackRef.ItemLookup -> "item_lookup"
+}
+
+private fun TrailerResolutionResult?.traceResultKind(): String = when (this) {
+    is TrailerResolutionResult.Playback -> "playback"
+    is TrailerResolutionResult.External -> "external"
+    null -> "null"
+}
+
 internal const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
@@ -64,7 +79,8 @@ class TrailerService(
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
     private val clock: Clock,
-    private val tvdbTrailerResolver: TvdbTrailerResolver? = null
+    private val tvdbTrailerResolver: TvdbTrailerResolver? = null,
+    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
 ) {
     @Inject
     constructor(
@@ -74,7 +90,8 @@ class TrailerService(
         trailerTmdbProvider: TrailerTmdbProvider,
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
-        tvdbTrailerResolver: TvdbTrailerResolver
+        tvdbTrailerResolver: TvdbTrailerResolver,
+        traceEvents: TraceMetadataEvents
     ) : this(
         trailerBackendProvider = trailerBackendProvider,
         inAppYouTubeExtractor = inAppYouTubeExtractor,
@@ -83,7 +100,8 @@ class TrailerService(
         addonRepository = addonRepository,
         streamRepository = streamRepository,
         clock = Clock.systemUTC(),
-        tvdbTrailerResolver = tvdbTrailerResolver
+        tvdbTrailerResolver = tvdbTrailerResolver,
+        traceEvents = traceEvents
     )
 
     private val lookupCache = ConcurrentHashMap<String, CachedTrailerLookup>()
@@ -163,8 +181,32 @@ class TrailerService(
         )
 
         when (val cached = lookupCache[cacheKey]) {
-            is CachedTrailerLookup.Hit -> return@withContext cached.result
-            CachedTrailerLookup.Miss -> return@withContext null
+            is CachedTrailerLookup.Hit -> {
+                traceEvents.emitTrailerLookupResult(
+                    contentId = contentId,
+                    itemType = type,
+                    season = effectiveSeasonNumber,
+                    fallbackCount = fallbackYtIds.count { it.isNotBlank() },
+                    cacheDecision = "hit",
+                    result = cached.result.traceResultKind(),
+                    hasPlayback = cached.result is TrailerResolutionResult.Playback,
+                    hasExternal = cached.result is TrailerResolutionResult.External
+                )
+                return@withContext cached.result
+            }
+            CachedTrailerLookup.Miss -> {
+                traceEvents.emitTrailerLookupResult(
+                    contentId = contentId,
+                    itemType = type,
+                    season = effectiveSeasonNumber,
+                    fallbackCount = fallbackYtIds.count { it.isNotBlank() },
+                    cacheDecision = "hit_miss",
+                    result = "null",
+                    hasPlayback = false,
+                    hasExternal = false
+                )
+                return@withContext null
+            }
             null -> Unit
         }
 
@@ -184,6 +226,16 @@ class TrailerService(
         }
 
         lookupCache[cacheKey] = resolved?.let(CachedTrailerLookup::Hit) ?: CachedTrailerLookup.Miss
+        traceEvents.emitTrailerLookupResult(
+            contentId = contentId,
+            itemType = type,
+            season = effectiveSeasonNumber,
+            fallbackCount = fallbackYtIds.count { it.isNotBlank() },
+            cacheDecision = "miss",
+            result = resolved.traceResultKind(),
+            hasPlayback = resolved is TrailerResolutionResult.Playback,
+            hasExternal = resolved is TrailerResolutionResult.External
+        )
         resolved
     }
 
@@ -435,37 +487,40 @@ class TrailerService(
         title: String? = null,
         year: String? = null
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
-        when (ref) {
+        val result = when (ref) {
             is TrailerPlaybackRef.YouTubeId -> {
-                val videoId = ref.videoId.trim().takeIf { it.isNotBlank() } ?: return@withContext null
-                val youtubeUrl = buildYouTubeWatchUrl(videoId)
-                resolveYouTubeTrailer(
-                    youtubeUrl = youtubeUrl,
-                    title = title,
-                    year = year
-                ) ?: TrailerResolutionResult.External(youtubeUrl)
-            }
-            is TrailerPlaybackRef.ExternalUrl -> {
-                val url = ref.url.trim().takeIf { it.isNotBlank() } ?: return@withContext null
-                if (extractYouTubeVideoId(url) != null) {
+                ref.videoId.trim().takeIf { it.isNotBlank() }?.let { videoId ->
+                    val youtubeUrl = buildYouTubeWatchUrl(videoId)
                     resolveYouTubeTrailer(
-                        youtubeUrl = url,
+                        youtubeUrl = youtubeUrl,
                         title = title,
                         year = year
-                    ) ?: TrailerResolutionResult.External(url)
-                } else {
-                    TrailerResolutionResult.External(url)
+                    ) ?: TrailerResolutionResult.External(youtubeUrl)
+                }
+            }
+            is TrailerPlaybackRef.ExternalUrl -> {
+                ref.url.trim().takeIf { it.isNotBlank() }?.let { url ->
+                    if (extractYouTubeVideoId(url) != null) {
+                        resolveYouTubeTrailer(
+                            youtubeUrl = url,
+                            title = title,
+                            year = year
+                        ) ?: TrailerResolutionResult.External(url)
+                    } else {
+                        TrailerResolutionResult.External(url)
+                    }
                 }
             }
             is TrailerPlaybackRef.InAppSource -> {
-                val videoUrl = ref.videoUrl.trim().takeIf { it.isNotBlank() } ?: return@withContext null
-                TrailerResolutionResult.Playback(
-                    TrailerPlaybackSource(
-                        videoUrl = videoUrl,
-                        audioUrl = ref.audioUrl?.trim()?.takeIf { it.isNotBlank() },
-                        userAgent = ref.userAgent?.trim()?.takeIf { it.isNotBlank() }
+                ref.videoUrl.trim().takeIf { it.isNotBlank() }?.let { videoUrl ->
+                    TrailerResolutionResult.Playback(
+                        TrailerPlaybackSource(
+                            videoUrl = videoUrl,
+                            audioUrl = ref.audioUrl?.trim()?.takeIf { it.isNotBlank() },
+                            userAgent = ref.userAgent?.trim()?.takeIf { it.isNotBlank() }
+                        )
                     )
-                )
+                }
             }
             is TrailerPlaybackRef.ItemLookup -> resolveTrailer(
                 title = ref.title,
@@ -477,6 +532,15 @@ class TrailerService(
                 fallbackYtIds = ref.fallbackYtIds
             )
         }
+        val playbackSource = (result as? TrailerResolutionResult.Playback)?.source
+        traceEvents.emitRuntimeTrailerPlaybackSource(
+            ref = ref.traceRefKind(),
+            result = result.traceResultKind(),
+            hasVideo = !playbackSource?.videoUrl.isNullOrBlank(),
+            hasAudio = !playbackSource?.audioUrl.isNullOrBlank(),
+            hasUserAgent = !playbackSource?.userAgent.isNullOrBlank()
+        )
+        result
     }
 
     fun clearCache() {

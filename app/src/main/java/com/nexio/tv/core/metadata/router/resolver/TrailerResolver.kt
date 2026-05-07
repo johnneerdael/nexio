@@ -1,6 +1,12 @@
 package com.nexio.tv.core.metadata.router.resolver
 
 import com.nexio.tv.core.metadata.router.MetadataCandidate
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipPlaybackRef
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
+import com.nexio.tv.core.media.StoredMediaClip
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverType
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -67,7 +73,8 @@ data class TrailerResolution(
  */
 @Singleton
 class TrailerResolver @Inject constructor(
-    private val traceEvents: TraceMetadataEvents
+    private val traceEvents: TraceMetadataEvents,
+    private val mediaClipStore: MediaClipStore? = null
 ) {
     val resolverType: ResolverType = ResolverType.TRAILERS
 
@@ -82,19 +89,36 @@ class TrailerResolver @Inject constructor(
                     ?.let(TrailerPlaybackRef::YouTubeId)
             }
             .distinct()
-        val itemLookupCandidates = if (providerCandidates.isEmpty()) {
+        val mediaClipMatches = request.cachedMediaClipMatches()
+        val mediaClipCandidates = mediaClipMatches.map { it.playbackRef }.distinct()
+        val itemLookupCandidates = if (providerCandidates.isEmpty() && mediaClipCandidates.isEmpty()) {
             listOfNotNull(request.toItemLookupRef())
         } else {
             emptyList()
         }
-        val candidates = (providerCandidates + itemLookupCandidates + fallbackCandidates).distinct()
+        val candidates = (providerCandidates + mediaClipCandidates + itemLookupCandidates + fallbackCandidates).distinct()
         val selected = candidates.firstOrNull()
         val reason = when {
             selected == null -> "missing_candidates"
             selected in providerCandidates -> "provider_candidate"
+            selected in mediaClipCandidates -> "media_clip_cache_hit"
             selected in fallbackCandidates -> "fallback_youtube_id"
             selected in itemLookupCandidates -> "item_lookup"
             else -> "selected"
+        }
+        if (selected != null && selected in mediaClipCandidates) {
+            mediaClipMatches.firstOrNull { it.playbackRef == selected }?.clip?.let { clip ->
+                traceEvents.emitMediaClipCandidateSelected(
+                    surface = request.surface.name,
+                    itemKey = request.itemKey,
+                    provider = clip.provider,
+                    clipType = clip.clipType.name,
+                    site = clip.site.name,
+                    videoId = clip.externalVideoId,
+                    cacheDecision = clip.cacheDecision.name,
+                    playbackUrlResolvedAtPlayTime = true
+                )
+            }
         }
 
         return TrailerResolution(
@@ -109,6 +133,41 @@ class TrailerResolver @Inject constructor(
                 "reason=$reason",
                 "candidate_count=${candidates.size}"
             )
+        )
+    }
+
+    private fun TrailerResolveRequest.cachedMediaClipMatches(): List<CachedMediaClipMatch> {
+        val store = mediaClipStore ?: return emptyList()
+        val identity = toContentIdentity() ?: return emptyList()
+        val scope = seasonNumber?.let { MediaClipScope.Season(identity, it) } ?: MediaClipScope.Title(identity)
+        return store.getCandidates(
+            identity = identity,
+            scope = scope,
+            clipTypes = setOf(MediaClipType.TRAILER, MediaClipType.TEASER, MediaClipType.PREVIEW),
+            language = null,
+            includeStale = true
+        ).mapNotNull { clip ->
+            when (val ref = clip.playbackRef) {
+                is MediaClipPlaybackRef.YouTubeId -> CachedMediaClipMatch(
+                    clip = clip,
+                    playbackRef = TrailerPlaybackRef.YouTubeId(ref.id)
+                )
+                else -> null
+            }
+        }.distinct()
+    }
+
+    private fun TrailerResolveRequest.toContentIdentity(): ContentIdentity? {
+        val normalizedContentId = contentId?.trim()?.takeIf { it.isNotBlank() }
+            ?: stableIds.tmdb?.trim()?.takeIf { it.isNotBlank() }?.let { "tmdb:$it" }
+            ?: stableIds.tvdb?.trim()?.takeIf { it.isNotBlank() }?.let { "tvdb:$it" }
+            ?: stableIds.imdb?.trim()?.takeIf { it.isNotBlank() }?.let { "imdb:$it" }
+            ?: stableIds.kitsu?.trim()?.takeIf { it.isNotBlank() }?.let { "kitsu:$it" }
+            ?: return null
+        return ContentIdentity(
+            contentId = normalizedContentId,
+            itemType = type,
+            stableIds = stableIds
         )
     }
 
@@ -151,6 +210,11 @@ class TrailerResolver @Inject constructor(
         )
         return pick
     }
+
+    private data class CachedMediaClipMatch(
+        val clip: StoredMediaClip,
+        val playbackRef: TrailerPlaybackRef
+    )
 
     private fun normalizedPlaybackRef(ref: TrailerPlaybackRef): TrailerPlaybackRef? =
         when (ref) {

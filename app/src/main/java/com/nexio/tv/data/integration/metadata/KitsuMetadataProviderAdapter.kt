@@ -2,6 +2,15 @@ package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.media.ClipSite
+import com.nexio.tv.core.media.Confidence
+import com.nexio.tv.core.media.ContentIdentity
+import com.nexio.tv.core.media.MediaClipCandidate
+import com.nexio.tv.core.media.MediaClipPlaybackRef
+import com.nexio.tv.core.media.MediaClipScope
+import com.nexio.tv.core.media.MediaClipSource
+import com.nexio.tv.core.media.MediaClipStore
+import com.nexio.tv.core.media.MediaClipType
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
@@ -13,6 +22,7 @@ import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.metadata.router.ResolverType
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -33,11 +43,13 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 
 class KitsuMetadataProviderAdapter @Inject constructor(
     private val integrationProvider: KitsuIntegrationProvider,
-    private val traceEvents: TraceMetadataEvents
+    private val traceEvents: TraceMetadataEvents,
+    private val mediaClipStore: MediaClipStore? = null
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.KITSU
 
@@ -63,10 +75,12 @@ class KitsuMetadataProviderAdapter @Inject constructor(
         )
         var titleField: SelectedLocalizedField? = null
         var synopsisField: SelectedLocalizedField? = null
+        var animeCoreTrailerYoutubeId: String? = null
         val candidate = when (step.apiShapeId) {
-            KitsuApiShapes.ANIME_CORE ->
-                integrationProvider.fetchEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
+            KitsuApiShapes.ANIME_CORE -> {
+                val baseCandidate = integrationProvider.fetchEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
                     val attributes = resource.attributes ?: return@fetchEnrichment null
+                    animeCoreTrailerYoutubeId = attributes.youtubeVideoId
                     val titles = attributes.titles.orEmpty()
                     titleField = selectKitsuTitleField(
                         policy = policy,
@@ -95,7 +109,19 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                 }
                     .toMetadataCandidate(this.provider)
                     .withKitsuCanonicalId(kitsuId)
+                    .withKitsuTrailer(animeCoreTrailerYoutubeId)
                     .withLocalizationTrace(titleField, synopsisField)
+                mediaClipStore?.storeCandidates(
+                    listOfNotNull(
+                        kitsuTrailerMediaClipCandidate(
+                            route = route,
+                            kitsuId = kitsuId,
+                            youtubeVideoId = animeCoreTrailerYoutubeId
+                        )
+                    )
+                )
+                baseCandidate
+            }
             KitsuApiShapes.ANIME_EPISODES -> {
                 // F-E-03: Kitsu does not have per-episode localization decisions like TVDB. The Kitsu API
                 // returns a single `attributes.titles` map at the series level (e.g. `en`, `en_jp`, `ja`)
@@ -177,6 +203,43 @@ class KitsuMetadataProviderAdapter @Inject constructor(
 
     private fun MetadataCandidate.withKitsuCanonicalId(kitsuId: String): MetadataCandidate =
         copy(fields = fields + (ResolvedField.CANONICAL_ID to FieldValue("kitsu:$kitsuId", FieldOwner.PRIMARY)))
+
+    private fun MetadataCandidate.withKitsuTrailer(youtubeVideoId: String?): MetadataCandidate {
+        val normalizedId = youtubeVideoId?.trim()?.takeIf { it.isNotBlank() } ?: return this
+        return copy(
+            resolverType = ResolverType.TRAILERS,
+            fields = fields + (ResolvedField.TRAILERS to FieldValue(listOf(normalizedId), FieldOwner.TRAILERS))
+        )
+    }
+
+    private fun kitsuTrailerMediaClipCandidate(
+        route: MetadataRoute,
+        kitsuId: String,
+        youtubeVideoId: String?
+    ): MediaClipCandidate? {
+        val normalizedId = youtubeVideoId?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val identity = ContentIdentity(
+            contentId = "kitsu:$kitsuId",
+            itemType = route.sourceContext.itemType,
+            stableIds = ProviderIds(kitsu = kitsuId)
+        )
+        return MediaClipCandidate(
+            clipId = "kitsu:$kitsuId:$normalizedId",
+            contentId = identity,
+            provider = "KITSU",
+            source = MediaClipSource.PROVIDER,
+            scope = MediaClipScope.Title(identity),
+            clipType = MediaClipType.TRAILER,
+            title = null,
+            language = route.language,
+            site = ClipSite.YOUTUBE,
+            externalVideoId = normalizedId,
+            playbackRef = MediaClipPlaybackRef.YouTubeId(normalizedId),
+            confidence = Confidence.HIGH,
+            sourceTrace = listOf(KitsuApiShapes.ANIME_CORE, "attributes.youtubeVideoId"),
+            fetchedAtMs = System.currentTimeMillis()
+        )
+    }
 
     private fun MetadataCandidate.withLocalizationTrace(
         titleTrace: SelectedLocalizedField?,

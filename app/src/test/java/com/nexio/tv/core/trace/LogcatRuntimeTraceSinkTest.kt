@@ -193,9 +193,30 @@ class LogcatRuntimeTraceSinkTest {
             "trailerSource" to "FALLBACK_YOUTUBE_IDS",
             "fallbackYouTubeIdsOnly" to true
         )))
+        sink.emit(envelope("screensaver.surface_published", mapOf(
+            "surface" to "screensaver",
+            "published" to true,
+            "itemCount" to 40,
+            "logoCount" to 31,
+            "trailerCandidateCount" to 40,
+            "selectedRefCount" to 25,
+            "fallbackIdCount" to 15
+        )))
+        sink.emit(envelope("screensaver.scheduler_state", mapOf(
+            "stage" to "start_prepared",
+            "route" to "home",
+            "eligible" to true,
+            "visible" to false,
+            "slideCount" to 40,
+            "trailerCandidateCount" to 40,
+            "trailerEnabled" to true,
+            "trailerSessionReady" to true,
+            "lifecycleState" to "RESUMED",
+            "reason" to "ready"
+        )))
 
         val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
-        assertEquals(3, logs.size)
+        assertEquals(5, logs.size)
         val pool = logs[0].msg
         assertTrue(pool.contains("t=screensaver.candidate_pool_built"))
         assertTrue(pool.contains("profile=profile-hash"))
@@ -214,6 +235,61 @@ class LogcatRuntimeTraceSinkTest {
         assertTrue(trailer.contains("t=screensaver.trailer_candidate_selected"))
         assertTrue(trailer.contains("trailerSource=FALLBACK_YOUTUBE_IDS"))
         assertTrue(trailer.contains("fallbackYouTubeIdsOnly=true"))
+
+        val surface = logs[3].msg
+        assertTrue(surface.contains("t=screensaver.surface_published"))
+        assertTrue(surface.contains("surface=screensaver"))
+        assertTrue(surface.contains("published=true"))
+        assertTrue(surface.contains("logoCount=31"))
+        assertTrue(surface.contains("trailerCandidateCount=40"))
+
+        val scheduler = logs[4].msg
+        assertTrue(scheduler.contains("t=screensaver.scheduler_state"))
+        assertTrue(scheduler.contains("stage=start_prepared"))
+        assertTrue(scheduler.contains("eligible=true"))
+        assertTrue(scheduler.contains("trailerEnabled=true"))
+        assertTrue(scheduler.contains("trailerSessionReady=true"))
+    }
+
+    @Test
+    fun `media clip events write to MetaRoute tag with durable clip fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+
+        sink.emit(envelope("media_clip.candidate_stored", mapOf(
+            "itemKey" to "tmdb:550",
+            "provider" to "TMDB",
+            "clipType" to "TRAILER",
+            "site" to "YOUTUBE",
+            "videoId" to "abc123",
+            "scope" to "title",
+            "cacheDecision" to "WRITE"
+        )))
+        sink.emit(envelope("media_clip.candidate_selected", mapOf(
+            "surface" to "SCREENSAVER",
+            "itemKey" to "tmdb:550",
+            "provider" to "TMDB",
+            "clipType" to "TRAILER",
+            "site" to "YOUTUBE",
+            "videoId" to "abc123",
+            "cacheDecision" to "HIT",
+            "playbackUrlResolvedAtPlayTime" to true
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(2, logs.size)
+        val stored = logs[0].msg
+        assertTrue(stored.contains("t=media_clip.candidate_stored"))
+        assertTrue(stored.contains("itemKey=tmdb:550"))
+        assertTrue(stored.contains("provider=TMDB"))
+        assertTrue(stored.contains("videoId=abc123"))
+        assertTrue(stored.contains("cacheDecision=WRITE"))
+
+        val selected = logs[1].msg
+        assertTrue(selected.contains("t=media_clip.candidate_selected"))
+        assertTrue(selected.contains("surface=SCREENSAVER"))
+        assertTrue(selected.contains("itemKey=tmdb:550"))
+        assertTrue(selected.contains("cacheDecision=HIT"))
+        assertTrue(selected.contains("playbackUrlResolvedAtPlayTime=true"))
     }
 
     @Test

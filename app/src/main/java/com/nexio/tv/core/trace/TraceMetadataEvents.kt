@@ -346,6 +346,58 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitScreensaverSurfacePublished(
+        surface: String,
+        published: Boolean,
+        itemCount: Int,
+        logoCount: Int,
+        trailerCandidateCount: Int,
+        selectedRefCount: Int,
+        fallbackIdCount: Int
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.surface_published",
+            payload = mapOf(
+                "surface" to surface,
+                "published" to published,
+                "itemCount" to itemCount,
+                "logoCount" to logoCount,
+                "trailerCandidateCount" to trailerCandidateCount,
+                "selectedRefCount" to selectedRefCount,
+                "fallbackIdCount" to fallbackIdCount
+            )
+        )
+    }
+
+    fun emitScreensaverSchedulerState(
+        stage: String,
+        route: String?,
+        eligible: Boolean,
+        visible: Boolean,
+        slideCount: Int,
+        trailerCandidateCount: Int,
+        trailerEnabled: Boolean,
+        trailerSessionReady: Boolean,
+        lifecycleState: String,
+        reason: String
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.scheduler_state",
+            payload = mapOf(
+                "stage" to stage,
+                "route" to optionalTraceValue(route),
+                "eligible" to eligible,
+                "visible" to visible,
+                "slideCount" to slideCount,
+                "trailerCandidateCount" to trailerCandidateCount,
+                "trailerEnabled" to trailerEnabled,
+                "trailerSessionReady" to trailerSessionReady,
+                "lifecycleState" to lifecycleState,
+                "reason" to reason
+            )
+        )
+    }
+
     fun emitHomeHydrationStarted(
         railId: String?,
         itemKey: String,
@@ -453,6 +505,233 @@ class TraceMetadataEvents(
                 "itemKey" to itemKey,
                 "reason" to reason,
                 "trigger" to trigger
+            )
+        )
+    }
+
+    fun emitTrailerPreviewRequest(
+        itemId: String,
+        itemType: String,
+        fallbackRef: String?,
+        published: Boolean,
+        negativeCached: Boolean,
+        forceRefresh: Boolean
+    ) {
+        emitTraceEvent(
+            eventType = "metadata.trailer_preview_request",
+            payload = mapOf(
+                "itemId" to itemId,
+                "itemType" to itemType,
+                "fallbackRef" to optionalTraceValue(fallbackRef),
+                "published" to published,
+                "negativeCached" to negativeCached,
+                "forceRefresh" to forceRefresh
+            )
+        )
+    }
+
+    fun emitTrailerPreviewState(
+        itemId: String,
+        stage: String,
+        published: Boolean,
+        negativeCached: Boolean,
+        loading: Boolean,
+        reason: String
+    ) {
+        emitTraceEvent(
+            eventType = "metadata.trailer_preview_state",
+            payload = mapOf(
+                "itemId" to itemId,
+                "stage" to stage,
+                "published" to published,
+                "negativeCached" to negativeCached,
+                "loading" to loading,
+                "reason" to reason
+            )
+        )
+    }
+
+    fun emitTrailerSurfaceSynced(
+        surface: String,
+        itemCount: Int,
+        selectedRefCount: Int,
+        youtubeRefCount: Int,
+        inAppRefCount: Int,
+        externalRefCount: Int,
+        fallbackIdCount: Int
+    ) {
+        emitTraceEvent(
+            eventType = "metadata.trailer_surface_synced",
+            payload = mapOf(
+                "surface" to surface,
+                "itemCount" to itemCount,
+                "selectedRefCount" to selectedRefCount,
+                "youtubeRefCount" to youtubeRefCount,
+                "inAppRefCount" to inAppRefCount,
+                "externalRefCount" to externalRefCount,
+                "fallbackIdCount" to fallbackIdCount
+            )
+        )
+    }
+
+    fun emitTrailerLookupResult(
+        contentId: String?,
+        itemType: String?,
+        season: Int?,
+        fallbackCount: Int,
+        cacheDecision: String,
+        result: String,
+        hasPlayback: Boolean,
+        hasExternal: Boolean
+    ) {
+        emitTraceEvent(
+            eventType = "metadata.trailer_lookup_result",
+            payload = mapOf(
+                "contentId" to optionalTraceValue(contentId),
+                "itemType" to optionalTraceValue(itemType),
+                "season" to (season ?: -1),
+                "fallbackCount" to fallbackCount,
+                "cacheDecision" to cacheDecision,
+                "result" to result,
+                "hasPlayback" to hasPlayback,
+                "hasExternal" to hasExternal
+            )
+        )
+    }
+
+    fun emitMediaClipCandidateStored(
+        itemKey: String,
+        provider: String,
+        clipType: String,
+        site: String,
+        videoId: String?,
+        scope: String,
+        cacheDecision: String
+    ) {
+        emitTraceEvent(
+            eventType = "media_clip.candidate_stored",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "provider" to provider,
+                "clipType" to clipType,
+                "site" to site,
+                "videoId" to optionalTraceValue(videoId),
+                "scope" to scope,
+                "cacheDecision" to cacheDecision
+            )
+        )
+    }
+
+    fun emitMediaClipCandidateSelected(
+        surface: String,
+        itemKey: String,
+        provider: String,
+        clipType: String,
+        site: String,
+        videoId: String?,
+        cacheDecision: String,
+        playbackUrlResolvedAtPlayTime: Boolean
+    ) {
+        emitTraceEvent(
+            eventType = "media_clip.candidate_selected",
+            payload = mapOf(
+                "surface" to surface,
+                "itemKey" to itemKey,
+                "provider" to provider,
+                "clipType" to clipType,
+                "site" to site,
+                "videoId" to optionalTraceValue(videoId),
+                "cacheDecision" to cacheDecision,
+                "playbackUrlResolvedAtPlayTime" to playbackUrlResolvedAtPlayTime
+            )
+        )
+    }
+
+    fun emitScreensaverTrailerPlaybackResolution(
+        itemId: String,
+        itemType: String,
+        inputRef: String,
+        selectedRef: String?,
+        result: String,
+        reason: String
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.trailer_playback_resolution",
+            payload = mapOf(
+                "itemId" to itemId,
+                "itemType" to itemType,
+                "inputRef" to inputRef,
+                "selectedRef" to optionalTraceValue(selectedRef),
+                "result" to result,
+                "reason" to reason
+            )
+        )
+    }
+
+    fun emitRuntimeTrailerPlaybackSource(
+        ref: String,
+        result: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        hasUserAgent: Boolean
+    ) {
+        emitTraceEvent(
+            eventType = "runtime.trailer_playback_source",
+            payload = mapOf(
+                "ref" to ref,
+                "result" to result,
+                "hasVideo" to hasVideo,
+                "hasAudio" to hasAudio,
+                "hasUserAgent" to hasUserAgent
+            )
+        )
+    }
+
+    fun emitModernHomeTrailerAutoplayGate(
+        stage: String,
+        focusKey: String?,
+        itemId: String?,
+        itemType: String?,
+        autoplayEnabled: Boolean,
+        delaySeconds: Int,
+        screensaverVisible: Boolean,
+        startupSplashVisible: Boolean,
+        externalTakeoverActive: Boolean,
+        selectionStillFocused: Boolean,
+        lifecycleResumed: Boolean,
+        trailerPlaybackUnlocked: Boolean,
+        hasTrailerMetadata: Boolean,
+        hasResolvedPreview: Boolean,
+        hasResolvedExternalPreview: Boolean,
+        loading: Boolean,
+        negativeCached: Boolean,
+        alreadyRetried: Boolean,
+        shouldProceed: Boolean,
+        reason: String
+    ) {
+        emitTraceEvent(
+            eventType = "metadata.trailer_autoplay_gate",
+            payload = mapOf(
+                "stage" to stage,
+                "focusKey" to optionalTraceValue(focusKey),
+                "itemId" to optionalTraceValue(itemId),
+                "itemType" to optionalTraceValue(itemType),
+                "autoplayEnabled" to autoplayEnabled,
+                "delaySeconds" to delaySeconds,
+                "screensaverVisible" to screensaverVisible,
+                "startupSplashVisible" to startupSplashVisible,
+                "externalTakeoverActive" to externalTakeoverActive,
+                "selectionStillFocused" to selectionStillFocused,
+                "lifecycleResumed" to lifecycleResumed,
+                "trailerPlaybackUnlocked" to trailerPlaybackUnlocked,
+                "hasTrailerMetadata" to hasTrailerMetadata,
+                "hasResolvedPreview" to hasResolvedPreview,
+                "hasResolvedExternalPreview" to hasResolvedExternalPreview,
+                "loading" to loading,
+                "negativeCached" to negativeCached,
+                "alreadyRetried" to alreadyRetried,
+                "shouldProceed" to shouldProceed,
+                "reason" to reason
             )
         )
     }

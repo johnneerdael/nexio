@@ -109,7 +109,8 @@ object IntegrationRuntimeModule {
         DurableArtworkDecisionCache(
             file = File(context.filesDir, "artwork-decisions-v1.json"),
             gson = gson,
-            traceSink = traceSink
+            traceSink = traceSink,
+            thumbnailWriteDebounceMs = 1_500L
         )
 
     @Provides

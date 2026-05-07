@@ -143,6 +143,30 @@ class HomeResolvedDisplayMapperTest {
     }
 
     @Test
+    fun `mapper preserves legacy poster and backdrop strings as artwork refs`() {
+        val finalItem = preview(
+            id = "tmdb:550",
+            title = "Final Home Title",
+            overview = "Final Home Overview",
+            rating = null,
+            artwork = ArtworkBundle()
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(finalItem)),
+            overlaysByItemKey = emptyMap(),
+            nowMs = 10_000L
+        ).single()
+
+        val backdrop = resolved.artwork.backdrop as ArtworkDisplayRef.LegacyString
+        val poster = resolved.artwork.poster as ArtworkDisplayRef.LegacyString
+        assertEquals("legacy-backdrop", backdrop.value)
+        assertEquals(ArtworkType.BACKDROP, backdrop.imageType)
+        assertEquals("legacy-poster", poster.value)
+        assertEquals(ArtworkType.POSTER, poster.imageType)
+    }
+
+    @Test
     fun `mapper does not publish unresolved home trailer fallbacks into display surface trailer state`() {
         val finalItem = preview(
             id = "tmdb:550",

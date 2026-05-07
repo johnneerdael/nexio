@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.ProviderIds
@@ -12,8 +13,11 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import java.lang.reflect.Modifier
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -115,6 +119,113 @@ class ResolvedDisplaySurfaceRepositoryTest {
     }
 
     @Test
+    fun `home and screensaver surfaces keep independent snapshots for same profile`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+
+        val homePublished = repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:home", title = "Visible Home"))
+        )
+        val screensaverPublished = repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:trending", title = "Trending Screensaver"))
+        )
+
+        assertTrue(homePublished)
+        assertTrue(screensaverPublished)
+        assertEquals(
+            "Visible Home",
+            repository.getSnapshot(ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY, profileId = 1).single().display.title
+        )
+        assertEquals(
+            "Trending Screensaver",
+            repository.getSnapshot(ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY, profileId = 1).single().display.title
+        )
+    }
+
+    @Test
+    fun `observeScreensaverSurface does not emit when only home surface changes`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val emissions = mutableListOf<List<ResolvedDisplayItem>>()
+        val collectJob = launch {
+            repository.observeScreensaverSurface(profileId = 1).collect { items ->
+                emissions += items
+            }
+        }
+
+        runCurrent()
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:home", title = "Visible Home"))
+        )
+        runCurrent()
+
+        assertEquals(listOf(emptyList<ResolvedDisplayItem>()), emissions)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `screensaver surface publish suppresses semantically unchanged timestamp churn`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val emissions = mutableListOf<List<ResolvedDisplayItem>>()
+        val collectJob = launch {
+            repository.observeScreensaverSurface(profileId = 1).collect { items ->
+                emissions += items
+            }
+        }
+        val first = resolvedItem(itemKey = "movie:tmdb:550", title = "Fight Club")
+        val samePayloadNewTimestamp = first.copy(updatedAtMs = first.updatedAtMs + 1_000L)
+
+        runCurrent()
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(first)
+        )
+        runCurrent()
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(samePayloadNewTimestamp)
+        )
+        runCurrent()
+
+        assertEquals(2, emissions.size)
+        assertEquals(emptyList<ResolvedDisplayItem>(), emissions[0])
+        assertEquals(listOf(first), emissions[1])
+        assertEquals(listOf(first), repository.getSnapshot(ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY, 1))
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `screensaver surface publish returns false for semantically unchanged timestamp churn`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val first = resolvedItem(itemKey = "movie:tmdb:550", title = "Fight Club")
+        val samePayloadNewTimestamp = first.copy(updatedAtMs = first.updatedAtMs + 1_000L)
+
+        val firstPublished = repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(first)
+        )
+        val secondPublished = repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(samePayloadNewTimestamp)
+        )
+
+        assertTrue(firstPublished)
+        assertEquals(false, secondPublished)
+    }
+
+    @Test
     fun `observeItem emits the stored resolved item for the requested profile and key`() = runTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
@@ -134,6 +245,43 @@ class ResolvedDisplaySurfaceRepositoryTest {
             repository.observeItem(profileId = 1, itemKey = "movie:tmdb:550").first()
         )
         assertNull(repository.observeItem(profileId = 2, itemKey = "movie:tmdb:550").first())
+    }
+
+    @Test
+    fun `incremental publish preserves existing trailer state when incoming update has no trailer state`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val resolvedWithTrailer = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview Title",
+            trailer = TrailerDisplayState(
+                fallbackTrailerYtIds = listOf("trailer-a"),
+                selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("trailer-a"),
+                availabilityReason = "fallback_youtube_id",
+                surface = "home"
+            )
+        )
+        val hydratedWithoutTrailer = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Canonical Title",
+            trailer = TrailerDisplayState()
+        )
+
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(resolvedWithTrailer)
+        )
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(hydratedWithoutTrailer),
+            replace = false
+        )
+
+        val published = repository.getSnapshot(profileId = 1).single()
+        assertEquals("Canonical Title", published.display.title)
+        assertEquals(TrailerPlaybackRef.YouTubeId("trailer-a"), published.trailer.selectedPlaybackRef)
+        assertEquals(listOf("trailer-a"), published.trailer.fallbackTrailerYtIds)
     }
 
     @Test
@@ -160,7 +308,8 @@ class ResolvedDisplaySurfaceRepositoryTest {
     private fun resolvedItem(
         itemKey: String,
         title: String,
-        overview: String = "Overview"
+        overview: String = "Overview",
+        trailer: TrailerDisplayState = TrailerDisplayState(fallbackTrailerYtIds = emptyList())
     ) = ResolvedDisplayItem(
         itemKey = itemKey,
         contentId = "tmdb:550",
@@ -182,7 +331,7 @@ class ResolvedDisplaySurfaceRepositoryTest {
         ),
         artwork = ArtworkBundle(),
         rating = TitleRating(8.8, TitleRatingSource.IMDB),
-        trailer = TrailerDisplayState(fallbackTrailerYtIds = emptyList()),
+        trailer = trailer,
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = emptyList(),
         updatedAtMs = 1L
