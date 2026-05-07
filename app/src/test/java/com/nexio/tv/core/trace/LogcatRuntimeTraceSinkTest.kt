@@ -403,15 +403,22 @@ class LogcatRuntimeTraceSinkTest {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("artwork.decision_store_load", mapOf(
             "success" to true,
+            "authoritative" to true,
+            "loadState" to "LOADED",
             "filePresent" to true,
             "fileReadable" to true,
             "fileBytes" to 81920L,
             "decisionCount" to 748,
             "linkCount" to 2,
             "droppedDecisionCount" to 0,
+            "quarantinedDecisionCount" to 1,
             "reason" to null,
             "schemaVersion" to 1,
-            "errorClass" to null
+            "storedSchemaVersion" to 1,
+            "errorClass" to null,
+            "errorMessageHash" to null,
+            "errorTopFrame" to null,
+            "firstQuarantinedDecisionKeyHash" to "bad-key-hash"
         )))
 
         val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
@@ -419,12 +426,22 @@ class LogcatRuntimeTraceSinkTest {
         val msg = logs.first().msg
         assertTrue(msg.contains("t=artwork.decision_store_load"))
         assertTrue(msg.contains("success=true"))
+        assertTrue(msg.contains("authoritative=true"))
+        assertTrue(msg.contains("loadState=LOADED"))
         assertTrue(msg.contains("filePresent=true"))
         assertTrue(msg.contains("fileReadable=true"))
         assertTrue(msg.contains("fileBytes=81920"))
         assertTrue(msg.contains("decisionCount=748"))
         assertTrue(msg.contains("linkCount=2"))
         assertTrue(msg.contains("droppedDecisionCount=0"))
+        assertTrue(msg.contains("quarantinedDecisionCount=1"))
+        assertTrue(msg.contains("reason=null"))
+        assertTrue(msg.contains("schemaVersion=1"))
+        assertTrue(msg.contains("storedSchemaVersion=1"))
+        assertTrue(msg.contains("errorClass=null"))
+        assertTrue(msg.contains("errorMessageHash=null"))
+        assertTrue(msg.contains("errorTopFrame=null"))
+        assertTrue(msg.contains("firstQuarantinedDecisionKeyHash=bad-key-hash"))
     }
 
     @Test
@@ -432,10 +449,13 @@ class LogcatRuntimeTraceSinkTest {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("home.snapshot_decision_lookup", mapOf(
             "scope" to "catalogRows[0].items[0]",
+            "lookupResult" to "QUARANTINED",
             "decisionFound" to false,
             "decisionKeyHash" to "abc123",
             "posterKind" to "decision",
             "posterProviderTag" to "rpdb",
+            "authoritative" to true,
+            "loadState" to "LOADED_WITH_QUARANTINE",
             "cacheLoaded" to true,
             "cacheDecisionCount" to 748,
             "cacheLinkCount" to 2,
@@ -445,7 +465,10 @@ class LogcatRuntimeTraceSinkTest {
             "lastLoadSuccess" to true,
             "lastLoadReason" to null,
             "lastLoadErrorClass" to null,
-            "droppedDecisionCount" to 0
+            "droppedDecisionCount" to 0,
+            "quarantinedDecisionCount" to 1,
+            "errorTopFrame" to "DecisionStore.kt:42",
+            "rehydrateRequestCount" to 3
         )))
 
         val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
@@ -453,8 +476,11 @@ class LogcatRuntimeTraceSinkTest {
         val msg = logs.first().msg
         assertTrue(msg.contains("t=home.snapshot_decision_lookup"))
         assertTrue(msg.contains("scope=catalogRows[0].items[0]"))
+        assertTrue(msg.contains("lookupResult=QUARANTINED"))
         assertTrue(msg.contains("decisionFound=false"))
         assertTrue(msg.contains("decisionKeyHash=abc123"))
+        assertTrue(msg.contains("authoritative=true"))
+        assertTrue(msg.contains("loadState=LOADED_WITH_QUARANTINE"))
         assertTrue(msg.contains("cacheLoaded=true"))
         assertTrue(msg.contains("cacheDecisionCount=748"))
         assertTrue(msg.contains("cacheLinkCount=2"))
@@ -462,6 +488,9 @@ class LogcatRuntimeTraceSinkTest {
         assertTrue(msg.contains("storeFileReadable=true"))
         assertTrue(msg.contains("storeFileBytes=81920"))
         assertTrue(msg.contains("lastLoadSuccess=true"))
+        assertTrue(msg.contains("quarantinedDecisionCount=1"))
+        assertTrue(msg.contains("errorTopFrame=DecisionStore.kt:42"))
+        assertTrue(msg.contains("rehydrateRequestCount=3"))
     }
 
     @Test
@@ -469,9 +498,13 @@ class LogcatRuntimeTraceSinkTest {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("home.snapshot_sanitize_artwork", mapOf(
             "scope" to "catalogRows[0].items[0]",
+            "action" to "DROP_DECISION_POSTER",
             "reason" to "missing_decision",
+            "destructive" to true,
+            "writeBackAllowed" to false,
             "posterKind" to "decision",
             "posterProviderTag" to "rpdb",
+            "posterProviderTagAction" to "CLEAR",
             "decisionFound" to false
         )))
 
@@ -480,10 +513,36 @@ class LogcatRuntimeTraceSinkTest {
         val msg = logs.first().msg
         assertTrue(msg.contains("t=home.snapshot_sanitize_artwork"))
         assertTrue(msg.contains("scope=catalogRows[0].items[0]"))
+        assertTrue(msg.contains("action=DROP_DECISION_POSTER"))
         assertTrue(msg.contains("reason=missing_decision"))
+        assertTrue(msg.contains("destructive=true"))
+        assertTrue(msg.contains("writeBackAllowed=false"))
         assertTrue(msg.contains("posterKind=decision"))
         assertTrue(msg.contains("posterProviderTag=rpdb"))
+        assertTrue(msg.contains("posterProviderTagAction=CLEAR"))
         assertTrue(msg.contains("decisionFound=false"))
+    }
+
+    @Test
+    fun `home snapshot artwork rehydrate requested event writes to MetaRoute tag with request diagnostics`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("home.snapshot_artwork_rehydrate_requested", mapOf(
+            "scope" to "catalogRows[0].items[0]",
+            "reason" to "quarantined_decision",
+            "posterKind" to "decision",
+            "providerTag" to "rpdb",
+            "decisionKeyHash" to "abc123"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=home.snapshot_artwork_rehydrate_requested"))
+        assertTrue(msg.contains("scope=catalogRows[0].items[0]"))
+        assertTrue(msg.contains("reason=quarantined_decision"))
+        assertTrue(msg.contains("posterKind=decision"))
+        assertTrue(msg.contains("providerTag=rpdb"))
+        assertTrue(msg.contains("decisionKeyHash=abc123"))
     }
 
     @Test

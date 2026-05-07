@@ -273,15 +273,22 @@ class LogcatRuntimeTraceSink(
         )
         "artwork.decision_store_load" -> linkedMapOf(
             "success" to payload["success"],
+            "authoritative" to payload["authoritative"],
+            "loadState" to payload["loadState"],
             "filePresent" to payload["filePresent"],
             "fileReadable" to payload["fileReadable"],
             "fileBytes" to payload["fileBytes"],
             "decisionCount" to payload["decisionCount"],
             "linkCount" to payload["linkCount"],
             "droppedDecisionCount" to payload["droppedDecisionCount"],
+            "quarantinedDecisionCount" to payload["quarantinedDecisionCount"],
             "reason" to payload["reason"],
             "schemaVersion" to payload["schemaVersion"],
-            "errorClass" to payload["errorClass"]
+            "storedSchemaVersion" to payload["storedSchemaVersion"],
+            "errorClass" to payload["errorClass"],
+            "errorMessageHash" to payload["errorMessageHash"],
+            "errorTopFrame" to payload["errorTopFrame"],
+            "firstQuarantinedDecisionKeyHash" to payload["firstQuarantinedDecisionKeyHash"]
         )
         "artwork.decision_store_write" -> linkedMapOf(
             "success" to payload["success"],
@@ -324,10 +331,13 @@ class LogcatRuntimeTraceSink(
         )
         "home.snapshot_decision_lookup" -> linkedMapOf(
             "scope" to payload["scope"],
+            "lookupResult" to payload["lookupResult"],
             "decisionFound" to payload["decisionFound"],
             "decisionKeyHash" to payload["decisionKeyHash"],
             "posterKind" to payload["posterKind"],
             "posterProviderTag" to payload["posterProviderTag"],
+            "authoritative" to payload["authoritative"],
+            "loadState" to payload["loadState"],
             "cacheLoaded" to payload["cacheLoaded"],
             "cacheDecisionCount" to payload["cacheDecisionCount"],
             "cacheLinkCount" to payload["cacheLinkCount"],
@@ -338,14 +348,28 @@ class LogcatRuntimeTraceSink(
             "lastLoadReason" to payload["lastLoadReason"],
             "lastLoadErrorClass" to payload["lastLoadErrorClass"],
             "droppedDecisionCount" to payload["droppedDecisionCount"],
-            "lookupErrorClass" to payload["lookupErrorClass"]
+            "lookupErrorClass" to payload["lookupErrorClass"],
+            "quarantinedDecisionCount" to payload["quarantinedDecisionCount"],
+            "errorTopFrame" to payload["errorTopFrame"],
+            "rehydrateRequestCount" to payload["rehydrateRequestCount"]
         )
         "home.snapshot_sanitize_artwork" -> linkedMapOf(
             "scope" to payload["scope"],
+            "action" to payload["action"],
             "reason" to payload["reason"],
+            "destructive" to payload["destructive"],
+            "writeBackAllowed" to payload["writeBackAllowed"],
             "posterKind" to payload["posterKind"],
             "posterProviderTag" to payload["posterProviderTag"],
+            "posterProviderTagAction" to payload["posterProviderTagAction"],
             "decisionFound" to payload["decisionFound"]
+        )
+        "home.snapshot_artwork_rehydrate_requested" -> linkedMapOf(
+            "scope" to payload["scope"],
+            "reason" to payload["reason"],
+            "posterKind" to payload["posterKind"],
+            "providerTag" to payload["providerTag"],
+            "decisionKeyHash" to payload["decisionKeyHash"]
         )
         "screensaver.trailer_playback_resolution" -> linkedMapOf(
             "itemId" to payload["itemId"],
