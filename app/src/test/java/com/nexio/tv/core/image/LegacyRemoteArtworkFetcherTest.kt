@@ -48,6 +48,25 @@ class LegacyRemoteArtworkFetcherTest {
     }
 
     @Test
+    fun `legacy diagnostics use logcat only trace session even when trace sink has active session`() = runTest {
+        val traceSink = RecordingTraceSink()
+        val model = model()
+        val transport = mockk<PosterTransport>()
+        every { transport.execute(RAW_URL) } returns PosterTransportResult(
+            statusCode = 200,
+            isSuccessful = true,
+            body = "image-bytes".toByteArray()
+        )
+
+        LegacyRemoteArtworkFetcher(model, transport, traceSink).fetch()
+
+        assertEquals(
+            listOf("logcat-only", "logcat-only"),
+            traceSink.events.map { it.traceSessionId }
+        )
+    }
+
+    @Test
     fun `http failure emits start and failed`() = runTest {
         val traceSink = RecordingTraceSink()
         val model = model()
@@ -120,6 +139,43 @@ class LegacyRemoteArtworkFetcherTest {
         )
         val failurePayload = traceSink.events.last().payload as Map<*, *>
         assertEquals("transport_exception", failurePayload["reason"])
+        assertEquals(IOException::class.java.name, failurePayload["errorClass"])
+        assertFalse(failurePayload.containsKey("message"))
+        assertPayloadsDoNotLeakSensitiveValues(traceSink)
+    }
+
+    @Test
+    fun `source creation exception emits failed without success and rethrows`() = runTest {
+        val traceSink = RecordingTraceSink()
+        val model = model()
+        val transport = mockk<PosterTransport>()
+        every { transport.execute(RAW_URL) } returns PosterTransportResult(
+            statusCode = 200,
+            isSuccessful = true,
+            body = "image-bytes".toByteArray()
+        )
+
+        try {
+            LegacyRemoteArtworkFetcher(
+                model = model,
+                transport = transport,
+                traceSink = traceSink,
+                sourceFactory = { throw IOException("failed to write $RAW_URL") }
+            ).fetch()
+            fail("Expected IOException")
+        } catch (error: IOException) {
+            assertEquals("failed to write $RAW_URL", error.message)
+        }
+
+        assertEquals(
+            listOf(
+                "legacy_remote_artwork.fetch_start",
+                "legacy_remote_artwork.fetch_failed"
+            ),
+            traceSink.events.map { it.eventType }
+        )
+        val failurePayload = traceSink.events.last().payload as Map<*, *>
+        assertEquals("source_creation_failed", failurePayload["reason"])
         assertEquals(IOException::class.java.name, failurePayload["errorClass"])
         assertFalse(failurePayload.containsKey("message"))
         assertPayloadsDoNotLeakSensitiveValues(traceSink)

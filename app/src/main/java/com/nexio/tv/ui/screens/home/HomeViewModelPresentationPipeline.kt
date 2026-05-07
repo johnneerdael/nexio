@@ -1055,8 +1055,8 @@ internal fun HomeDisplayMetadata.applyToHeroItem(
     var merged = base
     if (settings.useArtwork) {
         merged = merged.copy(
-            background = backdrop ?: merged.background,
-            logo = logo ?: merged.logo
+            background = displayBackdrop ?: merged.background,
+            logo = displayLogo ?: merged.logo
         )
     }
     if (settings.useBasicInfo) {

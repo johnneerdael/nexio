@@ -112,6 +112,11 @@ class LogcatTraceChannelTest {
     }
 
     @Test
+    fun `legacy remote artwork events map to INT_RUNTIME`() {
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("legacy_remote_artwork.fetch_start"))
+    }
+
+    @Test
     fun `home snapshot events map to META_ROUTE`() {
         assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_read"))
         assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.snapshot_write"))

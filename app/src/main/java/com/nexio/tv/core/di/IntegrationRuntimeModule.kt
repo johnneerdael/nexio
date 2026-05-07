@@ -4,16 +4,20 @@ import android.content.Context
 import androidx.room.Room
 import com.google.gson.Gson
 import com.nexio.tv.core.artwork.ArtworkAssetDiskCache
+import com.nexio.tv.core.artwork.ArtworkAssetRecordStore
 import com.nexio.tv.core.artwork.ArtworkByteLoader
 import com.nexio.tv.core.artwork.ArtworkCredentialResolver
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkPosterTransport
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
+import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityValidator
 import com.nexio.tv.core.artwork.ArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.ArtworkRouter
 import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.artwork.DefaultArtworkByteLoader
+import com.nexio.tv.core.artwork.DefaultArtworkReferenceIntegrityValidator
 import com.nexio.tv.core.artwork.DefaultArtworkPosterTransport
+import com.nexio.tv.core.artwork.DurableArtworkAssetRecordStore
 import com.nexio.tv.core.artwork.DurableArtworkDecisionCache
 import com.nexio.tv.core.artwork.FileBackedArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.PosterRatingsArtworkCredentialResolver
@@ -119,6 +123,23 @@ object IntegrationRuntimeModule {
     fun provideArtworkAssetDiskCache(
         @ApplicationContext context: Context
     ): ArtworkAssetDiskCache = ArtworkAssetDiskCache(context.cacheDir)
+
+    @Provides
+    @Singleton
+    fun provideArtworkAssetRecordStore(
+        @ApplicationContext context: Context,
+        gson: Gson
+    ): ArtworkAssetRecordStore =
+        DurableArtworkAssetRecordStore(
+            file = File(context.filesDir, "artwork-asset-records-v1.json"),
+            gson = gson
+        )
+
+    @Provides
+    @Singleton
+    fun provideArtworkReferenceIntegrityValidator(
+        impl: DefaultArtworkReferenceIntegrityValidator
+    ): ArtworkReferenceIntegrityValidator = impl
 
     @Provides
     @Singleton

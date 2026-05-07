@@ -29,6 +29,17 @@ class PremiumArtworkSharedPipelineContractTest {
     }
 
     @Test
+    fun `home snapshot store receives production artwork reference integrity validator`() {
+        val module = File("app/src/main/java/com/nexio/tv/core/di/IntegrationRuntimeModule.kt").readText()
+        val store = File("app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt").readText()
+
+        assertTrue(module.contains("fun provideArtworkReferenceIntegrityValidator("))
+        assertTrue(module.contains("): ArtworkReferenceIntegrityValidator = impl"))
+        assertTrue(store.contains("artworkReferenceIntegrityValidator: ArtworkReferenceIntegrityValidator,"))
+        assertFalse(store.contains("artworkReferenceIntegrityValidator: DefaultArtworkReferenceIntegrityValidator,"))
+    }
+
+    @Test
     fun `default byte loader is not called directly by production code`() {
         val productionReferences = File("app/src/main/java/com/nexio/tv")
             .walkTopDown()

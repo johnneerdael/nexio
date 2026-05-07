@@ -10,6 +10,9 @@ class CompositeRuntimeTraceSink(
 
     override fun emit(event: TraceEventEnvelope<*>) {
         for (sink in sinks) {
+            if (event.traceSessionId == LOGCAT_ONLY_TRACE_SESSION_ID && sink.activeTraceSessionId() != null) {
+                continue
+            }
             try {
                 sink.emit(event)
             } catch (ce: CancellationException) {
@@ -22,4 +25,8 @@ class CompositeRuntimeTraceSink(
 
     override fun eventsWritten(): Long = sinks.maxOfOrNull { it.eventsWritten() } ?: 0L
     override fun eventsDropped(): Long = sinks.sumOf { it.eventsDropped() }
+
+    private companion object {
+        const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
+    }
 }

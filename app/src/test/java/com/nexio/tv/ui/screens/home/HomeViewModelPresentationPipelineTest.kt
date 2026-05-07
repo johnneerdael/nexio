@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
@@ -239,6 +240,27 @@ class HomeViewModelPresentationPipelineTest {
 
         assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.logo)
         assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.frozenLogoUrl)
+    }
+
+    @Test
+    fun `hero overlay applies durable display backdrop and logo projections`() {
+        val base = testPreview("tt123", "Movie").copy(
+            background = "raw-backdrop",
+            logo = "raw-logo"
+        )
+        val metadata = HomeDisplayMetadata(
+            backdrop = "legacy-backdrop",
+            logo = "legacy-logo",
+            artwork = ArtworkBundle(
+                backdrop = testArtworkRef("backdrop", ArtworkType.BACKDROP),
+                logo = testArtworkRef("logo", ArtworkType.LOGO)
+            )
+        )
+
+        val updated = metadata.applyToHeroItem(base, TmdbSettings(enabled = true, useArtwork = true))
+
+        assertEquals("nexio-artwork://asset/display-backdrop", updated.background)
+        assertEquals("nexio-artwork://asset/display-logo", updated.logo)
     }
 
     @Test

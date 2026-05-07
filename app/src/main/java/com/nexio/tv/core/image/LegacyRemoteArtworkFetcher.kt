@@ -13,6 +13,7 @@ import com.nexio.tv.core.trace.TraceEventEnvelope
 import com.nexio.tv.data.integration.posters.transport.PosterTransport
 import java.io.Closeable
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,78 +23,93 @@ import okio.Path.Companion.toOkioPath
 class LegacyRemoteArtworkFetcher(
     private val model: LegacyRemoteArtworkModel,
     private val transport: PosterTransport,
-    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink,
+    private val sourceFactory: (ByteArray) -> ImageSource = ::createTempFileSource
 ) : Fetcher {
+    private val traceSequence = AtomicLong(0L)
+
     override suspend fun fetch(): FetchResult? {
-        emitTrace(
+        trace(
             eventType = "legacy_remote_artwork.fetch_start",
-            payload = mapOf(
-                "imageType" to model.imageType.name
-            )
+            payload = baseTracePayload()
         )
         val result = try {
             transport.execute(model.url.value)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            emitFailure(
-                reason = "transport_exception",
-                statusCode = null,
-                extra = mapOf("errorClass" to error::class.java.name)
+            trace(
+                eventType = "legacy_remote_artwork.fetch_failed",
+                payload = baseTracePayload() + mapOf(
+                    "reason" to "transport_exception",
+                    "errorClass" to error::class.java.name
+                )
             )
             return null
         }
         if (!result.isSuccessful) {
-            emitFailure(reason = "http_failure", statusCode = result.statusCode)
+            trace(
+                eventType = "legacy_remote_artwork.fetch_failed",
+                payload = baseTracePayload() + mapOf(
+                    "reason" to "http_failure",
+                    "statusCode" to result.statusCode
+                )
+            )
             return null
         }
-        val bytes = result.body
-        if (bytes == null) {
-            emitFailure(reason = "null_body", statusCode = result.statusCode)
+        val bytes = result.body ?: run {
+            trace(
+                eventType = "legacy_remote_artwork.fetch_failed",
+                payload = baseTracePayload() + mapOf(
+                    "reason" to "null_body",
+                    "statusCode" to result.statusCode
+                )
+            )
             return null
         }
-        emitTrace(
+        val source = try {
+            sourceFactory(bytes)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            trace(
+                eventType = "legacy_remote_artwork.fetch_failed",
+                payload = baseTracePayload() + mapOf(
+                    "reason" to "source_creation_failed",
+                    "errorClass" to error::class.java.name
+                )
+            )
+            throw error
+        }
+        trace(
             eventType = "legacy_remote_artwork.fetch_success",
-            payload = mapOf(
+            payload = baseTracePayload() + mapOf(
                 "reason" to "success",
                 "statusCode" to result.statusCode,
                 "byteCount" to bytes.size
             )
         )
         return SourceResult(
-            source = createTempFileSource(bytes),
+            source = source,
             mimeType = "image/jpeg",
             dataSource = DataSource.NETWORK
         )
     }
 
-    private fun createTempFileSource(bytes: ByteArray): ImageSource {
-        val file = File.createTempFile("legacy-remote-artwork-", ".img")
-        file.writeBytes(bytes)
-        return ImageSource(
-            file = file.toOkioPath(),
-            closeable = Closeable { file.delete() }
+    private fun baseTracePayload(): Map<String, Any?> =
+        mapOf(
+            "imageType" to model.imageType.name,
+            "modelKeyHash" to model.key.sha256(),
+            "urlHash" to model.url.value.sha256()
         )
-    }
 
-    private fun emitFailure(
-        reason: String,
-        statusCode: Int?,
-        extra: Map<String, Any?> = emptyMap()
+    private fun trace(
+        eventType: String,
+        payload: Map<String, Any?>
     ) {
-        emitTrace(
-            eventType = "legacy_remote_artwork.fetch_failed",
-            payload = mapOf(
-                "reason" to reason,
-                "statusCode" to statusCode
-            ) + extra
-        )
-    }
-
-    private fun emitTrace(eventType: String, payload: Map<String, Any?>) {
         traceSink.emit(
             TraceEventEnvelope(
-                traceSessionId = traceSink.activeTraceSessionId() ?: "legacy-remote-artwork",
+                traceSessionId = LOGCAT_ONLY_TRACE_SESSION_ID,
                 sequence = traceSequence.incrementAndGet(),
                 wallClockMs = System.currentTimeMillis(),
                 elapsedRealtimeMs = System.nanoTime() / 1_000_000,
@@ -122,6 +138,20 @@ class LegacyRemoteArtworkFetcher(
     }
 
     private companion object {
-        val traceSequence = AtomicLong(0L)
+        const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
     }
+}
+
+private fun createTempFileSource(bytes: ByteArray): ImageSource {
+    val file = File.createTempFile("legacy-remote-artwork-", ".img")
+    file.writeBytes(bytes)
+    return ImageSource(
+        file = file.toOkioPath(),
+        closeable = Closeable { file.delete() }
+    )
+}
+
+private fun String.sha256(): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
+    return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
 }
