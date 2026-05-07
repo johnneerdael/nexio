@@ -306,7 +306,7 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `rail preview preserves unsupported rating provider value without legacy badge source`() {
+    fun `rail preview rejects unsupported rating provider value without legacy badge source`() {
         val preview = RailItemPreview(
             railId = "mdblist_top_shows",
             railSource = RailSource.BUILT_IN_MDBLIST,
@@ -324,10 +324,16 @@ class RailItemPreviewTest {
         )
 
         val meta = preview.toMetaPreview()
+        val resolution = preview.display.toPreviewRating(fallbackProvider = preview.sourceProvider)
 
         assertEquals("mdblist:show:1", meta.id)
-        assertEquals(8.9f, meta.imdbRating)
+        assertNull(meta.imdbRating)
         assertNull(meta.ratingSource)
+        assertNull(resolution.rating)
+        assertNull(resolution.source)
+        assertEquals(8.9, resolution.rejected?.rawValue)
+        assertEquals("rating.value", resolution.rejected?.rawField)
+        assertEquals("MISSING_RATING_SOURCE", resolution.rejected?.reason)
     }
 
     @Test
