@@ -2,96 +2,109 @@
 
 Date: 2026-05-07
 
-Status: root cause is narrowed to a specific runtime boundary, but the deepest cause is not fully proven yet. The app still needs a fresh on-device run with the latest diagnostics from `4389da5d2 fix(posters): add restart decision diagnostics`.
+Status: root cause is now narrowed to persisted artwork reference integrity. The implementation in this branch adds the first complete protection layer: non-destructive snapshot reads, decision-to-asset recovery, a write barrier for artwork refs, legacy fallback visibility, and tests for the restart-loss cases.
 
 ## Executive Summary
 
-Premium RPDB posters can appear during a runtime session, disappear after app restart, and then slowly reappear as hydration runs again. That behavior violates the intended integration runtime contract: once a premium poster decision has resolved and been persisted, restart should restore a durable artwork decision or fall back to a non-premium candidate. A restart should not erase the poster decision.
+Premium posters can appear during one app run, disappear after restart, and slowly reappear as home hydration runs again. That violates the integration runtime contract: once artwork has resolved, restart must restore a durable artwork decision, a durable asset, or a safe fallback. Restart must not convert a previously rendered poster into a permanently damaged snapshot.
 
-The evidence collected from `adb logcat` on `192.168.50.71:5555` proves this failure mode:
+The strongest evidence so far shows two related failures:
 
-1. Runtime hydration creates premium artwork decisions and persists them.
-2. The home snapshot sanitizer later sees persisted `nexio-artwork://decision/...` poster refs as missing decisions.
-3. The sanitizer clears the poster and `posterProviderTag`.
-4. The damaged snapshot is written back.
-5. The next snapshot read rejects or degrades the snapshot due poster provider tag mismatch.
-6. Hydration later recreates decisions, explaining why posters slowly reappear.
+1. The home snapshot sanitizer treated a missing decision lookup as authoritative even when the durable decision cache was failed, partial, or otherwise not trustworthy.
+2. Some persisted `nexio-artwork://decision/...` refs had no matching durable decision record, even though premium asset bytes could exist and render.
 
-The remaining unproven question is why the durable decision lookup returns false at snapshot sanitization time. Before the latest diagnostics, logcat did not show `artwork.decision_store_load`, so we could not distinguish between file absence, unreadable file, parse/schema failure, cache not loaded yet, wrong cache instance/path, or decision key mismatch.
+The bug is therefore not simply "RPDB selection failed." Premium selection and asset rendering can work. The broken boundary is persisted artwork reference integrity across restart.
 
 ## User-Visible Symptom
 
 Observed behavior:
 
-- Premium posters are missing from several rails after restart.
-- Some posters slowly reappear while the app continues running.
-- Restart pushes multiple posters back to the bad state.
-- The issue affects the home/catalog display where premium posters should have either a durable premium decision or a non-premium fallback.
+- Premium posters are missing from several home/catalog rails after restart.
+- Some posters slowly reappear while the app keeps running.
+- Restart pushes multiple posters back into the bad state.
+- Missing poster cards may still have provider state, causing snapshot mismatch behavior.
+- Non-premium fallback artwork is not consistently used when a premium decision ref cannot be restored.
 
-The key implication is that this is not just a network loading delay. If a poster was already shown in a previous run, the app should have a durable artwork identity and/or fallback decision that survives process restart.
+The key implication: this is not only a network delay. If a poster appeared in a previous run, the app should have enough durable identity to render it or fall back without destructive cleanup.
 
-## Current Proof From Logcat
+## Evidence Collected
 
-Device used for investigation:
+Device investigations used ADB logcat on the local network, including `192.168.50.71:5555` during RCA and `192.168.50.98:5555` as the release-build verification target.
 
-- ADB target: `192.168.50.71:5555`
-- Package observed: versionCode `73`, versionName `0.55`
-- PID observed during the investigation: `26926`
-
-Useful command:
-
-```bash
-adb -s 192.168.50.71:5555 logcat -d -v time \
-  Nexio.IntRuntime:D Nexio.MetaRoute:D Nexio.FirstPaint:D '*:S' |
-  rg 'artwork\.decision_store_load|artwork\.decision_store_write|artwork\.decision_put|home\.snapshot_read|home\.snapshot_write|home\.snapshot_sanitize_artwork|home\.snapshot_decision_lookup'
-```
-
-Proven runtime events before latest diagnostics:
+Earlier gated logcat proved runtime writes:
 
 ```text
-Nexio.IntRuntime: t=artwork.decision_put ... provider=RPDB imageType=POSTER sourceRole=PREMIUM rejectedCount=1 hasFallbackCandidate=true
-Nexio.IntRuntime: t=artwork.decision_store_write success=true decisionCount=748 linkCount=0 errorClass=null
+artwork.decision_put provider=RPDB imageType=POSTER sourceRole=PREMIUM hasFallbackCandidate=true
+artwork.decision_store_write success=true decisionCount=748
 ```
 
-These prove that RPDB premium decisions are produced and persisted during runtime.
+Those events prove the runtime produced and persisted premium artwork decisions.
 
-Proven destructive snapshot path:
+The same investigation proved destructive snapshot cleanup:
 
 ```text
-Nexio.MetaRoute: t=home.snapshot_sanitize_artwork scope=catalogRows[0].items[13] reason=missing_decision posterKind=decision posterProviderTag=rpdb decisionFound=false
-Nexio.MetaRoute: t=home.snapshot_write success=true profileId=1 catalogRowCount=8 fullCatalogRowCount=8 heroItemCount=7 errorClass=null
-Nexio.MetaRoute: t=home.snapshot_read success=false profileId=1 snapshotFound=true ... requiredPosterProviderTag=rpdb reason=poster_provider_tag_mismatch errorClass=null
+home.snapshot_sanitize_artwork reason=missing_decision posterKind=decision posterProviderTag=rpdb decisionFound=false
+home.snapshot_write success=true
+home.snapshot_read success=false reason=poster_provider_tag_mismatch
 ```
 
-These prove that snapshot sanitization is clearing decision-backed premium poster refs because the durable decision lookup returns false.
-
-Important negative evidence:
+Later evidence narrowed the decision-store boundary:
 
 ```text
-No artwork.decision_store_load events were found in the gated logcat output.
+storeFilePresent=true
+storeFileReadable=true
+storeFileBytes=545965
+cacheLoaded=true
+cacheDecisionCount=700
+lastLoadSuccess=false
+lastLoadErrorClass=ClassCastException
+decisionFound=false x456
+home.snapshot_sanitize_artwork reason=missing_decision x456
+home.snapshot_read success=false reason=poster_provider_tag_mismatch
 ```
 
-That missing event was the reason the previous instrumentation was not enough to finish the RCA. We could prove where posters were destroyed, but not why the cache lookup returned false.
+That changed the root cause from "maybe the decision file is missing" to:
+
+```text
+The durable store can exist and contain decisions, but lookup misses are not authoritative when load failed or was partial.
+Snapshot cleanup used those misses destructively anyway.
+```
+
+Newer RCA also showed:
+
+```text
+Premium asset files can exist and contain valid image bytes.
+Some decision refs have no matching durable decision record.
+Some materialization succeeds from disk.
+```
+
+That means persisted decision refs need recovery from durable asset records, not only decision-store lookup.
 
 ## Current Root Cause Statement
 
-The confirmed root cause boundary is:
+The root cause is persisted artwork reference integrity failure:
 
-`HomeCatalogSnapshotStore` destructively clears decision-backed poster refs during snapshot sanitization when `ArtworkDecisionCache.get(ArtworkDecisionKey)` returns null. That sanitized snapshot is then persisted, so restart can re-enter the bad state even if the poster appeared in a previous run.
+```text
+Home snapshot persisted a premium artwork decision ref.
+On restart, durable decision lookup could be missing, failed, partial, or orphaned.
+Snapshot read/sanitize treated that state as destructive authority.
+The snapshot was cleared or rejected, then written back damaged.
+Hydration later recreated artwork, but the next restart could repeat the cycle.
+```
 
-The not-yet-proven underlying cause is one of:
+The invariant that must hold is:
 
-- Durable decision store file is missing on startup.
-- Durable decision store file exists but is unreadable.
-- Durable decision store load fails due parse/schema/data issue.
-- The cache is not loaded or not authoritative when snapshot sanitization runs.
-- Snapshot store is checking a different cache instance or path than the runtime writer uses.
-- The decision key embedded in the snapshot does not match the decision key persisted by the cache.
-- The decision is invalidated between write and snapshot read due settings/credential/provider policy mismatch.
+```text
+A failed, partial, unknown, or orphaned artwork decision state must never cause destructive snapshot cleanup during read.
+```
 
-The latest instrumentation is intended to separate these cases.
+The stronger write-side invariant is:
 
-## Shared Components And Responsibilities
+```text
+A persisted snapshot should not claim a premium poster is valid unless the artwork ref is backed by a durable decision, a durable asset, or a safe fallback/rehydration path.
+```
+
+## Shared Components And Their Roles
 
 ### `HomeCatalogSnapshotStore`
 
@@ -99,18 +112,25 @@ File: `app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt`
 
 Responsibilities:
 
-- Reads and writes the cached home snapshot.
-- Encodes the active poster provider token and effective language into snapshot policy.
-- Sanitizes unsafe poster refs before persisting/restoring.
-- Rejects snapshots whose `posterProviderTag` does not match the active provider.
+- Read and write the cached home snapshot.
+- Preserve home rows for fast startup.
+- Track provider tag compatibility for artwork fields.
+- Sanitize unsafe persisted refs.
 
-Role in this bug:
+Role in the bug:
 
-- It is the component that clears the poster and provider tag when `nexio-artwork://decision/...` does not resolve in the durable decision cache.
-- It persists the sanitized result, making the bad state survive restart.
-- It previously logged `home.snapshot_sanitize_artwork`, but not enough cache state to explain why `decisionFound=false`.
+- It destructively cleared decision-backed poster refs when decision lookup returned null.
+- It persisted the sanitized result, making bad state survive restart.
+- It rejected whole snapshots for `poster_provider_tag_mismatch`, even though the problem was item-scoped artwork drift.
 
-### `ArtworkDecisionCache` / `DurableArtworkDecisionCache`
+Current fix:
+
+- Snapshot read no longer fails the whole snapshot for provider-tag mismatch.
+- Missing/unknown decision refs are preserved during read and marked for rehydration.
+- Snapshot write now validates artwork refs through an integrity validator.
+- Provider tags are cleared with missing posters and repaired when asset recovery can replace a decision ref.
+
+### `DurableArtworkDecisionCache`
 
 Files:
 
@@ -119,40 +139,118 @@ Files:
 
 Responsibilities:
 
-- Stores the durable mapping from `ArtworkDecisionKey` to selected poster candidate.
-- Persists premium and fallback candidate metadata without raw secrets.
-- Restores decision state across process restarts.
-- Invalidates decisions when settings or credential hashes change.
+- Persist decisions from selected artwork candidates.
+- Restore decisions across process restart.
+- Expose typed lookup state instead of a nullable boolean result.
 
-Role in this bug:
+Role in the bug:
 
-- Runtime writes prove this component receives premium RPDB decisions.
-- Snapshot reads prove lookups return null for some decision refs.
-- Before `4389da5d2`, load-state and file-state diagnostics were not visible in logcat, preventing final proof.
+- Runtime decision writes were observed.
+- Store load could be partial/failed with `ClassCastException`.
+- Lookup misses were previously consumed as if authoritative.
 
-### Artwork Materialization / Image Runtime
+Current fix boundary:
 
-Relevant shared responsibility:
+- The branch relies on typed decision lookup results already introduced in earlier work.
+- Missing decisions are no longer enough to destroy snapshot state during read.
+- Missing authoritative decisions can now recover through the asset reverse index.
 
-- Converts an artwork decision into a loadable poster asset.
-- Should use the durable decision and non-premium fallback candidate instead of raw premium URLs in persistent UI state.
+### `ArtworkAssetRepository`
 
-Role in this bug:
+File: `app/src/main/java/com/nexio/tv/core/artwork/ArtworkAssetRepository.kt`
 
-- Runtime can recreate posters later, so materialization itself is not proven to be the restart-loss cause.
-- However, fallback candidate durability remains part of the invariant: if premium cannot be restored immediately, a non-premium fallback should be available and should not be erased by snapshot sanitization.
+Responsibilities:
 
-### Metadata Router And Home Hydration
+- Materialize decisions into durable image assets.
+- Serve disk hits without repeating network fetches.
+- Track trace state for runtime cache decisions.
 
-Relevant shared responsibility:
+Role in the bug:
 
-- Resolves canonical metadata and applies display fields to the home surface.
-- Eventually recreates artwork decisions after restart.
+- Premium bytes could exist even when the matching decision record was unavailable.
+- Without a reverse index, a `nexio-artwork://decision/...` URI could not recover from an existing asset.
 
-Role in this bug:
+Current fix:
 
-- Slow poster reappearance points to hydration repairing the surface after startup.
-- Hydration repair is not enough because restart destroys or rejects the cached poster state again.
+- Records durable asset metadata when assets are written or reconstructed from disk.
+- Adds `decisionKey -> latest asset record` recovery.
+- Missing decision plus valid asset now returns a disk-backed result and emits recovery diagnostics.
+- Duplicate record writes are skipped where possible to reduce write amplification.
+
+### `ArtworkAssetDiskCache`
+
+File: `app/src/main/java/com/nexio/tv/core/artwork/ArtworkAssetDiskCache.kt`
+
+Responsibilities:
+
+- Own concrete cached artwork files.
+- Keep file access inside the cache root.
+- Provide lightweight image byte validation.
+
+Current fix:
+
+- Adds canonical path guards to prevent path traversal.
+- Adds readable image header checks for JPEG, PNG, and WebP.
+- Supports reverse-index recovery only when the file exists and looks like image bytes.
+
+### `DurableArtworkAssetRecordStore`
+
+Files:
+
+- `app/src/main/java/com/nexio/tv/core/artwork/ArtworkAssetRecordStore.kt`
+- `app/src/main/java/com/nexio/tv/core/artwork/DurableArtworkAssetRecordStore.kt`
+
+Responsibilities:
+
+- Persist asset records independently from decision records.
+- Provide `findLatestAssetForDecision(decisionKey)`.
+- Quarantine malformed records without dropping valid records.
+
+Current fix:
+
+- Uses explicit DTO persistence rather than direct domain-object JSON.
+- Refuses writes when a future schema is detected.
+- Restores valid records while quarantining bad ones.
+
+### `ArtworkReferenceIntegrityValidator`
+
+File: `app/src/main/java/com/nexio/tv/core/artwork/ArtworkReferenceIntegrityValidator.kt`
+
+Responsibilities:
+
+- Validate snapshot artwork refs before write.
+- Distinguish valid, recoverable, orphaned, unknown, invalid, and empty refs.
+- Avoid collapsing non-authoritative cache state into authoritative missing data.
+
+Current fix:
+
+- `ValidDecision`: keep.
+- `ValidAsset`: keep.
+- `RecoverableAssetForDecision`: replace decision URI with asset URI.
+- `OrphanedDecisionRef`: clear provider tag and request hydration on write.
+- `UnknownDecisionRef`: preserve and request hydration.
+- `Invalid`: clear internal invalid artwork refs and provider tags.
+
+### `LegacyRemoteArtworkFetcher`
+
+Files:
+
+- `app/src/main/java/com/nexio/tv/core/image/LegacyRemoteArtworkFetcher.kt`
+- `app/src/main/java/com/nexio/tv/core/image/LegacyRemoteArtworkModel.kt`
+
+Responsibilities:
+
+- Compatibility fallback for remote artwork not yet routed through the durable artwork system.
+
+Role in the bug:
+
+- Some fallback paths could render through legacy Coil/remote fetching without the same durable artwork instrumentation.
+
+Current fix:
+
+- Adds gated safe logcat/runtime trace events for start, success, and failure.
+- Rejects premium provider hosts, including trailing-dot host variants.
+- Keeps legacy fallback visible but not a normal premium-provider escape hatch.
 
 ### Logcat Trace Runtime
 
@@ -160,173 +258,95 @@ Files:
 
 - `app/src/main/java/com/nexio/tv/core/trace/LogcatTraceChannel.kt`
 - `app/src/main/java/com/nexio/tv/core/trace/LogcatRuntimeTraceSink.kt`
+- `app/src/main/java/com/nexio/tv/core/trace/CompositeRuntimeTraceSink.kt`
 
 Responsibilities:
 
-- Routes `FirstPaint`, `MetaRoute`, and `IntRuntime` trace events to gated logcat channels.
-- Allows on-device proof without broad noisy logging.
+- Route gated FirstPaint, MetaRoute, and Integration Runtime events to logcat.
+- Keep diagnostic payloads safe: no raw URLs, no raw decision keys, no secrets.
 
-Role in this bug:
+Current fix:
 
-- Existing logcat proved the destructive snapshot path.
-- Missing `artwork.decision_store_load` proved instrumentation was insufficient at the cache load/lookup boundary.
-- New `home.snapshot_decision_lookup` and stronger `artwork.decision_store_load` fields are now the key proof tools.
+- Routes legacy remote artwork events through `Nexio.IntRuntime`.
+- Curates safe legacy fields for logcat.
+- Supports logcat-only trace events so compatibility fetch diagnostics do not pollute active file traces.
 
-## Fixes And Instrumentation Tried So Far
+## Fixes Tried Before This Packet
 
-### Premium poster persistence and fallback work
+Earlier work moved premium artwork away from raw provider URLs:
 
-Prior fixes attempted to move away from raw premium poster URLs and toward durable decision refs:
+- Store `nexio-artwork://decision/...` refs instead of raw RPDB/Top-Posters URLs.
+- Persist selected premium candidates and fallback candidates.
+- Add decision-store write/load diagnostics.
+- Add snapshot sanitize/read/write diagnostics.
+- Add typed decision lookup states so failed/partial cache loads are not equivalent to authoritative misses.
 
-- Store `nexio-artwork://decision/...` refs instead of raw RPDB URLs in home snapshots.
-- Keep non-premium fallback candidates alongside premium decisions.
-- Materialize fallback artwork when premium asset materialization cannot be used.
-- Avoid storing raw premium provider URLs or secrets in durable JSON.
+Those changes were necessary, but not sufficient. They still left an integrity gap when a persisted decision ref had no matching durable decision record or when a decision cache miss could not recover from durable asset bytes.
 
-This was necessary but not sufficient. The current bug shows that a decision ref can still be cleared on restart if the durable decision lookup fails.
+## Fixes In This Branch
 
-### Durable decision cache hardening
+This branch implements the P0 reference-integrity packet:
 
-Commit: `ccda6d9b3 fix(posters): prove durable artwork restarts`
+1. DTO-backed durable asset record store with per-record quarantine.
+2. Asset disk cache helpers with canonical path and image header validation.
+3. Asset record persistence during artwork materialization and disk-hit reconstruction.
+4. Decision URI recovery from latest valid asset record.
+5. `ArtworkReferenceIntegrityValidator` with explicit valid/recoverable/orphaned/unknown/invalid results.
+6. Snapshot read made item-scoped and non-fatal for artwork mismatch.
+7. Missing decision refs preserved on read and queued for rehydration.
+8. Snapshot write barrier that validates refs, promotes recoverable decisions to asset refs, and never persists `poster=null` with a provider tag.
+9. Hilt wiring for the validator and asset record store.
+10. Legacy remote fallback instrumentation and premium-host rejection.
 
-Changes included:
+## Expected Behavior After This Packet
 
-- `artwork.decision_put`
-- `artwork.decision_store_write`
-- `artwork.decision_store_load`
-- `home.snapshot_read`
-- `home.snapshot_write`
-- `home.snapshot_sanitize_artwork`
-- Malformed persisted decisions are dropped individually rather than clearing the whole store.
+After restart:
 
-Result:
+- Decision ref with durable decision renders normally.
+- Decision ref without decision but with durable valid asset renders from the asset.
+- Decision ref without decision or asset does not fail the whole snapshot.
+- Unknown/non-authoritative lookup preserves the ref and requests rehydration.
+- Orphaned refs are repaired or cleared through the write barrier, not destructively during read.
+- Provider tag mismatch is diagnostic and item-scoped, not a full snapshot rejection.
+- Legacy fallback fetches are visible in gated logcat.
 
-- This proved runtime writes and snapshot sanitization.
-- It did not prove why the durable lookup returned false, because no `artwork.decision_store_load` appeared in the collected logcat.
+## Verification Notes
 
-### Latest proof instrumentation
+Host verification passed for the focused unit suite covering:
 
-Commit: `4389da5d2 fix(posters): add restart decision diagnostics`
+- asset record store persistence/quarantine
+- disk cache recovery helpers
+- decision-to-asset recovery
+- artwork reference integrity validation
+- snapshot read/write behavior
+- legacy fallback instrumentation
+- logcat routing/formatting
+- DI contract wiring
 
-Changes included:
+Release-device verification should use `192.168.50.98:5555` and package `com.nexio.tv`, because that is where the real release data/profile state lives. A debug install on `192.168.50.71:5555` proved logcat gate routing but did not reproduce the existing release snapshot state because it used a fresh debug package.
 
-- `ArtworkDecisionCacheDiagnostics`
-- `ArtworkDecisionCacheSnapshotDiagnostics`
-- Durable cache load diagnostics:
-  - `loaded`
-  - `decisionCount`
-  - `linkCount`
-  - `storeFilePresent`
-  - `storeFileReadable`
-  - `storeFileBytes`
-  - `lastLoadSuccess`
-  - `lastLoadReason`
-  - `lastLoadErrorClass`
-  - `droppedDecisionCount`
-- Stronger `artwork.decision_store_load` log fields:
-  - `fileReadable`
-  - `fileBytes`
-- New `home.snapshot_decision_lookup` MetaRoute event:
-  - `scope`
-  - `decisionFound`
-  - `decisionKeyHash`
-  - `posterKind`
-  - `posterProviderTag`
-  - cache load/file diagnostics
-  - `lookupErrorClass`
-
-Result expected after deployment:
-
-- The next restart log should identify the exact reason `decisionFound=false` occurs.
-
-## How To Interpret The Next Logs
-
-Look for `home.snapshot_decision_lookup` before each `home.snapshot_sanitize_artwork reason=missing_decision`.
-
-Decision table:
-
-| Log evidence | Meaning | Likely fix area |
-| --- | --- | --- |
-| `cacheLoaded=false` | Snapshot sanitization ran before cache was loaded or before load state was authoritative | Load ordering or sanitizer policy |
-| `storeFilePresent=false` and `decisionCount=0` | Decision store is not present at lookup time | Persistence path, storage lifecycle, profile/account scope |
-| `storeFilePresent=true`, `storeFileBytes>0`, `lastLoadSuccess=false` | Store exists but load failed | JSON schema, migration, parse quarantine |
-| `lastLoadReason=schema_version_mismatch` | Persisted schema cannot be restored | Forward-compatible migration |
-| `lastLoadErrorClass` non-null | Load or lookup threw | Inspect exception class and parser/file access |
-| `cacheLoaded=true`, `cacheDecisionCount>0`, `decisionFound=false` | Cache has decisions but not this key | Decision key mismatch, invalidation, provider/settings/credential hash mismatch |
-| `decisionFound=false` followed by later `artwork.decision_put` for same hashed identity | Hydration recreates a decision that snapshot could not restore | Startup cache lookup/order/key mismatch |
-
-## Important Invariant For The Real Fix
-
-The real fix should preserve this invariant:
-
-If a snapshot contains a `nexio-artwork://decision/...` poster ref, the app should not destructively clear and persist that poster solely because a lookup is missing unless the durable cache load is known to be successful and authoritative for the same store/path/profile/provider policy.
-
-If cache state is unknown, unavailable, or failed to load, the snapshot should avoid converting a recoverable decision ref into permanent poster loss. At minimum, the app should retain a non-premium fallback poster decision or avoid writing the sanitized bad state back to disk.
-
-## Likely Fix Paths After Proof
-
-Do not pick one until `home.snapshot_decision_lookup` proves the case.
-
-Possible fixes:
-
-1. Cache not loaded or non-authoritative at sanitizer time:
-   - Force durable artwork cache load before snapshot read/sanitize.
-   - Or change sanitizer behavior so unknown cache state does not destructively clear decision refs.
-
-2. Wrong cache instance or file path:
-   - Audit Hilt binding and storage path for `ArtworkDecisionCache`.
-   - Ensure snapshot store and runtime artwork resolver use the same singleton and same file.
-
-3. Decision key mismatch:
-   - Centralize key construction and compare `decisionKeyHash` across snapshot refs and `artwork.decision_put`.
-   - Ensure settings hash, credential hash, image language, provider, canonical id, and policy version are stable across restart.
-
-4. Store parse/schema failure:
-   - Add forward-compatible schema migration.
-   - Quarantine invalid decisions while restoring valid ones.
-   - Ensure failures do not clear all decisions or cause snapshot destruction.
-
-5. Provider/settings invalidation:
-   - Confirm poster provider token, credential hash, and settings hash used by the decision key are identical before and after restart.
-   - If provider state is not ready at first read, delay provider-scoped snapshot validation until it is authoritative.
-
-## Current Engineering Handoff State
-
-What is proven:
-
-- Premium RPDB decisions are created and written during runtime.
-- Snapshot sanitization clears decision-backed posters when cache lookup returns false.
-- The cleared snapshot is persisted.
-- Snapshot read then rejects/degrades due provider tag mismatch.
-- Hydration later recreates decisions, explaining slow reappearance.
-
-What is not proven yet:
-
-- The precise reason durable lookup returns false at restart/startup snapshot sanitization time.
-
-Next action:
-
-1. Deploy/build a version including `4389da5d2`.
-2. Restart the app on `192.168.50.71`.
-3. Capture gated logcat.
-4. Compare `home.snapshot_decision_lookup` diagnostics against `artwork.decision_store_load`, `artwork.decision_put`, `home.snapshot_sanitize_artwork`, and `home.snapshot_write`.
-5. Choose the fix path from the decision table above.
-
-## Verification Already Run For Latest Instrumentation
-
-Focused tests passed:
+Useful release verification flow:
 
 ```bash
-./gradlew :app:testDebugUnitTest \
-  --tests com.nexio.tv.data.local.HomeCatalogSnapshotStoreTest \
-  --tests com.nexio.tv.core.artwork.ArtworkDecisionCacheTest \
-  --tests com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest \
-  --tests com.nexio.tv.core.trace.LogcatTraceChannelTest
+adb -s 192.168.50.98:5555 logcat -c
+adb -s 192.168.50.98:5555 shell am force-stop com.nexio.tv
+adb -s 192.168.50.98:5555 shell monkey -p com.nexio.tv 1
+adb -s 192.168.50.98:5555 logcat -d -v time |
+  rg 'Nexio\.|artwork\.decision|artwork\.ref_|artwork\.orphan|home\.snapshot|legacy_remote_artwork|poster_provider_tag|ClassCastException|OutOfMemory|Skipped [0-9]+ frames|Background concurrent copying GC'
 ```
 
-Whitespace check passed on touched files:
+Required proof points:
 
-```bash
-git diff --check
-```
+- no `home.snapshot_read success=false reason=poster_provider_tag_mismatch`
+- no destructive read-time sanitize for missing decisions
+- orphan or unknown decision refs emit rehydration diagnostics
+- missing decision plus valid asset emits `artwork.orphan_decision_ref_asset_recovered`
+- legacy remote fallback events appear only for compatibility fallback, not premium provider URLs
+
+## Remaining Risks
+
+- This packet does not remove every legacy fallback path; it instruments the compatibility path and blocks premium hosts.
+- This packet does not guarantee every old damaged snapshot is immediately repaired. It prevents further destructive read damage and adds recovery/rehydration paths.
+- Device proof still depends on release build verification against the package/data where the bad snapshot exists.
+- The earlier write-amplification slowdown must stay monitored: durable asset/decision stores should avoid rewriting full files for bulk thumbnail churn.
 

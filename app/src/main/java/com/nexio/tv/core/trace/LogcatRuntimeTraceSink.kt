@@ -332,6 +332,17 @@ class LogcatRuntimeTraceSink(
             "fallbackProvider" to payload["fallbackProvider"],
             "assetKey" to payload["assetKey"]
         )
+        "legacy_remote_artwork.fetch_start",
+        "legacy_remote_artwork.fetch_success",
+        "legacy_remote_artwork.fetch_failed" -> linkedMapOf(
+            "urlHash" to payload["urlHash"],
+            "modelKeyHash" to payload["modelKeyHash"],
+            "imageType" to payload["imageType"],
+            "reason" to payload["reason"],
+            "statusCode" to payload["statusCode"],
+            "byteCount" to payload["byteCount"],
+            "errorClass" to payload["errorClass"]
+        )
         "home.snapshot_read" -> linkedMapOf(
             "success" to payload["success"],
             "profileId" to payload["profileId"],

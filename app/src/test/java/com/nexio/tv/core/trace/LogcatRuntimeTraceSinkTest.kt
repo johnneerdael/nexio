@@ -380,6 +380,77 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `legacy remote artwork events write safe diagnostics to IntRuntime tag`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+
+        sink.emit(envelope("legacy_remote_artwork.fetch_start", mapOf(
+            "urlHash" to "url-hash-1",
+            "modelKeyHash" to "model-key-hash-1",
+            "imageType" to "POSTER",
+            "url" to "https://images.example.test/raw-start.jpg",
+            "modelKey" to "raw-start-model-key"
+        )))
+        sink.emit(envelope("legacy_remote_artwork.fetch_success", mapOf(
+            "urlHash" to "url-hash-2",
+            "imageType" to "BACKDROP",
+            "statusCode" to 200,
+            "byteCount" to 4096L,
+            "url" to "https://images.example.test/raw-success.jpg"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(2, logs.size)
+
+        val start = logs[0].msg
+        assertTrue(start.contains("t=legacy_remote_artwork.fetch_start"))
+        assertTrue(start.contains("urlHash=url-hash-1"))
+        assertTrue(start.contains("modelKeyHash=model-key-hash-1"))
+        assertTrue(start.contains("imageType=POSTER"))
+        assertFalse(start.contains("https://images.example.test/raw-start.jpg"))
+        assertFalse(start.contains("raw-start-model-key"))
+
+        val success = logs[1].msg
+        assertTrue(success.contains("t=legacy_remote_artwork.fetch_success"))
+        assertTrue(success.contains("urlHash=url-hash-2"))
+        assertTrue(success.contains("imageType=BACKDROP"))
+        assertTrue(success.contains("statusCode=200"))
+        assertTrue(success.contains("byteCount=4096"))
+        assertFalse(success.contains("https://images.example.test/raw-success.jpg"))
+    }
+
+    @Test
+    fun `legacy remote artwork failure logcat line excludes unsafe payload values`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("legacy_remote_artwork.fetch_failed", mapOf(
+            "modelKeyHash" to "model-key-hash-failed",
+            "imageType" to "POSTER",
+            "reason" to "http_error",
+            "statusCode" to 404,
+            "byteCount" to 0L,
+            "errorClass" to "HttpException",
+            "url" to "https://images.example.test/raw-failed.jpg",
+            "modelKey" to "raw-failed-model-key",
+            "exceptionMessage" to "token leaked in exception message",
+            "errorMessage" to "another unsafe exception message"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=legacy_remote_artwork.fetch_failed"))
+        assertTrue(msg.contains("modelKeyHash=model-key-hash-failed"))
+        assertTrue(msg.contains("imageType=POSTER"))
+        assertTrue(msg.contains("reason=http_error"))
+        assertTrue(msg.contains("statusCode=404"))
+        assertTrue(msg.contains("byteCount=0"))
+        assertTrue(msg.contains("errorClass=HttpException"))
+        assertFalse(msg.contains("https://images.example.test/raw-failed.jpg"))
+        assertFalse(msg.contains("raw-failed-model-key"))
+        assertFalse(msg.contains("token leaked in exception message"))
+        assertFalse(msg.contains("another unsafe exception message"))
+    }
+
+    @Test
     fun `artwork decision store write event writes to IntRuntime tag with persistence fields`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("artwork.decision_store_write", mapOf(

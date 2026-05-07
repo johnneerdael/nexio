@@ -8,8 +8,11 @@ import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionLookupResult
 import com.nexio.tv.core.artwork.ArtworkDecisionStoreLoadState
+import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityResult
+import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityValidator
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
@@ -176,16 +179,18 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
-    fun `read rejects active poster provider snapshots with mismatched poster tags`() {
+    fun `read ignores active poster provider snapshots with mismatched poster tags`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 0
         val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val traceSink = RecordingTraceSink()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
             metadataDiskCacheStore = metadataStore,
-            posterRatingsUrlResolver = posterResolver
+            posterRatingsUrlResolver = posterResolver,
+            traceSink = traceSink
         )
         val row = sampleRow("addon", "movies", posterProviderTag = "top_posters")
         val snapshot = HomeCatalogSnapshotStore.Snapshot(
@@ -197,7 +202,23 @@ class HomeCatalogSnapshotStoreTest {
 
         store.write(snapshot, "RPDB:12345")
 
-        assertNull(store.read("RPDB:12345"))
+        assertEquals(snapshot, store.read("RPDB:12345"))
+
+        val mismatchPayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_provider_tag_mismatch_ignored" }
+            .map { event -> event.payload as Map<*, *> }
+            .single()
+        assertEquals(3, mismatchPayload["mismatchCount"])
+        assertEquals("top_posters=3", mismatchPayload["providerTags"])
+        assertEquals("rpdb", mismatchPayload["requiredPosterProviderTag"])
+
+        val rehydrateRequests = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .filter { payload -> payload["reason"] == "poster_provider_tag_mismatch" }
+        assertEquals(3, rehydrateRequests.size)
+        assertTrue(rehydrateRequests.all { payload -> payload["providerTag"] == "top_posters" })
+        assertTrue(rehydrateRequests.all { payload -> payload["requiredProviderTag"] == "rpdb" })
     }
 
     @Test
@@ -328,7 +349,237 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
-    fun `authoritative missing clears decision refs and tag`() {
+    fun `snapshot_write_preserves_orphaned_decision_ref_for_rehydration`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val traceSink = RecordingTraceSink()
+        val decisionKey = ArtworkDecisionKey("missing-decision")
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                "nexio-artwork://decision/missing-decision" to
+                    ArtworkReferenceIntegrityResult.OrphanedDecisionRef(decisionKey, "missing_authoritative_no_asset")
+            ),
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/missing-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertTrue(raw.contains("nexio-artwork://decision/missing-decision"))
+        assertTrue(raw.contains("\"posterProviderTag\":\"rpdb\""))
+        assertPosterFieldsPreserved(store.read("RPDB:12345"), "nexio-artwork://decision/missing-decision", "rpdb")
+        assertTrue(
+            traceSink.events.any { event ->
+                event.eventType == "home.snapshot_artwork_rehydrate_requested" &&
+                    (event.payload as Map<*, *>)["lookupResultType"] == "orphaned_decision_ref"
+            }
+        )
+    }
+
+    @Test
+    fun `snapshot_write_prefers_asset_ref_when_reverse_index_recovers_asset`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val decisionKey = ArtworkDecisionKey("recoverable-decision")
+        val assetKey = ArtworkAssetKey("recoverable-asset")
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                "nexio-artwork://decision/recoverable-decision" to
+                    ArtworkReferenceIntegrityResult.RecoverableAssetForDecision(decisionKey, assetKey),
+                "nexio-artwork://asset/recoverable-asset" to
+                    ArtworkReferenceIntegrityResult.ValidAsset(assetKey)
+            )
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/recoverable-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains("nexio-artwork://decision/recoverable-decision"))
+        assertTrue(raw.contains("nexio-artwork://asset/recoverable-asset"))
+        assertPosterFieldsPreserved(store.read("RPDB:12345"), "nexio-artwork://asset/recoverable-asset", "rpdb")
+    }
+
+    @Test
+    fun `snapshot_write_preserves_unknown_decision_ref`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val decisionKey = ArtworkDecisionKey("unknown-decision")
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                "nexio-artwork://decision/unknown-decision" to
+                    ArtworkReferenceIntegrityResult.UnknownDecisionRef(decisionKey, "decision_cache_not_authoritative")
+            )
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/unknown-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        assertPosterFieldsPreserved(store.read("RPDB:12345"), "nexio-artwork://decision/unknown-decision", "rpdb")
+    }
+
+    @Test
+    fun `snapshot_write_never_writes_poster_null_with_provider_tag`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                "nexio-artwork://decision" to ArtworkReferenceIntegrityResult.Invalid("invalid_decision_key")
+            )
+        )
+        val invalidArtworkRow = sampleRow(
+            addonId = "addon",
+            catalogId = "invalid",
+            poster = "nexio-artwork://decision",
+            posterProviderTag = "rpdb"
+        )
+        val blankPosterHero = invalidArtworkRow.items.single().copy(poster = " ", posterProviderTag = "rpdb")
+        val nullPosterFullRow = invalidArtworkRow.copy(
+            catalogId = "null",
+            items = listOf(invalidArtworkRow.items.single().copy(poster = null, posterProviderTag = "rpdb"))
+        )
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(invalidArtworkRow),
+            fullCatalogRows = listOf(nullPosterFullRow),
+            heroItems = listOf(blankPosterHero)
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains("\"posterProviderTag\":\"rpdb\""))
+        assertFalse(raw.contains("nexio-artwork://decision"))
+    }
+
+    @Test
+    fun `snapshot_write_clears_malformed_decision_child_ref_with_provider_tag`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val malformedRef = "nexio-artwork://decision/artwork-decision:bad"
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = NonAuthoritativeArtworkDecisionCache(),
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                malformedRef to ArtworkReferenceIntegrityResult.Invalid("invalid_decision_key")
+            )
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = malformedRef,
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains(malformedRef))
+        assertFalse(raw.contains("\"posterProviderTag\":\"rpdb\""))
+        assertClearedPosterFields(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `snapshot_write_clears_invalid_simple_decision_child_ref_with_provider_tag`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val invalidRef = "nexio-artwork://decision/bad"
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                invalidRef to ArtworkReferenceIntegrityResult.Invalid("invalid_decision_key")
+            )
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = invalidRef,
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains(invalidRef))
+        assertFalse(raw.contains("\"posterProviderTag\":\"rpdb\""))
+        assertClearedPosterFields(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `snapshot write barrier redacts unknown validator reasons from trace payloads`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val traceSink = RecordingTraceSink()
+        val invalidRef = "nexio-artwork://decision/raw-secret-decision-key-or-url"
+        val rawReason = "raw-secret-decision-key-or-url"
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkReferenceIntegrityValidator = FakeArtworkReferenceIntegrityValidator(
+                invalidRef to ArtworkReferenceIntegrityResult.Invalid(rawReason)
+            ),
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = invalidRef,
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val writeBarrierPayloads = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_write_barrier_repaired" }
+            .map { event -> event.payload as Map<*, *> }
+        assertEquals(3, writeBarrierPayloads.size)
+        assertTrue(writeBarrierPayloads.all { payload -> payload["reason"] == "validator_reason_redacted" })
+        assertFalse(writeBarrierPayloads.joinToString("\n").contains(rawReason))
+    }
+
+    @Test
+    fun `authoritative missing preserves decision refs and tag and requests rehydration`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -337,11 +588,13 @@ class HomeCatalogSnapshotStoreTest {
         val cache = InMemoryArtworkDecisionCache()
         val decisionKey = ArtworkDecisionKey("missing-decision")
         cache.put(sampleArtworkDecision(decisionKey))
+        val traceSink = RecordingTraceSink()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
             metadataDiskCacheStore = metadataStore,
             posterRatingsUrlResolver = posterResolver,
-            artworkDecisionCache = cache
+            artworkDecisionCache = cache,
+            traceSink = traceSink
         )
         val snapshot = sampleSnapshotWithPoster(
             poster = "nexio-artwork://decision/missing-decision",
@@ -352,7 +605,19 @@ class HomeCatalogSnapshotStoreTest {
         cache.remove(decisionKey)
 
         val restored = store.read("RPDB:12345")
-        assertClearedPosterFields(restored)
+        assertPosterFieldsPreserved(restored, "nexio-artwork://decision/missing-decision", "rpdb")
+
+        val rehydrateRequests = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .filter { payload -> payload["reason"] == "missing_decision_authoritative" }
+        assertEquals(3, rehydrateRequests.size)
+        assertTrue(rehydrateRequests.all { payload -> payload["posterKind"] == "decision" })
+        assertTrue(rehydrateRequests.all { payload -> payload["providerTag"] == "rpdb" })
+        assertTrue(rehydrateRequests.all { payload -> (payload["decisionKeyHash"] as String).isNotBlank() })
+        assertTrue(rehydrateRequests.none { payload ->
+            (payload["decisionKeyHash"] as String).contains("missing-decision")
+        })
     }
 
     @Test
@@ -457,7 +722,7 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
-    fun `provider tag mismatch rejects found decision ref`() {
+    fun `provider tag mismatch preserves found decision ref and requests hydration`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -465,11 +730,13 @@ class HomeCatalogSnapshotStoreTest {
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val cache = InMemoryArtworkDecisionCache()
         cache.put(sampleArtworkDecision(ArtworkDecisionKey("found-mismatched-provider-decision")))
+        val traceSink = RecordingTraceSink()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
             metadataDiskCacheStore = metadataStore,
             posterRatingsUrlResolver = posterResolver,
-            artworkDecisionCache = cache
+            artworkDecisionCache = cache,
+            traceSink = traceSink
         )
         val snapshot = sampleSnapshotWithPoster(
             poster = "nexio-artwork://decision/found-mismatched-provider-decision",
@@ -478,11 +745,28 @@ class HomeCatalogSnapshotStoreTest {
 
         store.write(snapshot, "RPDB:12345")
 
-        assertNull(store.read("RPDB:12345"))
+        assertEquals(snapshot, store.read("RPDB:12345"))
+
+        val mismatchPayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_provider_tag_mismatch_ignored" }
+            .map { event -> event.payload as Map<*, *> }
+            .single()
+        assertEquals(3, mismatchPayload["mismatchCount"])
+        assertEquals("decision=3", mismatchPayload["posterKinds"])
+
+        val rehydratePayload = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .first { payload -> payload["reason"] == "poster_provider_tag_mismatch" }
+        assertEquals("decision", rehydratePayload["posterKind"])
+        assertEquals("top_posters", rehydratePayload["providerTag"])
+        assertEquals("rpdb", rehydratePayload["requiredProviderTag"])
+        assertTrue((rehydratePayload["decisionKeyHash"] as String).isNotBlank())
+        assertFalse((rehydratePayload["decisionKeyHash"] as String).contains("found-mismatched-provider-decision"))
     }
 
     @Test
-    fun `read logs missing decision ref sanitization`() {
+    fun `read logs missing decision ref rehydration without sanitization`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
@@ -510,18 +794,15 @@ class HomeCatalogSnapshotStoreTest {
 
         val sanitizeEvents = traceSink.events
             .filter { event -> event.eventType == "home.snapshot_sanitize_artwork" }
-        assertEquals(1, sanitizeEvents.size)
-        val payload = sanitizeEvents.first().payload as Map<*, *>
-        assertEquals(3, payload["sanitizedCount"])
-        assertEquals(3, payload["missingDecisionCount"])
-        assertEquals(0, payload["rawPremiumCount"])
-        assertEquals(0, payload["legacyIntegrationCount"])
-        assertEquals("clear_poster_ref", payload["action"])
-        assertEquals("missing_decision=3", payload["reasons"])
-        assertEquals(true, payload["destructive"])
-        assertEquals(false, payload["writeBackAllowed"])
-        assertEquals("clear", payload["posterProviderTagAction"])
-        assertTrue((payload["samples"] as String).contains("missing_decision:decision:rpdb:missing_authoritative"))
+        assertEquals(0, sanitizeEvents.size)
+
+        val rehydrateRequests = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .filter { payload -> payload["reason"] == "missing_decision_authoritative" }
+        assertEquals(3, rehydrateRequests.size)
+        assertTrue(rehydrateRequests.all { payload -> payload["posterKind"] == "decision" })
+        assertTrue(rehydrateRequests.all { payload -> payload["providerTag"] == "rpdb" })
     }
 
     @Test
@@ -592,12 +873,18 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals("LoadedAuthoritative", lookupPayload["loadState"])
         assertEquals(0, lookupPayload["quarantinedDecisionCount"])
         assertEquals(null, lookupPayload["errorTopFrame"])
-        assertEquals(0, lookupPayload["rehydrateRequestCount"])
+        assertEquals(3, lookupPayload["rehydrateRequestCount"])
         assertEquals(
             "found=0|missing_authoritative=3|cache_not_authoritative=0|lookup_failed=0",
             lookupPayload["lookupResultTypes"]
         )
         assertTrue((lookupPayload["missingDecisionSamples"] as String).contains("catalogRows[0].items[0]:decision:rpdb"))
+
+        val rehydrateRequests = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_artwork_rehydrate_requested" }
+            .map { event -> event.payload as Map<*, *> }
+            .filter { payload -> payload["reason"] == "missing_decision_authoritative" }
+        assertEquals(3, rehydrateRequests.size)
     }
 
     @Test
@@ -663,7 +950,7 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     private fun sampleSnapshotWithPoster(
-        poster: String,
+        poster: String?,
         posterProviderTag: String?
     ): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies", poster = poster, posterProviderTag = posterProviderTag)
@@ -890,6 +1177,15 @@ class HomeCatalogSnapshotStoreTest {
         override fun invalidateByCredentialHash(credentialHash: String) = Unit
         override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) = Unit
         override fun invalidatePremiumArtworkPolicy() = Unit
+    }
+
+    private class FakeArtworkReferenceIntegrityValidator(
+        vararg results: Pair<String, ArtworkReferenceIntegrityResult>
+    ) : ArtworkReferenceIntegrityValidator {
+        private val resultsByRef = results.toMap()
+
+        override fun validate(ref: String?): ArtworkReferenceIntegrityResult =
+            resultsByRef[ref?.trim().orEmpty()] ?: ArtworkReferenceIntegrityResult.Invalid("unexpected_ref")
     }
 
 }

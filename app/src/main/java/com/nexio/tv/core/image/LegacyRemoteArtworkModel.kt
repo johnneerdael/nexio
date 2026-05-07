@@ -46,7 +46,7 @@ private fun String.isValidRemoteArtworkUrl(): Boolean {
     val uri = runCatching { URI(this) }.getOrNull() ?: return false
     val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
     if (scheme != "http" && scheme != "https") return false
-    val host = uri.host?.lowercase(Locale.ROOT) ?: return false
+    val host = uri.host?.trimEnd('.')?.lowercase(Locale.ROOT) ?: return false
     if (host == "api.ratingposterdb.com" || host == "api.top-posters.com") return false
     return true
 }

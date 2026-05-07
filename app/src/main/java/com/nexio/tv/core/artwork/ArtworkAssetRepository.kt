@@ -33,7 +33,7 @@ data class ArtworkAssetResult(
     val assetKey: ArtworkAssetKey,
     val localFile: File,
     val record: ArtworkAssetRecord,
-    val runtimeResult: IntegrationFetchResult<ByteArray>,
+    val runtimeResult: IntegrationFetchResult<ByteArray>?,
     val runtimeApiShapeId: String,
     val cacheDecision: String,
     val mimeType: String?,
@@ -47,33 +47,83 @@ class ArtworkAssetRepository @Inject constructor(
     private val sourceMaterializer: ArtworkSourceMaterializer,
     private val byteLoader: ArtworkByteLoader,
     private val decisionCache: ArtworkDecisionCache,
+    private val assetRecordStore: ArtworkAssetRecordStore,
     private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
 ) {
     private val traceSequence = AtomicLong(0L)
 
     suspend fun getOrFetchDecision(decisionKey: ArtworkDecisionKey): ArtworkAssetResult? {
-        val decision = decisionCache.get(decisionKey)
-        traceArtwork(
-            eventType = "artwork.decision_lookup",
-            payload = mapOf(
-                "decisionKey" to decisionKey.value,
-                "found" to (decision != null)
-            )
-        )
-        if (decision == null) {
-            traceArtwork(
-                eventType = "artwork.decision_missing",
-                payload = mapOf("decisionKey" to decisionKey.value)
-            )
-            return null
-        }
+        val lookupResult = decisionCache.lookup(decisionKey, requiredContext = null)
+        return when (lookupResult) {
+            is ArtworkDecisionLookupResult.Found -> {
+                traceDecisionLookup(
+                    decisionKey = decisionKey,
+                    found = true,
+                    lookupResult = lookupResult
+                )
+                materializeFoundDecision(lookupResult.decision)
+            }
 
+            is ArtworkDecisionLookupResult.MissingAuthoritative -> {
+                traceDecisionLookup(
+                    decisionKey = decisionKey,
+                    found = false,
+                    lookupResult = lookupResult
+                )
+                traceArtwork(
+                    eventType = "artwork.orphan_decision_ref_found",
+                    payload = mapOf(
+                        "decisionKeyHash" to decisionKey.hashedForTrace(),
+                        "lookupResult" to "MissingAuthoritative"
+                    )
+                )
+                recoverMissingDecisionFromAsset(decisionKey)
+            }
+
+            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> {
+                traceDecisionLookup(
+                    decisionKey = decisionKey,
+                    found = false,
+                    lookupResult = lookupResult
+                )
+                traceOrphanDecisionRefRehydrateRequested(
+                    decisionKey = decisionKey,
+                    reason = lookupResult.reason ?: "cache_not_authoritative",
+                    extraPayload = mapOf(
+                        "lookupResult" to "CacheNotAuthoritative",
+                        "errorClass" to lookupResult.errorClass
+                    )
+                )
+                null
+            }
+
+            is ArtworkDecisionLookupResult.LookupFailed -> {
+                traceDecisionLookup(
+                    decisionKey = decisionKey,
+                    found = false,
+                    lookupResult = lookupResult
+                )
+                traceOrphanDecisionRefRehydrateRequested(
+                    decisionKey = decisionKey,
+                    reason = "decision_lookup_failed",
+                    extraPayload = mapOf(
+                        "lookupResult" to "LookupFailed",
+                        "errorClass" to lookupResult.errorClass,
+                        "messageHash" to lookupResult.messageHash
+                    )
+                )
+                null
+            }
+        }
+    }
+
+    private suspend fun materializeFoundDecision(decision: ArtworkDecision): ArtworkAssetResult? {
         val result = getOrFetch(decision) ?: getOrFetchFallback(decision)
         traceArtwork(
             eventType = "artwork.asset_materialized",
             payload = mapOf(
-                "decisionKey" to decisionKey.value,
-                "assetKey" to result?.assetKey?.value,
+                "decisionKeyHash" to decision.decisionKey.hashedForTrace(),
+                "assetKeyHash" to result?.assetKey?.hashedForTrace(),
                 "provider" to result?.record?.provider?.key,
                 "imageType" to result?.record?.imageType?.name,
                 "cacheDecision" to result?.cacheDecision,
@@ -82,6 +132,90 @@ class ArtworkAssetRepository @Inject constructor(
             )
         )
         return result
+    }
+
+    private fun recoverMissingDecisionFromAsset(decisionKey: ArtworkDecisionKey): ArtworkAssetResult? {
+        val record = runCatching {
+            assetRecordStore.findLatestAssetForDecision(decisionKey)
+        }.onFailure { error ->
+            traceArtwork(
+                eventType = "artwork.orphan_decision_ref_recovery_lookup_failed",
+                payload = mapOf(
+                    "decisionKeyHash" to decisionKey.hashedForTrace(),
+                    "errorClass" to error::class.java.name,
+                    "messageHash" to error.message?.let(::artworkDecisionShortSha256)
+                )
+            )
+        }.getOrNull()
+        val file = record?.let(diskCache::getExistingFile)
+        val fileExists = file != null
+        val byteValid = record?.let(diskCache::hasReadableImageBytes) == true
+        if (record != null && file != null && byteValid) {
+            traceArtwork(
+                eventType = "artwork.orphan_decision_ref_asset_recovered",
+                payload = mapOf(
+                    "decisionKeyHash" to decisionKey.hashedForTrace(),
+                    "assetKeyHash" to record.assetKey.hashedForTrace(),
+                    "provider" to record.provider?.key,
+                    "imageType" to record.imageType.name,
+                    "fileExists" to true,
+                    "byteValid" to true,
+                    "source" to "asset_reverse_index"
+                )
+            )
+            return ArtworkAssetResult(
+                assetKey = record.assetKey,
+                localFile = file,
+                record = record,
+                runtimeResult = null,
+                runtimeApiShapeId = "ARTWORK_REVERSE_INDEX",
+                cacheDecision = "DECISION_MISSING_ASSET_RECOVERED",
+                mimeType = record.mimeType,
+                networkExecuted = false
+            )
+        }
+
+        traceOrphanDecisionRefRehydrateRequested(
+            decisionKey = decisionKey,
+            reason = "missing_decision_no_asset",
+            extraPayload = mapOf(
+                "assetKeyHash" to record?.assetKey?.hashedForTrace(),
+                "provider" to record?.provider?.key,
+                "imageType" to record?.imageType?.name,
+                "fileExists" to fileExists,
+                "byteValid" to byteValid
+            )
+        )
+        return null
+    }
+
+    private fun traceDecisionLookup(
+        decisionKey: ArtworkDecisionKey,
+        found: Boolean,
+        lookupResult: ArtworkDecisionLookupResult
+    ) {
+        traceArtwork(
+            eventType = "artwork.decision_lookup",
+            payload = mapOf(
+                "decisionKeyHash" to decisionKey.hashedForTrace(),
+                "found" to found,
+                "lookupResult" to lookupResult.traceName()
+            )
+        )
+    }
+
+    private fun traceOrphanDecisionRefRehydrateRequested(
+        decisionKey: ArtworkDecisionKey,
+        reason: String,
+        extraPayload: Map<String, Any?> = emptyMap()
+    ) {
+        traceArtwork(
+            eventType = "artwork.orphan_decision_ref_rehydrate_requested",
+            payload = mapOf(
+                "decisionKeyHash" to decisionKey.hashedForTrace(),
+                "reason" to reason
+            ) + extraPayload
+        )
     }
 
     private suspend fun getOrFetchFallback(decision: ArtworkDecision): ArtworkAssetResult? {
@@ -112,9 +246,9 @@ class ArtworkAssetRepository @Inject constructor(
             traceArtwork(
                 eventType = "artwork.fallback_materialized",
                 payload = mapOf(
-                    "decisionKey" to decision.decisionKey.value,
+                    "decisionKeyHash" to decision.decisionKey.hashedForTrace(),
                     "fallbackProvider" to result.record.provider?.key,
-                    "assetKey" to result.assetKey.value
+                    "assetKeyHash" to result.assetKey.hashedForTrace()
                 )
             )
             return result.copy(cacheDecision = "FALLBACK_MATERIALIZED")
@@ -182,6 +316,7 @@ class ArtworkAssetRepository @Inject constructor(
             fetchedAtMs = System.currentTimeMillis()
         )
         val write = diskCache.write(record, bytes)
+        persistAssetRecordBestEffort(write.record)
         return ArtworkAssetResult(
             assetKey = materialized.assetKey,
             localFile = write.file,
@@ -214,6 +349,7 @@ class ArtworkAssetRepository @Inject constructor(
             byteCount = bytes.size.toLong(),
             fetchedAtMs = file.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
         )
+        persistAssetRecordBestEffort(record)
         return ArtworkAssetResult(
             assetKey = materialized.assetKey,
             localFile = file,
@@ -224,6 +360,37 @@ class ArtworkAssetRepository @Inject constructor(
             mimeType = record.mimeType,
             networkExecuted = networkExecuted
         )
+    }
+
+    private fun persistAssetRecordBestEffort(record: ArtworkAssetRecord) {
+        val existing = runCatching {
+            assetRecordStore.get(record.assetKey)
+        }.onFailure { error ->
+            traceArtwork(
+                eventType = "artwork.asset_record_store_read_failed",
+                payload = mapOf(
+                    "assetKeyHash" to record.assetKey.hashedForTrace(),
+                    "decisionKeyHash" to record.decisionKey?.hashedForTrace(),
+                    "errorClass" to error::class.java.name
+                )
+            )
+        }.getOrNull()
+        if (existing == record) {
+            return
+        }
+
+        runCatching {
+            assetRecordStore.put(record)
+        }.onFailure { error ->
+            traceArtwork(
+                eventType = "artwork.asset_record_store_write_failed",
+                payload = mapOf(
+                    "assetKeyHash" to record.assetKey.hashedForTrace(),
+                    "decisionKeyHash" to record.decisionKey?.hashedForTrace(),
+                    "errorClass" to error::class.java.name
+                )
+            )
+        }
     }
 
     private fun traceArtwork(
@@ -258,6 +425,20 @@ class ArtworkAssetRepository @Inject constructor(
             is IntegrationFetchResult.Stale -> "STALE_HIT"
             IntegrationFetchResult.Missing -> "MISS_NETWORK_SUPPRESSED"
         }
+
+    private fun ArtworkDecisionLookupResult.traceName(): String =
+        when (this) {
+            is ArtworkDecisionLookupResult.Found -> "Found"
+            is ArtworkDecisionLookupResult.MissingAuthoritative -> "MissingAuthoritative"
+            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> "CacheNotAuthoritative"
+            is ArtworkDecisionLookupResult.LookupFailed -> "LookupFailed"
+        }
+
+    private fun ArtworkDecisionKey.hashedForTrace(): String =
+        artworkDecisionShortSha256(value)
+
+    private fun ArtworkAssetKey.hashedForTrace(): String =
+        artworkDecisionShortSha256(value)
 
     private companion object {
         const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"

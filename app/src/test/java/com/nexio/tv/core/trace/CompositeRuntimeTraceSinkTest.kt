@@ -15,8 +15,14 @@ class CompositeRuntimeTraceSinkTest {
         payload = mapOf<String, Any?>("contentId" to "x")
     )
 
-    private class CountingSink : RuntimeTraceSink {
+    private fun logcatOnlyEnvelope(seq: Long): TraceEventEnvelope<*> =
+        envelope(seq).copy(traceSessionId = "logcat-only")
+
+    private class CountingSink(
+        private val activeSessionId: String? = null
+    ) : RuntimeTraceSink {
         var seen = 0
+        override fun activeTraceSessionId(): String? = activeSessionId
         override fun emit(event: TraceEventEnvelope<*>) { seen++ }
         override fun eventsWritten(): Long = seen.toLong()
         override fun eventsDropped(): Long = 0L
@@ -41,6 +47,30 @@ class CompositeRuntimeTraceSinkTest {
         composite.emit(envelope(2))
         assertEquals(2, a.seen)
         assertEquals(2, b.seen)
+    }
+
+    @Test
+    fun `logcat only event is forwarded only to sinks without active trace session`() {
+        val sessionSink = CountingSink(activeSessionId = "s")
+        val logcatSink = CountingSink(activeSessionId = null)
+        val composite = CompositeRuntimeTraceSink(listOf(sessionSink, logcatSink))
+
+        composite.emit(logcatOnlyEnvelope(1))
+
+        assertEquals(0, sessionSink.seen)
+        assertEquals(1, logcatSink.seen)
+    }
+
+    @Test
+    fun `normal session event is still forwarded to active and null session sinks`() {
+        val sessionSink = CountingSink(activeSessionId = "s")
+        val logcatSink = CountingSink(activeSessionId = null)
+        val composite = CompositeRuntimeTraceSink(listOf(sessionSink, logcatSink))
+
+        composite.emit(envelope(1))
+
+        assertEquals(1, sessionSink.seen)
+        assertEquals(1, logcatSink.seen)
     }
 
     @Test

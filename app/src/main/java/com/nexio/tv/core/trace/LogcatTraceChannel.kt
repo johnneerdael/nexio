@@ -24,6 +24,7 @@ enum class LogcatTraceChannel(val tag: String) {
             eventType.startsWith("runtime.") -> INT_RUNTIME
             eventType.startsWith("http.") -> INT_RUNTIME
             eventType.startsWith("artwork.") -> INT_RUNTIME
+            eventType.startsWith("legacy_remote_artwork.") -> INT_RUNTIME
             eventType == "trace.body_sample" -> INT_RUNTIME
             else -> null
         }

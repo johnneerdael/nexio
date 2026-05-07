@@ -18,6 +18,7 @@ import com.nexio.tv.core.integration.IntegrationStreamSpec
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -73,6 +74,60 @@ class ArtworkAssetRepositoryTest {
         assertArrayEquals("loaded".toByteArray(), result!!.localFile.readBytes())
         assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
         assertEquals(true, result.networkExecuted)
+    }
+
+    @Test
+    fun `materialized decision writes asset record reverse index`() = runTest {
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val decision = rpdbTemplateDecision()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            assetRecordStore = recordStore,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01))
+            }
+        )
+
+        val result = repository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals(result!!.record, recordStore.get(result.assetKey))
+        assertEquals(result.record, recordStore.findLatestAssetForDecision(decision.decisionKey))
+    }
+
+    @Test
+    fun `fresh materialization returns image result when asset record write fails`() = runTest {
+        val traceSink = RecordingArtworkTraceSink()
+        val decision = rpdbTemplateDecision()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            assetRecordStore = ThrowingArtworkAssetRecordStore(),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("fresh-image".toByteArray())
+            },
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetch(decision)
+
+        assertNotNull(result)
+        result!!
+        assertArrayEquals("fresh-image".toByteArray(), result.localFile.readBytes())
+        val readEvent = traceSink.events.single { it.eventType == "artwork.asset_record_store_read_failed" }
+        val readPayload = readEvent.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), readPayload["assetKeyHash"])
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), readPayload["decisionKeyHash"])
+        assertEquals(false, readPayload.containsKey("assetKey"))
+        assertEquals(false, readPayload.containsKey("decisionKey"))
+        assertEquals(IOException::class.java.name, readPayload["errorClass"])
+        val writeEvent = traceSink.events.single { it.eventType == "artwork.asset_record_store_write_failed" }
+        val payload = writeEvent.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), payload["assetKeyHash"])
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), payload["decisionKeyHash"])
+        assertEquals(false, payload.containsKey("assetKey"))
+        assertEquals(false, payload.containsKey("decisionKey"))
+        assertEquals(IOException::class.java.name, payload["errorClass"])
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, result.assetKey.value)
     }
 
     @Test
@@ -166,12 +221,14 @@ class ArtworkAssetRepositoryTest {
         val decision = rpdbTemplateDecision()
         cache.put(decision)
         val runtime = LoadingIntegrationRuntime()
+        val traceSink = RecordingArtworkTraceSink()
         val repository = repository(
             runtime = runtime,
             cache = cache,
             byteLoader = ArtworkByteLoader { _, _ ->
                 IntegrationLoadResult.Success("decision-image".toByteArray())
-            }
+            },
+            traceSink = traceSink
         )
 
         val result = repository.getOrFetchDecision(decision.decisionKey)
@@ -181,6 +238,14 @@ class ArtworkAssetRepositoryTest {
         assertEquals(ArtworkCacheKeys.assetKeyForProviderTemplate(decision.selectedCandidate.providerTemplate!!), result.assetKey)
         assertArrayEquals("decision-image".toByteArray(), result.localFile.readBytes())
         assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
+        val materializedPayload = traceSink.events
+            .single { it.eventType == "artwork.asset_materialized" }
+            .payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), materializedPayload["decisionKeyHash"])
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), materializedPayload["assetKeyHash"])
+        assertEquals(false, materializedPayload.containsKey("decisionKey"))
+        assertEquals(false, materializedPayload.containsKey("assetKey"))
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, result.assetKey.value)
     }
 
     @Test
@@ -233,6 +298,7 @@ class ArtworkAssetRepositoryTest {
         val restartedCache = DurableArtworkDecisionCache(decisionFile, Gson())
         val restartedRemoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
         val runtime = LoadingIntegrationRuntime()
+        val traceSink = RecordingArtworkTraceSink()
         var loadCount = 0
         val repository = repository(
             runtime = runtime,
@@ -251,7 +317,8 @@ class ArtworkAssetRepositoryTest {
                     else ->
                         IntegrationLoadResult.NetworkError(IllegalStateException("fallback source unavailable"))
                 }
-            }
+            },
+            traceSink = traceSink
         )
 
         val result = repository.getOrFetchDecision(decision.decisionKey)
@@ -260,6 +327,14 @@ class ArtworkAssetRepositoryTest {
         assertArrayEquals("fallback-bytes".toByteArray(), result!!.localFile.readBytes())
         assertEquals(2, loadCount)
         assertEquals("FALLBACK_MATERIALIZED", result.cacheDecision)
+        val fallbackPayload = traceSink.events
+            .single { it.eventType == "artwork.fallback_materialized" }
+            .payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), fallbackPayload["decisionKeyHash"])
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), fallbackPayload["assetKeyHash"])
+        assertEquals(false, fallbackPayload.containsKey("decisionKey"))
+        assertEquals(false, fallbackPayload.containsKey("assetKey"))
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, result.assetKey.value)
     }
 
     @Test
@@ -325,6 +400,82 @@ class ArtworkAssetRepositoryTest {
         assertEquals(false, result!!.networkExecuted)
         assertEquals("ARTWORK_DISK_HIT", result.cacheDecision)
         assertArrayEquals("disk-first".toByteArray(), result.localFile.readBytes())
+    }
+
+    @Test
+    fun `existing artwork asset returns image result when asset record write fails`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val firstRepository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("disk-image".toByteArray())
+            }
+        )
+        assertNotNull(firstRepository.getOrFetch(decision))
+        val traceSink = RecordingArtworkTraceSink()
+        val secondRepository = repository(
+            runtime = FailingIfCalledIntegrationRuntime(),
+            diskCache = diskCache,
+            assetRecordStore = ThrowingArtworkAssetRecordStore(),
+            traceSink = traceSink
+        )
+
+        val result = secondRepository.getOrFetch(decision)
+
+        assertNotNull(result)
+        result!!
+        assertEquals("ARTWORK_DISK_HIT", result.cacheDecision)
+        assertArrayEquals("disk-image".toByteArray(), result.localFile.readBytes())
+        val readEvent = traceSink.events.single { it.eventType == "artwork.asset_record_store_read_failed" }
+        val readPayload = readEvent.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), readPayload["assetKeyHash"])
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), readPayload["decisionKeyHash"])
+        assertEquals(false, readPayload.containsKey("assetKey"))
+        assertEquals(false, readPayload.containsKey("decisionKey"))
+        assertEquals(IOException::class.java.name, readPayload["errorClass"])
+        val writeEvent = traceSink.events.single { it.eventType == "artwork.asset_record_store_write_failed" }
+        val payload = writeEvent.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(result.assetKey.value), payload["assetKeyHash"])
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), payload["decisionKeyHash"])
+        assertEquals(false, payload.containsKey("assetKey"))
+        assertEquals(false, payload.containsKey("decisionKey"))
+        assertEquals(IOException::class.java.name, payload["errorClass"])
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, result.assetKey.value)
+    }
+
+    @Test
+    fun `existing artwork asset does not rewrite matching asset record`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val decision = rpdbTemplateDecision()
+        val firstRepository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            diskCache = diskCache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("disk-record".toByteArray())
+            }
+        )
+        val firstResult = firstRepository.getOrFetch(decision)
+        assertNotNull(firstResult)
+        val reconstructedRecord = firstResult!!.record.copy(
+            fetchedAtMs = firstResult.localFile.lastModified().takeIf { it > 0L } ?: firstResult.record.fetchedAtMs
+        )
+        val recordStore = RecordingArtworkAssetRecordStore()
+        recordStore.put(reconstructedRecord)
+        val putCountBeforeDiskHit = recordStore.putCount
+        val secondRepository = repository(
+            runtime = FailingIfCalledIntegrationRuntime(),
+            diskCache = diskCache,
+            assetRecordStore = recordStore
+        )
+
+        val result = secondRepository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals("ARTWORK_DISK_HIT", result!!.cacheDecision)
+        assertEquals(reconstructedRecord, result.record)
+        assertEquals(putCountBeforeDiskHit, recordStore.putCount)
     }
 
     @Test
@@ -453,14 +604,108 @@ class ArtworkAssetRepositoryTest {
 
         assertNull(result)
         assertEquals(
-            listOf("artwork.decision_lookup", "artwork.decision_missing"),
+            listOf(
+                "artwork.decision_lookup",
+                "artwork.orphan_decision_ref_found",
+                "artwork.orphan_decision_ref_rehydrate_requested"
+            ),
             traceSink.events.map { it.eventType }
         )
-        assertEquals(false, (traceSink.events.first().payload as Map<*, *>)["found"])
+        val lookupPayload = traceSink.events.first().payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256("missing-decision"), lookupPayload["decisionKeyHash"])
+        assertEquals(false, lookupPayload.containsKey("decisionKey"))
+        assertEquals(false, lookupPayload["found"])
         assertEquals(
-            "missing-decision",
-            (traceSink.events.last().payload as Map<*, *>)["decisionKey"]
+            "missing_decision_no_asset",
+            (traceSink.events.last().payload as Map<*, *>)["reason"]
         )
+    }
+
+    @Test
+    fun `missing authoritative decision returns null and traces reverse recovery lookup failure`() = runTest {
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = InMemoryArtworkDecisionCache(),
+            assetRecordStore = ThrowingReverseLookupArtworkAssetRecordStore(),
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetchDecision(ArtworkDecisionKey("missing-decision"))
+
+        assertNull(result)
+        assertEquals(
+            listOf(
+                "artwork.decision_lookup",
+                "artwork.orphan_decision_ref_found",
+                "artwork.orphan_decision_ref_recovery_lookup_failed",
+                "artwork.orphan_decision_ref_rehydrate_requested"
+            ),
+            traceSink.events.map { it.eventType }
+        )
+        traceSink.events.forEach { event ->
+            assertEquals(false, event.payload.toString().contains("missing-decision"))
+        }
+        val failurePayload = traceSink.events
+            .single { it.eventType == "artwork.orphan_decision_ref_recovery_lookup_failed" }
+            .payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256("missing-decision"), failurePayload["decisionKeyHash"])
+        assertEquals(IOException::class.java.name, failurePayload["errorClass"])
+        assertEquals(artworkDecisionShortSha256("reverse index unavailable"), failurePayload["messageHash"])
+        assertEquals(false, failurePayload.containsKey("decisionKey"))
+        assertEquals(
+            "missing_decision_no_asset",
+            (traceSink.events.last().payload as Map<*, *>)["reason"]
+        )
+    }
+
+    @Test
+    fun `missing authoritative decision recovers from indexed asset file`() = runTest {
+        val decision = rpdbTemplateDecision()
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val assetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(decision.selectedCandidate.providerTemplate!!)
+        val record = diskCache.recordFor(
+            assetKey = assetKey,
+            decision = decision,
+            provider = decision.selectedCandidate.provider,
+            sourceHash = "source-hash",
+            mimeType = "image/jpeg",
+            byteCount = 4,
+            fetchedAtMs = 1_000
+        )
+        val write = diskCache.write(record, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01))
+        val recordStore = RecordingArtworkAssetRecordStore()
+        recordStore.put(write.record)
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = InMemoryArtworkDecisionCache(),
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        assertEquals(assetKey, result!!.assetKey)
+        assertEquals("DECISION_MISSING_ASSET_RECOVERED", result.cacheDecision)
+        assertEquals(
+            listOf(
+                "artwork.decision_lookup",
+                "artwork.orphan_decision_ref_found",
+                "artwork.orphan_decision_ref_asset_recovered"
+            ),
+            traceSink.events.map { it.eventType }
+        )
+        val recoveryPayload = traceSink.events
+            .single { it.eventType == "artwork.orphan_decision_ref_asset_recovered" }
+            .payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), recoveryPayload["decisionKeyHash"])
+        assertEquals(artworkDecisionShortSha256(assetKey.value), recoveryPayload["assetKeyHash"])
+        assertEquals(false, recoveryPayload.containsKey("decisionKey"))
+        assertEquals(false, recoveryPayload.containsKey("assetKey"))
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, assetKey.value)
     }
 
     @Test
@@ -510,9 +755,28 @@ class ArtworkAssetRepositoryTest {
 
         assertNull(result)
         assertEquals("artwork.decision_lookup", traceSink.events.first().eventType)
-        assertEquals(true, (traceSink.events.first().payload as Map<*, *>)["found"])
+        val lookupPayload = traceSink.events.first().payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), lookupPayload["decisionKeyHash"])
+        assertEquals(false, lookupPayload.containsKey("decisionKey"))
+        assertEquals(true, lookupPayload["found"])
         assertEquals("artwork.asset_materialized", traceSink.events.last().eventType)
-        assertEquals(false, (traceSink.events.last().payload as Map<*, *>)["success"])
+        val materializedPayload = traceSink.events.last().payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), materializedPayload["decisionKeyHash"])
+        assertEquals(false, materializedPayload.containsKey("decisionKey"))
+        assertEquals(false, materializedPayload.containsKey("assetKey"))
+        assertEquals(false, materializedPayload["success"])
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value)
+    }
+
+    private fun assertTracePayloadsDoNotContain(
+        traceSink: RecordingArtworkTraceSink,
+        vararg sensitiveValues: String
+    ) {
+        traceSink.events.forEach { event ->
+            sensitiveValues.forEach { sensitiveValue ->
+                assertEquals(false, event.payload.toString().contains(sensitiveValue))
+            }
+        }
     }
 
     private fun repository(
@@ -523,6 +787,7 @@ class ArtworkAssetRepositoryTest {
         byteLoader: ArtworkByteLoader = ArtworkByteLoader { _, _ ->
             IntegrationLoadResult.Success("image-bytes".toByteArray())
         },
+        assetRecordStore: ArtworkAssetRecordStore = RecordingArtworkAssetRecordStore(),
         traceSink: RuntimeTraceSink = RecordingArtworkTraceSink()
     ): ArtworkAssetRepository =
         ArtworkAssetRepository(
@@ -531,8 +796,50 @@ class ArtworkAssetRepositoryTest {
             sourceMaterializer = sourceMaterializer,
             byteLoader = byteLoader,
             decisionCache = cache,
+            assetRecordStore = assetRecordStore,
             traceSink = traceSink
         )
+
+    private class RecordingArtworkAssetRecordStore : ArtworkAssetRecordStore {
+        private val records = linkedMapOf<ArtworkAssetKey, ArtworkAssetRecord>()
+        var putCount = 0
+            private set
+
+        override fun put(record: ArtworkAssetRecord) {
+            putCount += 1
+            records[record.assetKey] = record
+        }
+
+        override fun get(assetKey: ArtworkAssetKey): ArtworkAssetRecord? =
+            records[assetKey]
+
+        override fun findLatestAssetForDecision(decisionKey: ArtworkDecisionKey): ArtworkAssetRecord? =
+            records.values
+                .filter { it.decisionKey == decisionKey }
+                .maxByOrNull { it.fetchedAtMs }
+    }
+
+    private class ThrowingArtworkAssetRecordStore : ArtworkAssetRecordStore {
+        override fun put(record: ArtworkAssetRecord) {
+            throw IOException("record store unavailable")
+        }
+
+        override fun get(assetKey: ArtworkAssetKey): ArtworkAssetRecord? {
+            throw IOException("record store unavailable")
+        }
+
+        override fun findLatestAssetForDecision(decisionKey: ArtworkDecisionKey): ArtworkAssetRecord? = null
+    }
+
+    private class ThrowingReverseLookupArtworkAssetRecordStore : ArtworkAssetRecordStore {
+        override fun put(record: ArtworkAssetRecord) = Unit
+
+        override fun get(assetKey: ArtworkAssetKey): ArtworkAssetRecord? = null
+
+        override fun findLatestAssetForDecision(decisionKey: ArtworkDecisionKey): ArtworkAssetRecord? {
+            throw IOException("reverse index unavailable")
+        }
+    }
 
     private class RecordingArtworkTraceSink : RuntimeTraceSink {
         val events = mutableListOf<TraceEventEnvelope<*>>()
