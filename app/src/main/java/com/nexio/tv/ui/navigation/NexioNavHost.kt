@@ -286,10 +286,11 @@ fun NexioNavHost(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
-                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, originalLanguage, deterministicAutoplay ->
+                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, originalLanguage, deterministicAutoplay, streamVideoId ->
                     navController.navigate(
                         Screen.Stream.createRoute(
                             videoId = videoId,
+                            streamVideoId = streamVideoId,
                             contentType = contentType,
                             title = title,
                             poster = poster,
@@ -309,10 +310,11 @@ fun NexioNavHost(
                         )
                     )
                 },
-                onPlayEpisodeWithManualStreamSelection = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, runtime, originalLanguage ->
+                onPlayEpisodeWithManualStreamSelection = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, runtime, originalLanguage, streamVideoId ->
                     navController.navigate(
                         buildManualSelectionStreamRoute(
                             videoId = videoId,
+                            streamVideoId = streamVideoId,
                             contentType = contentType,
                             title = title,
                             poster = poster,
@@ -444,6 +446,11 @@ fun NexioNavHost(
                     defaultValue = null
                 },
                 navArgument("addonBaseUrl") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("streamVideoId") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
@@ -1212,6 +1219,7 @@ internal fun continueWatchingRuntimeMinutes(item: ContinueWatchingItem): Int? {
 
 internal fun buildManualSelectionStreamRoute(
     videoId: String,
+    streamVideoId: String? = null,
     contentType: String,
     title: String,
     poster: String? = null,
@@ -1236,6 +1244,7 @@ internal fun buildManualSelectionStreamRoute(
 ): String {
     return Screen.Stream.createRoute(
         videoId = videoId,
+        streamVideoId = streamVideoId,
         contentType = contentType,
         title = title,
         poster = poster,
