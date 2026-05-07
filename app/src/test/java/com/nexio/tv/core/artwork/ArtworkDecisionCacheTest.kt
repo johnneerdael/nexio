@@ -6,6 +6,7 @@ import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.IntegrationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -16,6 +17,47 @@ import java.lang.reflect.Modifier
 
 class ArtworkDecisionCacheTest {
     private val cache = InMemoryArtworkDecisionCache()
+
+    @Test
+    fun `in memory lookup returns found or missing authoritative`() {
+        val key = ArtworkDecisionKey("lookup-in-memory")
+        val decision = decision(key, ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"))
+
+        cache.put(decision)
+
+        assertEquals(ArtworkDecisionLookupResult.Found(decision), cache.lookup(key))
+        assertEquals(
+            ArtworkDecisionLookupResult.MissingAuthoritative,
+            cache.lookup(ArtworkDecisionKey("lookup-in-memory-missing"))
+        )
+    }
+
+    @Test
+    fun `loaded authoritative requires no dropped or quarantined decisions`() {
+        val context = authorityContext()
+
+        assertTrue(
+            ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                authorityContext = context,
+                droppedDecisionCount = 0,
+                quarantinedDecisionCount = 0
+            ).isAuthoritativeForMissing(context)
+        )
+        assertFalse(
+            ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                authorityContext = context,
+                droppedDecisionCount = 1,
+                quarantinedDecisionCount = 0
+            ).isAuthoritativeForMissing(context)
+        )
+        assertFalse(
+            ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+                authorityContext = context,
+                droppedDecisionCount = 0,
+                quarantinedDecisionCount = 1
+            ).isAuthoritativeForMissing(context)
+        )
+    }
 
     @Test
     fun `canonical decision supersedes preview decision without deleting preview fallback`() {
@@ -208,6 +250,114 @@ class ArtworkDecisionCacheTest {
         assertNull(cache.get(previewKey))
         assertNull(cache.getCanonicalForPreview(previewKey))
         assertEquals(canonical, cache.get(canonicalKey))
+    }
+
+    @Test
+    fun `durable clean load is authoritative and missing lookup is authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
+        assertEquals(
+            ArtworkDecisionLookupResult.MissingAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("durable-clean-missing"))
+        )
+        assertEquals(ArtworkDecisionStoreLoadState.LoadedAuthoritative::class, restarted.loadState()::class)
+        assertTrue(restarted.loadState().isAuthoritativeForMissing())
+        assertTrue(restarted.snapshotDiagnostics().authoritative)
+    }
+
+    @Test
+    fun `durable malformed decision is quarantined while valid decisions remain usable`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+        file.writeText(file.readText().replace("],\"previewLinks\"", ",{}],\"previewLinks\""))
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("durable-partial-missing"))
+        )
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
+        assertNotNull(diagnostics.firstQuarantinedDecisionKeyHash)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(true, payload["success"])
+        assertEquals(false, payload["authoritative"])
+        assertEquals("LoadedPartialNonAuthoritative", payload["loadState"])
+        assertEquals(1, payload["decisionCount"])
+        assertEquals(1, payload["quarantinedDecisionCount"])
+        assertNotNull(payload["firstQuarantinedDecisionKeyHash"])
+    }
+
+    @Test
+    fun `durable top level parse failure is failed non authoritative`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText("{not-json")
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("parse-failure-missing"))
+        )
+        assertEquals(ArtworkDecisionStoreLoadState.FailedNonAuthoritative::class, restarted.loadState()::class)
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("FailedNonAuthoritative", diagnostics.loadStateName)
+        assertFalse(diagnostics.authoritative)
+        assertNotNull(diagnostics.errorMessageHash)
+        assertNotNull(diagnostics.errorTopFrame)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(false, payload["success"])
+        assertEquals(false, payload["authoritative"])
+        assertEquals("FailedNonAuthoritative", payload["loadState"])
+        assertNotNull(payload["errorMessageHash"])
+        assertNotNull(payload["errorTopFrame"])
+    }
+
+    @Test
+    fun `durable missing authoritative requires matching authority context`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        DurableArtworkDecisionCache(file = file, gson = Gson()).put(durableRpdbDecision())
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson())
+
+        restarted.get(ArtworkDecisionKey("warm-load"))
+        val context = restarted.snapshotDiagnostics().authorityContext
+        assertNotNull(context)
+        val mismatched = context!!.copy(imageLanguage = "nl")
+
+        assertNotEquals(context, mismatched)
+        assertEquals(
+            ArtworkDecisionLookupResult.MissingAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("matching-context-missing"), context)
+        )
+        assertEquals(
+            ArtworkDecisionLookupResult.CacheNotAuthoritative,
+            restarted.lookup(ArtworkDecisionKey("mismatched-context-missing"), mismatched)
+        )
     }
 
     @Test
@@ -724,4 +874,14 @@ class ArtworkDecisionCacheTest {
             assertEquals(serializedName, annotation?.value)
         }
     }
+
+    private fun authorityContext(): ArtworkDecisionAuthorityContext =
+        ArtworkDecisionAuthorityContext(
+            storeIdHash = "store",
+            schemaVersion = 1,
+            providerPolicyHash = "policy",
+            settingsHash = "settings",
+            credentialHash = "credential",
+            imageLanguage = "en"
+        )
 }

@@ -1,7 +1,76 @@
 package com.nexio.tv.core.artwork
 
+data class ArtworkDecisionAuthorityContext(
+    val storeIdHash: String,
+    val schemaVersion: Int,
+    val providerPolicyHash: String?,
+    val settingsHash: String?,
+    val credentialHash: String?,
+    val imageLanguage: String?
+)
+
+sealed class ArtworkDecisionStoreLoadState {
+    object NotLoaded : ArtworkDecisionStoreLoadState()
+    object Loading : ArtworkDecisionStoreLoadState()
+    data class LoadedAuthoritative(
+        val authorityContext: ArtworkDecisionAuthorityContext? = null,
+        val droppedDecisionCount: Int = 0,
+        val quarantinedDecisionCount: Int = 0
+    ) : ArtworkDecisionStoreLoadState()
+    data class LoadedPartialNonAuthoritative(
+        val authorityContext: ArtworkDecisionAuthorityContext? = null,
+        val droppedDecisionCount: Int = 0,
+        val quarantinedDecisionCount: Int = 0
+    ) : ArtworkDecisionStoreLoadState()
+    data class FailedNonAuthoritative(
+        val authorityContext: ArtworkDecisionAuthorityContext? = null,
+        val errorClass: String? = null
+    ) : ArtworkDecisionStoreLoadState()
+
+    fun isAuthoritativeForMissing(
+        requiredContext: ArtworkDecisionAuthorityContext? = null
+    ): Boolean =
+        this is LoadedAuthoritative &&
+            droppedDecisionCount == 0 &&
+            quarantinedDecisionCount == 0 &&
+            (requiredContext == null || authorityContext == requiredContext)
+}
+
+sealed class ArtworkDecisionLookupResult {
+    data class Found(val decision: ArtworkDecision) : ArtworkDecisionLookupResult()
+    object MissingAuthoritative : ArtworkDecisionLookupResult()
+    object CacheNotAuthoritative : ArtworkDecisionLookupResult()
+    data class LookupFailed(
+        val errorClass: String?,
+        val errorMessageHash: String?
+    ) : ArtworkDecisionLookupResult()
+}
+
 interface ArtworkDecisionCache {
     fun get(key: ArtworkDecisionKey): ArtworkDecision?
+    fun lookup(
+        key: ArtworkDecisionKey,
+        requiredContext: ArtworkDecisionAuthorityContext? = null
+    ): ArtworkDecisionLookupResult =
+        runCatching {
+            get(key)?.let(ArtworkDecisionLookupResult::Found)
+                ?: if (loadState().isAuthoritativeForMissing(requiredContext)) {
+                    ArtworkDecisionLookupResult.MissingAuthoritative
+                } else {
+                    ArtworkDecisionLookupResult.CacheNotAuthoritative
+                }
+        }.getOrElse { error ->
+            ArtworkDecisionLookupResult.LookupFailed(
+                errorClass = error.javaClass.simpleName,
+                errorMessageHash = error.message?.let(::artworkDecisionShortSha256)
+            )
+        }
+    fun loadState(): ArtworkDecisionStoreLoadState =
+        ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+            authorityContext = null,
+            droppedDecisionCount = 0,
+            quarantinedDecisionCount = 0
+        )
     fun put(decision: ArtworkDecision)
     fun remove(key: ArtworkDecisionKey)
     fun linkPreviewToCanonical(
@@ -29,7 +98,16 @@ data class ArtworkDecisionCacheSnapshotDiagnostics(
     val lastLoadSuccess: Boolean?,
     val lastLoadReason: String?,
     val lastLoadErrorClass: String?,
-    val droppedDecisionCount: Int?
+    val droppedDecisionCount: Int?,
+    val loadStateName: String = if (loaded) "LoadedAuthoritative" else "NotLoaded",
+    val authoritative: Boolean = loaded && droppedDecisionCount == 0,
+    val schemaVersion: Int? = null,
+    val storedSchemaVersion: Int? = null,
+    val quarantinedDecisionCount: Int? = 0,
+    val errorMessageHash: String? = null,
+    val errorTopFrame: String? = null,
+    val firstQuarantinedDecisionKeyHash: String? = null,
+    val authorityContext: ArtworkDecisionAuthorityContext? = null
 )
 
 class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheDiagnostics {
@@ -39,6 +117,21 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheD
     @Synchronized
     override fun get(key: ArtworkDecisionKey): ArtworkDecision? =
         decisions[key]
+
+    @Synchronized
+    override fun lookup(
+        key: ArtworkDecisionKey,
+        requiredContext: ArtworkDecisionAuthorityContext?
+    ): ArtworkDecisionLookupResult =
+        decisions[key]?.let(ArtworkDecisionLookupResult::Found)
+            ?: ArtworkDecisionLookupResult.MissingAuthoritative
+
+    override fun loadState(): ArtworkDecisionStoreLoadState =
+        ArtworkDecisionStoreLoadState.LoadedAuthoritative(
+            authorityContext = null,
+            droppedDecisionCount = 0,
+            quarantinedDecisionCount = 0
+        )
 
     @Synchronized
     override fun put(decision: ArtworkDecision) {
@@ -124,6 +217,21 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheD
             lastLoadSuccess = true,
             lastLoadReason = null,
             lastLoadErrorClass = null,
-            droppedDecisionCount = 0
+            droppedDecisionCount = 0,
+            loadStateName = "LoadedAuthoritative",
+            authoritative = true,
+            schemaVersion = null,
+            storedSchemaVersion = null,
+            quarantinedDecisionCount = 0,
+            errorMessageHash = null,
+            errorTopFrame = null,
+            firstQuarantinedDecisionKeyHash = null,
+            authorityContext = null
         )
 }
+
+internal fun artworkDecisionShortSha256(value: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte -> "%02x".format(byte) }
+        .take(12)
