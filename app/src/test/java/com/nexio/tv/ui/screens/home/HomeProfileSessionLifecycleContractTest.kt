@@ -36,6 +36,10 @@ class HomeProfileSessionLifecycleContractTest {
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
     private val catalogPipelineSource =
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
+    private val resetProfileScopedHomeStateSource =
+        catalogPipelineSource.functionBody("resetProfileScopedHomeState")
+    private val observeInstalledAddonsPipelineSource =
+        catalogPipelineSource.functionBody("observeInstalledAddonsPipeline")
 
     @Test
     fun `home profile session has stable session identity fields`() {
@@ -454,11 +458,27 @@ class HomeProfileSessionLifecycleContractTest {
     }
 
     @Test
-    fun `profile reset does not clear shared cache owners`() {
-        assertFalse(catalogPipelineSource.contains("metadataDiskCacheStore.clear"))
-        assertFalse(catalogPipelineSource.contains("artworkDecisionStore.clear"))
-        assertFalse(catalogPipelineSource.contains("integrationCache.clear"))
-        assertFalse(catalogPipelineSource.contains("runtimeCache.clear"))
+    fun `profile reset clears only profile-owned visible home state`() {
+        assertTrue(resetProfileScopedHomeStateSource.contains("catalogRows = emptyList()"))
+        assertTrue(resetProfileScopedHomeStateSource.contains("continueWatchingItems = emptyList()"))
+        assertTrue(resetProfileScopedHomeStateSource.contains("traktUpNextItems = emptyList()"))
+
+        assertFalse(resetProfileScopedHomeStateSource.contains("metadataDiskCacheStore.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("metadataDiskCacheStore.delete"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("artworkDecisionStore.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("identityMappingStore.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("integrationOwnershipService.clearAll"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("integrationCache.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("runtimeCache.clear"))
+    }
+
+    @Test
+    fun `installed addon observer remains shared across profile sessions`() {
+        assertTrue(homeViewModelSource.contains("observeInstalledAddons()"))
+        assertTrue(observeInstalledAddonsPipelineSource.contains("addonRepository.getInstalledAddons()"))
+        assertFalse(observeInstalledAddonsPipelineSource.contains("activeHomeProfileSession"))
+        assertFalse(observeInstalledAddonsPipelineSource.contains("flatMapLatest"))
+        assertFalse(homeViewModelSource.contains("activeHomeProfileSession.flatMapLatest"))
     }
 
     @Test
@@ -472,5 +492,24 @@ class HomeProfileSessionLifecycleContractTest {
         assertTrue(continueWatchingSource.contains("ProfileScopedEmission.Success"))
         assertTrue(continueWatchingSource.contains("ProfileScopedEmission.Error"))
         assertFalse(continueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+    }
+
+    private fun String.functionBody(name: String): String {
+        val signatureIndex = indexOf("fun HomeViewModel.$name(")
+        assertTrue("Missing HomeViewModel.$name function", signatureIndex >= 0)
+        val bodyStart = indexOf('{', signatureIndex)
+        assertTrue("Missing HomeViewModel.$name body", bodyStart >= 0)
+
+        var depth = 0
+        for (index in bodyStart until length) {
+            when (this[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) return substring(bodyStart, index + 1)
+                }
+            }
+        }
+        error("Unterminated HomeViewModel.$name body")
     }
 }
