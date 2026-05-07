@@ -78,11 +78,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 
 /**
  * Regression guard for Task 2 of the rail-preview-first hydration plan.
@@ -96,6 +98,10 @@ class HomeViewModelFocusHydrationTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val createdViewModels = mutableListOf<HomeViewModel>()
+    private val catalogPipelineSource =
+        File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
+    private val resetProfileScopedHomeStateSource =
+        catalogPipelineSource.functionBody("resetProfileScopedHomeState")
 
     @Before
     fun setUp() {
@@ -637,6 +643,13 @@ class HomeViewModelFocusHydrationTest {
 
         assertTrue(viewModel.inMemoryHomeSnapshot?.heroItems.orEmpty().none { it.name == "Old Profile Cached Hero" })
         assertTrue(viewModel._uiState.value.heroItems.none { it.name == "Old Profile Cached Hero" })
+    }
+
+    @Test
+    fun `profile reset preserves focused hydration reuse caches`() {
+        assertFalse(resetProfileScopedHomeStateSource.contains("focusedItemHydrationStates.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("trailerMetadataAvailableState.clear"))
+        assertFalse(resetProfileScopedHomeStateSource.contains("trailerPreviewNegativeCache.clear"))
     }
 
     @Test
@@ -1342,6 +1355,25 @@ class HomeViewModelFocusHydrationTest {
         override fun eventsWritten(): Long = events.size.toLong()
 
         override fun eventsDropped(): Long = 0L
+    }
+
+    private fun String.functionBody(name: String): String {
+        val signatureIndex = indexOf("fun HomeViewModel.$name(")
+        assertTrue("Missing HomeViewModel.$name function", signatureIndex >= 0)
+        val bodyStart = indexOf('{', signatureIndex)
+        assertTrue("Missing HomeViewModel.$name body", bodyStart >= 0)
+
+        var depth = 0
+        for (index in bodyStart until length) {
+            when (this[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) return substring(bodyStart, index + 1)
+                }
+            }
+        }
+        error("Unterminated HomeViewModel.$name body")
     }
 
     private companion object {
