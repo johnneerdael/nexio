@@ -166,7 +166,8 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         val fixture = fixture(
             tmdbSnapshot = currentTmdbSnapshot(tmdbPrefs, TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
             tmdbPrefs = tmdbPrefs,
-            continueWatchingSnapshotFlow = emptyFlow()
+            continueWatchingSnapshotFlow = emptyFlow(),
+            continueWatchingEnsureFreshError = CancellationException("non-cw feed should not refresh")
         )
 
         val row = withTimeout(100) {
@@ -175,6 +176,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
 
         assertEquals(listOf("tmdb:1"), row?.items?.map { it.id })
         verify(exactly = 0) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(any()) }
+        coVerify(exactly = 0) { fixture.continueWatchingSnapshotService.ensureFresh(force = false) }
     }
 
     @Test
@@ -231,7 +233,8 @@ class AndroidTvFeedCatalogServiceTmdbTest {
                 )
             ),
             tmdbPrefs = tmdbPrefs,
-            continueWatchingSnapshotFlow = emptyFlow()
+            continueWatchingSnapshotFlow = emptyFlow(),
+            continueWatchingEnsureFreshError = CancellationException("non-cw rows should not refresh")
         )
 
         val rows = withTimeout(100) {
@@ -242,6 +245,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
 
         assertEquals(listOf("tmdb:1"), rows.single().items.map { it.id })
         verify(exactly = 0) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(any()) }
+        coVerify(exactly = 0) { fixture.continueWatchingSnapshotService.ensureFresh(force = false) }
     }
 
     @Test
