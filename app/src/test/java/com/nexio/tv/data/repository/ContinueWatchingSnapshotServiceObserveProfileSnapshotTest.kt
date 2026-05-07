@@ -8,9 +8,11 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -112,9 +114,20 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
         ))
         seedSnapshot(service, owned)
 
-        val result = service.observeProfileSnapshot(profileId = 2).first()
+        val result = service.observeProfileSnapshot(profileId = 2).drop(1).first()
 
         assertEquals(targetSnapshot, result)
+    }
+
+    @Test
+    fun `observeProfileSnapshot emits empty snapshot for requested profile before records exist`() = runTest {
+        val service = buildService()
+
+        val result = withTimeout(500) {
+            service.observeProfileSnapshot(profileId = 2).first()
+        }
+
+        assertEquals(ContinueWatchingSnapshot(), result)
     }
 
     // ── Test 2: drops snapshots owned by a different profile ──────────────────
@@ -134,7 +147,7 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
         // and return the profile-2 emission.
         seedSnapshot(service, ProfileOwnedContinueWatchingSnapshot(profileId = 2, snapshot = mine))
 
-        val result = service.observeProfileSnapshot(profileId = 2).first()
+        val result = service.observeProfileSnapshot(profileId = 2).drop(1).first()
 
         assertEquals(mine, result)
     }

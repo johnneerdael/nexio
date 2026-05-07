@@ -1,5 +1,16 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.data.repository.ContinueWatchingSnapshot
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -22,6 +33,7 @@ import java.io.File
  *
  * Task 6 uses the same source-level assertion technique for the rail/home wiring.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelContinueWatchingProfileScopedTest {
 
     private val sourceFile: File = locateSourceFile()
@@ -37,6 +49,136 @@ class HomeViewModelContinueWatchingProfileScopedTest {
                 "Could not locate HomeViewModelContinueWatching.kt; tried: " +
                     candidates.joinToString { it.absolutePath }
             )
+    }
+
+    @Test
+    fun `profile switch restarts continue watching collection`() = runTest {
+        val firstSession = homeSession(profileId = 1, profileSessionKey = "profile:1:runtime:1")
+        val secondSession = homeSession(profileId = 2, profileSessionKey = "profile:2:runtime:1")
+        val activeSession = MutableStateFlow(firstSession)
+        val snapshotFlows = mapOf(
+            1 to MutableSharedFlow<ContinueWatchingSnapshot>(),
+            2 to MutableSharedFlow<ContinueWatchingSnapshot>()
+        )
+        val observedProfiles = mutableListOf<Int>()
+        val emissions = mutableListOf<ProfileScopedEmission<ContinueWatchingSnapshot>>()
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            continueWatchingProfileScopedEmissions(
+                activeHomeProfileSession = activeSession,
+                observeProfileSnapshot = { profileId ->
+                    observedProfiles += profileId
+                    snapshotFlows.getValue(profileId)
+                }
+            ).collect { emission ->
+                emissions += emission
+            }
+        }
+
+        advanceUntilIdle()
+        snapshotFlows.getValue(1).emit(ContinueWatchingSnapshot(updatedAtMs = 11L))
+        activeSession.value = secondSession
+        advanceUntilIdle()
+        snapshotFlows.getValue(2).emit(ContinueWatchingSnapshot(updatedAtMs = 22L))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(listOf(1, 2), observedProfiles)
+        assertEquals(
+            listOf(firstSession, firstSession, secondSession, secondSession),
+            emissions.map { it.session }
+        )
+        assertTrue(emissions[0] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[1] is ProfileScopedEmission.Success)
+        assertTrue(emissions[2] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[3] is ProfileScopedEmission.Success)
+    }
+
+    @Test
+    fun `same profile session key does not restart continue watching collection`() = runTest {
+        val firstSession = homeSession(
+            profileId = 1,
+            sessionId = "home-profile:1:runtime:1",
+            profileSessionKey = "profile:1:runtime:1"
+        )
+        val settingsSession = homeSession(
+            profileId = 1,
+            sessionId = "home-profile:1:runtime:settings",
+            profileSessionKey = "profile:1:runtime:1"
+        )
+        val activeSession = MutableStateFlow(firstSession)
+        val snapshotFlow = MutableSharedFlow<ContinueWatchingSnapshot>()
+        val observedProfiles = mutableListOf<Int>()
+        val emissions = mutableListOf<ProfileScopedEmission<ContinueWatchingSnapshot>>()
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            continueWatchingProfileScopedEmissions(
+                activeHomeProfileSession = activeSession,
+                observeProfileSnapshot = { profileId ->
+                    observedProfiles += profileId
+                    snapshotFlow
+                }
+            ).collect { emission ->
+                emissions += emission
+            }
+        }
+
+        advanceUntilIdle()
+        activeSession.value = settingsSession
+        advanceUntilIdle()
+        snapshotFlow.emit(ContinueWatchingSnapshot(updatedAtMs = 33L))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(listOf(1), observedProfiles)
+        assertEquals(2, emissions.size)
+        assertEquals(firstSession, emissions[0].session)
+        assertEquals(firstSession, emissions[1].session)
+    }
+
+    @Test
+    fun `old profile emissions after switch are ignored by cancelled flow`() = runTest {
+        val firstSession = homeSession(profileId = 1, profileSessionKey = "profile:1:runtime:1")
+        val secondSession = homeSession(profileId = 2, profileSessionKey = "profile:2:runtime:1")
+        val activeSession = MutableStateFlow(firstSession)
+        val firstSnapshots = MutableSharedFlow<ContinueWatchingSnapshot>()
+        val secondSnapshots = MutableSharedFlow<ContinueWatchingSnapshot>()
+        val emissions = mutableListOf<ProfileScopedEmission<ContinueWatchingSnapshot>>()
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            continueWatchingProfileScopedEmissions(
+                activeHomeProfileSession = activeSession,
+                observeProfileSnapshot = { profileId ->
+                    if (profileId == 1) firstSnapshots else secondSnapshots
+                }
+            ).collect { emission ->
+                emissions += emission
+            }
+        }
+
+        advanceUntilIdle()
+        firstSnapshots.emit(ContinueWatchingSnapshot(updatedAtMs = 11L))
+        activeSession.value = secondSession
+        advanceUntilIdle()
+        firstSnapshots.emit(ContinueWatchingSnapshot(updatedAtMs = 99L))
+        secondSnapshots.emit(ContinueWatchingSnapshot(updatedAtMs = 22L))
+        advanceUntilIdle()
+        job.cancel()
+
+        val secondLoadingIndex = emissions.indexOfFirst {
+            it is ProfileScopedEmission.Loading && it.session == secondSession
+        }
+        assertTrue(secondLoadingIndex >= 0)
+        assertFalse(
+            emissions.drop(secondLoadingIndex + 1).any {
+                it is ProfileScopedEmission.Success && it.session == firstSession
+            }
+        )
+        assertTrue(
+            emissions.drop(secondLoadingIndex + 1).any {
+                it is ProfileScopedEmission.Success && it.session == secondSession
+            }
+        )
     }
 
     @Test
@@ -99,6 +241,52 @@ class HomeViewModelContinueWatchingProfileScopedTest {
             "F-G-01 part 1: HomeViewModelContinueWatching must not directly chain " +
                 "observeSnapshot().collectLatest { ... }; introduce .filter on profileId " +
                 "(path A) or migrate to observeContinueWatching() (path B)."
+        }
+    }
+
+    @Test
+    fun `continue watching collector is driven by active profile session`() {
+        check(sourceFile.exists()) { "expected source at ${sourceFile.absolutePath}" }
+        val source = sourceFile.readText()
+
+        assertTrue(source.contains("continueWatchingProfileScopedEmissions("))
+        assertTrue(source.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertTrue(source.contains(".flatMapLatest { session ->"))
+        assertTrue(source.contains("observeProfileSnapshot(session.profileId)"))
+        assertTrue(source.contains("isCurrentHomeSession(session)"))
+        assertFalse(source.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+    }
+
+    private fun homeSession(
+        profileId: Int,
+        profileSessionKey: String,
+        sessionId: String = "home-$profileSessionKey",
+        generation: Long = 1L
+    ): HomeProfileSession {
+        return if (profileId == 1) {
+            HomeProfileSession.DefaultLegacy(
+                generation = generation,
+                sessionId = sessionId,
+                profileSessionKey = profileSessionKey,
+                language = "en",
+                subtitleLanguage = null,
+                startedAtMs = 1L
+            )
+        } else {
+            HomeProfileSession.Secondary(
+                profileId = profileId,
+                generation = generation,
+                sessionId = sessionId,
+                profileSessionKey = profileSessionKey,
+                language = "en",
+                subtitleLanguage = null,
+                startedAtMs = 1L,
+                boundaryContext = com.nexio.tv.core.profile.SecondaryProfileRuntimeContext(
+                    profileId = profileId,
+                    languageTag = "en",
+                    generation = generation
+                )
+            )
         }
     }
 }

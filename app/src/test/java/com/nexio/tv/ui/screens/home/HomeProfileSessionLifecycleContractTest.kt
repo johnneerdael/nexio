@@ -32,6 +32,8 @@ class HomeProfileSessionLifecycleContractTest {
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeProfileSessionCoordinator.kt")
     private val homeViewModelSource =
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+    private val continueWatchingSource =
+        File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
     private val catalogPipelineSource =
         File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
 
@@ -457,5 +459,18 @@ class HomeProfileSessionLifecycleContractTest {
         assertFalse(catalogPipelineSource.contains("artworkDecisionStore.clear"))
         assertFalse(catalogPipelineSource.contains("integrationCache.clear"))
         assertFalse(catalogPipelineSource.contains("runtimeCache.clear"))
+    }
+
+    @Test
+    fun `continue watching collector follows active profile session lifecycle`() {
+        assertTrue(continueWatchingSource.contains("continueWatchingProfileScopedEmissions("))
+        assertTrue(continueWatchingSource.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
+        assertTrue(continueWatchingSource.contains(".flatMapLatest { session ->"))
+        assertTrue(continueWatchingSource.contains("observeProfileSnapshot(session.profileId)"))
+        assertTrue(continueWatchingSource.contains("isCurrentHomeSession(session)"))
+        assertTrue(continueWatchingSource.contains("ProfileScopedEmission.Loading"))
+        assertTrue(continueWatchingSource.contains("ProfileScopedEmission.Success"))
+        assertTrue(continueWatchingSource.contains("ProfileScopedEmission.Error"))
+        assertFalse(continueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
     }
 }
