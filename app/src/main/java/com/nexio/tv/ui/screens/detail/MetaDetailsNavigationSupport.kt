@@ -71,6 +71,13 @@ internal fun buildSeriesNextToWatchCandidate(
 
     val regularEpisodes = orderedEpisodes.filter { (it.season ?: 0) > 0 }
     val episodePool = if (regularEpisodes.isNotEmpty()) regularEpisodes else orderedEpisodes
+    val episodeOrderIndex = orderedEpisodes
+        .mapIndexedNotNull { index, video ->
+            val season = video.season
+            val episode = video.episode
+            if (season != null && episode != null) (season to episode) to index else null
+        }
+        .toMap()
 
     val latestInProgress = progressMap.values
         .filter { it.isInProgress() }
@@ -78,7 +85,10 @@ internal fun buildSeriesNextToWatchCandidate(
 
     val latestCompleted = progressMap.values
         .filter { it.isCompleted() }
-        .maxByOrNull { it.lastWatched }
+        .maxWithOrNull(
+            compareBy<WatchProgress> { it.lastWatched }
+                .thenBy { progress -> episodeOrderIndex[progress.season to progress.episode] ?: Int.MIN_VALUE }
+        )
 
     val preferCompletedContext = latestCompleted != null &&
         (latestInProgress == null || latestCompleted.lastWatched >= latestInProgress.lastWatched)

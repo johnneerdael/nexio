@@ -249,6 +249,23 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
+    fun equalTimestampCompletedEpisodesUseFurthestEpisodeAsTheWatchAnchor() {
+        val completedSeasonOne = (1..6).associate { episode ->
+            1 to episode to completedProgress("show:1:$episode", 1, episode, 1_000L)
+        }
+
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = episodesForSeasons(1..2, episodeCount = 6),
+            progressMap = completedSeasonOne,
+            metaId = "show"
+        )
+
+        assertEquals("show:2:1", result.nextVideoId)
+        assertEquals(2, result.nextSeason)
+        assertEquals(1, result.nextEpisode)
+    }
+
+    @Test
     fun newerCompletedEpisodeBeatsAnOlderInProgressResumeTarget() {
         val result = buildSeriesNextToWatchCandidate(
             episodes = episodesForSeasons(1..1, episodeCount = 3),
