@@ -17,11 +17,16 @@ class ResolverOrchestrator @Inject constructor(
     )
 
     fun schedule(depth: MetadataDepth): ResolverSchedule {
-        val localResolvers = mutableSetOf(ResolverType.ADDON_DISPLAY)
+        val localResolvers = if (depth == MetadataDepth.IDENTITY) {
+            mutableSetOf()
+        } else {
+            mutableSetOf(ResolverType.ADDON_DISPLAY)
+        }
         val networkResolvers = mutableSetOf<ResolverType>()
 
         when (depth) {
-            MetadataDepth.PREVIEW -> Unit
+            MetadataDepth.PREVIEW,
+            MetadataDepth.IDENTITY -> Unit
             MetadataDepth.DETAIL_CORE -> {
                 localResolvers += ResolverType.RATING
                 localResolvers += ResolverType.ARTWORK
