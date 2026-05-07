@@ -81,10 +81,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -544,10 +543,16 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             activeHomeProfileSession
                 .drop(1)
-                .onEach { session ->
+                .mapNotNull { session ->
+                    val previousSession = activeHomeProfileSessionSnapshot
                     activeHomeProfileSessionSnapshot = session
+                    session.takeIf {
+                        shouldResetProfileScopedHomeState(
+                            previousSession = previousSession,
+                            nextSession = session
+                        )
+                    }
                 }
-                .distinctUntilChangedBy { it.profileSessionKey }
                 .collectLatest { session ->
                     profileSwitchDiskHydrationActive = true
                     suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
@@ -985,4 +990,11 @@ class HomeViewModel @Inject constructor(
         movieWatchedObserverJobs.clear()
         super.onCleared()
     }
+}
+
+internal fun shouldResetProfileScopedHomeState(
+    previousSession: HomeProfileSession,
+    nextSession: HomeProfileSession
+): Boolean {
+    return previousSession.profileSessionKey != nextSession.profileSessionKey
 }
