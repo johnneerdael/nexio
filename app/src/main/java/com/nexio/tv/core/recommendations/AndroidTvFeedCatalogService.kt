@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,6 +53,7 @@ private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
 private const val MDBLIST_RAIL_ADDON_ID = "mdblist"
 private const val MDBLIST_RAIL_ADDON_NAME = "MDBList"
 private const val MDBLIST_RAIL_ADDON_BASE_URL = "https://api.mdblist.com"
+private const val CONTINUE_WATCHING_SNAPSHOT_TIMEOUT_MS = 500L
 
 data class AndroidTvFeedOption(
     val key: String,
@@ -150,10 +152,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val activeProfileId = profileManager.activeProfileId.value
-        val continueWatchingSnapshot = continueWatchingSnapshotService
-            .observeProfileSnapshot(activeProfileId)
-            .first()
+        val continueWatchingSnapshot = resolveActiveProfileContinueWatchingSnapshot()
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -228,10 +227,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val activeProfileId = profileManager.activeProfileId.value
-        val continueWatchingSnapshot = continueWatchingSnapshotService
-            .observeProfileSnapshot(activeProfileId)
-            .first()
+        val continueWatchingSnapshot = resolveActiveProfileContinueWatchingSnapshot()
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -321,6 +317,26 @@ class AndroidTvFeedCatalogService @Inject constructor(
                 }
         }
         return null
+    }
+
+    private suspend fun resolveActiveProfileContinueWatchingSnapshot(): ContinueWatchingSnapshot {
+        val activeProfileId = profileManager.activeProfileId.value
+        if (activeProfileId <= 0) return ContinueWatchingSnapshot()
+
+        return runCatching {
+            withTimeoutOrNull(CONTINUE_WATCHING_SNAPSHOT_TIMEOUT_MS) {
+                continueWatchingSnapshotService
+                    .observeProfileSnapshot(activeProfileId)
+                    .first()
+            } ?: ContinueWatchingSnapshot()
+        }.getOrElse { error ->
+            Log.w(
+                TAG,
+                "Falling back to empty Android TV continue-watching feed for profile=$activeProfileId",
+                error
+            )
+            ContinueWatchingSnapshot()
+        }
     }
 
     private fun buildFeedOptions(
