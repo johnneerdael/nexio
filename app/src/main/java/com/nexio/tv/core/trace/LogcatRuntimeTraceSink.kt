@@ -331,7 +331,13 @@ class LogcatRuntimeTraceSink(
         )
         "home.snapshot_decision_lookup" -> linkedMapOf(
             "scope" to payload["scope"],
-            "lookupResult" to payload["lookupResult"],
+            "decisionLookupCount" to payload["decisionLookupCount"],
+            "decisionFoundCount" to payload["decisionFoundCount"],
+            "missingDecisionCount" to payload["missingDecisionCount"],
+            "cacheNotAuthoritativeCount" to payload["cacheNotAuthoritativeCount"],
+            "lookupFailedCount" to payload["lookupFailedCount"],
+            "lookupErrorCount" to payload["lookupErrorCount"],
+            "lookupResultTypes" to payload["lookupResultTypes"],
             "decisionFound" to payload["decisionFound"],
             "decisionKeyHash" to payload["decisionKeyHash"],
             "posterKind" to payload["posterKind"],
@@ -355,14 +361,16 @@ class LogcatRuntimeTraceSink(
         )
         "home.snapshot_sanitize_artwork" -> linkedMapOf(
             "scope" to payload["scope"],
+            "sanitizedCount" to payload["sanitizedCount"],
+            "rawPremiumCount" to payload["rawPremiumCount"],
+            "legacyIntegrationCount" to payload["legacyIntegrationCount"],
+            "missingDecisionCount" to payload["missingDecisionCount"],
             "action" to payload["action"],
-            "reason" to payload["reason"],
+            "reasons" to payload["reasons"],
             "destructive" to payload["destructive"],
             "writeBackAllowed" to payload["writeBackAllowed"],
-            "posterKind" to payload["posterKind"],
-            "posterProviderTag" to payload["posterProviderTag"],
             "posterProviderTagAction" to payload["posterProviderTagAction"],
-            "decisionFound" to payload["decisionFound"]
+            "samples" to payload["samples"]
         )
         "home.snapshot_artwork_rehydrate_requested" -> linkedMapOf(
             "scope" to payload["scope"],
