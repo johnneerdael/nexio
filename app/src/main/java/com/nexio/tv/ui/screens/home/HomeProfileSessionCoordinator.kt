@@ -47,10 +47,7 @@ class HomeProfileSessionCoordinator internal constructor(
     )
 
     internal fun start(scope: CoroutineScope, generationProvider: () -> Long): StateFlow<HomeProfileSession> {
-        val initialInputs = sessionInputs(
-            profileSession = profileManager.activeProfileSession.value,
-            settings = PlayerSettings()
-        )
+        val initialInputs = bootstrapSessionInputs(profileManager.activeProfileSession.value)
         val initialSession = createSession(initialInputs, generationProvider)
         val sessions = combine(
             profileManager.activeProfileSession,
@@ -74,6 +71,14 @@ class HomeProfileSessionCoordinator internal constructor(
             scope = scope,
             started = SharingStarted.Eagerly,
             initialValue = initialSession
+        )
+    }
+
+    private fun bootstrapSessionInputs(profileSession: ActiveProfileSession): HomeProfileSessionInputs {
+        return HomeProfileSessionInputs(
+            profileSession = profileSession,
+            language = profileBoundary.currentLanguageTag(),
+            subtitleLanguage = null
         )
     }
 

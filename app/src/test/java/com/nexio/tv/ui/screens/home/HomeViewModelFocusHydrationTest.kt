@@ -25,7 +25,6 @@ import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
@@ -70,6 +69,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -1314,7 +1314,7 @@ class HomeViewModelFocusHydrationTest {
                 profileModeRouter = profileModeRouter,
                 profileBoundary = profileBoundary,
                 localeTags = flowOf("en"),
-                playerSettings = flowOf(PlayerSettings()),
+                playerSettings = emptyFlow(),
                 nowMs = { 1L }
             ),
             trackingProviderStateService = mockk(relaxed = true),
