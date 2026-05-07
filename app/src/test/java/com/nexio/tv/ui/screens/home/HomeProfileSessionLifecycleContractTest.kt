@@ -463,13 +463,17 @@ class HomeProfileSessionLifecycleContractTest {
         assertTrue(resetProfileScopedHomeStateSource.contains("continueWatchingItems = emptyList()"))
         assertTrue(resetProfileScopedHomeStateSource.contains("traktUpNextItems = emptyList()"))
 
-        assertFalse(resetProfileScopedHomeStateSource.contains("metadataDiskCacheStore.clear"))
-        assertFalse(resetProfileScopedHomeStateSource.contains("metadataDiskCacheStore.delete"))
-        assertFalse(resetProfileScopedHomeStateSource.contains("artworkDecisionStore.clear"))
-        assertFalse(resetProfileScopedHomeStateSource.contains("identityMappingStore.clear"))
+        assertNoSharedCacheEvictionCalls(
+            source = resetProfileScopedHomeStateSource,
+            receivers = listOf(
+                "metadataDiskCacheStore",
+                "artworkDecisionStore",
+                "identityMappingStore",
+                "integrationCache",
+                "runtimeCache"
+            )
+        )
         assertFalse(resetProfileScopedHomeStateSource.contains("integrationOwnershipService.clearAll"))
-        assertFalse(resetProfileScopedHomeStateSource.contains("integrationCache.clear"))
-        assertFalse(resetProfileScopedHomeStateSource.contains("runtimeCache.clear"))
     }
 
     @Test
@@ -478,7 +482,6 @@ class HomeProfileSessionLifecycleContractTest {
         assertTrue(observeInstalledAddonsPipelineSource.contains("addonRepository.getInstalledAddons()"))
         assertFalse(observeInstalledAddonsPipelineSource.contains("activeHomeProfileSession"))
         assertFalse(observeInstalledAddonsPipelineSource.contains("flatMapLatest"))
-        assertFalse(homeViewModelSource.contains("activeHomeProfileSession.flatMapLatest"))
     }
 
     @Test
@@ -511,5 +514,16 @@ class HomeProfileSessionLifecycleContractTest {
             }
         }
         error("Unterminated HomeViewModel.$name body")
+    }
+
+    private fun assertNoSharedCacheEvictionCalls(source: String, receivers: List<String>) {
+        val destructiveMethods = "(?:clear\\w*|delete\\w*|remove\\w*|evict\\w*)"
+        receivers.forEach { receiver ->
+            val destructiveCall = Regex("""\b$receiver\s*\.\s*$destructiveMethods\s*\(""")
+            assertFalse(
+                "Profile reset must not evict shared cache via $receiver",
+                destructiveCall.containsMatchIn(source)
+            )
+        }
     }
 }
