@@ -331,6 +331,36 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `durable missing file authority state tracks put and remove decision counts`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.root.resolve("missing-artwork-decisions.json")
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        cache.put(decision)
+
+        val afterPutState = cache.loadState() as ArtworkDecisionStoreLoadState.LoadedAuthoritative
+        assertEquals(1, afterPutState.decisionCount)
+        val missingAfterPut = ArtworkDecisionKey("missing-after-put")
+        assertMissingAuthoritative(
+            result = cache.lookup(missingAfterPut),
+            key = missingAfterPut,
+            decisionCount = 1
+        )
+
+        cache.remove(decision.decisionKey)
+
+        val afterRemoveState = cache.loadState() as ArtworkDecisionStoreLoadState.LoadedAuthoritative
+        assertEquals(0, afterRemoveState.decisionCount)
+        val missingAfterRemove = ArtworkDecisionKey("missing-after-remove")
+        assertMissingAuthoritative(
+            result = cache.lookup(missingAfterRemove),
+            key = missingAfterRemove,
+            decisionCount = 0
+        )
+    }
+
+    @Test
     fun `durable blank file load is authoritative and missing lookup is authoritative`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
@@ -346,6 +376,26 @@ class ArtworkDecisionCacheTest {
         assertEquals(true, diagnostics.storeFilePresent)
         assertEquals(0, diagnostics.droppedDecisionCount)
         assertEquals(0, diagnostics.quarantinedDecisionCount)
+    }
+
+    @Test
+    fun `durable blank file authority state tracks put decision count`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        file.writeText("  \n  ")
+        val cache = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        cache.put(decision)
+
+        val loadState = cache.loadState() as ArtworkDecisionStoreLoadState.LoadedAuthoritative
+        assertEquals(1, loadState.decisionCount)
+        val missingKey = ArtworkDecisionKey("blank-put-missing")
+        assertMissingAuthoritative(
+            result = cache.lookup(missingKey),
+            key = missingKey,
+            decisionCount = 1
+        )
     }
 
     @Test
@@ -426,6 +476,48 @@ class ArtworkDecisionCacheTest {
         assertEquals(true, payload["success"])
         assertEquals("LoadedPartialNonAuthoritative", payload["loadState"])
         assertEquals(1, payload["decisionCount"])
+        assertEquals(1, payload["quarantinedDecisionCount"])
+    }
+
+    @Test
+    fun `durable malformed preview link makes load partial while valid decisions remain usable`() {
+        val temp = TemporaryFolder().also { it.create() }
+        val file = temp.newFile("artwork-decisions.json")
+        val first = DurableArtworkDecisionCache(file = file, gson = Gson())
+        val decision = durableRpdbDecision()
+
+        first.put(decision)
+        val store = JsonParser.parseString(file.readText()).asJsonObject
+        store.add("previewLinks", JsonArray().apply {
+            add(JsonObject())
+        })
+        file.writeText(Gson().toJson(store))
+
+        val traceSink = RecordingTraceSink()
+        val restarted = DurableArtworkDecisionCache(file = file, gson = Gson(), traceSink = traceSink)
+
+        assertEquals(ArtworkDecisionLookupResult.Found(decision), restarted.lookup(decision.decisionKey))
+        val missingKey = ArtworkDecisionKey("broken-preview-link-missing")
+        assertCacheNotAuthoritative(
+            result = restarted.lookup(missingKey),
+            key = missingKey,
+            reason = "partial_load"
+        )
+
+        val diagnostics = restarted.snapshotDiagnostics()
+        assertEquals("LoadedPartialNonAuthoritative", diagnostics.loadStateName)
+        assertEquals(1, diagnostics.decisionCount)
+        assertEquals(1, diagnostics.droppedDecisionCount)
+        assertEquals(1, diagnostics.quarantinedDecisionCount)
+
+        val payload = traceSink.events
+            .single { event -> event.eventType == "artwork.decision_store_load" }
+            .payload as Map<*, *>
+        assertEquals(true, payload["success"])
+        assertEquals(false, payload["authoritative"])
+        assertEquals("LoadedPartialNonAuthoritative", payload["loadState"])
+        assertEquals(1, payload["decisionCount"])
+        assertEquals(1, payload["droppedDecisionCount"])
         assertEquals(1, payload["quarantinedDecisionCount"])
     }
 
@@ -1054,11 +1146,15 @@ class ArtworkDecisionCacheTest {
 
     private fun assertMissingAuthoritative(
         result: ArtworkDecisionLookupResult,
-        key: ArtworkDecisionKey
+        key: ArtworkDecisionKey,
+        decisionCount: Int? = null
     ) {
         assertTrue(result is ArtworkDecisionLookupResult.MissingAuthoritative)
         result as ArtworkDecisionLookupResult.MissingAuthoritative
         assertEquals(key, result.decisionKey)
+        if (decisionCount != null) {
+            assertEquals(decisionCount, result.loadState.decisionCount)
+        }
         assertTrue(result.loadState.isAuthoritativeForMissing())
     }
 
