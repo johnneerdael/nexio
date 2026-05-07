@@ -10,6 +10,7 @@ import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkPosterTransport
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.ArtworkRemoteSourceStore
+import com.nexio.tv.core.artwork.ArtworkRouter
 import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.artwork.DefaultArtworkByteLoader
 import com.nexio.tv.core.artwork.DefaultArtworkPosterTransport
@@ -129,6 +130,13 @@ object IntegrationRuntimeModule {
             file = File(context.filesDir, "artwork-remote-sources-v1.json"),
             gson = gson
         )
+
+    @Provides
+    @Singleton
+    fun provideArtworkRouter(
+        remoteSourceStore: ArtworkRemoteSourceStore
+    ): ArtworkRouter =
+        ArtworkRouter(remoteSourceStore = remoteSourceStore)
 
     @Provides
     @Singleton

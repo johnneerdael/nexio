@@ -34,7 +34,9 @@ class TvdbMetadataProviderAdapterEpisodeFieldSelectedTraceTest {
 
         val adapter = TvdbMetadataProviderAdapter(
             integrationProvider = provider,
-            traceEvents = events
+            traceEvents = events,
+            artworkCandidateMapper = TvdbArtworkCandidateMapper(),
+            artworkDecisionResolver = mockk(relaxed = true)
         )
 
         val route = sampleTvdbRoute(tvdbId = 73244, language = "nld")
