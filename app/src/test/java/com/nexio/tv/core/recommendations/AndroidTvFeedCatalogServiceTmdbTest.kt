@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
+import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
@@ -38,10 +39,12 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Test
 
 class AndroidTvFeedCatalogServiceTmdbTest {
+    private val upNextFeedKey = "trakt_${ContentType.SERIES.toApiString()}_${TraktCatalogIds.UP_NEXT}"
 
     @Test
     fun `feed options include enabled TMDB catalog from snapshot`() = runTest {
@@ -325,6 +328,70 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         }
 
         assertEquals(emptyList<MetaPreview>(), row?.items)
+    }
+
+    @Test
+    fun `resolving up next feed uses continue watching snapshot path`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences()
+        )
+
+        fixture.service.resolveFeed(upNextFeedKey)
+
+        coVerify(exactly = 1) { fixture.continueWatchingSnapshotService.ensureFresh(force = false) }
+        verify(exactly = 1) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(1) }
+    }
+
+    @Test
+    fun `resolving up next feed falls back when profile snapshot is unavailable`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingSnapshotFlow = emptyFlow()
+        )
+
+        val row = withTimeout(1_000) {
+            fixture.service.resolveFeed(upNextFeedKey)
+        }
+
+        assertNull(row)
+        coVerify(exactly = 1) { fixture.continueWatchingSnapshotService.ensureFresh(force = false) }
+        verify(exactly = 1) { fixture.continueWatchingSnapshotService.observeProfileSnapshot(1) }
+    }
+
+    @Test
+    fun `resolving up next feed rethrows parent cancellation`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingSnapshotFlow = flow {
+                throw CancellationException("up next snapshot cancelled")
+            }
+        )
+
+        try {
+            fixture.service.resolveFeed(upNextFeedKey)
+            fail("Expected Up Next snapshot cancellation to propagate")
+        } catch (error: CancellationException) {
+            assertEquals("up next snapshot cancelled", error.message)
+        }
+    }
+
+    @Test
+    fun `resolving up next feed rethrows cancellation from refresh`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences(),
+            continueWatchingEnsureFreshError = CancellationException("up next refresh cancelled")
+        )
+
+        try {
+            fixture.service.resolveFeed(upNextFeedKey)
+            fail("Expected Up Next refresh cancellation to propagate")
+        } catch (error: CancellationException) {
+            assertEquals("up next refresh cancelled", error.message)
+        }
     }
 
     @Test
