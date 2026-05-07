@@ -49,6 +49,13 @@ data class PreservedStreamMetadata(
 )
 
 @Immutable
+data class MatchInfo(
+    val score: Int? = null,
+    val confidence: String = "UNKNOWN",
+    val reasons: List<String> = emptyList()
+)
+
+@Immutable
 data class ParsedStreamInfo(
     val stream: Stream,
     val title: String?,
@@ -92,7 +99,10 @@ data class ParsedStreamInfo(
     val isPrivate: Boolean = false,
     val message: String? = null,
     val transportKind: StreamTransportKind,
-    val preservedMetadata: PreservedStreamMetadata = PreservedStreamMetadata()
+    val preservedMetadata: PreservedStreamMetadata = PreservedStreamMetadata(),
+    val matchInfo: MatchInfo? = null,
+    val episodeTitle: String? = null,
+    val crossIds: Map<String, String> = emptyMap()
 ) {
     val isDolbyVision: Boolean get() = visualTags.any { it == "DV" }
     val isWebDl: Boolean get() = quality == "WEB-DL"

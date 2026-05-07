@@ -133,8 +133,49 @@ object AioStrictStreamParser {
                 videoHash = stream.behaviorHints?.videoHash,
                 videoSize = stream.behaviorHints?.videoSize ?: sizeBytes,
                 bingeGroup = stream.behaviorHints?.bingeGroup?.takeIf { it.isNotBlank() }
-            )
+            ),
+            matchInfo = if (stream.addonParserPreset == AddonParserPreset.NEXIO_TORII || stream.addonParserPreset == AddonParserPreset.NEXIO_NAGARE)
+                parseMatchLine(description) else null,
+            episodeTitle = if (stream.addonParserPreset == AddonParserPreset.NEXIO_TORII || stream.addonParserPreset == AddonParserPreset.NEXIO_NAGARE)
+                parseEpisodeTitleLine(description) else null,
+            crossIds = if (stream.addonParserPreset == AddonParserPreset.NEXIO_TORII || stream.addonParserPreset == AddonParserPreset.NEXIO_NAGARE)
+                parseCrossIdsLine(description) else emptyMap()
         )
+    }
+
+    private val matchLineRegex = Regex("""🎯\s+([A-Z]+)(?:\s*\((\d+)\))?(?:\s*·\s*(.+))?""")
+    private val episodeTitleRegex = Regex("""📺\s+S\d+E\d+\s+·\s+"([^"]+)"""")
+    private val crossIdsRegex = Regex("""🆔\s+(.+)""")
+
+    private fun parseMatchLine(description: String): MatchInfo? {
+        val line = description.lineSequence().firstOrNull { it.contains("🎯") } ?: return null
+        val m = matchLineRegex.find(line) ?: return null
+        val confidence = m.groupValues[1].ifBlank { "UNKNOWN" }
+        val score = m.groupValues.getOrNull(2)?.toIntOrNull()
+        val reasons = m.groupValues.getOrNull(3)
+            ?.split("·")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+        return MatchInfo(score = score, confidence = confidence, reasons = reasons)
+    }
+
+    private fun parseEpisodeTitleLine(description: String): String? {
+        val line = description.lineSequence().firstOrNull { it.contains("📺") } ?: return null
+        return episodeTitleRegex.find(line)?.groupValues?.get(1)
+    }
+
+    private fun parseCrossIdsLine(description: String): Map<String, String> {
+        val line = description.lineSequence().firstOrNull { it.contains("🆔") } ?: return emptyMap()
+        val m = crossIdsRegex.find(line) ?: return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        m.groupValues[1].split("·").forEach { token ->
+            val parts = token.trim().split(":", limit = 2)
+            if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
+                out[parts[0]] = parts[1]
+            }
+        }
+        return out
     }
 
     private fun fallbackTitle(stream: Stream, filename: String?, description: String): String? {
