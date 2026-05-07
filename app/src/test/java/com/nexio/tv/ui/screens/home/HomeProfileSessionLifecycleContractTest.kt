@@ -339,6 +339,56 @@ class HomeProfileSessionLifecycleContractTest {
     }
 
     @Test
+    fun `home profile session updates when session ordinal changes with reused runtime id`() = runTest {
+        val activeProfileSession = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 1L,
+                startedAtMs = 100L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.activeProfileId } returns MutableStateFlow(1)
+        }
+        val profileBoundary = mockk<ProfileBoundary> {
+            every { currentLanguageTag() } returns "en"
+        }
+        val playerSettings = MutableSharedFlow<PlayerSettings>()
+        val coordinator = HomeProfileSessionCoordinator(
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = profileBoundary,
+            localeTags = flowOf("en"),
+            playerSettings = playerSettings,
+            nowMs = { 1234L }
+        )
+
+        val sessionScope = CoroutineScope(coroutineContext + Job())
+        try {
+            val activeSession = coordinator.start(sessionScope, generationProvider = { 11L })
+            advanceUntilIdle()
+            val initialKey = activeSession.value.profileSessionKey
+
+            activeProfileSession.value = com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "profile:1:runtime",
+                sessionOrdinal = 2L,
+                startedAtMs = 200L
+            )
+            advanceUntilIdle()
+
+            assertEquals(1, activeSession.value.profileId)
+            assertTrue(activeSession.value.sessionId.contains("profile:1:runtime"))
+            assertTrue(activeSession.value.profileSessionKey.endsWith(":2"))
+            assertFalse(initialKey == activeSession.value.profileSessionKey)
+        } finally {
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
     fun `profile reset does not clear shared cache owners`() {
         assertFalse(catalogPipelineSource.contains("metadataDiskCacheStore.clear"))
         assertFalse(catalogPipelineSource.contains("artworkDecisionStore.clear"))
