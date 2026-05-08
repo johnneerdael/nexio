@@ -45,7 +45,7 @@ internal object HomeResolvedDisplayMapper {
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
-        val overlay = overlaysByItemKey[itemKey]
+        val overlay = overlayFromMap(overlaysByItemKey)
         val firstPaintFields = toHomeDisplayMetadata()
         val fields = overlay?.fields?.mergeFallback(firstPaintFields) ?: firstPaintFields
         val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
