@@ -73,6 +73,24 @@ class HomeReactiveHydrationPipelineTest {
     }
 
     @Test
+    fun `unchanged overlay map ignoring timestamps does not request a republish`() {
+        val baseOverlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = HomeDisplayMetadata(title = "Fight Club")
+        )
+        val current = mapOf("movie:tmdb:550" to baseOverlay)
+        val nextSameContent = mapOf(
+            "movie:tmdb:550" to baseOverlay.copy(
+                updatedAtMs = 5_000L,
+                staleAtMs = 6_000L,
+                expiresAtMs = 7_000L
+            )
+        )
+
+        assertFalse(shouldPublishHydratedHomeOverlays(current, nextSameContent))
+    }
+
+    @Test
     fun `snapshot composition preserves hero identity when overlay display is unchanged`() {
         val item = preview("tmdb:550", "Preview")
         val heroItems = listOf(item)
