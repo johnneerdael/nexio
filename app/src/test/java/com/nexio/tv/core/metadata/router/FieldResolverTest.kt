@@ -286,4 +286,51 @@ class FieldResolverTest {
 
         assertEquals(selected, document.localization.getValue(ResolvedField.OVERVIEW))
     }
+
+    @Test
+    fun `RATING field preserves preview when primary canonical rating is null`() {
+        val tmdbPreview = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            sourceRole = SourceRole.RAIL_PREVIEW,
+            fields = mapOf(ResolvedField.RATING to FieldValue(8.5, FieldOwner.PRIMARY))
+        )
+        val tvdbPrimary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            sourceRole = SourceRole.PRIMARY,
+            fields = mapOf(ResolvedField.RATING to FieldValue(0.0, FieldOwner.PRIMARY))
+        )
+
+        val document = resolver.resolveWithPreview(
+            preview = tmdbPreview,
+            primary = tvdbPrimary,
+            secondary = emptyList()
+        )
+
+        assertEquals(8.5, document.rating)
+        assertEquals(MetadataPrimaryProvider.TMDB.name, document.sourceProviders[ResolvedField.RATING])
+        assertEquals(SourceRole.RAIL_PREVIEW, document.sourceRoles[ResolvedField.RATING])
+    }
+
+    @Test
+    fun `RATING field is replaced when primary canonical rating is positive`() {
+        val tmdbPreview = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            sourceRole = SourceRole.RAIL_PREVIEW,
+            fields = mapOf(ResolvedField.RATING to FieldValue(8.5, FieldOwner.PRIMARY))
+        )
+        val tvdbPrimary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            sourceRole = SourceRole.PRIMARY,
+            fields = mapOf(ResolvedField.RATING to FieldValue(9.0, FieldOwner.PRIMARY))
+        )
+
+        val document = resolver.resolveWithPreview(
+            preview = tmdbPreview,
+            primary = tvdbPrimary,
+            secondary = emptyList()
+        )
+
+        assertEquals(9.0, document.rating)
+        assertEquals(MetadataPrimaryProvider.TVDB.name, document.sourceProviders[ResolvedField.RATING])
+    }
 }
