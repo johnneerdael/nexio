@@ -681,10 +681,16 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
             languageTag = languageTag,
             policyVersion = HOME_HYDRATED_OVERLAY_POLICY_VERSION
         ).collectLatest { overlays ->
-            if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, overlays)) {
+            // The store returns Map<aliasKey, overlay> where aliasKey is whichever alias
+            // matched on disk. Re-key by overlay.itemKey so the in-memory map uses the
+            // same row-shape keys the coordinator path emits — preventing two key shapes
+            // from coexisting in hydratedHomeOverlaysByItemKey and the silent-miss
+            // lookups that caused only 2 home.hydration_applied events on cold start.
+            val byItemKey = overlays.values.associateBy { it.itemKey }
+            if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, byItemKey)) {
                 return@collectLatest
             }
-            hydratedHomeOverlaysByItemKey.value = overlays
+            hydratedHomeOverlaysByItemKey.value = byItemKey
             scheduleUpdateCatalogRows()
         }
     }
