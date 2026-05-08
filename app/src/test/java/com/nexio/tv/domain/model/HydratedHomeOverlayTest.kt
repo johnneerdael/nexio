@@ -38,6 +38,17 @@ class HydratedHomeOverlayTest {
     }
 
     @Test
+    fun `display hash differs when only thumbnail differs`() {
+        val withoutThumbnail = HomeDisplayMetadata(title = "Same").hydratedHomeDisplayHash()
+        val withThumbnail = HomeDisplayMetadata(
+            title = "Same",
+            thumbnail = "https://example.com/thumb.jpg"
+        ).hydratedHomeDisplayHash()
+
+        assertNotEquals(withoutThumbnail, withThumbnail)
+    }
+
+    @Test
     fun `display hash distinguishes field separator inside text from adjacent field values`() {
         val separator = "\u001F"
         val embeddedSeparator = HomeDisplayMetadata(title = "A${separator}B").hydratedHomeDisplayHash()
