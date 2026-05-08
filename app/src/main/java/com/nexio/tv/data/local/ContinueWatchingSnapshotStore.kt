@@ -289,30 +289,33 @@ class ContinueWatchingSnapshotStore private constructor(
         positionMs: Long,
         durationMs: Long,
         updatedAt: Long,
-        source: ContinueWatchingRecord.Source?
+        source: ContinueWatchingRecord.Source
     ): List<ResumeIdentity> {
         val resumeSource = when (source) {
             ContinueWatchingRecord.Source.LOCAL -> ContinueWatchingSource.LOCAL
             ContinueWatchingRecord.Source.REMOTE -> ContinueWatchingSource.TRAKT_PLAYBACK
             ContinueWatchingRecord.Source.SYNTHETIC -> ContinueWatchingSource.SYNTHETIC
-            null -> return emptyList()
         }
-        val videoId = episodeContext?.let { "$contentId:${it.season}:${it.number}" } ?: contentId
-        return runCatching {
-            listOf(
-                ResumeIdentity(
-                    source = resumeSource,
-                    contentId = contentId,
-                    videoId = videoId,
-                    season = episodeContext?.season,
-                    episode = episodeContext?.number,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    progressPercent = null,
-                    lastWatchedMs = updatedAt
-                )
+        val normalizedSeason = episodeContext?.season?.takeIf { it > 0 }
+        val normalizedEpisode = episodeContext?.number?.takeIf { it > 0 }
+        val videoId = if (normalizedSeason != null && normalizedEpisode != null) {
+            "$contentId:$normalizedSeason:$normalizedEpisode"
+        } else {
+            contentId
+        }
+        return listOf(
+            ResumeIdentity(
+                source = resumeSource,
+                contentId = contentId,
+                videoId = videoId,
+                season = normalizedSeason,
+                episode = normalizedEpisode,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                progressPercent = null,
+                lastWatchedMs = updatedAt
             )
-        }.getOrDefault(emptyList())
+        )
     }
 
     private fun decodeEpisodeContext(
