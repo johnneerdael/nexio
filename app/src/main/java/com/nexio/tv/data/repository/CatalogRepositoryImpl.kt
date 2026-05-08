@@ -113,8 +113,7 @@ class CatalogRepositoryImpl @Inject constructor(
             skip = skip,
             skipStep = skipStep,
             extraArgs = extraArgs,
-            supportsSkip = supportsSkip,
-            activePosterProvider = activePosterProvider
+            supportsSkip = supportsSkip
         )
 
         when (refreshed) {
@@ -180,8 +179,7 @@ class CatalogRepositoryImpl @Inject constructor(
                 skip = skip,
                 skipStep = skipStep,
                 extraArgs = extraArgs,
-                supportsSkip = supportsSkip,
-                activePosterProvider = activePosterProvider
+                supportsSkip = supportsSkip
             )
         ) {
             is Result.Success -> {
@@ -266,8 +264,7 @@ class CatalogRepositoryImpl @Inject constructor(
         skip: Int,
         skipStep: Int,
         extraArgs: Map<String, String>,
-        supportsSkip: Boolean,
-        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider?
+        supportsSkip: Boolean
     ): Result {
         val url = buildCatalogUrl(addonBaseUrl, type, catalogId, skip, extraArgs)
         Log.d(
@@ -282,7 +279,7 @@ class CatalogRepositoryImpl @Inject constructor(
         ) {
             is NetworkResult.Success -> {
                 val items = result.data.metas.map { meta ->
-                    posterRatingsUrlResolver.apply(meta.toDomain(), activePosterProvider)
+                    meta.toDomain()
                 }
                 Log.d(
                     TAG,
