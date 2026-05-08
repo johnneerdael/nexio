@@ -2,6 +2,8 @@ package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.emptyOrNull
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 
 @Immutable
@@ -134,35 +136,27 @@ private fun Float?.sanitizedTitleRating(): Float? =
     RatingValueValidator.sanitizeTitleRating(this)
 
 private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
-    val fallbackArtwork = fallback.artwork ?: return artwork
+    val primaryArtwork = artwork?.enforceArtworkTypeBoundaries()
+    val fallbackArtwork = fallback.artwork?.enforceArtworkTypeBoundaries()
     val merged = ArtworkBundle(
-        poster = artwork?.poster ?: fallbackArtwork.poster.takeIf { displayPoster == null },
-        backdrop = artwork?.backdrop ?: fallbackArtwork.backdrop.takeIf { displayBackdrop == null },
-        logo = artwork?.logo ?: fallbackArtwork.logo.takeIf { displayLogo == null },
-        thumbnail = artwork?.thumbnail ?: fallbackArtwork.thumbnail.takeIf { displayThumbnail == null }
+        poster = primaryArtwork?.poster ?: fallbackArtwork?.poster,
+        backdrop = primaryArtwork?.backdrop ?: fallbackArtwork?.backdrop,
+        logo = primaryArtwork?.logo ?: fallbackArtwork?.logo,
+        thumbnail = primaryArtwork?.thumbnail ?: fallbackArtwork?.thumbnail
     )
-    return merged.takeUnless {
-        it.poster == null &&
-            it.backdrop == null &&
-            it.logo == null &&
-            it.thumbnail == null
-    }
+    return merged.enforceArtworkTypeBoundaries().emptyOrNull()
 }
 
 private fun HomeDisplayMetadata.mergeAppliedArtwork(base: MetaPreview): ArtworkBundle? {
-    val baseArtwork = base.artwork ?: return artwork
+    val primaryArtwork = artwork?.enforceArtworkTypeBoundaries()
+    val baseArtwork = base.artwork?.enforceArtworkTypeBoundaries()
     val merged = ArtworkBundle(
-        poster = artwork?.poster ?: baseArtwork.poster.takeIf { displayPoster == null },
-        backdrop = artwork?.backdrop ?: baseArtwork.backdrop.takeIf { displayBackdrop == null },
-        logo = artwork?.logo ?: baseArtwork.logo.takeIf { displayLogo == null },
-        thumbnail = artwork?.thumbnail ?: baseArtwork.thumbnail.takeIf { displayThumbnail == null }
+        poster = primaryArtwork?.poster ?: baseArtwork?.poster,
+        backdrop = primaryArtwork?.backdrop ?: baseArtwork?.backdrop,
+        logo = primaryArtwork?.logo ?: baseArtwork?.logo,
+        thumbnail = primaryArtwork?.thumbnail ?: baseArtwork?.thumbnail
     )
-    return merged.takeUnless {
-        it.poster == null &&
-            it.backdrop == null &&
-            it.logo == null &&
-            it.thumbnail == null
-    }
+    return merged.enforceArtworkTypeBoundaries().emptyOrNull()
 }
 
 fun homeDisplayItemKey(contentType: String, contentId: String): String {

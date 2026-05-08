@@ -4,6 +4,7 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
@@ -25,6 +26,7 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal object HomeResolvedDisplayMapper {
@@ -44,7 +46,8 @@ internal object HomeResolvedDisplayMapper {
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
         val overlay = overlaysByItemKey[itemKey]
-        val fields = toHomeDisplayMetadata()
+        val firstPaintFields = toHomeDisplayMetadata()
+        val fields = overlay?.fields?.mergeFallback(firstPaintFields) ?: firstPaintFields
         val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
         val stableIds = firstPaintStableIds.withOverlayStableId(overlay)
         val trailerState = resolveHomeTrailerDisplayState(
@@ -209,13 +212,13 @@ private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
     }
 
 private fun HomeDisplayMetadata.toResolvedArtworkBundle(): ArtworkBundle {
-    val structured = artwork ?: ArtworkBundle()
+    val structured = artwork?.enforceArtworkTypeBoundaries() ?: ArtworkBundle()
     return ArtworkBundle(
         poster = structured.poster ?: poster.toLegacyArtworkRef(ArtworkType.POSTER),
         backdrop = structured.backdrop ?: backdrop.toLegacyArtworkRef(ArtworkType.BACKDROP),
         logo = structured.logo ?: logo.toLegacyArtworkRef(ArtworkType.LOGO),
         thumbnail = structured.thumbnail ?: thumbnail.toLegacyArtworkRef(ArtworkType.THUMBNAIL)
-    )
+    ).enforceArtworkTypeBoundaries()
 }
 
 private fun String?.toLegacyArtworkRef(imageType: ArtworkType): ArtworkDisplayRef.LegacyString? =
