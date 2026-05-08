@@ -20,11 +20,18 @@ import kotlinx.coroutines.CancellationException
 
 @Singleton
 class ContinueWatchingIdentityResolver @Inject constructor(
-    private val metadataRouterFacade: MetadataRouterFacade,
+    private val metadataRouterFacade: MetadataRouterFacade?,
     private val streamFetchIdentityResolver: StreamFetchIdentityResolver
 ) {
+    internal constructor() : this(
+        metadataRouterFacade = null,
+        streamFetchIdentityResolver = StreamFetchIdentityResolver()
+    )
+
     suspend fun resolveOrFallback(input: RawContinueWatchingInput): ContinueWatchingRecord {
         val progress = input.progress
+        val facade = metadataRouterFacade
+            ?: return legacyFallback(input, IllegalStateException("identity resolver unavailable in test helper"))
         return runCatching {
             val previewStableIds = observedIds(progress)
             val request = MetadataRequest(
@@ -38,7 +45,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 seasonNumber = progress.season,
                 depth = MetadataDepth.IDENTITY
             )
-            val bundle = metadataRouterFacade.resolveStableIdBundle(
+            val bundle = facade.resolveStableIdBundle(
                 request,
                 StableIdResolutionTrigger.CONTINUE_WATCHING,
                 ContinueWatchingItemKeys.legacyParentKey(progress.contentType, progress.contentId)
