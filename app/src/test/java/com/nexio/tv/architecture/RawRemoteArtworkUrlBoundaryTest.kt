@@ -262,7 +262,7 @@ class RawRemoteArtworkUrlBoundaryTest {
             File("app/src/main/java/com/nexio/tv/data/local/ContinueWatchingSnapshotStore.kt"),
             File("app/src/main/java/com/nexio/tv/data/local/HydratedHomeOverlayStore.kt")
         )
-        val forbidden = Regex("""https://api\.(top-posters|ratingposterdb)\.com""")
+        val forbidden = Regex("""(?:https://)?api\.(top-posters|ratingposterdb)\.com""")
         val allowlistedHits = mutableListOf<Pair<String, String>>()
         val offenders = files.flatMap { file ->
             file.readText()
@@ -454,17 +454,17 @@ class RawRemoteArtworkUrlBoundaryTest {
     }
 
     private fun String.isPremiumProviderSanitizerAllowlistEntry(): Boolean =
-        trim().matches(Regex(""""https://api\.(?:top-posters|ratingposterdb)\.com/",?$"""))
+        trim().matches(Regex(""""api\.(?:top-posters|ratingposterdb)\.com",?$"""))
 
     private companion object {
         private const val CONTEXT_RADIUS = 3
         private const val RAW_BOUNDARY_TEST_PATH =
             "app/src/test/java/com/nexio/tv/architecture/RawRemoteArtworkUrlBoundaryTest.kt"
         private val expectedSnapshotSanitizerAllowlist = listOf(
-            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:73" to
-                "\"https://api.ratingposterdb.com/\",",
-            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:74" to
-                "\"https://api.top-posters.com/\""
+            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:102" to
+                "\"api.ratingposterdb.com\",",
+            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:103" to
+                "\"api.top-posters.com\""
         )
         private val expectedSnapshotSanitizerPrefixLocations =
             expectedSnapshotSanitizerAllowlist.map { it.first }
