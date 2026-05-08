@@ -300,22 +300,29 @@ class TvdbMetadataService @Inject constructor(
         language: String? = null
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> = withContext(Dispatchers.IO) {
         val distinctSeasons = seasonNumbers.distinct().sorted()
-        if (distinctSeasons.isEmpty()) return@withContext emptyMap()
 
         // D-02: Resolve merge alias for episode fetches too
         val resolvedId = resolveSeriesAlias(identity.tvdbId)
         val resolvedIdentity = identity.copy(tvdbId = resolvedId)
 
-        val seasonEpisodes = coroutineScope {
-            distinctSeasons.map { seasonNumber ->
-                async {
-                    fetchSeasonEpisodes(
-                        identity = resolvedIdentity,
-                        seasonNumber = seasonNumber,
-                        language = language
-                    )
-                }
-            }.awaitAll().flatten()
+        val seasonEpisodes = if (distinctSeasons.isEmpty()) {
+            fetchSeasonEpisodesForFilter(
+                identity = resolvedIdentity,
+                seasonNumber = null,
+                language = language
+            )
+        } else {
+            coroutineScope {
+                distinctSeasons.map { seasonNumber ->
+                    async {
+                        fetchSeasonEpisodesForFilter(
+                            identity = resolvedIdentity,
+                            seasonNumber = seasonNumber,
+                            language = language
+                        )
+                    }
+                }.awaitAll().flatten()
+            }
         }
 
         seasonEpisodes
@@ -332,15 +339,23 @@ class TvdbMetadataService @Inject constructor(
         identity: TvdbSeriesIdentity,
         seasonNumber: Int,
         language: String? = null
+    ): List<TvSeasonEpisode> = fetchSeasonEpisodesForFilter(identity, seasonNumber, language)
+
+    private suspend fun fetchSeasonEpisodesForFilter(
+        identity: TvdbSeriesIdentity,
+        seasonNumber: Int?,
+        language: String? = null
     ): List<TvSeasonEpisode> = withContext(Dispatchers.IO) {
         val normalizedLanguage = normalizeLanguage(language)
 
-        val cached = metadataDiskCacheStore.readTvdbSeasonEpisodes(
-            seriesId = identity.tvdbId,
-            seasonType = DEFAULT_SEASON_TYPE,
-            seasonNumber = seasonNumber,
-            languageTag = normalizedLanguage
-        )
+        val cached = seasonNumber?.let {
+            metadataDiskCacheStore.readTvdbSeasonEpisodes(
+                seriesId = identity.tvdbId,
+                seasonType = DEFAULT_SEASON_TYPE,
+                seasonNumber = it,
+                languageTag = normalizedLanguage
+            )
+        }
 
         // D-08: Check credential health before network call
         if (!credentialHealth.canCallTvdb()) {
@@ -372,12 +387,14 @@ class TvdbMetadataService @Inject constructor(
 
         if (localizedBundle == null || localizedBundle.englishFallbackPayloadMissing()) {
             // D-07: Serve stale cached episodes on network failure
-            val staleCached = metadataDiskCacheStore.readTvdbSeasonEpisodes(
-                seriesId = identity.tvdbId,
-                seasonType = DEFAULT_SEASON_TYPE,
-                seasonNumber = seasonNumber,
-                languageTag = normalizedLanguage
-            )
+            val staleCached = seasonNumber?.let {
+                metadataDiskCacheStore.readTvdbSeasonEpisodes(
+                    seriesId = identity.tvdbId,
+                    seasonType = DEFAULT_SEASON_TYPE,
+                    seasonNumber = it,
+                    languageTag = normalizedLanguage
+                )
+            }
             if (staleCached != null) {
                 recordDiagnostic(
                     TvdbReliabilityReason.STALE_CACHE_SERVED,
@@ -392,16 +409,22 @@ class TvdbMetadataService @Inject constructor(
 
         val mapped = localizedBundle.episodes.values
             .map { episode -> episode.metadata }
-            .filter { metadata -> metadata.seasonNumber == seasonNumber }
-            .sortedWith(compareBy<TvEpisodeMetadata> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.providerEpisodeId })
+            .filter { metadata -> seasonNumber == null || metadata.seasonNumber == seasonNumber }
+            .sortedWith(
+                compareBy<TvEpisodeMetadata> { it.seasonNumber ?: Int.MAX_VALUE }
+                    .thenBy { it.episodeNumber ?: Int.MAX_VALUE }
+                    .thenBy { it.providerEpisodeId }
+            )
 
-        metadataDiskCacheStore.writeTvdbSeasonEpisodes(
-            seriesId = identity.tvdbId,
-            seasonType = DEFAULT_SEASON_TYPE,
-            seasonNumber = seasonNumber,
-            languageTag = normalizedLanguage,
-            episodes = mapped
-        )
+        if (seasonNumber != null) {
+            metadataDiskCacheStore.writeTvdbSeasonEpisodes(
+                seriesId = identity.tvdbId,
+                seasonType = DEFAULT_SEASON_TYPE,
+                seasonNumber = seasonNumber,
+                languageTag = normalizedLanguage,
+                episodes = mapped
+            )
+        }
 
         mapped.map { metadata -> metadata.toSeasonEpisode() }
     }

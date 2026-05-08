@@ -19,6 +19,7 @@ import com.nexio.tv.data.remote.api.TvdbCompanyRecord
 import com.nexio.tv.data.remote.api.TvdbContentRating
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbGenreRecord
+import com.nexio.tv.data.remote.api.TvdbLinks
 import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
@@ -543,6 +544,59 @@ class TvdbMetadataServiceTest {
         assertEquals(62, episode?.runtimeMinutes)
         assertEquals(1, episode?.absoluteNumber)
         assertEquals(4444, episode?.linkedMovieTvdbId)
+    }
+
+    @Test
+    fun `fetch episode enrichment follows TVDB pagination when no season filter is provided`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 76733)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 76733, "default", "eng", 0, null, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 290001,
+                            seasonNumber = 29,
+                            number = 14,
+                            name = "Page zero finale"
+                        )
+                    )
+                ),
+                links = TvdbLinks(next = "https://api4.thetvdb.com/v4/series/76733/episodes/default/eng?page=1")
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 76733, "default", "eng", 1, null, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 500011,
+                            seasonNumber = 50,
+                            number = 11,
+                            name = "Everyone Will Be Shooketh!"
+                        )
+                    )
+                ),
+                links = TvdbLinks(next = null)
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = emptyList(), language = "en-US")
+
+        assertEquals("Page zero finale", episodes[29 to 14]?.title)
+        assertEquals("Everyone Will Be Shooketh!", episodes[50 to 11]?.title)
+        coVerify(exactly = 1) {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 76733, "default", "eng", 0, null, null, null)
+        }
+        coVerify(exactly = 1) {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 76733, "default", "eng", 1, null, null, null)
+        }
     }
 
     @Test

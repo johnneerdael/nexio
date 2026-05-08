@@ -33,6 +33,7 @@ import com.nexio.tv.data.remote.api.TvdbRemoteIdSearchResponse
 import com.nexio.tv.data.remote.api.TvdbSearchResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
+import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.data.integration.metadata.LocalizationPolicy
@@ -46,6 +47,8 @@ import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 import retrofit2.Response
+
+private const val TVDB_MAX_EPISODE_PAGES = 25
 
 @Singleton
 class TvdbIntegrationProvider @Inject constructor(
@@ -270,13 +273,33 @@ class TvdbIntegrationProvider @Inject constructor(
         page: Int = 0,
         season: Int? = null
     ): TvdbSeriesEpisodesData? {
+        val first = fetchSeriesEpisodesPage(tvdbId, seasonType, page, season) ?: return null
+        var combined = first.data ?: return null
+        var nextPage = page + 1
+        var nextLink = first.links?.next
+        while (!nextLink.isNullOrBlank() && nextPage < TVDB_MAX_EPISODE_PAGES) {
+            val next = fetchSeriesEpisodesPage(tvdbId, seasonType, nextPage, season) ?: break
+            val nextData = next.data ?: break
+            combined = combined.copy(episodes = combined.episodes + nextData.episodes)
+            nextLink = next.links?.next
+            nextPage += 1
+        }
+        return combined
+    }
+
+    private suspend fun fetchSeriesEpisodesPage(
+        tvdbId: Int,
+        seasonType: String,
+        page: Int,
+        season: Int?
+    ): TvdbSeriesEpisodesResponse? {
         val authorization = tvdbAuthService.bearerToken() ?: return null
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
             operationKey = "tvdb.series.episodes.season_type",
-            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:season:${season ?: "all"}:page:$page",
-            codec = gsonCodec<TvdbSeriesEpisodesData>(),
+            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:season:${season ?: "all"}:page:$page:response:v2",
+            codec = gsonCodec<TvdbSeriesEpisodesResponse>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
@@ -298,7 +321,7 @@ class TvdbIntegrationProvider @Inject constructor(
                 if (!response.isSuccessful) {
                     IntegrationLoadResult.HttpError(response.code())
                 } else {
-                    response.body()?.data?.let { IntegrationLoadResult.Success(it) }
+                    response.body()?.let { IntegrationLoadResult.Success(it) }
                         ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_series_episodes_missing")
                 }
             }
@@ -403,6 +426,45 @@ class TvdbIntegrationProvider @Inject constructor(
         season: Int? = null,
         localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): LocalizedPayloadFetch<TvdbSeriesEpisodesData> {
+        val first = fetchSeriesEpisodesTranslatedPageWithTrace(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            language = language,
+            fallbackRole = fallbackRole,
+            page = page,
+            season = season,
+            localizationPolicyVersion = localizationPolicyVersion
+        )
+        var combined = first.value?.data
+        var nextPage = page + 1
+        var nextLink = first.value?.links?.next
+        while (!nextLink.isNullOrBlank() && nextPage < TVDB_MAX_EPISODE_PAGES) {
+            val next = fetchSeriesEpisodesTranslatedPageWithTrace(
+                tvdbId = tvdbId,
+                seasonType = seasonType,
+                language = language,
+                fallbackRole = fallbackRole,
+                page = nextPage,
+                season = season,
+                localizationPolicyVersion = localizationPolicyVersion
+            )
+            val nextData = next.value?.data ?: break
+            combined = combined?.copy(episodes = combined.episodes + nextData.episodes) ?: nextData
+            nextLink = next.value.links?.next
+            nextPage += 1
+        }
+        return LocalizedPayloadFetch(value = combined, trace = first.trace)
+    }
+
+    private suspend fun fetchSeriesEpisodesTranslatedPageWithTrace(
+        tvdbId: Int,
+        seasonType: String,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        page: Int,
+        season: Int?,
+        localizationPolicyVersion: Int
+    ): LocalizedPayloadFetch<TvdbSeriesEpisodesResponse> {
         val authorization = tvdbAuthService.bearerToken()
         if (authorization == null) {
             return null.toTvdbEpisodesPayloadFetch(
@@ -421,8 +483,8 @@ class TvdbIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
             operationKey = "tvdb.series.episodes.language:$tvdbId:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
-            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
-            codec = gsonCodec<TvdbSeriesEpisodesData>(),
+            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion:response:v2",
+            codec = gsonCodec<TvdbSeriesEpisodesResponse>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
@@ -445,7 +507,7 @@ class TvdbIntegrationProvider @Inject constructor(
                 if (!response.isSuccessful) {
                     IntegrationLoadResult.HttpError(response.code())
                 } else {
-                    response.body()?.data?.let { IntegrationLoadResult.Success(it) }
+                    response.body()?.let { IntegrationLoadResult.Success(it) }
                         ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_series_episodes_language_missing")
                 }
             }
@@ -802,7 +864,7 @@ class TvdbIntegrationProvider @Inject constructor(
             )
         )
 
-    private fun TvdbSeriesEpisodesData?.toTvdbEpisodesPayloadFetch(
+    private fun <T> T?.toTvdbEpisodesPayloadFetch(
         tvdbId: Int,
         seasonType: String,
         language: String,
@@ -812,7 +874,7 @@ class TvdbIntegrationProvider @Inject constructor(
         localizationPolicyVersion: Int,
         cacheDecision: String,
         executedNetwork: Boolean
-    ): LocalizedPayloadFetch<TvdbSeriesEpisodesData> =
+    ): LocalizedPayloadFetch<T> =
         LocalizedPayloadFetch(
             value = this,
             trace = MetadataLocalizationPayloadTrace(
@@ -820,7 +882,7 @@ class TvdbIntegrationProvider @Inject constructor(
                 apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
                 language = language,
                 fallbackRole = fallbackRole,
-                cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
+                cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion:response:v2",
                 cacheDecision = cacheDecision,
                 executedNetwork = executedNetwork,
                 policyVersion = localizationPolicyVersion

@@ -832,10 +832,15 @@ class MetadataRouterFacade(
                 providerPlanRunner.run(plan).stepResults
                     .flatMap { stepResult -> stepResult.episodeMetadata.entries }
                     .associate { it.toPair() }
+            } else if (route.provider == MetadataPrimaryProvider.TVDB) {
+                val unconstrainedRoute = route.copy(seasonNumber = null)
+                val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
+                providerPlanRunner.run(plan).stepResults
+                    .flatMap { stepResult -> stepResult.episodeMetadata.entries }
+                    .associate { it.toPair() }
             } else {
-                // TVDB and TMDB require a seasonNumber at SEASON depth (enforced per-provider in
-                // ProviderPlanExecutor). Default to season 1 — the correct fallback for standard TV
-                // shows where the caller did not specify which season to hydrate.
+                // TMDB requires a seasonNumber at SEASON depth. Default to season 1 for standard
+                // TV shows where the caller did not specify which season to hydrate.
                 // Last-write-wins on duplicate (season, episode) keys — acceptable here too.
                 val season1Route = route.copy(seasonNumber = 1)
                 val plan = providerPlanExecutor.buildPlan(season1Route, MetadataDepth.SEASON)

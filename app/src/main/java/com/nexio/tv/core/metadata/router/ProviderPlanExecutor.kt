@@ -24,12 +24,11 @@ class ProviderPlanExecutor @Inject constructor() {
         }
 
         // seasonNumber may be null for providers that support unconstrained season fetches
-        // (e.g. Kitsu returns all episodes when no season filter is applied).
-        // Non-Kitsu providers (TMDB, TVDB) still require a seasonNumber at SEASON depth —
-        // validated per-provider inside tmdbSteps / tvdbSteps.
+        // (Kitsu and TVDB return all episodes when no season filter is applied).
+        // TMDB still requires a seasonNumber at SEASON depth, validated in tmdbSteps.
         // The previously blanket check(seasonNumber != null) at the buildPlan level was removed
         // as part of the anime-season-projection-phase0 fix — it blocked unconstrained Kitsu routes.
-        // Enforcement is now delegated per-provider in tmdbSteps and tvdbSteps.
+        // Enforcement is now delegated per-provider where required.
 
         if (depth == MetadataDepth.PLAYER) {
             return ProviderExecutionPlan(route = route, depth = depth, steps = emptyList())
@@ -183,9 +182,6 @@ class ProviderPlanExecutor @Inject constructor() {
 
     private fun tvdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
         validateMediaKind(route, MetadataMediaKind.SERIES)
-        check(depth != MetadataDepth.SEASON || route.seasonNumber != null) {
-            "TVDB SEASON provider plan requires seasonNumber"
-        }
 
         val steps = mutableListOf(
             step(
