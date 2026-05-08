@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -151,6 +153,30 @@ class ModernHomePresentationTest {
         assertNotNull(preview.artwork?.backdrop)
         assertNotNull(preview.artwork?.logo)
         assertEquals("tt1190634", preview.firstPaintStableIds.imdb)
+
+        val poster = preview.artwork?.poster
+        assertTrue(poster is ArtworkDisplayRef.LegacyString)
+        poster as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.POSTER, poster.imageType)
+        assertTrue(poster.value.contains("provider:RPDB"))
+
+        val backdrop = preview.artwork?.backdrop
+        assertTrue(backdrop is ArtworkDisplayRef.LegacyString)
+        backdrop as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.BACKDROP, backdrop.imageType)
+
+        val logo = preview.artwork?.logo
+        assertTrue(logo is ArtworkDisplayRef.LegacyString)
+        logo as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.LOGO, logo.imageType)
+    }
+
+    @Test
+    fun `provider ids derived from mixed case tmdb tv content id still extract numeric id`() {
+        val ids = providerIdsFromContinueWatchingContentId("TMDB:TV:76479")
+        assertEquals("76479", ids.tmdb)
+        assertNull(ids.tvdb)
+        assertNull(ids.imdb)
     }
 
     @Test
@@ -179,6 +205,17 @@ class ModernHomePresentationTest {
 
         assertNotNull(bundle?.poster)
         assertNotNull(bundle?.backdrop)
+
+        val poster = bundle?.poster
+        assertTrue(poster is ArtworkDisplayRef.LegacyString)
+        poster as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.POSTER, poster.imageType)
+        assertTrue(poster.value.contains("provider:RPDB"))
+
+        val backdrop = bundle?.backdrop
+        assertTrue(backdrop is ArtworkDisplayRef.LegacyString)
+        backdrop as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.BACKDROP, backdrop.imageType)
     }
 
     @Test
