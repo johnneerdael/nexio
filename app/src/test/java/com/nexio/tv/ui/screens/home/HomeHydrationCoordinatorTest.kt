@@ -856,6 +856,237 @@ class HomeHydrationCoordinatorTest {
         )
     }
 
+    @Test
+    fun `trakt_tv_row_without_first_paint_artwork_hydrates_tvdb_and_premium_artwork`() = runTest {
+        // Trakt Trending Show fixture with no first-paint artwork. The Trakt rail surfaced
+        // ProviderIds for Trakt/TMDB/TVDB/IMDb. The TV artwork chain must produce:
+        //   - route provider = TVDB
+        //   - canonical identity = TVDB:355567
+        //   - hydrated artwork = RPDB poster + TVDB backdrop + TVDB logo (representing
+        //     the ArtworkRouter's per-type selection downstream of TVDB candidates +
+        //     RPDB premium candidate)
+        //   - overlay aliases include the row key, canonical TVDB key, and series/tv
+        //     variants for trakt/imdb/tmdb so Home rows can read the overlay back under
+        //     any of the in-flight content IDs.
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        val aliasesSlot = slot<Set<String>>()
+        val requestSlot = slot<com.nexio.tv.core.metadata.router.MetadataRequest>()
+
+        val firstPaintIds = ProviderIds(
+            trakt = "171028",
+            tmdb = "76479",
+            tvdb = "355567",
+            imdb = "tt1190634"
+        )
+        val rpdbPosterRef = ArtworkDisplayRef.LegacyString(
+            value = "nexio-artwork://decision/artwork-decision:poster:canonical:tvdb:series-355567:provider:RPDB:premium:true:policy:1",
+            imageType = ArtworkType.POSTER,
+            trace = ArtworkTrace(
+                selectedProvider = "RPDB",
+                sourceRole = "PREMIUM"
+            )
+        )
+        val tvdbBackdropRef = ArtworkDisplayRef.LegacyString(
+            value = "nexio-artwork://asset/artwork-asset:TVDB:backdrop:urlHash:abc:variant:none:imageLang:en:policy:1",
+            imageType = ArtworkType.BACKDROP,
+            trace = ArtworkTrace(
+                selectedProvider = "TVDB",
+                sourceRole = "PRIMARY"
+            )
+        )
+        val tvdbLogoRef = ArtworkDisplayRef.LegacyString(
+            value = "nexio-artwork://asset/artwork-asset:TVDB:logo:urlHash:def:variant:none:imageLang:en:policy:1",
+            imageType = ArtworkType.LOGO,
+            trace = ArtworkTrace(
+                selectedProvider = "TVDB",
+                sourceRole = "PRIMARY"
+            )
+        )
+        val hydratedArtwork = ArtworkBundle(
+            poster = rpdbPosterRef,
+            backdrop = tvdbBackdropRef,
+            logo = tvdbLogoRef
+        )
+
+        coEvery { facade.resolveRequest(capture(requestSlot)) } returns MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.TVDB,
+                parentId = "trakt:171028",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                language = "en-US",
+                targetIds = mapOf(MetadataPrimaryProvider.TVDB to "355567"),
+                trace = listOf(MetadataRouteTrace(MetadataDecisionReason.ITEM_TYPE_SERIES, "series item type routes to TVDB"))
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_CORE,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "tvdb:355567",
+                title = "The Boys",
+                overview = "The Boys overview",
+                poster = "tvdb-poster.jpg",
+                backdrop = "tvdb-backdrop.jpg",
+                logo = "tvdb-logo.png",
+                rating = 8.4,
+                runtimeMinutes = 60,
+                genres = listOf("Action"),
+                releaseDate = "2019-07-26",
+                fieldOwners = mapOf(ResolvedField.TITLE to FieldOwner.PRIMARY),
+                ignoredOverwrites = emptyList(),
+                sourceRoles = mapOf(ResolvedField.TITLE to SourceRole.PRIMARY),
+                sourceProviders = mapOf(ResolvedField.TITLE to "TVDB")
+            ),
+            displayMetadata = HomeDisplayMetadata(
+                title = "The Boys",
+                description = "The Boys overview",
+                imdbRating = 8.4f,
+                ratingSource = TitleRatingSource.TMDB,
+                genres = listOf("Action"),
+                releaseInfo = "2019-07-26",
+                posterProviderTag = "rpdb",
+                artwork = hydratedArtwork
+            ),
+            trace = emptyList()
+        )
+        coEvery {
+            facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any())
+        } returns StableIdBundle(
+            itemKey = "series:trakt:171028",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(
+                tmdbMovieId = null,
+                tvdbSeriesId = "355567",
+                kitsuAnimeId = null
+            ),
+            sidecars = SidecarStableIds(imdbId = "tt1190634"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TRAKT,
+                sourceItemId = "trakt:171028",
+                railId = RailSource.BUILT_IN_TRAKT.name,
+                observedIds = firstPaintIds
+            ),
+            evidence = listOf(StableIdEvidence("trakt", "tvdb", networkExecuted = false, resultId = "355567")),
+            resolvedAtMs = 1L
+        )
+        coEvery { store.upsert(capture(overlaySlot), capture(aliasesSlot)) } returns Unit
+
+        val traktTvRow = MetaPreview(
+            id = "trakt:171028",
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "The Boys",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = "The Boys overview",
+            releaseInfo = "2019",
+            runtime = null,
+            imdbRating = null,
+            ratingSource = null,
+            genres = listOf("Action"),
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintSourceProvider = ProviderId.TRAKT,
+            firstPaintStableIds = firstPaintIds,
+            firstPaintRailSource = RailSource.BUILT_IN_TRAKT,
+            firstPaintSourceItemId = "trakt:171028",
+            artwork = null
+        )
+
+        val result = coordinator(facade, store, sink).hydrate(
+            item = traktTvRow,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull("hydration must produce an overlay", result)
+
+        // Hydration request: ProviderIds survive preview mapping into the source context.
+        val capturedRequest = requestSlot.captured
+        assertEquals("trakt:171028", capturedRequest.contentId)
+        assertEquals(ContentType.SERIES, capturedRequest.contentType)
+        assertEquals("series", capturedRequest.sourceContext.itemType)
+        assertEquals(firstPaintIds.trakt, capturedRequest.sourceContext.previewStableIds.trakt)
+        assertEquals(firstPaintIds.tmdb, capturedRequest.sourceContext.previewStableIds.tmdb)
+        assertEquals(firstPaintIds.tvdb, capturedRequest.sourceContext.previewStableIds.tvdb)
+        assertEquals(firstPaintIds.imdb, capturedRequest.sourceContext.previewStableIds.imdb)
+        assertEquals("TRAKT", capturedRequest.sourceContext.previewSourceProvider)
+        assertEquals(RailSource.BUILT_IN_TRAKT.name, capturedRequest.sourceContext.previewRailSource)
+
+        // Route provider = TVDB (proves series item type → TVDB even with a Trakt parent id).
+        // Canonical identity follows the TVDB route + bundle (not the Trakt parent id).
+        assertEquals(ProviderId.TVDB, overlaySlot.captured.canonicalProvider)
+        assertEquals("355567", overlaySlot.captured.canonicalId)
+        assertEquals("tt1190634", overlaySlot.captured.imdbId)
+        assertEquals(ContentType.SERIES, overlaySlot.captured.contentType)
+
+        // Overlay fields preserve the per-type selected artwork: RPDB poster, TVDB backdrop, TVDB logo.
+        val artwork = overlaySlot.captured.fields.artwork
+        assertNotNull("hydrated artwork bundle must be present on the overlay", artwork)
+        assertNotNull("hydrated poster must survive overlay write", artwork?.poster)
+        assertNotNull("hydrated backdrop must survive overlay write", artwork?.backdrop)
+        assertNotNull("hydrated logo must survive overlay write", artwork?.logo)
+
+        val poster = artwork?.poster
+        assertTrue("poster should be a typed display ref", poster is ArtworkDisplayRef.LegacyString)
+        poster as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.POSTER, poster.imageType)
+        assertTrue("poster ref should encode the RPDB premium decision", poster.value.contains("provider:RPDB"))
+
+        val backdrop = artwork?.backdrop
+        assertTrue("backdrop should be a typed display ref", backdrop is ArtworkDisplayRef.LegacyString)
+        backdrop as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.BACKDROP, backdrop.imageType)
+        assertTrue("backdrop ref must come from TVDB", backdrop.value.contains("TVDB:backdrop"))
+
+        val logo = artwork?.logo
+        assertTrue("logo should be a typed display ref", logo is ArtworkDisplayRef.LegacyString)
+        logo as ArtworkDisplayRef.LegacyString
+        assertEquals(ArtworkType.LOGO, logo.imageType)
+        assertTrue("logo ref must come from TVDB", logo.value.contains("TVDB:logo"))
+
+        // Overlay published with a row-key alias so display projections find it under the
+        // raw Trakt content id, plus canonical TVDB and series/tv variants for every
+        // provider id observed during routing.
+        val aliases = aliasesSlot.captured
+        assertTrue("row key must alias the overlay", "series:trakt:171028" in aliases)
+        assertTrue("typed series alias for trakt id", "series:trakt:171028" in aliases)
+        assertTrue("typed series alias for canonical TVDB id", "series:tvdb:355567" in aliases)
+        assertTrue("typed tv alias for canonical TVDB id", "tv:tvdb:355567" in aliases)
+        assertTrue("typed series alias for IMDb id", "series:imdb:tt1190634" in aliases)
+        assertTrue("typed tv alias for IMDb id", "tv:imdb:tt1190634" in aliases)
+        assertTrue("typed series alias for TMDB id", "series:tmdb:76479" in aliases)
+        assertTrue("typed tv alias for TMDB id", "tv:tmdb:76479" in aliases)
+
+        // Sequence trace confirms the full chain reached overlay write and apply.
+        assertEquals(
+            listOf(
+                "home.hydration_started",
+                "home.hydration_overlay_written",
+                "home.rating_and_artwork_surface",
+                "home.hydration_applied"
+            ),
+            sink.events.map { it.eventType }
+        )
+        val artworkSurface = sink.events.single { it.eventType == "home.rating_and_artwork_surface" }
+        @Suppress("UNCHECKED_CAST")
+        val artworkPayload = artworkSurface.payload as Map<String, Any?>
+        assertEquals("TVDB", artworkPayload["routeProvider"])
+        assertEquals(true, artworkPayload["overlayApplied"])
+    }
+
     private fun coordinator(
         facade: MetadataRouterFacade,
         store: HydratedHomeOverlayStore,
