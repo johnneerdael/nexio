@@ -126,6 +126,69 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching in progress route keeps resume id and stream fetch id separate`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    contentType = "series",
+                    season = 2,
+                    episode = 1,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt9794044:2:1"
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268", args.getValue("contentId"))
+        assertEquals("1234000", args.getValue("resumePositionMs"))
+        assertEquals("2468000", args.getValue("resumeDurationMs"))
+        assertEquals("50.0", args.getValue("resumeProgressPercent"))
+        assertEquals(WatchProgress.SOURCE_TRAKT_PLAYBACK, args.getValue("resumeSource"))
+    }
+
+    @Test
+    fun `manual continue watching in progress route keeps resume id and stream fetch id separate`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    contentType = "series",
+                    season = 2,
+                    episode = 1,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt9794044:2:1"
+            )
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268", args.getValue("contentId"))
+        assertEquals("1234000", args.getValue("resumePositionMs"))
+        assertEquals("2468000", args.getValue("resumeDurationMs"))
+        assertEquals("50.0", args.getValue("resumeProgressPercent"))
+        assertEquals(WatchProgress.SOURCE_TRAKT_PLAYBACK, args.getValue("resumeSource"))
+    }
+
+    @Test
     fun `continue watching in progress route preserves stable ids addon context and resume args`() {
         val route = buildContinueWatchingStreamRoute(
             item = ContinueWatchingItem.InProgress(
