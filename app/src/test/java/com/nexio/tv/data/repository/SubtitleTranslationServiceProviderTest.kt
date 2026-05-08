@@ -299,6 +299,58 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
+    fun bareSingleItemObjectResponseIsAcceptedAsSingleCueTranslation() = runTest {
+        // Regression: when a single cue is sent, some OpenAI-compatible providers
+        // (observed with deepseek/deepseek-v4-flash on OpenRouter) return the JSON
+        // content as a bare object {"id":0,"text":"…"} instead of [...] or
+        // {"items":[...]}. The parser previously threw "empty translation payload",
+        // which the BuiltInSubtitleCueTranslator caches as a 60-second cooldown
+        // and surfaces as a flood of TextRenderer "Cue group translation failed"
+        // warnings during playback.
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"id\":0,\"text\":\"Hallo\"}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+
+            val result = service.translateCueTexts(
+                texts = listOf("Hello"),
+                targetLanguageCode = "nl",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                )
+            )
+
+            assertEquals(mapOf("Hello" to "Hallo"), result.getOrThrow())
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun authProviderErrorDoesNotSplitAdaptiveChunks() = runTest {
         assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode = 401)
     }

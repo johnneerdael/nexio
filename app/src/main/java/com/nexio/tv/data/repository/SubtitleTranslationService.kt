@@ -1552,7 +1552,11 @@ class SubtitleTranslationService @Inject constructor(
         val normalized = sanitizeJsonResponse(responseText)
         val array = when {
             normalized.startsWith("[") -> JSONArray(normalized)
-            normalized.startsWith("{") -> JSONObject(normalized).optJSONArray("items") ?: JSONArray()
+            normalized.startsWith("{") -> {
+                val obj = JSONObject(normalized)
+                obj.optJSONArray("items")
+                    ?: if (obj.has("id") && obj.has("text")) JSONArray().put(obj) else JSONArray()
+            }
             else -> JSONArray()
         }
         if (array.length() == 0) {
@@ -1844,7 +1848,11 @@ class SubtitleTranslationService @Inject constructor(
         val normalized = sanitizeJsonResponse(responseText)
         val array = when {
             normalized.startsWith("[") -> JSONArray(normalized)
-            normalized.startsWith("{") -> JSONObject(normalized).optJSONArray("items") ?: JSONArray()
+            normalized.startsWith("{") -> {
+                val obj = JSONObject(normalized)
+                obj.optJSONArray("items")
+                    ?: if (obj.has("id") && obj.has("text")) JSONArray().put(obj) else JSONArray()
+            }
             else -> JSONArray()
         }
         if (array.length() == 0) {
