@@ -545,6 +545,187 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
+    fun `snapshot_write_rejects_backdrop_ref_in_poster_slot`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val backdropRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:backdrop:urlHash:abc:variant:none:imageLang:en:policy:1"
+        val snapshot = sampleSnapshotWithPoster(
+            poster = backdropRef,
+            posterProviderTag = "tvdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains(backdropRef))
+        assertClearedPosterFields(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `snapshot_write_rejects_poster_ref_in_background_slot`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val poster = "https://images.example/poster.jpg"
+        val backgroundRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:poster:urlHash:abc:variant:none:imageLang:en:policy:1"
+        val row = sampleRow(
+            addonId = "addon",
+            catalogId = "movies",
+            poster = poster,
+            posterProviderTag = "rpdb",
+            background = backgroundRef
+        )
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains(backgroundRef))
+        assertPosterFieldsPreserved(store.read("RPDB:12345"), poster, "rpdb")
+        assertBackgroundFieldsCleared(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `snapshot_write_rejects_backdrop_ref_in_logo_slot`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val poster = "https://images.example/poster.jpg"
+        val logoRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:backdrop:urlHash:abc:variant:none:imageLang:en:policy:1"
+        val row = sampleRow(
+            addonId = "addon",
+            catalogId = "movies",
+            poster = poster,
+            posterProviderTag = "rpdb",
+            logo = logoRef
+        )
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains(logoRef))
+        assertPosterFieldsPreserved(store.read("RPDB:12345"), poster, "rpdb")
+        assertLogoFieldsCleared(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `snapshot_write_preserves_type_correct_artwork_refs`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val posterRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:poster:urlHash:posterhash:variant:none:imageLang:en:policy:1"
+        val backgroundRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:backdrop:urlHash:backdrophash:variant:none:imageLang:en:policy:1"
+        val logoRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:logo:urlHash:logohash:variant:none:imageLang:en:policy:1"
+        val row = sampleRow(
+            addonId = "addon",
+            catalogId = "movies",
+            poster = posterRef,
+            posterProviderTag = "tvdb",
+            background = backgroundRef,
+            logo = logoRef
+        )
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertTrue(raw.contains(posterRef))
+        assertTrue(raw.contains(backgroundRef))
+        assertTrue(raw.contains(logoRef))
+        val restored = store.read("RPDB:12345")
+        assertPosterFieldsPreserved(restored, posterRef, "tvdb")
+        assertBackgroundFieldsPreserved(restored, backgroundRef)
+        assertLogoFieldsPreserved(restored, logoRef)
+    }
+
+    @Test
+    fun `snapshot_write_wrong_type_trace_uses_hashes_not_raw_refs`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val traceSink = RecordingTraceSink()
+        val wrongTypeRef =
+            "nexio-artwork://asset/artwork-asset:TVDB:backdrop:urlHash:secretref:variant:none:imageLang:en:policy:1"
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            traceSink = traceSink
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = wrongTypeRef,
+            posterProviderTag = "tvdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val writeBarrierPayloads = traceSink.events
+            .filter { event -> event.eventType == "home.snapshot_write_barrier_repaired" }
+            .map { event -> event.payload as Map<*, *> }
+            .filter { payload -> payload["reason"] == "wrong_artwork_type" }
+        assertEquals(3, writeBarrierPayloads.size)
+        assertTrue(writeBarrierPayloads.all { payload -> payload["field"] == "poster" })
+        assertTrue(writeBarrierPayloads.all { payload -> (payload["assetKeyHash"] as String).isNotBlank() })
+        assertTrue(writeBarrierPayloads.all { payload -> payload["destructive"] == true })
+        assertTrue(writeBarrierPayloads.all { payload -> payload["posterProviderTagAction"] == "clear" })
+        assertFalse(writeBarrierPayloads.joinToString("\n").contains(wrongTypeRef))
+        assertFalse(writeBarrierPayloads.joinToString("\n").contains("secretref"))
+    }
+
+    @Test
     fun `snapshot write barrier redacts unknown validator reasons from trace payloads`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
@@ -966,7 +1147,9 @@ class HomeCatalogSnapshotStoreTest {
         addonId: String,
         catalogId: String,
         poster: String? = "poster",
-        posterProviderTag: String? = null
+        posterProviderTag: String? = null,
+        background: String? = "background",
+        logo: String? = "logo"
     ): CatalogRow {
         return CatalogRow(
             addonId = addonId,
@@ -983,8 +1166,8 @@ class HomeCatalogSnapshotStoreTest {
                     name = "Sample",
                     poster = poster,
                     posterShape = PosterShape.POSTER,
-                    background = "background",
-                    logo = "logo",
+                    background = background,
+                    logo = logo,
                     description = "description",
                     releaseInfo = "2025",
                     imdbRating = 8.1f,
@@ -1046,6 +1229,44 @@ class HomeCatalogSnapshotStoreTest {
         items.forEach { item ->
             assertEquals(expectedPoster, item?.poster)
             assertEquals(expectedPosterProviderTag, item?.posterProviderTag)
+        }
+    }
+
+    private fun assertBackgroundFieldsCleared(snapshot: HomeCatalogSnapshotStore.Snapshot?) {
+        snapshotItems(snapshot).forEach { item ->
+            assertNull(item?.background)
+        }
+    }
+
+    private fun assertBackgroundFieldsPreserved(
+        snapshot: HomeCatalogSnapshotStore.Snapshot?,
+        expectedBackground: String
+    ) {
+        snapshotItems(snapshot).forEach { item ->
+            assertEquals(expectedBackground, item?.background)
+        }
+    }
+
+    private fun assertLogoFieldsCleared(snapshot: HomeCatalogSnapshotStore.Snapshot?) {
+        snapshotItems(snapshot).forEach { item ->
+            assertNull(item?.logo)
+        }
+    }
+
+    private fun assertLogoFieldsPreserved(
+        snapshot: HomeCatalogSnapshotStore.Snapshot?,
+        expectedLogo: String
+    ) {
+        snapshotItems(snapshot).forEach { item ->
+            assertEquals(expectedLogo, item?.logo)
+        }
+    }
+
+    private fun snapshotItems(snapshot: HomeCatalogSnapshotStore.Snapshot?): List<MetaPreview?> {
+        return buildList {
+            add(snapshot?.catalogRows?.single()?.items?.single())
+            add(snapshot?.fullCatalogRows?.single()?.items?.single())
+            add(snapshot?.heroItems?.single())
         }
     }
 
