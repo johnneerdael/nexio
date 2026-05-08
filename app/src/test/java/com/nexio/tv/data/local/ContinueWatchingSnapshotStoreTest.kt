@@ -26,6 +26,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -517,6 +518,27 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `read synthesizes movie shaped resume identity for episode context with zero season`() {
+        val store = storeWithRawSnapshot(
+            validRecordJson(
+                episodeContextJson = """{"season":0,"number":0}""",
+                resumeIdentitiesJson = "[]",
+                primaryResumeLookupKey = null
+            ),
+            languageTag = "en"
+        )
+
+        val record = store.read(profileId = 1)?.records?.singleOrNull()
+
+        assertEquals("movie:tmdb:1", record?.parentId)
+        val identity = record?.resumeIdentities?.singleOrNull()
+        assertNotNull(identity)
+        assertNull(identity?.season)
+        assertNull(identity?.episode)
+        assertEquals("movie:tmdb:1", identity?.videoId)
+    }
+
+    @Test
     fun `read keeps record when click time metadata is malformed`() {
         val store = storeWithRawSnapshot(
             validRecordJson(
@@ -544,10 +566,26 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     private fun validRecordJson(
-        clickTimeDisplayMetadata: String? = null
+        clickTimeDisplayMetadata: String? = null,
+        episodeContextJson: String? = null,
+        resumeIdentitiesJson: String = """[{
+                  "source": "LOCAL",
+                  "contentId": "tt1",
+                  "videoId": "tt1",
+                  "positionMs": 10,
+                  "durationMs": 100,
+                  "lastWatchedMs": 1000
+                }]""",
+        primaryResumeLookupKey: String? = "tt1|tt1|null|null"
     ): String {
         val clickTimeField = clickTimeDisplayMetadata
             ?.let { """, "clickTimeDisplayMetadata": $it""" }
+            .orEmpty()
+        val episodeContextField = episodeContextJson
+            ?.let { """"episodeContext": $it,""" }
+            .orEmpty()
+        val primaryLookupField = primaryResumeLookupKey
+            ?.let { """, "primaryResumeLookupKey": "$it"""" }
             .orEmpty()
         return """
             {
@@ -566,17 +604,11 @@ class ContinueWatchingSnapshotStoreTest {
                 "routingVersion": 1,
                 "positionMs": 10,
                 "durationMs": 100,
+                $episodeContextField
                 "source": "LOCAL",
                 "updatedAt": 1000,
-                "resumeIdentities": [{
-                  "source": "LOCAL",
-                  "contentId": "tt1",
-                  "videoId": "tt1",
-                  "positionMs": 10,
-                  "durationMs": 100,
-                  "lastWatchedMs": 1000
-                }],
-                "primaryResumeLookupKey": "tt1|tt1|null|null"
+                "resumeIdentities": $resumeIdentitiesJson
+                $primaryLookupField
                 $clickTimeField
               }],
               "displayMetadataByItemKey": {},
