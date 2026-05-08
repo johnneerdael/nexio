@@ -22,8 +22,13 @@ class NexioArtworkFetcher(
     override suspend fun fetch(): FetchResult? {
         val result = when {
             assetKey != null -> {
-                val file = repository.getExistingFile(assetKey) ?: return null
-                ArtworkFetchFile(file = file, mimeType = null)
+                val existing = repository.getExistingFile(assetKey)
+                if (existing != null) {
+                    ArtworkFetchFile(file = existing, mimeType = null)
+                } else {
+                    val rehydrated = repository.getOrRehydrateAsset(assetKey) ?: return null
+                    ArtworkFetchFile(file = rehydrated.localFile, mimeType = rehydrated.mimeType)
+                }
             }
             decisionKey != null -> {
                 val materialized = repository.getOrFetchDecision(decisionKey) ?: return null
