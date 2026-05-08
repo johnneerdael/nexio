@@ -868,6 +868,20 @@ class HomeHydrationCoordinatorTest {
         //   - overlay aliases include the row key, canonical TVDB key, and series/tv
         //     variants for trakt/imdb/tmdb so Home rows can read the overlay back under
         //     any of the in-flight content IDs.
+        //
+        // Lower-layer contracts (mocked here, asserted there):
+        //   - TVDB type 2/3/23 -> POSTER/BACKDROP/LOGO mapping ->
+        //     TvdbArtworkCandidateMapperTest / TvdbMetadataProviderAdapterArtworkTest
+        //   - RPDB premium poster candidate generation from ProviderIds ->
+        //     MetadataArtworkDecisionResolverTest
+        //   - ArtworkRouter per-type selection (RPDB poster vs TVDB backdrop/logo) ->
+        //     ArtworkRouterTest
+        //   - Overlay alias shape (series/tv variants, canonical TVDB key) ->
+        //     HomeArtworkOverlayKeysTest
+        //   - Portrait poster card never falling back to backdrop ->
+        //     ModernHomePresentationTest
+        //   - tmdb:tv:<id> parser ->
+        //     MetadataRouterContentIdParserTest / MetadataIdParserTypedTmdbTest
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val sink = RecordingTraceSink()
@@ -1043,6 +1057,8 @@ class HomeHydrationCoordinatorTest {
         assertTrue("poster should be a typed display ref", poster is ArtworkDisplayRef.LegacyString)
         poster as ArtworkDisplayRef.LegacyString
         assertEquals(ArtworkType.POSTER, poster.imageType)
+        // "provider:RPDB" is the ArtworkDecisionKey wire format -- see ArtworkDecisionKey.serialize().
+        // A change to that segment naming should reflect here.
         assertTrue("poster ref should encode the RPDB premium decision", poster.value.contains("provider:RPDB"))
 
         val backdrop = artwork?.backdrop
@@ -1061,8 +1077,10 @@ class HomeHydrationCoordinatorTest {
         // raw Trakt content id, plus canonical TVDB and series/tv variants for every
         // provider id observed during routing.
         val aliases = aliasesSlot.captured
-        assertTrue("row key must alias the overlay", "series:trakt:171028" in aliases)
-        assertTrue("typed series alias for trakt id", "series:trakt:171028" in aliases)
+        assertTrue(
+            "series:trakt:171028 must alias the overlay (row key + typed series alias for trakt)",
+            "series:trakt:171028" in aliases
+        )
         assertTrue("typed series alias for canonical TVDB id", "series:tvdb:355567" in aliases)
         assertTrue("typed tv alias for canonical TVDB id", "tv:tvdb:355567" in aliases)
         assertTrue("typed series alias for IMDb id", "series:imdb:tt1190634" in aliases)
@@ -1071,6 +1089,8 @@ class HomeHydrationCoordinatorTest {
         assertTrue("typed tv alias for TMDB id", "tv:tmdb:76479" in aliases)
 
         // Sequence trace confirms the full chain reached overlay write and apply.
+        // Exact sequence asserted: any new trace event added to HomeHydrationCoordinator
+        // must be reflected here so observability changes don't sneak through unnoticed.
         assertEquals(
             listOf(
                 "home.hydration_started",
