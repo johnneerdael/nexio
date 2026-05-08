@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.applyTo
+import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
@@ -4101,7 +4102,10 @@ internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPrevi
         releaseInfo = displayMetadata.releaseInfo ?: info.releaseInfo ?: info.released,
         imdbRating = info.imdbRating ?: displayMetadata.imdbRating,
         tomatoesRating = displayMetadata.tomatoesRating,
-        genres = info.genres.ifEmpty { displayMetadata.genres }
+        genres = info.genres.ifEmpty { displayMetadata.genres },
+        posterProviderTag = displayMetadata.posterProviderTag,
+        artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
+        firstPaintStableIds = providerIdsFromContinueWatchingContentId(info.contentId)
     )
 }
 

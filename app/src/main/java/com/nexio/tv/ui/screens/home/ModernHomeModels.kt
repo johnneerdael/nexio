@@ -13,9 +13,11 @@ import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
+import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -406,10 +408,9 @@ internal fun buildContinueWatchingItem(
                         displayMetadata.displayPoster
                     )
                 } else {
-                    firstNonBlank(
-                        displayMetadata.displayPoster,
-                        displayMetadata.displayBackdrop
-                    )
+                    // Portrait poster cards must take their image only from poster sources
+                    // (Task 3 step 5). Backdrop/logo are NOT valid fallbacks here.
+                    displayMetadata.displayPoster
                 }
             )
         }
@@ -440,9 +441,11 @@ internal fun buildContinueWatchingItem(
                         item.info.thumbnail
                     )
                 } else {
+                    // Portrait poster cards: poster sources only. Episode thumbnails are also
+                    // permitted because they are episode-specific portrait/landscape stills,
+                    // but backdrop/logo are NOT valid fallbacks here.
                     firstNonBlank(
                         displayMetadata.displayPoster,
-                        displayMetadata.displayBackdrop,
                         item.info.thumbnail
                     )
                 }
@@ -465,17 +468,16 @@ internal fun buildContinueWatchingItem(
                 )
             }
         } else {
+            // Portrait poster card: poster sources only. Episode thumbnails are series-specific
+            // portrait stills which are acceptable; backdrop/logo are NOT valid fallbacks.
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
                     heroPreview.poster,
                     displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop
+                    item.episodeThumbnail
                 )
             } else {
-                firstNonBlank(
-                    displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop
-                )
+                displayMetadata.displayPoster
             }
         }
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
@@ -493,9 +495,10 @@ internal fun buildContinueWatchingItem(
                 )
             }
         } else {
+            // Portrait poster card: poster sources only. Episode thumbnails are acceptable;
+            // backdrop/logo are NOT valid fallbacks here.
             firstNonBlank(
                 displayMetadata.displayPoster,
-                displayMetadata.displayBackdrop,
                 item.info.thumbnail
             )
         }
@@ -544,8 +547,37 @@ internal fun continueWatchingInProgressToMetaPreview(item: ContinueWatchingItem.
         releaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
         imdbRating = item.episodeImdbRating ?: displayMetadata.imdbRating,
         tomatoesRating = displayMetadata.tomatoesRating,
-        genres = item.genres.ifEmpty { displayMetadata.genres }
+        genres = item.genres.ifEmpty { displayMetadata.genres },
+        posterProviderTag = displayMetadata.posterProviderTag,
+        artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
+        firstPaintStableIds = providerIdsFromContinueWatchingContentId(item.progress.contentId)
     )
+}
+
+/**
+ * Maps a Continue Watching content ID to a [ProviderIds] using only durable identifiers.
+ *
+ * Used by all three CW MetaPreview projection sites so first-paint cache lookups have stable
+ * IDs available without going back through display metadata. Only honest mappings are emitted —
+ * we never derive provider IDs from titles or release years.
+ */
+internal fun providerIdsFromContinueWatchingContentId(contentId: String): ProviderIds {
+    val value = contentId.trim()
+    if (value.isBlank()) return ProviderIds()
+    return when {
+        value.startsWith("tt", ignoreCase = true) -> ProviderIds(imdb = value)
+        value.startsWith("imdb:", ignoreCase = true) ->
+            ProviderIds(imdb = value.substringAfter(':').takeIf { it.isNotBlank() })
+        value.startsWith("tvdb:", ignoreCase = true) ->
+            ProviderIds(tvdb = value.substringAfter(':').takeIf { it.isNotBlank() })
+        value.startsWith("tmdb:tv:", ignoreCase = true) ->
+            ProviderIds(tmdb = value.substringAfter("tmdb:tv:").takeIf { it.isNotBlank() })
+        value.startsWith("tmdb:", ignoreCase = true) ->
+            ProviderIds(tmdb = value.substringAfter(':').takeIf { it.isNotBlank() })
+        value.startsWith("trakt:", ignoreCase = true) ->
+            ProviderIds(trakt = value.substringAfter(':').takeIf { it.isNotBlank() })
+        else -> ProviderIds()
+    }
 }
 
 internal fun buildCatalogItem(

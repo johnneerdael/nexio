@@ -32,6 +32,7 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -675,7 +676,9 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 tomatoesRating = displayMetadata.tomatoesRating,
                 genres = displayMetadata.genres.takeIf { it.isNotEmpty() } ?: genres,
                 language = null,
-                posterProviderTag = displayMetadata.posterProviderTag
+                posterProviderTag = displayMetadata.posterProviderTag,
+                artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
+                firstPaintStableIds = providerIdsFromContinueWatchingContentId(progress.contentId)
             )
         }
 
@@ -697,7 +700,9 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 tomatoesRating = displayMetadata.tomatoesRating,
                 genres = displayMetadata.genres.takeIf { it.isNotEmpty() } ?: info.genres,
                 language = null,
-                posterProviderTag = displayMetadata.posterProviderTag
+                posterProviderTag = displayMetadata.posterProviderTag,
+                artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
+                firstPaintStableIds = providerIdsFromContinueWatchingContentId(info.contentId)
             )
         }
     }
