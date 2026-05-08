@@ -562,19 +562,23 @@ internal fun continueWatchingInProgressToMetaPreview(item: ContinueWatchingItem.
  * we never derive provider IDs from titles or release years.
  */
 internal fun providerIdsFromContinueWatchingContentId(contentId: String): ProviderIds {
-    val value = contentId.trim()
+    // Normalize to lowercase so the `substringAfter` extractions below are unambiguous
+    // regardless of whether upstream content IDs arrive uppercased (e.g., "TMDB:TV:76479").
+    // Without normalization, a case-insensitive `startsWith` match combined with a
+    // case-sensitive `substringAfter` literal would silently return the entire string.
+    val value = contentId.trim().lowercase()
     if (value.isBlank()) return ProviderIds()
     return when {
-        value.startsWith("tt", ignoreCase = true) -> ProviderIds(imdb = value)
-        value.startsWith("imdb:", ignoreCase = true) ->
+        value.startsWith("tt") -> ProviderIds(imdb = value)
+        value.startsWith("imdb:") ->
             ProviderIds(imdb = value.substringAfter(':').takeIf { it.isNotBlank() })
-        value.startsWith("tvdb:", ignoreCase = true) ->
+        value.startsWith("tvdb:") ->
             ProviderIds(tvdb = value.substringAfter(':').takeIf { it.isNotBlank() })
-        value.startsWith("tmdb:tv:", ignoreCase = true) ->
+        value.startsWith("tmdb:tv:") ->
             ProviderIds(tmdb = value.substringAfter("tmdb:tv:").takeIf { it.isNotBlank() })
-        value.startsWith("tmdb:", ignoreCase = true) ->
+        value.startsWith("tmdb:") ->
             ProviderIds(tmdb = value.substringAfter(':').takeIf { it.isNotBlank() })
-        value.startsWith("trakt:", ignoreCase = true) ->
+        value.startsWith("trakt:") ->
             ProviderIds(trakt = value.substringAfter(':').takeIf { it.isNotBlank() })
         else -> ProviderIds()
     }
