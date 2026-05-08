@@ -76,6 +76,7 @@ fun HomeDisplayMetadata.hydratedHomeDisplayHash(): String {
         appendLengthPrefixed("poster", poster.orEmpty())
         appendLengthPrefixed("posterProviderTag", posterProviderTag.orEmpty())
         appendLengthPrefixed("backdrop", backdrop.orEmpty())
+        appendLengthPrefixed("thumbnail", thumbnail.orEmpty())
     }
     val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
 
