@@ -893,7 +893,7 @@ class TraktProgressService @Inject constructor(
 
         val episodeIds = playbackEpisodes
             .filter { item ->
-                val sameContent = normalizeContentId(item.show?.ids) == target
+                val sameContent = normalizeContentId(item.show?.ids, kind = MediaKind.SHOW) == target
                 val sameEpisode = if (season != null && episode != null) {
                     item.episode?.season == season && item.episode.number == episode
                 } else {
@@ -914,7 +914,11 @@ class TraktProgressService @Inject constructor(
     ) {
         val parsed = parseContentIds(contentId)
         val ids = toTraktIds(parsed)
-        val canonicalId = normalizeContentId(ids = ids, fallback = contentId.trim())
+        val canonicalId = if (removeShow) {
+            normalizeContentId(ids = ids, kind = MediaKind.SHOW, fallback = contentId.trim())
+        } else {
+            normalizeContentId(ids = ids, fallback = contentId.trim())
+        }
 
         when {
             removeShow -> {
@@ -1005,7 +1009,7 @@ class TraktProgressService @Inject constructor(
 
         playbackEpisodes
             .filter { item ->
-                val sameContent = normalizeContentId(item.show?.ids) == target
+                val sameContent = normalizeContentId(item.show?.ids, kind = MediaKind.SHOW) == target
                 val sameEpisode = if (season != null && episode != null) {
                     item.episode?.season == season && item.episode.number == episode
                 } else {
@@ -1030,14 +1034,14 @@ class TraktProgressService @Inject constructor(
     suspend fun clearShowProgress(contentId: String) {
         val parsed = parseContentIds(contentId)
         val ids = toTraktIds(parsed)
-        val canonicalId = normalizeContentId(ids = ids, fallback = contentId.trim())
+        val canonicalId = normalizeContentId(ids = ids, kind = MediaKind.SHOW, fallback = contentId.trim())
         if (canonicalId.isBlank()) return
 
         applyOptimisticRemoval(contentId = canonicalId, season = null, episode = null)
 
         val playbackEpisodes = getPlayback("episodes", force = true)
         playbackEpisodes
-            .filter { normalizeContentId(it.show?.ids) == canonicalId }
+            .filter { normalizeContentId(it.show?.ids, kind = MediaKind.SHOW) == canonicalId }
             .forEach { item ->
                 item.id?.let { playbackId ->
                     traktProgressMutationExecutor.deletePlayback(playbackId)
@@ -1933,7 +1937,7 @@ class TraktProgressService @Inject constructor(
         val season = episode.season ?: return null
         val number = episode.number ?: return null
 
-        val contentId = normalizeContentId(show.ids)
+        val contentId = normalizeContentId(show.ids, kind = MediaKind.SHOW)
         if (contentId.isBlank()) return null
 
         val lastWatched = parseIsoToMillis(item.watchedAt)
@@ -2075,7 +2079,7 @@ class TraktProgressService @Inject constructor(
         val season = episode.season ?: return null
         val number = episode.number ?: return null
 
-        val contentId = normalizeContentId(show.ids)
+        val contentId = normalizeContentId(show.ids, kind = MediaKind.SHOW)
         if (contentId.isBlank()) return null
         val videoId = resolveEpisodeVideoId(contentId, season, number)
 

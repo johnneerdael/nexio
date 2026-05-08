@@ -74,6 +74,23 @@ class FieldResolver @Inject constructor(
         }
 
         primary?.fields?.forEach { (field, fieldValue) ->
+            // Tactical RATING fix: do not let a primary canonical RATING with a
+            // non-positive value clobber a numerically-better preview rating.
+            // TVDB-canonical SERIES rows often arrive with no rating; the FieldResolver's
+            // default "primary canonical wins" rule then drops a perfectly good TMDB
+            // rail-preview rating. RatingResolver-driven selection is the proper fix
+            // (Task 7); this guard keeps observable behavior correct in the meantime.
+            if (field == ResolvedField.RATING && !fieldValue.isPositiveRating()) {
+                rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                    mapOf(
+                        "provider" to primary.provider.name,
+                        "sourceProvider" to primary.provider.name,
+                        "sourceRole" to SourceRole.PRIMARY.name,
+                        "reason" to "primary canonical rating value missing"
+                    )
+                )
+                return@forEach
+            }
             val previewSourceRole = sourceRoles[field]
             if (previewSourceRole.isPreviewRole()) {
                 val previewValue = fields[field]
@@ -327,6 +344,11 @@ class FieldResolver @Inject constructor(
 
     private fun SourceRole?.isPreviewRole(): Boolean =
         this == SourceRole.RAIL_PREVIEW || this == SourceRole.ADDON_PREVIEW
+
+    private fun FieldValue.isPositiveRating(): Boolean {
+        val number = value as? Number ?: return false
+        return number.toDouble() > 0.0
+    }
 
     private fun previewRoleLabel(sourceRole: String?): String =
         when (sourceRole) {

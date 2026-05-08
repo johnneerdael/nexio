@@ -85,8 +85,29 @@ class TraktProgressRuntimeStateTest {
         assertFalse(shouldPreferEpisodeHistoryEntry(existing = newerEarlierEpisode, candidate = oldFinale))
     }
 
+    @Test
+    fun `episode progress maps Trakt shows with show id precedence`() {
+        val source = source()
+        val historyMapper = source.section(
+            start = "private fun mapEpisodeHistoryItem",
+            end = "private suspend fun fetchEpisodeProgressSnapshot"
+        )
+        val playbackMapper = source.section(
+            start = "private suspend fun mapPlaybackEpisode",
+            end = "private fun mapSeasonProgress"
+        )
+
+        assertTrue(historyMapper.contains("normalizeContentId(show.ids, kind = MediaKind.SHOW)"))
+        assertFalse(historyMapper.contains("normalizeContentId(show.ids)"))
+        assertTrue(playbackMapper.contains("normalizeContentId(show.ids, kind = MediaKind.SHOW)"))
+        assertFalse(playbackMapper.contains("normalizeContentId(show.ids)"))
+    }
+
     private fun source(): String =
         File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
+
+    private fun String.section(start: String, end: String): String =
+        substringAfter(start).substringBefore(end)
 
     private fun historyProgress(
         season: Int,
