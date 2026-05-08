@@ -219,7 +219,16 @@ internal fun shouldPrefetchModernRow(
 ): Boolean = isActiveRow && !isVerticalRowsScrolling
 
 internal fun modernVisibleCatalogRows(rows: List<CatalogRow>): List<CatalogRow> {
-    return rows.filter { row -> row.items.isNotEmpty() || row.isLoading }
+    val visibleRowsByKey = LinkedHashMap<String, CatalogRow>()
+    rows.forEach { row ->
+        if (row.items.isEmpty() && !row.isLoading) return@forEach
+        val key = catalogRowKey(row)
+        val existing = visibleRowsByKey[key]
+        if (existing == null || (existing.isLoading && row.items.isNotEmpty())) {
+            visibleRowsByKey[key] = row
+        }
+    }
+    return visibleRowsByKey.values.toList()
 }
 
 internal fun modernLoadingPlaceholderCount(): Int = MODERN_LOADING_PLACEHOLDER_COUNT

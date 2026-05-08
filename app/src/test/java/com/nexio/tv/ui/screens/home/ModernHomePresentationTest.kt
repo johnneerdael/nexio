@@ -88,6 +88,29 @@ class ModernHomePresentationTest {
         assertTrue(cache.catalogItemCache.isEmpty())
     }
 
+    @Test
+    fun `deduplicates visible catalog rows by stable row key`() {
+        val cache = ModernCarouselRowBuildCache()
+        val state = buildModernHomePresentation(
+            input = ModernHomePresentationInput(
+                catalogRows = listOf(
+                    catalogRow("trakt_trending_movies", "Trakt Trending Movies", ContentType.MOVIE, listOf(meta("movie-1"))),
+                    catalogRow("trakt_trending_movies", "Trakt Trending Movies Duplicate", ContentType.MOVIE, listOf(meta("movie-2")))
+                ),
+                continueWatchingItems = emptyList(),
+                useLandscapePosters = false,
+                showCatalogTypeSuffix = true,
+                continueWatchingTitle = "Continue watching",
+                airsDateTemplate = "Airs %s",
+                upcomingLabel = "Upcoming"
+            ),
+            cache = cache
+        )
+
+        assertEquals(listOf("addon_movie_trakt_trending_movies"), state.rows.map { it.key })
+        assertEquals(setOf("addon_movie_trakt_trending_movies"), state.lookups.activeRowKeys)
+    }
+
     private fun catalogRow(
         catalogId: String,
         catalogName: String,
