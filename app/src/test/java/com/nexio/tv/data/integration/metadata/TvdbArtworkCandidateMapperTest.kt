@@ -11,11 +11,110 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.data.remote.api.TvdbArtworkRecord
 import com.nexio.tv.domain.model.ProviderIds
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvdbArtworkCandidateMapperTest {
     private val mapper = TvdbArtworkCandidateMapper()
+
+    @Test
+    fun `tvdb artwork type constants match external ids`() {
+        assertEquals(2, TvdbArtworkTypes.POSTER)
+        assertEquals(3, TvdbArtworkTypes.BACKDROP)
+        assertEquals(23, TvdbArtworkTypes.CLEAR_LOGO)
+    }
+
+    @Test
+    fun `tvdb type 2 maps to poster candidate`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            artworks = listOf(
+                artwork(id = 300, type = 2, image = "https://art.tvdb.com/poster.jpg")
+            )
+        )
+
+        val poster = candidates.single()
+        assertEquals(ArtworkType.POSTER, poster.imageType)
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB), poster.provider)
+        assertEquals(ArtworkSourceRole.PRIMARY, poster.sourceRole)
+        assertTrue(poster.requiresRuntimeFetch)
+    }
+
+    @Test
+    fun `tvdb type 3 maps to backdrop candidate`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            artworks = listOf(
+                artwork(id = 301, type = 3, image = "https://art.tvdb.com/backdrop.jpg")
+            )
+        )
+
+        assertEquals(listOf(ArtworkType.BACKDROP), candidates.map { it.imageType })
+        assertFalse(candidates.any { it.imageType == ArtworkType.POSTER })
+    }
+
+    @Test
+    fun `tvdb type 23 maps to logo candidate`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            artworks = listOf(
+                artwork(id = 302, type = 23, image = "https://art.tvdb.com/logo.png")
+            )
+        )
+
+        assertEquals(listOf(ArtworkType.LOGO), candidates.map { it.imageType })
+        assertFalse(candidates.any { it.imageType == ArtworkType.POSTER })
+    }
+
+    @Test
+    fun `tvdb extended image maps to poster fallback only`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            posterFallbackImage = "https://art.tvdb.com/fallback-poster.jpg",
+            artworks = listOf(
+                artwork(id = 301, type = TvdbArtworkTypes.BACKDROP, image = "https://art.tvdb.com/backdrop.jpg"),
+                artwork(id = 302, type = TvdbArtworkTypes.CLEAR_LOGO, image = "https://art.tvdb.com/logo.png")
+            )
+        )
+
+        val posters = candidates.filter { it.imageType == ArtworkType.POSTER }
+        assertEquals(listOf(ArtworkType.BACKDROP, ArtworkType.LOGO, ArtworkType.POSTER), candidates.map { it.imageType })
+        assertEquals(1, posters.size)
+        assertEquals("tvdb_series_extended_image_fallback", posters.single().trace.reason)
+    }
+
+    @Test
+    fun `tvdb backdrop never maps to poster`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            artworks = listOf(
+                artwork(id = 301, type = TvdbArtworkTypes.BACKDROP, image = "https://art.tvdb.com/backdrop.jpg")
+            )
+        )
+
+        assertEquals(listOf(ArtworkType.BACKDROP), candidates.map { it.imageType })
+        assertFalse(candidates.any { it.imageType == ArtworkType.POSTER })
+    }
+
+    @Test
+    fun `tvdb logo never maps to poster`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            artworks = listOf(
+                artwork(id = 302, type = TvdbArtworkTypes.CLEAR_LOGO, image = "https://art.tvdb.com/logo.png")
+            )
+        )
+
+        assertEquals(listOf(ArtworkType.LOGO), candidates.map { it.imageType })
+        assertFalse(candidates.any { it.imageType == ArtworkType.POSTER })
+    }
 
     @Test
     fun `maps tvdb series artwork types to shared artwork candidates`() {
@@ -172,6 +271,27 @@ class TvdbArtworkCandidateMapperTest {
             "https://art.tvdb.com/fallback-poster.jpg",
             (poster.source as ArtworkSource.RemoteUrl).rawUrl.value
         )
+    }
+
+    @Test
+    fun `tvdb extended image fallback is ignored when type 2 poster exists`() {
+        val candidates = mapper.mapSeriesArtwork(
+            seriesId = 81189,
+            requestedLanguage = "eng",
+            posterFallbackImage = "https://art.tvdb.com/fallback-poster.jpg",
+            artworks = listOf(
+                artwork(id = 300, type = TvdbArtworkTypes.POSTER, image = "https://art.tvdb.com/type2-poster.jpg")
+            )
+        )
+
+        val posters = candidates.filter { it.imageType == ArtworkType.POSTER }
+        assertEquals(1, posters.size)
+        val poster = posters.single()
+        assertEquals(
+            "https://art.tvdb.com/type2-poster.jpg",
+            (poster.source as ArtworkSource.RemoteUrl).rawUrl.value
+        )
+        assertEquals("tvdb_series_extended_artwork_type_2", poster.trace.reason)
     }
 
     @Test
