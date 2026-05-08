@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.applyTo
+import com.nexio.tv.domain.model.contentEquals
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
@@ -456,7 +457,14 @@ internal fun hydratedHomeOverlayItemKeysForRows(rows: List<CatalogRow>): Set<Str
 internal fun shouldPublishHydratedHomeOverlays(
     current: Map<String, HydratedHomeOverlay>,
     next: Map<String, HydratedHomeOverlay>
-): Boolean = current != next
+): Boolean {
+    if (current.size != next.size) return true
+    if (current.keys != next.keys) return true
+    return current.any { (key, overlay) ->
+        val nextOverlay = next[key] ?: return true
+        !overlay.contentEquals(nextOverlay)
+    }
+}
 
 internal fun HomeViewModel.invalidateHydratedHomeOverlayScope(scheduleRows: Boolean = true) {
     hydratedHomeOverlayObserverJob?.cancel()
@@ -504,7 +512,8 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
 
     var changed = false
     hydratedHomeOverlaysByItemKey.update { current ->
-        if (current[overlay.itemKey] == overlay) {
+        val existing = current[overlay.itemKey]
+        if (existing != null && existing.contentEquals(overlay)) {
             current
         } else {
             changed = true
