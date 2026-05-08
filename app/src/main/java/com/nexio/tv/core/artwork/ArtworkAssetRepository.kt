@@ -231,22 +231,14 @@ class ArtworkAssetRepository @Inject constructor(
             }
 
         for (candidate in fallbackCandidates) {
-            val fallbackDecision = decision.copy(
-                selectedCandidate = PersistedArtworkCandidate(
-                    provider = candidate.provider,
-                    sourceRole = candidate.sourceRole,
-                    sourceHash = candidate.sourceHash,
-                    redactedSourceForTrace = candidate.redactedSourceForTrace,
-                    providerTemplate = candidate.providerTemplate,
-                    priority = candidate.priority
-                ),
-                rejectedCandidates = emptyList()
-            )
+            val fallbackDecision = decision.fallbackDecisionFor(candidate)
             val result = getOrFetch(fallbackDecision) ?: continue
             traceArtwork(
                 eventType = "artwork.fallback_materialized",
                 payload = mapOf(
                     "decisionKeyHash" to decision.decisionKey.hashedForTrace(),
+                    "requestedDecisionKeyHash" to decision.decisionKey.hashedForTrace(),
+                    "fallbackDecisionKeyHash" to fallbackDecision.decisionKey.hashedForTrace(),
                     "fallbackProvider" to result.record.provider?.key,
                     "assetKeyHash" to result.assetKey.hashedForTrace()
                 )
@@ -255,6 +247,34 @@ class ArtworkAssetRepository @Inject constructor(
         }
 
         return null
+    }
+
+    private fun ArtworkDecision.fallbackDecisionFor(candidate: RejectedArtworkCandidate): ArtworkDecision {
+        val fallbackSettingsHash = candidate.providerTemplate?.settingsHash
+        val fallbackCredentialHash = candidate.providerTemplate?.credentialHash
+        return copy(
+            decisionKey = ArtworkCacheKeys.decisionKey(
+                ownerKey = ownerKey,
+                imageType = imageType,
+                provider = candidate.provider,
+                premiumEnabled = candidate.providerTemplate != null &&
+                    candidate.sourceRole == ArtworkSourceRole.PREMIUM,
+                settingsHash = fallbackSettingsHash,
+                credentialHash = fallbackCredentialHash,
+                policyVersion = policyVersion
+            ),
+            selectedCandidate = PersistedArtworkCandidate(
+                provider = candidate.provider,
+                sourceRole = candidate.sourceRole,
+                sourceHash = candidate.sourceHash,
+                redactedSourceForTrace = candidate.redactedSourceForTrace,
+                providerTemplate = candidate.providerTemplate,
+                priority = candidate.priority
+            ),
+            rejectedCandidates = emptyList(),
+            settingsHash = fallbackSettingsHash,
+            credentialHash = fallbackCredentialHash
+        )
     }
 
     suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? {
