@@ -1,0 +1,174 @@
+{
+  "assembleDebugPassed": false,
+  "assets": {
+    "asset_count": 0,
+    "backdrop_asset_count": 0,
+    "parsed": false,
+    "poster_asset_count": 0,
+    "premium_ref_count": 0,
+    "raw_url_string_count": 0,
+    "total_asset_bytes": 0
+  },
+  "debugApkPresent": false,
+  "decisions": {
+    "backdrop_decision_count": 0,
+    "decision_count": 0,
+    "logo_decision_count": 0,
+    "parsed": false,
+    "poster_decision_count": 0,
+    "raw_url_string_count": 0,
+    "redacted_trace_url_count": 0,
+    "rejected_for_premium_precedence_count": 0,
+    "selected_poster_premium_count": 0,
+    "selected_premium_count": 0,
+    "sensitive_hash_marker_count": 0
+  },
+  "device_verification": {
+    "adbConnected": false,
+    "adbConnectionAttempted": true,
+    "apkInstallAttempted": true,
+    "apkInstalled": true,
+    "appLaunchAttempted": true,
+    "appLaunched": true,
+    "deviceErrorCount": 0,
+    "deviceUnavailableErrorCount": 0,
+    "installFailedErrorCount": 0,
+    "launchFailedErrorCount": 0,
+    "logcatCaptured": true,
+    "logcatCapturedWithoutClear": true,
+    "logcatFailedErrorCount": 0,
+    "multipleDevicesErrorCount": 0,
+    "permissionDeniedErrorCount": 0,
+    "storeCaptureFailedErrorCount": 0,
+    "stores_captured": {
+      "artworkAssetsCaptured": false,
+      "artworkDecisionsCaptured": false,
+      "homeSnapshotCaptured": true,
+      "hydratedOverlayCaptured": true
+    },
+    "suAttempted": true,
+    "suAvailable": false,
+    "suUnavailableErrorCount": 0,
+    "timeoutErrorCount": 0,
+    "unknownOrOtherErrorCount": 0
+  },
+  "focusedUnitTestCount": 0,
+  "focusedUnitTestsPassed": false,
+  "input_files": {
+    "assets": {
+      "bytes": 0,
+      "present": false,
+      "provided": false
+    },
+    "decisions": {
+      "bytes": 0,
+      "present": false,
+      "provided": false
+    },
+    "logcat": {
+      "bytes": 755295,
+      "present": true,
+      "provided": true
+    },
+    "overlay": {
+      "bytes": 1471135,
+      "present": true,
+      "provided": true
+    },
+    "snapshot": {
+      "bytes": 33067,
+      "present": true,
+      "provided": true
+    }
+  },
+  "logcat": {
+    "exception_line_count": 12,
+    "line_count": 5710,
+    "logcatArtworkFallbackCount": 0,
+    "logcatOverlayProjectionTraceCount": 6,
+    "nexio_line_count": 1569,
+    "premium_hint_line_count": 19,
+    "present": true,
+    "raw_url_line_count": 0
+  },
+  "logcatArtworkFallbackCount": 0,
+  "logcatCapturedWithoutClear": true,
+  "logcatOverlayProjectionTraceCount": 6,
+  "overlay": {
+    "alias_count": 1171,
+    "field_trace_count": 4262,
+    "overlayAssetRefCount": 116,
+    "overlayDecisionRefCount": 165,
+    "overlay_count": 325,
+    "parsed": true,
+    "poster_decision_ref_count": 165,
+    "poster_remote_url_count": 145,
+    "premium_hint_string_count": 537,
+    "provider_tag_mismatch_count": 0,
+    "remote_url_string_count": 609
+  },
+  "overlayAssetRefCount": 116,
+  "overlayDecisionRefCount": 165,
+  "providerTagMismatchCount": 0,
+  "rawEvidenceHistoryPurgeRequired": false,
+  "rawEvidenceOriginMainCount": 0,
+  "rawEvidencePresentInReachableHistory": false,
+  "rawEvidencePresentOnOriginMain": false,
+  "rawEvidenceReachableHistoryCount": 0,
+  "rawEvidenceTrackedInHead": false,
+  "rawEvidenceTrackedInHeadCount": 0,
+  "rawPremiumUrlCount": 2,
+  "rawPremiumUrlCountCoversDisplayStateInputsOnly": true,
+  "rawPremiumUrlCountIncludesRemovedCatalogCache": false,
+  "rawRpdbUrlCount": 0,
+  "rawTopPostersUrlCount": 2,
+  "rawUrlBoundaryTestsPassed": false,
+  "required_counts": {
+    "overlayAssetRefCount": 116,
+    "rawPremiumUrlCount": 2,
+    "rawRpdbUrlCount": 0,
+    "rawTopPostersUrlCount": 2,
+    "snapshotAssetRefCount": 11,
+    "wrongBackgroundTypeCount": 0,
+    "wrongLogoTypeCount": 0,
+    "wrongPosterTypeCount": 0
+  },
+  "sanitization": {
+    "contains_raw_ids": false,
+    "contains_raw_titles": false,
+    "contains_raw_urls": false,
+    "rawEvidenceHistoryPurgeRequired": false,
+    "rawEvidencePresentInReachableHistory": false,
+    "rawEvidencePresentOnOriginMain": false,
+    "rawEvidenceTrackedInHead": false,
+    "rawPremiumUrlCountCoversDisplayStateInputsOnly": true,
+    "rawPremiumUrlCountIncludesRemovedCatalogCache": false
+  },
+  "schema_version": 1,
+  "snapshot": {
+    "catalog_item_count": 0,
+    "catalog_row_count": 0,
+    "hero_item_count": 0,
+    "parsed": true,
+    "poster_decision_ref_count": 0,
+    "poster_remote_url_count": 0,
+    "preference_json_entry_count": 1,
+    "premium_hint_string_count": 18,
+    "provider_tag_mismatch_count": 0,
+    "remote_url_string_count": 21,
+    "snapshotAssetRefCount": 11,
+    "snapshotDecisionRefCount": 10
+  },
+  "snapshotAssetRefCount": 11,
+  "snapshotDecisionRefCount": 10,
+  "verification": {
+    "assembleDebugPassed": false,
+    "debugApkPresent": false,
+    "focusedUnitTestCount": 0,
+    "focusedUnitTestsPassed": false,
+    "rawUrlBoundaryTestsPassed": false
+  },
+  "wrongBackgroundTypeCount": 0,
+  "wrongLogoTypeCount": 0,
+  "wrongPosterTypeCount": 0
+}
