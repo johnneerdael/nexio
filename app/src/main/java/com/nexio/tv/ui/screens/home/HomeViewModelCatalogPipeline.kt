@@ -440,7 +440,16 @@ internal fun hydratedHomeOverlayItemKeysForRows(rows: List<CatalogRow>): Set<Str
     return rows
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
-        .map { item -> item.homeOverlayItemKey() }
+        .flatMap { item ->
+            HomeArtworkOverlayKeys.aliasesFor(
+                rowItemKey = item.homeOverlayItemKey(),
+                contentId = item.id,
+                itemType = item.apiType,
+                providerIds = item.firstPaintStableIds,
+                canonicalProvider = null,
+                canonicalId = null
+            ).asSequence()
+        }
         .toSet()
 }
 
