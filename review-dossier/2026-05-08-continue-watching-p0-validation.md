@@ -75,7 +75,7 @@ Command:
 ./gradlew testDebugUnitTest --tests com.nexio.tv.data.repository.ContinueWatchingMetadataRouterTest --tests com.nexio.tv.data.repository.ContinueWatchingTimelineTest --tests com.nexio.tv.data.repository.ContinueWatchingTimelineAirDateTest --tests com.nexio.tv.data.repository.ContinueWatchingSnapshotServiceProfileBoundaryTest --tests com.nexio.tv.ui.screens.home.HomeViewModelContinueWatchingProfileScopedTest --tests com.nexio.tv.ui.screens.home.HomeViewModelContinueWatchingProjectionTest --tests com.nexio.tv.ui.screens.stream.StreamScreenViewModelDeterministicAutoplayTest
 ```
 
-Result: FAILED. `60 tests completed, 5 failed`.
+Result after profile-scoped contract alignment rerun: FAILED. `60 tests completed, 4 failed`.
 
 Failed tests:
 
@@ -83,10 +83,20 @@ Failed tests:
 - `ContinueWatchingSnapshotServiceProfileBoundaryTest > continue watching ownership rail is profile scoped and canonicalized` at `ContinueWatchingSnapshotServiceProfileBoundaryTest.kt:287`
 - `ContinueWatchingSnapshotServiceProfileBoundaryTest > stale default profile emission after switch is not stamped as secondary profile snapshot` at `ContinueWatchingSnapshotServiceProfileBoundaryTest.kt:287`
 - `ContinueWatchingSnapshotServiceProfileBoundaryTest > observing snapshot waits for persisted active profile snapshot before emitting default empty` with `io.mockk.MockKException at MockKStub.kt:93`
-- `HomeViewModelContinueWatchingProfileScopedTest > accepted continue watching snapshot cancels previous enrichment before eligibility check` at `HomeViewModelContinueWatchingProfileScopedTest.kt:308`
+
+### HomeViewModelContinueWatchingProfileScopedTest Only
+
+Command:
+
+```bash
+./gradlew testDebugUnitTest --tests com.nexio.tv.ui.screens.home.HomeViewModelContinueWatchingProfileScopedTest
+```
+
+Result after profile-scoped contract alignment rerun: PASSED.
 
 ## Notes
 
 - The existing `ProfileSettingsScopeContractTest` baseline is still failing in the tracking/profile ownership contract area.
 - The existing `ContinueWatchingSnapshotServiceProfileBoundaryTest` baseline is still failing in the profile boundary area.
 - The P0 source contract no longer fails after aligning it with the actual canonical-record branch structure.
+- The Home profile-scoped source contract no longer fails after aligning it with `buildContinueWatchingItemsForSnapshot(snapshot, nowMs)`.
