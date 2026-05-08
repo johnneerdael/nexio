@@ -681,16 +681,17 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
             languageTag = languageTag,
             policyVersion = HOME_HYDRATED_OVERLAY_POLICY_VERSION
         ).collectLatest { overlays ->
-            // The store returns Map<aliasKey, overlay> where aliasKey is whichever alias
-            // matched on disk. Re-key by overlay.itemKey so the in-memory map uses the
-            // same row-shape keys the coordinator path emits — preventing two key shapes
-            // from coexisting in hydratedHomeOverlaysByItemKey and the silent-miss
-            // lookups that caused only 2 home.hydration_applied events on cold start.
-            val byItemKey = overlays.values.associateBy { it.itemKey }
-            if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, byItemKey)) {
+            // Keep the alias-shape the store emits — each rail row's requested alias is
+            // its own key, so different rails of the same show coexist as separate map
+            // entries pointing at the same overlay (e.g., series:trakt:139960 and
+            // series:tmdb:223386 both → same overlay). Collapsing to overlay.itemKey
+            // would lose rails whose alias differs from the row that originally
+            // hydrated the overlay; the apply seam (Task 1) tolerates the asymmetry
+            // via HomeArtworkOverlayKeys.aliasesFor lookup.
+            if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, overlays)) {
                 return@collectLatest
             }
-            hydratedHomeOverlaysByItemKey.value = byItemKey
+            hydratedHomeOverlaysByItemKey.value = overlays
             scheduleUpdateCatalogRows()
         }
     }
