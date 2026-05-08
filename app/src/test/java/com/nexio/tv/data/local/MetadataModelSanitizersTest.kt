@@ -216,7 +216,119 @@ class MetadataModelSanitizersTest {
         val sanitized = meta.sanitizedForCache()
 
         assertEquals("nexio-artwork://decision/premium-poster", sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `durable tmdb asset derives tmdb provider tag over old rpdb tag`() {
+        val preview = samplePreview(
+            poster = "nexio-artwork://asset/artwork-asset:TMDB:poster:tmdb:550:poster-path",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertEquals("tmdb", sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `durable rpdb asset derives rpdb provider tag`() {
+        val metadata = HomeDisplayMetadata(
+            poster = "nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt123:poster-path",
+            posterProviderTag = "tmdb"
+        )
+
+        val sanitized = metadata.sanitizedForCache()
+
         assertEquals("rpdb", sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `durable tvdb asset derives tvdb provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://asset/artwork-asset:TVDB:poster:series:94997:poster-path",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("tvdb", sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `durable top posters decision derives top_posters provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://decision/artwork-decision:poster:tt123:provider:TOP_POSTERS:score:1",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("top_posters", sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `durable rpdb decision derives rpdb provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://decision/artwork-decision:poster:tt123:provider:RPDB:score:1",
+            posterProviderTag = "tmdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("rpdb", sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `malformed decision ref with provider segment clears provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://decision/bad:provider:RPDB",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("nexio-artwork://decision/bad:provider:RPDB", sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `asset ref with unknown provider clears provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://asset/artwork-asset:UNKNOWN:poster:tmdb:550:poster-path",
+            posterProviderTag = "tmdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("nexio-artwork://asset/artwork-asset:UNKNOWN:poster:tmdb:550:poster-path", sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `malformed asset ref missing image type clears provider tag`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://asset/artwork-asset:RPDB",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("nexio-artwork://asset/artwork-asset:RPDB", sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `raw remote poster clears provider tag`() {
+        val preview = samplePreview(
+            poster = "https://image.tmdb.org/t/p/w500/poster.jpg",
+            posterProviderTag = "tmdb"
+        )
+
+        val sanitized = preview.sanitizedForCache()
+
+        assertEquals("https://image.tmdb.org/t/p/w500/poster.jpg", sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
     }
 
     @Test
@@ -439,6 +551,26 @@ class MetadataModelSanitizersTest {
             language = "en",
             collectionId = null,
             collectionName = null
+        )
+
+    private fun samplePreview(
+        poster: String?,
+        posterProviderTag: String?
+    ): MetaPreview =
+        MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2025",
+            imdbRating = 8.3f,
+            ratingSource = TitleRatingSource.IMDB,
+            genres = emptyList(),
+            posterProviderTag = posterProviderTag
         )
 
     private fun sampleMeta(
