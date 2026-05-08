@@ -299,7 +299,7 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
-    fun `hydrated legacy logo prevents preview structured logo fallback`() = runTest {
+    fun `hydrated artwork merge keeps typed fallback refs even when legacy strings exist`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
@@ -335,9 +335,9 @@ class HomeHydrationCoordinatorTest {
             onOverlayApplied = { true }
         )
 
-        assertEquals("hydrated-logo-url-or-key", overlaySlot.captured.fields.displayLogo)
         assertSame(hydratedBackdrop, overlaySlot.captured.fields.artwork?.backdrop)
-        assertNull(overlaySlot.captured.fields.artwork?.logo)
+        assertSame(previewLogo, overlaySlot.captured.fields.artwork?.logo)
+        assertEquals("nexio-artwork://decision/preview-logo", overlaySlot.captured.fields.displayLogo)
     }
 
     @Test

@@ -28,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 
@@ -282,11 +283,96 @@ class IdleScreensaverRepositoryTest {
         )
     }
 
+    @Test
+    fun `warmFromCache carries image and trailer logo artwork refs`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        val backdrop = artworkRef(assetKey = "hotd-backdrop", imageType = ArtworkType.BACKDROP)
+        val logo = artworkRef(assetKey = "hotd-logo", imageType = ArtworkType.LOGO)
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 1) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = listOf(
+                candidate(
+                    itemKey = "series:tmdb:94997",
+                    contentId = "tmdb:94997",
+                    itemType = "series",
+                    preferredImage = backdrop,
+                    logo = logo,
+                    title = "House of the Dragon",
+                    rating = null
+                )
+            ),
+            trailerCandidates = listOf(
+                ScreensaverTrailerCandidate(
+                    itemKey = "series:tmdb:94997",
+                    contentId = "tmdb:94997",
+                    itemType = "series",
+                    title = "House of the Dragon",
+                    releaseInfo = "2022",
+                    overview = "Overview",
+                    rating = null,
+                    artwork = ArtworkBundle(backdrop = backdrop, logo = logo),
+                    trailerState = TrailerDisplayState(),
+                    stableIds = ProviderIds(tmdb = "94997", imdb = "tt11198330")
+                )
+            )
+        )
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 1 }
+        )
+
+        repository.warmFromCache()
+
+        assertSame(logo, repository.slides.value.single().logoArtwork)
+        assertSame(logo, repository.trailerCandidates.value.single().logoArtwork)
+    }
+
+    @Test
+    fun `warmFromCache clears out of range candidate ratings from image and trailer models`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        val backdrop = artworkRef(assetKey = "hotd-backdrop", imageType = ArtworkType.BACKDROP)
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 1) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = listOf(
+                candidate(
+                    itemKey = "series:tmdb:94997",
+                    contentId = "tmdb:94997",
+                    itemType = "series",
+                    preferredImage = backdrop,
+                    title = "House of the Dragon",
+                    rating = TitleRating(1767427.0, TitleRatingSource.TMDB)
+                )
+            ),
+            trailerCandidates = listOf(
+                ScreensaverTrailerCandidate(
+                    itemKey = "series:tmdb:94997",
+                    contentId = "tmdb:94997",
+                    itemType = "series",
+                    title = "House of the Dragon",
+                    releaseInfo = "2022",
+                    overview = "Overview",
+                    rating = TitleRating(1767427.0, TitleRatingSource.TMDB),
+                    artwork = ArtworkBundle(backdrop = backdrop),
+                    trailerState = TrailerDisplayState(),
+                    stableIds = ProviderIds(tmdb = "94997", imdb = "tt11198330")
+                )
+            )
+        )
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 1 }
+        )
+
+        repository.warmFromCache()
+
+        assertNull(repository.slides.value.single().imdbRating)
+        assertNull(repository.trailerCandidates.value.single().imdbRating)
+    }
+
     private fun candidate(
         itemKey: String = "movie:tmdb:550",
         contentId: String = "tmdb:550",
         itemType: String = "movie",
         preferredImage: ArtworkDisplayRef,
+        logo: ArtworkDisplayRef? = null,
         title: String,
         rating: TitleRating?
     ) = ScreensaverSlideCandidate(
@@ -299,7 +385,7 @@ class IdleScreensaverRepositoryTest {
         genres = listOf("Drama", "Thriller"),
         runtime = "139m",
         rating = rating,
-        artwork = ArtworkBundle(backdrop = preferredImage),
+        artwork = ArtworkBundle(backdrop = preferredImage, logo = logo),
         preferredImage = preferredImage,
         stableIds = ProviderIds(tmdb = contentId.removePrefix("tmdb:"), imdb = "tt0137523"),
         trace = emptyList()

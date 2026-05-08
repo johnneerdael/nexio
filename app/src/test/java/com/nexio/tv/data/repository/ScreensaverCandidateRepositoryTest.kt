@@ -164,6 +164,32 @@ class ScreensaverCandidateRepositoryTest {
     }
 
     @Test
+    fun `trailer candidates clear invalid resolved ratings and preserve logo artwork`() = runTest {
+        val surface = testSurface()
+        val repository = testScreensaverCandidates(surface)
+        val logo = artworkRef(key = "logo-94997", imageType = ArtworkType.LOGO)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "series:tmdb:94997",
+                    title = "House of the Dragon",
+                    artwork = ArtworkBundle(
+                        backdrop = artworkRef(key = "backdrop-94997", imageType = ArtworkType.BACKDROP),
+                        logo = logo
+                    ),
+                    rating = TitleRating(1767427.0, TitleRatingSource.TMDB)
+                )
+            )
+        )
+
+        val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
+
+        assertEquals(null, candidate.rating)
+        assertSame(logo, candidate.artwork.logo)
+    }
+
+    @Test
     fun `trailer candidates come from resolved items even when trailer ids are empty`() = runTest {
         val surface = testSurface()
         val repository = testScreensaverCandidates(surface)
