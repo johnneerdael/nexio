@@ -93,6 +93,7 @@ class ContinueWatchingSnapshotStore private constructor(
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
                 add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
                 add("scheduledReemit", encodeNextUpItems(snapshot.scheduledReemit))
+                add("records", gson.toJsonTree(snapshot.records))
                 add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
                 add("metadataSnapshotsByItemKey", gson.toJsonTree(snapshot.metadataSnapshotsByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
@@ -131,6 +132,7 @@ class ContinueWatchingSnapshotStore private constructor(
                 decodeNextUpItems(root, "nextUpItems")
             },
             scheduledReemit = decodeNextUpItems(root, "scheduledReemit"),
+            records = decodeArray(root, "records"),
             displayMetadataByItemKey = decodeDisplayMetadata(root, "displayMetadataByItemKey"),
             metadataSnapshotsByItemKey = decodeMetadataSnapshots(root, "metadataSnapshotsByItemKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
@@ -140,6 +142,7 @@ class ContinueWatchingSnapshotStore private constructor(
             canonical.resumeItems.isNotEmpty() ||
             canonical.nextUpItems.isNotEmpty() ||
             canonical.traktUpNextItems.isNotEmpty() ||
+            canonical.records.isNotEmpty() ||
             canonical.displayMetadataByItemKey.isNotEmpty() ||
             canonical.metadataSnapshotsByItemKey.isNotEmpty()
         ) {

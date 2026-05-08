@@ -128,9 +128,19 @@ class MetadataRouterFacade(
     )
 
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
+        return routeRequest(
+            request = request,
+            allowUnresolvedIdentityRoute = false
+        )
+    }
+
+    private suspend fun routeRequest(
+        request: MetadataRequest,
+        allowUnresolvedIdentityRoute: Boolean
+    ): MetadataRoute {
         val routed = router.route(request)
         val route = identityResolver.resolve(routed)
-        if (route.targetIdRequiresIdentityResolution) {
+        if (route.targetIdRequiresIdentityResolution && !allowUnresolvedIdentityRoute) {
             throw MetadataRouteFailure.IdentityResolutionFailed(route.parentId, route.provider)
         }
         return route
@@ -214,7 +224,10 @@ class MetadataRouterFacade(
             )
         }
 
-        val route = routeRequest(request)
+        val route = routeRequest(
+            request = request,
+            allowUnresolvedIdentityRoute = request.depth == MetadataDepth.IDENTITY
+        )
         val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
         val runResult = providerPlanRunner.run(plan)
         val previewCandidate = request.sourceContext

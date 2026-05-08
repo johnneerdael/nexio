@@ -11,12 +11,18 @@ import javax.inject.Singleton
 @Singleton
 class ProviderPlanExecutor @Inject constructor() {
     fun buildPlan(route: MetadataRoute, depth: MetadataDepth): ProviderExecutionPlan {
+        if (depth == MetadataDepth.IDENTITY) {
+            return ProviderExecutionPlan(route = route, depth = depth, steps = emptyList())
+        }
+
         check(!route.targetIdRequiresIdentityResolution) {
             "Provider plan requires identity resolution before execution for route ${route.parentId}"
         }
+
         check(depth !in unsupportedDepths) {
             "Unsupported provider plan depth $depth"
         }
+
         // seasonNumber may be null for providers that support unconstrained season fetches
         // (e.g. Kitsu returns all episodes when no season filter is applied).
         // Non-Kitsu providers (TMDB, TVDB) still require a seasonNumber at SEASON depth —

@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
+import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.IntegrationOwnershipService
@@ -9,6 +11,7 @@ import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -28,6 +31,7 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,6 +69,7 @@ data class ContinueWatchingSnapshot(
     val resumeItems: List<WatchProgress> = emptyList(),
     val nextUpItems: List<TrackingNextUpEntry> = emptyList(),
     val traktUpNextItems: List<TrackingNextUpEntry> = emptyList(),
+    val records: List<ContinueWatchingRecord> = emptyList(),
     val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
     val metadataSnapshotsByItemKey: Map<String, ContinueWatchingMetadataSnapshot> = emptyMap(),
     val updatedAtMs: Long = 0L,
@@ -83,12 +88,14 @@ data class ProfileOwnedContinueWatchingSnapshot(
 
 internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): List<ContinueWatchingRecord> {
     val now = System.currentTimeMillis().coerceAtLeast(1L)
-    val resumeRecords = snapshot.resumeItems.map { progress ->
+    val legacyResumeRecords = snapshot.resumeItems.map { progress ->
         val parentId = progress.contentId
-        val episodeContext = if (progress.season != null && progress.episode != null) {
+        val season = progress.season
+        val episode = progress.episode
+        val episodeContext = if (season != null && episode != null) {
             ContinueWatchingRecord.EpisodeContext(
-                season = progress.season!!,
-                number = progress.episode!!
+                season = season,
+                number = episode
             )
         } else {
             null
@@ -112,7 +119,7 @@ internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): L
             updatedAt = if (progress.lastWatched > 0L) progress.lastWatched else now
         )
     }
-    val nextUpRecords = snapshot.nextUpItems.map { entry ->
+    val syntheticNextUpRecords = snapshot.nextUpItems.map { entry ->
         val episodeContext = ContinueWatchingRecord.EpisodeContext(
             season = entry.season,
             number = entry.episode
@@ -132,8 +139,75 @@ internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): L
             updatedAt = if (entry.activityAtMs > 0L) entry.activityAtMs else now
         )
     }
-    return resumeRecords + nextUpRecords
+    if (snapshot.records.isEmpty()) {
+        return legacyResumeRecords + syntheticNextUpRecords
+    }
+
+    val canonicalKeys = snapshot.records.map { it.identityKey() }.toSet()
+    val contentIds = snapshot.records.map { it.contentId }.toSet()
+    val missingSyntheticNextUpRecords = syntheticNextUpRecords.filterNot { record ->
+        record.identityKey() in canonicalKeys || record.contentId in contentIds
+    }
+    return snapshot.records + missingSyntheticNextUpRecords
 }
+
+private fun ContinueWatchingSnapshot.withInvalidatedCanonicalRecords(): ContinueWatchingSnapshot {
+    return if (records.isEmpty()) this else copy(records = emptyList())
+}
+
+private data class CanonicalRecordRemovalRef(
+    val contentId: String,
+    val videoId: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null
+)
+
+private fun ContinueWatchingSnapshot.withCanonicalRecordsRemovedFor(
+    refs: List<CanonicalRecordRemovalRef>
+): ContinueWatchingSnapshot {
+    if (records.isEmpty() || refs.isEmpty()) return this
+    val normalizedRefs = refs
+        .mapNotNull { ref ->
+            val contentId = ref.contentId.trim()
+            if (contentId.isBlank()) return@mapNotNull null
+            ref.copy(
+                contentId = contentId,
+                videoId = ref.videoId?.trim()?.takeIf { it.isNotBlank() }
+            )
+        }
+    if (normalizedRefs.isEmpty()) return this
+
+    return copy(
+        records = records.filterNot { record ->
+            normalizedRefs.any { ref -> record.matchesRemovalRef(ref) }
+        }
+    )
+}
+
+private fun ContinueWatchingRecord.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
+    if (resumeIdentities.any { identity -> identity.matchesRemovalRef(ref) }) return true
+    if (ref.videoId != null && contentId == ref.videoId) return true
+    if (parentId != ref.contentId) return false
+    if (ref.season == null && ref.episode == null) return true
+    return episodeContext?.let { context ->
+        context.season == ref.season && context.number == ref.episode
+    } == true
+}
+
+private fun ResumeIdentity.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
+    if (ref.videoId != null && videoId == ref.videoId) return true
+    if (contentId != ref.contentId) return false
+    if (ref.season == null && ref.episode == null) return true
+    return season == ref.season && episode == ref.episode
+}
+
+private fun WatchProgress.toCanonicalRecordRemovalRef(): CanonicalRecordRemovalRef =
+    CanonicalRecordRemovalRef(
+        contentId = contentId,
+        videoId = videoId,
+        season = season,
+        episode = episode
+    )
 
 private data class LiveContinueWatchingSnapshotEmission(
     val profileId: Int,
@@ -150,13 +224,47 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val snapshotStore: ContinueWatchingSnapshotStore,
+    private val continueWatchingIdentityResolver: ContinueWatchingIdentityResolver,
     private val airScheduler: ContinueWatchingAirScheduler = NoopContinueWatchingAirScheduler,
     private val profileManager: ProfileManager? = null,
     private val ownershipService: IntegrationOwnershipService? = null,
     private val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
     private val identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver(),
-    private val metadataRouterFacade: MetadataRouterFacade? = null
+    private val metadataRouterFacade: MetadataRouterFacade? = null,
+    @ApplicationContext private val appContext: Context? = null
 ) {
+    @VisibleForTesting
+    constructor(
+        watchProgressRepository: WatchProgressRepository,
+        trackingProgressService: TrackingProgressService,
+        trackingProviderStateService: TrackingProviderStateService,
+        traktSettingsDataStore: TraktSettingsDataStore,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        snapshotStore: ContinueWatchingSnapshotStore,
+        airScheduler: ContinueWatchingAirScheduler = NoopContinueWatchingAirScheduler,
+        profileManager: ProfileManager? = null,
+        ownershipService: IntegrationOwnershipService? = null,
+        activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
+        identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver(),
+        metadataRouterFacade: MetadataRouterFacade? = null,
+        @ApplicationContext appContext: Context? = null
+    ) : this(
+        watchProgressRepository = watchProgressRepository,
+        trackingProgressService = trackingProgressService,
+        trackingProviderStateService = trackingProviderStateService,
+        traktSettingsDataStore = traktSettingsDataStore,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        snapshotStore = snapshotStore,
+        continueWatchingIdentityResolver = ContinueWatchingIdentityResolver(),
+        airScheduler = airScheduler,
+        profileManager = profileManager,
+        ownershipService = ownershipService,
+        activeRailTracker = activeRailTracker,
+        identityResolver = identityResolver,
+        metadataRouterFacade = metadataRouterFacade,
+        appContext = appContext
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
     private val snapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
@@ -229,6 +337,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     }.distinctUntilChanged()
                 }
                 .flatMapLatest { (profileId, isAuthenticated) ->
+                    val languageTag = activeLanguageTag()
                     if (!isAuthenticated) {
                         ownershipService?.removeRail(RailKeyFactory.continueWatching(profileId))
                         lastRefreshRequestMs = 0L
@@ -237,9 +346,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         watchProgressRepository.observeProgress(profileId)
                             .map { allProgress ->
                                 LiveContinueWatchingSnapshotEmission(
-                                profileId = profileId,
+                                    profileId = profileId,
                                     hasLoadedRemoteSnapshot = true,
                                     snapshot = buildRawSnapshot(
+                                        profileId = profileId,
+                                        languageTag = languageTag,
                                         allProgress = allProgress,
                                         nextUpEntries = emptyList(),
                                         traktUpNextEntries = emptyList()
@@ -265,6 +376,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                     profileId = profileId,
                                     hasLoadedRemoteSnapshot = true,
                                     snapshot = buildRawSnapshot(
+                                        profileId = profileId,
+                                        languageTag = languageTag,
                                         allProgress = allProgress,
                                         nextUpEntries = nextUpEntries,
                                         traktUpNextEntries = traktUpNextEntries
@@ -441,9 +554,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun removeResumeEntry(videoId: String) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removed = current.snapshot.resumeItems.filter { it.videoId == videoId }
                 current.copy(
                     snapshot = current.snapshot.copy(
-                        resumeItems = current.snapshot.resumeItems.filterNot { it.videoId == videoId }
+                        resumeItems = current.snapshot.resumeItems - removed.toSet()
+                    ).withCanonicalRecordsRemovedFor(
+                        removed.map { it.toCanonicalRecordRemovalRef() }
                     )
                 )
             }
@@ -456,9 +572,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun removeAllForShow(showId: String) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removed = current.snapshot.resumeItems.filter { it.contentId == showId }
                 current.copy(
                     snapshot = current.snapshot.copy(
-                        resumeItems = current.snapshot.resumeItems.filterNot { it.contentId == showId }
+                        resumeItems = current.snapshot.resumeItems - removed.toSet()
+                    ).withCanonicalRecordsRemovedFor(
+                        removed.map { it.toCanonicalRecordRemovalRef() }
                     )
                 )
             }
@@ -474,7 +593,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 val merged = (current.snapshot.resumeItems + entry)
                     .sortedByDescending { it.lastWatched }
                     .distinctBy { it.videoId }
-                current.copy(snapshot = current.snapshot.copy(resumeItems = merged))
+                current.copy(
+                    snapshot = current.snapshot.copy(
+                        resumeItems = merged
+                    ).withInvalidatedCanonicalRecords()
+                )
             }
         }
     }
@@ -526,6 +649,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (episodes.isEmpty()) return
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removedResumes = current.snapshot.resumeItems.filter { progress ->
+                    episodes.any { ref ->
+                        progress.contentId == ref.showId &&
+                            progress.season == ref.seasonNumber &&
+                            progress.episode == ref.episodeNumber
+                    }
+                }
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems.filterNot { progress ->
@@ -549,6 +679,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                     entry.episode == ref.episodeNumber
                             }
                         }
+                    ).withCanonicalRecordsRemovedFor(
+                        removedResumes.map { it.toCanonicalRecordRemovalRef() }
                     )
                 )
             }
@@ -591,7 +723,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         resumeItems = rollbackResume,
                         nextUpItems = rollbackNextUp,
                         traktUpNextItems = rollbackTraktUpNext
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
@@ -636,7 +768,25 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
-    private fun buildRawSnapshot(
+    internal suspend fun buildRawSnapshotForTest(
+        profileId: Int = activeProfileId(),
+        languageTag: String = activeLanguageTag(),
+        allProgress: List<WatchProgress>,
+        nextUpEntries: List<TrackingNextUpEntry>,
+        traktUpNextEntries: List<TrackingNextUpEntry>
+    ): ContinueWatchingSnapshot {
+        return buildRawSnapshot(
+            profileId = profileId,
+            languageTag = languageTag,
+            allProgress = allProgress,
+            nextUpEntries = nextUpEntries,
+            traktUpNextEntries = traktUpNextEntries
+        )
+    }
+
+    private suspend fun buildRawSnapshot(
+        profileId: Int,
+        languageTag: String,
         allProgress: List<WatchProgress>,
         nextUpEntries: List<TrackingNextUpEntry>,
         traktUpNextEntries: List<TrackingNextUpEntry>
@@ -644,6 +794,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
+        val records = ContinueWatchingMerger.merge(
+            resumeItems.map { progress ->
+                continueWatchingIdentityResolver.resolveOrFallback(
+                    RawContinueWatchingInput(
+                        profileId = profileId,
+                        progress = progress,
+                        languageTag = languageTag
+                    )
+                )
+            }
+        )
         val normalizedNextUpItems = nextUpEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
@@ -722,6 +883,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             resumeItems = gatedResumeItems,
             nextUpItems = nextUpItems,
             traktUpNextItems = traktUpNextItems,
+            records = records,
             updatedAtMs = nowMs,
             scheduledReemit = scheduledReemit
         )
@@ -856,6 +1018,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             resumeItems = resumeItems,
             nextUpItems = mainFeedNextUpItems,
             traktUpNextItems = sanitizedTraktUpNextItems,
+            records = snapshot.records,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = snapshot.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs,
@@ -1034,6 +1197,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    private fun activeLanguageTag(): String =
+        appContext?.let { AppLocaleResolver.resolveEffectiveAppLanguageTag(it) } ?: "en-US"
 
     private fun activeProfileSession(): ActiveProfileSession =
         runCatching { profileManager?.activeProfileSession?.value }.getOrNull()

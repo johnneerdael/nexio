@@ -3,9 +3,13 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
+import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -22,6 +26,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import javax.inject.Inject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,7 +79,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
      * Auth is always false → upstream combine never fires → rawSnapshotState stays
      * at its initial empty value until we seed it via the mutation helpers.
      */
-    private fun buildService(): ContinueWatchingSnapshotService {
+    private fun buildService(
+        continueWatchingIdentityResolver: ContinueWatchingIdentityResolver = canonicalResolver()
+    ): ContinueWatchingSnapshotService {
         val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
             every { state } returns flowOf(EffectiveTrackingProviderState())
         }
@@ -100,9 +107,89 @@ class ContinueWatchingSnapshotServiceMutationTest {
             trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
             metadataDiskCacheStore = metadataDiskCacheStore,
-            snapshotStore = snapshotStore
+            snapshotStore = snapshotStore,
+            continueWatchingIdentityResolver = continueWatchingIdentityResolver
         )
     }
+
+    private fun canonicalResolver(
+        resolver: suspend (RawContinueWatchingInput) -> ContinueWatchingRecord = { input ->
+            canonicalRecord(input)
+        }
+    ): ContinueWatchingIdentityResolver =
+        mockk {
+            coEvery { resolveOrFallback(any()) } coAnswers {
+                resolver(firstArg())
+            }
+        }
+
+    private fun canonicalRecord(
+        input: RawContinueWatchingInput,
+        canonicalProvider: ProviderId? = input.progress.contentId.canonicalProvider(),
+        canonicalId: String? = input.progress.contentId.substringAfter(':', input.progress.contentId),
+        identityConfidence: IdentityConfidence = IdentityConfidence.HIGH,
+        warnings: List<String> = emptyList()
+    ): ContinueWatchingRecord {
+        val progress = input.progress
+        val providerIds = ProviderIds(
+            imdb = if (canonicalProvider == ProviderId.IMDB) canonicalId else null,
+            tvdb = if (canonicalProvider == ProviderId.TVDB) canonicalId else null
+        )
+        val identity = ContentIdentity(
+            canonicalProvider = canonicalProvider,
+            canonicalId = canonicalId,
+            providerIds = providerIds
+        )
+        val episodeContext = if (progress.season != null && progress.episode != null) {
+            ContinueWatchingRecord.EpisodeContext(progress.season, progress.episode)
+        } else {
+            null
+        }
+        val resumeIdentity = progress.toResumeIdentity()
+        val canonicalKey = if (canonicalProvider != null && canonicalId != null) {
+            ContinueWatchingCanonicalKey(
+                mediaKind = if (episodeContext == null) MetadataMediaKind.MOVIE else MetadataMediaKind.SERIES,
+                canonicalParent = identity,
+                season = episodeContext?.season,
+                episode = episodeContext?.number,
+                profileId = input.profileId
+            )
+        } else {
+            null
+        }
+
+        return ContinueWatchingRecord(
+            profileId = input.profileId,
+            parentId = progress.contentId,
+            contentId = progress.videoId,
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = progress.position,
+            durationMs = progress.duration,
+            episodeContext = episodeContext,
+            clickTimeDisplayMetadata = null,
+            source = if (progress.source == WatchProgress.SOURCE_LOCAL) {
+                ContinueWatchingRecord.Source.LOCAL
+            } else {
+                ContinueWatchingRecord.Source.REMOTE
+            },
+            updatedAt = progress.lastWatched.coerceAtLeast(1L),
+            canonicalKey = canonicalKey,
+            displayIdentity = identity.takeIf { canonicalKey != null },
+            resumeIdentities = listOf(resumeIdentity),
+            primaryResumeLookupKey = resumeIdentity.lookupKey(),
+            identityConfidence = identityConfidence,
+            identityWarnings = warnings,
+            languageTag = input.languageTag
+        )
+    }
+
+    private fun String.canonicalProvider(): ProviderId? =
+        when (substringBefore(':').lowercase()) {
+            "imdb" -> ProviderId.IMDB
+            "tvdb" -> ProviderId.TVDB
+            else -> null
+        }
 
     private class RecordingAirScheduler : ContinueWatchingAirScheduler {
         val scheduledAt = mutableListOf<Long?>()
@@ -177,6 +264,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 IntegrationOwnershipService::class.java -> null
                 ActiveRailTracker::class.java -> ActiveRailTracker()
                 RailMediaIdentityResolver::class.java -> RailMediaIdentityResolver()
+                ContinueWatchingIdentityResolver::class.java -> canonicalResolver()
                 MetadataRouterFacade::class.java -> null
                 else -> null
             }
@@ -205,6 +293,35 @@ class ContinueWatchingSnapshotServiceMutationTest {
         return rawSnapshotFlow(service).value.snapshot
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun snapshotFlow(
+        service: ContinueWatchingSnapshotService
+    ): MutableStateFlow<ProfileOwnedContinueWatchingSnapshot> {
+        val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("snapshotState")
+        field.isAccessible = true
+        return field.get(service) as MutableStateFlow<ProfileOwnedContinueWatchingSnapshot>
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun persistedSnapshotReadyFlow(
+        service: ContinueWatchingSnapshotService
+    ): MutableStateFlow<Boolean> {
+        val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("persistedSnapshotReady")
+        field.isAccessible = true
+        return field.get(service) as MutableStateFlow<Boolean>
+    }
+
+    private fun setPublishedSnapshot(
+        service: ContinueWatchingSnapshotService,
+        profileId: Int = 1,
+        snapshot: ContinueWatchingSnapshot
+    ) {
+        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = snapshot)
+        rawSnapshotFlow(service).value = owned
+        snapshotFlow(service).value = owned
+        persistedSnapshotReadyFlow(service).value = true
+    }
+
     private fun invokeScheduleReemitIfNeeded(
         service: ContinueWatchingSnapshotService,
         entries: List<TrackingNextUpEntry>,
@@ -219,25 +336,295 @@ class ContinueWatchingSnapshotServiceMutationTest {
         method.invoke(service, entries, nowMs)
     }
 
-    private fun invokeBuildRawSnapshot(
+    private suspend fun invokeBuildRawSnapshot(
         service: ContinueWatchingSnapshotService,
         allProgress: List<WatchProgress>,
         nextUpEntries: List<TrackingNextUpEntry>,
-        traktUpNextEntries: List<TrackingNextUpEntry>
+        traktUpNextEntries: List<TrackingNextUpEntry>,
+        profileId: Int = 1,
+        languageTag: String = "en-US"
     ): ContinueWatchingSnapshot {
-        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
-            "buildRawSnapshot",
-            List::class.java,
-            List::class.java,
-            List::class.java
+        return service.buildRawSnapshotForTest(
+            profileId = profileId,
+            languageTag = languageTag,
+            allProgress = allProgress,
+            nextUpEntries = nextUpEntries,
+            traktUpNextEntries = traktUpNextEntries
         )
-        method.isAccessible = true
-        return method.invoke(
-            service,
-            allProgress,
-            nextUpEntries,
-            traktUpNextEntries
-        ) as ContinueWatchingSnapshot
+    }
+
+    @Test
+    fun `canonical snapshot records merge Citadel local TVDB and remote IMDb rows and preserve unresolved rows`() =
+        runTest {
+            val citadelKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = ContentIdentity(
+                    canonicalProvider = ProviderId.TVDB,
+                    canonicalId = "393268",
+                    providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+                ),
+                season = 2,
+                episode = 1,
+                profileId = 4
+            )
+            val resolver = canonicalResolver { input ->
+                when (input.progress.contentId) {
+                    "tvdb:393268", "tt9794044" -> canonicalRecord(
+                        input = input,
+                        canonicalProvider = ProviderId.TVDB,
+                        canonicalId = "393268"
+                    ).copy(
+                        parentId = "series:tvdb:393268",
+                        contentId = "series:tvdb:393268:s2e1",
+                        canonicalKey = citadelKey,
+                        displayIdentity = citadelKey.canonicalParent
+                    )
+                    else -> canonicalRecord(
+                        input = input,
+                        canonicalProvider = null,
+                        canonicalId = null,
+                        identityConfidence = IdentityConfidence.LOW,
+                        warnings = listOf("identity resolution failed: unresolved")
+                    )
+                }
+            }
+            val service = buildService(continueWatchingIdentityResolver = resolver)
+            val localTvdb = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L,
+                source = WatchProgress.SOURCE_LOCAL
+            )
+            val remoteImdb = resume(
+                contentId = "tt9794044",
+                videoId = "tt9794044:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 20_000L,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            )
+            val unresolved = resume(
+                contentId = "addon:unknown",
+                videoId = "addon:unknown:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 30_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                profileId = 4,
+                languageTag = "nl",
+                allProgress = listOf(localTvdb, remoteImdb, unresolved),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(listOf(unresolved, remoteImdb, localTvdb), snapshot.resumeItems)
+            assertEquals(2, snapshot.records.size)
+            val citadel = snapshot.records.single { it.canonicalKey == citadelKey }
+            assertEquals(2, citadel.resumeIdentities.size)
+            assertTrue(citadel.resumeLookupKeys.contains(localTvdb.toResumeIdentity().lookupKey()))
+            assertTrue(citadel.resumeLookupKeys.contains(remoteImdb.toResumeIdentity().lookupKey()))
+            assertEquals("nl", citadel.languageTag)
+            val unresolvedRecord = snapshot.records.single { it.identityConfidence == IdentityConfidence.LOW }
+            assertEquals("addon:unknown", unresolvedRecord.parentId)
+            assertTrue(unresolvedRecord.identityWarnings.single().contains("unresolved"))
+        }
+
+    @Test
+    fun `observeContinueWatching emits canonical resume records plus synthetic next-up records`() =
+        runTest {
+            val service = buildService()
+            val resume = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val nextUp = nextUp(
+                contentId = "tvdb:393268",
+                firstAiredMs = 20_000L,
+                episode = 2
+            ).copy(season = 2, videoId = "tvdb:393268:2:2")
+            val canonicalResume = canonicalRecord(
+                RawContinueWatchingInput(profileId = 1, progress = resume, languageTag = "en-US")
+            ).copy(
+                parentId = "series:tvdb:393268",
+                contentId = "series:tvdb:393268:s2e1"
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(resume),
+                nextUpItems = listOf(nextUp),
+                records = listOf(canonicalResume),
+                updatedAtMs = 1L
+            )
+            setPublishedSnapshot(service, snapshot = snapshot)
+
+            val records = service.observeContinueWatching(profileId = 1).first()
+
+            assertEquals(2, records.size)
+            assertTrue(records.any { it.contentId == "series:tvdb:393268:s2e1" })
+            val synthetic = records.single { it.source == ContinueWatchingRecord.Source.SYNTHETIC }
+            assertEquals("tvdb:393268:s2e2", synthetic.contentId)
+            assertEquals(2, synthetic.episodeContext?.season)
+            assertEquals(2, synthetic.episodeContext?.number)
+        }
+
+    @Test
+    fun `remove and mark watched mutations do not leave stale canonical records observable`() =
+        runTest {
+            val service = buildService()
+            val removedResume = resume(
+                contentId = "show-stale",
+                videoId = "show-stale:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val markedResume = resume(
+                contentId = "show-marked",
+                videoId = "show-marked:1:2",
+                season = 1,
+                episode = 2,
+                lastWatched = 20_000L
+            )
+            val keptResume = resume(
+                contentId = "show-kept",
+                videoId = "show-kept:1:3",
+                season = 1,
+                episode = 3,
+                lastWatched = 30_000L
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(removedResume, markedResume, keptResume),
+                records = listOf(
+                    canonicalRecord(RawContinueWatchingInput(1, removedResume, "en-US")),
+                    canonicalRecord(RawContinueWatchingInput(1, markedResume, "en-US")),
+                    canonicalRecord(RawContinueWatchingInput(1, keptResume, "en-US"))
+                ),
+                updatedAtMs = 1L
+            )
+            setPublishedSnapshot(service, snapshot = snapshot)
+
+            service.removeResumeEntry(removedResume.videoId)
+            service.applyEpisodesMarked(
+                listOf(
+                    ContinueWatchingSnapshotService.EpisodeRef(
+                        showId = markedResume.contentId,
+                        seasonNumber = markedResume.season ?: error("season"),
+                        episodeNumber = markedResume.episode ?: error("episode")
+                    )
+                )
+            )
+            setPublishedSnapshot(service, snapshot = rawSnapshot(service))
+
+            val records = service.observeContinueWatching(profileId = 1).first()
+
+            assertEquals(listOf("show-kept:1:3"), records.map { it.contentId })
+            assertFalse(records.any { it.parentId == removedResume.contentId })
+            assertFalse(records.any { it.parentId == markedResume.contentId })
+        }
+
+    @Test
+    fun `removeShowOptimistically preserves canonical resume aliases for unaffected records`() =
+        runTest {
+            val service = buildService()
+            val resume = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val record = canonicalRecord(
+                RawContinueWatchingInput(profileId = 1, progress = resume, languageTag = "en-US")
+            ).copy(
+                parentId = "series:tvdb:393268",
+                contentId = "series:tvdb:393268:s2e1",
+                resumeIdentities = listOf(
+                    resume.toResumeIdentity(),
+                    resume.copy(contentId = "tt9794044", videoId = "tt9794044:2:1").toResumeIdentity()
+                ),
+                primaryResumeLookupKey = resume.toResumeIdentity().lookupKey()
+            )
+            val unrelatedNextUp = nextUp(
+                contentId = "show-next-up-only",
+                firstAiredMs = 20_000L,
+                episode = 2
+            )
+            setPublishedSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    resumeItems = listOf(resume),
+                    nextUpItems = listOf(unrelatedNextUp),
+                    records = listOf(record),
+                    updatedAtMs = 1L
+                )
+            )
+
+            service.removeShowOptimistically("show-next-up-only")
+
+            val snapshot = rawSnapshot(service)
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(listOf(record), snapshot.records)
+            assertTrue(snapshot.records.single().resumeLookupKeys.contains("tt9794044|tt9794044:2:1|2|1"))
+        }
+
+    @Test
+    fun `removeResumeEntry filters only affected canonical resume record`() =
+        runTest {
+            val service = buildService()
+            val removedResume = resume(
+                contentId = "show-removed",
+                videoId = "show-removed:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val keptResume = resume(
+                contentId = "show-kept",
+                videoId = "show-kept:1:2",
+                season = 1,
+                episode = 2,
+                lastWatched = 20_000L
+            )
+            val removedRecord = canonicalRecord(RawContinueWatchingInput(1, removedResume, "en-US"))
+            val keptRecord = canonicalRecord(RawContinueWatchingInput(1, keptResume, "en-US"))
+            setPublishedSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    resumeItems = listOf(removedResume, keptResume),
+                    records = listOf(removedRecord, keptRecord),
+                    updatedAtMs = 1L
+                )
+            )
+
+            service.removeResumeEntry(removedResume.videoId)
+
+            val snapshot = rawSnapshot(service)
+
+            assertEquals(listOf(keptResume), snapshot.resumeItems)
+            assertEquals(listOf(keptRecord), snapshot.records)
+            assertFalse(snapshot.records.any { it.resumeLookupKeys.contains(removedResume.toResumeIdentity().lookupKey()) })
+        }
+
+    @Test
+    fun `production constructor requires ContinueWatchingIdentityResolver`() {
+        val productionConstructor = ContinueWatchingSnapshotService::class.java.declaredConstructors
+            .firstOrNull { constructor ->
+                constructor.getAnnotation(Inject::class.java) != null
+            }
+            ?: error("ContinueWatchingSnapshotService must have an @Inject constructor")
+
+        assertTrue(
+            "Production @Inject constructor must require ContinueWatchingIdentityResolver",
+            productionConstructor.parameterTypes.any { it == ContinueWatchingIdentityResolver::class.java }
+        )
     }
 
     private fun awaitCondition(timeoutMs: Long = 2_000L, condition: () -> Boolean) {

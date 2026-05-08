@@ -71,7 +71,9 @@ sealed class ContinueWatchingItem {
         val episodeThumbnail: String? = null,
         val episodeImdbRating: Float? = null,
         val genres: List<String> = emptyList(),
-        val releaseInfo: String? = null
+        val releaseInfo: String? = null,
+        val canonicalKey: String? = null,
+        val streamFetchVideoId: String? = null
     ) : ContinueWatchingItem()
 
     @Immutable
@@ -99,7 +101,9 @@ data class NextUpInfo(
     val lastWatched: Long,
     val imdbRating: Float? = null,
     val genres: List<String> = emptyList(),
-    val releaseInfo: String? = null
+    val releaseInfo: String? = null,
+    val canonicalKey: String? = null,
+    val streamFetchVideoId: String? = null
 ) {
     val displayPoster: String?
         get() = displayMetadata?.displayPoster ?: poster
