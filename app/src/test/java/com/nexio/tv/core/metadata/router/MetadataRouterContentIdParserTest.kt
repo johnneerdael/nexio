@@ -51,4 +51,16 @@ class MetadataRouterContentIdParserTest {
         assertEquals("tt0133093", providerNativeIdFromContentId("imdb:tt0133093", "imdb"))
         assertEquals("TT0133093", providerNativeIdFromContentId("imdb:TT0133093", "imdb"))
     }
+
+    @Test
+    fun `provider native id parser rejects trailing colon empty payload`() {
+        assertNull(providerNativeIdFromContentId("tmdb:tv:", "tmdb"))
+        assertNull(providerNativeIdFromContentId("tmdb:movie:", "tmdb"))
+        assertNull(providerNativeIdFromContentId("tmdb:", "tmdb"))
+    }
+
+    @Test
+    fun `provider native id parser rejects empty middle segment`() {
+        assertNull(providerNativeIdFromContentId("tmdb::1399", "tmdb"))
+    }
 }

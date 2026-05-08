@@ -40,4 +40,23 @@ class MetadataIdParserTypedTmdbTest {
         assertEquals(AnimeIdScheme.TVDB, parsed.scheme)
         assertEquals("81189", parsed.value)
     }
+
+    @Test
+    fun `parser falls back to unknown for typed tmdb shape with empty payload`() {
+        val parsed = MetadataIdParser.parse("tmdb:tv:")
+        assertEquals(AnimeIdScheme.UNKNOWN, parsed.scheme)
+        assertEquals("tmdb:tv:", parsed.raw)
+    }
+
+    @Test
+    fun `parser falls back to unknown for typed tmdb movie shape with empty payload`() {
+        val parsed = MetadataIdParser.parse("tmdb:movie:")
+        assertEquals(AnimeIdScheme.UNKNOWN, parsed.scheme)
+    }
+
+    @Test
+    fun `parser falls back to unknown for empty middle segment`() {
+        val parsed = MetadataIdParser.parse("tmdb::1399")
+        assertEquals(AnimeIdScheme.UNKNOWN, parsed.scheme)
+    }
 }
