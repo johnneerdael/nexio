@@ -14,12 +14,15 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
+import com.nexio.tv.data.repository.ContinueWatchingRecord
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
+import com.nexio.tv.data.repository.ResumeIdentity
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
+import com.nexio.tv.data.repository.toResumeIdentity
 import kotlinx.coroutines.CancellationException
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -91,6 +94,7 @@ internal suspend fun resolveProjectedContinueWatchingIdentityKeys(
     val result = mutableMapOf<Int, String>()
     items.forEachIndexed { index, item ->
         val contentId = item.contentId()
+        val fallbackKey = item.canonicalOrContentKey()
         val season = item.season()
         val episode = item.episode()
         val key = if (
@@ -115,10 +119,10 @@ internal suspend fun resolveProjectedContinueWatchingIdentityKeys(
                 projection.targetCoordinate?.identityKey
                     ?: projection.sourceKitsuCoordinate.identityKey
             } catch (_: Exception) {
-                contentId
+                fallbackKey
             }
         } else {
-            contentId
+            fallbackKey
         }
         result[index] = key
     }
@@ -149,6 +153,61 @@ internal suspend fun <T, R> mapContinueWatchingEnrichmentWithLimit(
             }
         }
     }.awaitAll()
+}
+
+internal fun buildContinueWatchingItemsForSnapshot(
+    snapshot: ContinueWatchingSnapshot,
+    nowMs: Long
+): List<ContinueWatchingItem> {
+    if (snapshot.records.isEmpty()) {
+        return buildRawContinueWatchingItemsForSnapshot(snapshot, nowMs)
+    }
+
+    val timeline = buildMixedContinueWatchingTimeline(
+        resumeItems = snapshot.records,
+        nextUpItems = snapshot.nextUpItems,
+        resumeRef = ::resumeRefForContinueWatchingRecord,
+        nextUpRef = ::nextUpRefForContinueWatching
+    )
+    val rawResumeByLookupKey = snapshot.resumeItems.associateBy { it.toResumeIdentity().lookupKey() }
+
+    return timeline.mapNotNull { row ->
+        when (row) {
+            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingItem(
+                rawResumeByLookupKey = rawResumeByLookupKey,
+                displayMetadataByItemKey = snapshot.displayMetadataByItemKey
+            )
+            is ContinueWatchingTimelineRow.NextUp ->
+                row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+        }
+    }.filter { item ->
+        item !is ContinueWatchingItem.NextUp || item.info.hasAired
+    }.dedupByCanonicalOrContentKey()
+}
+
+private fun buildRawContinueWatchingItemsForSnapshot(
+    snapshot: ContinueWatchingSnapshot,
+    nowMs: Long
+): List<ContinueWatchingItem> {
+    val timeline = buildMixedContinueWatchingTimeline(
+        resumeItems = snapshot.resumeItems,
+        nextUpItems = snapshot.nextUpItems,
+        resumeRef = ::resumeRefForContinueWatching,
+        nextUpRef = ::nextUpRefForContinueWatching
+    )
+    return timeline.map { row ->
+        when (row) {
+            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
+            is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+        }
+    }.filter { item ->
+        item !is ContinueWatchingItem.NextUp || item.info.hasAired
+    }
+}
+
+private fun List<ContinueWatchingItem>.dedupByCanonicalOrContentKey(): List<ContinueWatchingItem> {
+    val seen = linkedSetOf<String>()
+    return filter { item -> seen.add(item.canonicalOrContentKey()) }
 }
 
 internal sealed interface ProfileScopedEmission<out T> {
@@ -330,21 +389,8 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     continueWatchingSnapshotVersion += 1L
     val snapshotVersion = continueWatchingSnapshotVersion
 
-    val timeline = buildMixedContinueWatchingTimeline(
-        resumeItems = snapshot.resumeItems,
-        nextUpItems = snapshot.nextUpItems,
-        resumeRef = ::resumeRefForContinueWatching,
-        nextUpRef = ::nextUpRefForContinueWatching
-    )
     val nowMs = System.currentTimeMillis()
-    val rawItems = timeline.map { row ->
-        when (row) {
-            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
-            is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
-        }
-    }.filter { item ->
-        item !is ContinueWatchingItem.NextUp || item.info.hasAired
-    }
+    val rawItems = buildContinueWatchingItemsForSnapshot(snapshot, nowMs)
     // Apply anime projection dedup: kitsu:X S3E1 and tvdb:Y S3E1 that map to the same
     // projected coordinate collapse to one entry, eliminating cross-source duplicates.
     val projectedKeys = try {
@@ -354,7 +400,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     }
     val items = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
         val idx = rawItems.indexOfFirst { it === item }
-        projectedKeys[idx] ?: item.contentId()
+        projectedKeys[idx] ?: item.canonicalOrContentKey()
     }
     val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
         entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
@@ -976,6 +1022,15 @@ private fun resumeRefForContinueWatching(progress: WatchProgress): ContinueWatch
     )
 }
 
+private fun resumeRefForContinueWatchingRecord(record: ContinueWatchingRecord): ContinueWatchingResumeRef {
+    val primaryResume = record.primaryResumeIdentity()
+    return ContinueWatchingResumeRef(
+        contentId = primaryResume?.contentId ?: record.streamFetchIdentity?.contentId ?: record.parentId,
+        activityAtMs = record.updatedAt,
+        suppressNextUp = record.episodeContext != null || primaryResume?.isEpisode == true
+    )
+}
+
 private fun nextUpRefForContinueWatching(
     entry: com.nexio.tv.data.repository.TrackingNextUpEntry
 ): ContinueWatchingNextUpRef {
@@ -985,6 +1040,117 @@ private fun nextUpRefForContinueWatching(
         firstAiredMs = entry.firstAiredMs,
         availabilityInstantMs = entry.tvdbAvailabilityInstantMs
     )
+}
+
+private fun ContinueWatchingRecord.toContinueWatchingItem(
+    rawResumeByLookupKey: Map<String, WatchProgress>,
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+): ContinueWatchingItem? {
+    val resumeIdentity = primaryResumeIdentity()
+    if (resumeIdentity != null) {
+        return toContinueWatchingInProgress(
+            resumeIdentity = resumeIdentity,
+            rawResumeByLookupKey = rawResumeByLookupKey,
+            displayMetadataByItemKey = displayMetadataByItemKey
+        )
+    }
+    return toSyntheticNextUp(displayMetadataByItemKey)
+}
+
+private fun ContinueWatchingRecord.primaryResumeIdentity(): ResumeIdentity? {
+    return resumeIdentities.firstOrNull { it.lookupKey() == primaryResumeLookupKey }
+        ?: resumeIdentities.maxByOrNull { it.lastWatchedMs }
+}
+
+private fun ContinueWatchingRecord.toContinueWatchingInProgress(
+    resumeIdentity: ResumeIdentity,
+    rawResumeByLookupKey: Map<String, WatchProgress>,
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+): ContinueWatchingItem.InProgress {
+    val canonicalKey = identityKey()
+    val contentType = contentTypeForUi()
+    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, resumeIdentity.contentId)]
+    val rawProgress = rawResumeByLookupKey[resumeIdentity.lookupKey()]
+    val baseProgress = rawProgress ?: WatchProgress(
+        contentId = resumeIdentity.contentId,
+        contentType = contentType,
+        name = displayMetadata?.title ?: parentId,
+        poster = displayMetadata?.displayPoster,
+        backdrop = displayMetadata?.displayBackdrop,
+        logo = displayMetadata?.displayLogo,
+        videoId = resumeIdentity.videoId,
+        season = resumeIdentity.season,
+        episode = resumeIdentity.episode,
+        episodeTitle = null,
+        position = resumeIdentity.positionMs,
+        duration = resumeIdentity.durationMs ?: durationMs,
+        lastWatched = resumeIdentity.lastWatchedMs,
+        progressPercent = resumeIdentity.progressPercent
+    )
+    return baseProgress.copy(
+        contentId = resumeIdentity.contentId,
+        contentType = contentType,
+        name = displayMetadata?.title ?: baseProgress.name,
+        poster = displayMetadata?.displayPoster ?: baseProgress.poster,
+        backdrop = displayMetadata?.displayBackdrop ?: baseProgress.backdrop,
+        logo = displayMetadata?.displayLogo ?: baseProgress.logo,
+        videoId = resumeIdentity.videoId,
+        season = resumeIdentity.season,
+        episode = resumeIdentity.episode,
+        position = positionMs,
+        duration = durationMs,
+        lastWatched = updatedAt,
+        progressPercent = resumeIdentity.progressPercent
+    ).toContinueWatchingInProgress(displayMetadataByItemKey).copy(
+        canonicalKey = canonicalKey,
+        streamFetchVideoId = streamFetchIdentity?.videoId
+    )
+}
+
+private fun ContinueWatchingRecord.toSyntheticNextUp(
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+): ContinueWatchingItem.NextUp? {
+    val episode = episodeContext ?: return null
+    val contentType = contentTypeForUi()
+    val contentId = streamFetchIdentity?.contentId ?: parentId
+    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    return ContinueWatchingItem.NextUp(
+        NextUpInfo(
+            contentId = contentId,
+            contentType = contentType,
+            name = displayMetadata?.title ?: parentId,
+            poster = displayMetadata?.displayPoster,
+            backdrop = displayMetadata?.displayBackdrop,
+            logo = displayMetadata?.displayLogo,
+            displayMetadata = displayMetadata,
+            videoId = streamFetchIdentity?.videoId ?: contentId,
+            season = episode.season,
+            episode = episode.number,
+            episodeTitle = null,
+            episodeDescription = displayMetadata?.description,
+            thumbnail = displayMetadata?.displayThumbnail,
+            released = null,
+            hasAired = true,
+            airDateLabel = null,
+            lastWatched = updatedAt,
+            imdbRating = displayMetadata?.imdbRating,
+            genres = displayMetadata?.genres.orEmpty(),
+            releaseInfo = displayMetadata?.releaseInfo,
+            canonicalKey = identityKey(),
+            streamFetchVideoId = streamFetchIdentity?.videoId
+        )
+    )
+}
+
+private fun ContinueWatchingRecord.contentTypeForUi(): String {
+    val mediaKind = canonicalKey?.mediaKind?.name?.lowercase(Locale.US)
+    return when {
+        mediaKind == "movie" -> ContentType.MOVIE.toApiString()
+        mediaKind == "series" || episodeContext != null -> ContentType.SERIES.toApiString()
+        parentId.startsWith("movie:", ignoreCase = true) ||
+            contentId.startsWith("movie:", ignoreCase = true) -> ContentType.MOVIE.toApiString()
+        else -> ContentType.SERIES.toApiString()
+    }
 }
 
 private fun WatchProgress.toContinueWatchingInProgress(
