@@ -643,7 +643,7 @@ private fun List<MetaPreview>.applyHydratedHomeOverlaysToHeroItems(
 
     var changed = false
     val updatedItems = map { item ->
-        val overlay = overlaysByItemKey[item.homeOverlayItemKey()] ?: return@map item
+        val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
         val updated = overlay.fields.applyToHeroItem(item, tmdbSettings)
         if (updated != item) {
             changed = true
