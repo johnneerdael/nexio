@@ -258,7 +258,8 @@ data class TvdbRemoteId(
 @JsonClass(generateAdapter = true)
 data class TvdbSeriesEpisodesResponse(
     @Json(name = "status") val status: String? = null,
-    @Json(name = "data") val data: TvdbSeriesEpisodesData? = null
+    @Json(name = "data") val data: TvdbSeriesEpisodesData? = null,
+    @Json(name = "links") val links: TvdbLinks? = null
 )
 
 @JsonClass(generateAdapter = true)

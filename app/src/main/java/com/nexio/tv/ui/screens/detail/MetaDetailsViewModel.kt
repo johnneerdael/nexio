@@ -1772,12 +1772,17 @@ class MetaDetailsViewModel @Inject constructor(
         if (!settings.useEpisodes || !isTvContent) return targetMeta
 
         val tvdbCoreEpisodes = tvEnrichment?.episodeMetadata.orEmpty()
-        val seasonNumbers = targetMeta.videos
-            .mapNotNull { it.season }
-            .ifEmpty {
-                tvdbCoreEpisodes.keys.map { it.first }
-            }
-            .distinct()
+        val shouldRequestAllTvdbEpisodes = tvEnrichment?.seriesTvdbId != null
+        val seasonNumbers = if (shouldRequestAllTvdbEpisodes) {
+            emptyList()
+        } else {
+            targetMeta.videos
+                .mapNotNull { it.season }
+                .ifEmpty {
+                    tvdbCoreEpisodes.keys.map { it.first }
+                }
+                .distinct()
+        }
 
         val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(
             metadataRequest = MetadataRequest(
@@ -1823,8 +1828,14 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        return targetMeta.copy(
-            videos = targetMeta.videos.map { video ->
+        val existingKeys = targetMeta.videos
+            .mapNotNull { video ->
+                val season = video.season ?: return@mapNotNull null
+                val episode = video.episode ?: return@mapNotNull null
+                season to episode
+            }
+            .toSet()
+        val hydratedVideos = targetMeta.videos.map { video ->
                 val season = video.season
                 val episode = video.episode
                 val key = if (season != null && episode != null) season to episode else null
@@ -1845,6 +1856,16 @@ class MetaDetailsViewModel @Inject constructor(
                     tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
                 )
             }
+        val missingVideos = buildKitsuEpisodeVideos(
+            seriesId = targetMeta.id,
+            episodeLabel = context.getString(R.string.episodes_episode),
+            episodeMap = episodeMap.filterKeys { it !in existingKeys }
+        )
+        val mergedVideos = (hydratedVideos + missingVideos)
+            .sortedWith(compareBy<Video>({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }, { it.title }))
+
+        return targetMeta.copy(
+            videos = mergedVideos
         )
     }
 
