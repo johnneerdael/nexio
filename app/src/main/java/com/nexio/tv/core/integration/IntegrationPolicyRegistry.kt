@@ -36,7 +36,7 @@ fun defaultIntegrationPolicyRegistry(): IntegrationPolicyRegistry =
             IntegrationProvider.YOUTUBE_TRAILER to IntegrationProviderPolicy(),
             IntegrationProvider.OPEN_SUBTITLES to IntegrationProviderPolicy(),
             IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD to IntegrationProviderPolicy(),
-            IntegrationProvider.SUBTITLE_TRANSLATION to IntegrationProviderPolicy(),
+            IntegrationProvider.SUBTITLE_TRANSLATION to IntegrationProviderPolicy(allowDuringPlayback = true),
             IntegrationProvider.WYZIE_SUBTITLES to IntegrationProviderPolicy()
         )
     )
