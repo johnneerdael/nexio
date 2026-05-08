@@ -52,6 +52,28 @@ data class HydratedHomeOverlay(
     fun isExpired(nowMs: Long): Boolean = nowMs >= expiresAtMs
 }
 
+/**
+ * True when two overlays describe the same content. Ignores [HydratedHomeOverlay.updatedAtMs],
+ * [HydratedHomeOverlay.staleAtMs], and [HydratedHomeOverlay.expiresAtMs] which are stamped fresh
+ * on every rebuild even when nothing else has changed. Use this — not data-class equality — for
+ * the apply-seam dedup, the publish gate, and the catalog-signature hash. Otherwise every
+ * cache-hit hydration tick mutates the overlay map, fires scheduleUpdateCatalogRows(), and
+ * triggers a full Compose recomposition.
+ */
+fun HydratedHomeOverlay.contentEquals(other: HydratedHomeOverlay): Boolean =
+    overlayKey == other.overlayKey &&
+        itemKey == other.itemKey &&
+        canonicalProvider == other.canonicalProvider &&
+        canonicalId == other.canonicalId &&
+        imdbId == other.imdbId &&
+        contentType == other.contentType &&
+        languageTag == other.languageTag &&
+        policyVersion == other.policyVersion &&
+        fields == other.fields &&
+        fieldTrace == other.fieldTrace &&
+        displayHash == other.displayHash &&
+        state == other.state
+
 fun hydratedHomeOverlayKey(
     canonicalProvider: ProviderId,
     canonicalId: String,

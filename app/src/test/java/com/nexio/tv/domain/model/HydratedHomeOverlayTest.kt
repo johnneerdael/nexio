@@ -94,6 +94,55 @@ class HydratedHomeOverlayTest {
     }
 
     @Test
+    fun `contentEquals returns true when only timestamps differ`() {
+        val fields = HomeDisplayMetadata(title = "Same")
+        val a = HydratedHomeOverlay(
+            overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+            itemKey = "movie:tmdb:550",
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            contentType = ContentType.MOVIE,
+            languageTag = "en",
+            policyVersion = 1,
+            fields = fields,
+            fieldTrace = emptyList(),
+            updatedAtMs = 1_000L,
+            staleAtMs = 2_000L,
+            expiresAtMs = 3_000L,
+            state = HomeItemHydrationState.CANONICAL_READY
+        )
+        val b = a.copy(updatedAtMs = 5_000L, staleAtMs = 6_000L, expiresAtMs = 7_000L)
+
+        assertNotEquals(a, b)
+        assertTrue(a.contentEquals(b))
+    }
+
+    @Test
+    fun `contentEquals returns false when displayHash differs`() {
+        val a = HydratedHomeOverlay(
+            overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+            itemKey = "movie:tmdb:550",
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            contentType = ContentType.MOVIE,
+            languageTag = "en",
+            policyVersion = 1,
+            fields = HomeDisplayMetadata(title = "Old"),
+            fieldTrace = emptyList(),
+            updatedAtMs = 1_000L,
+            staleAtMs = 2_000L,
+            expiresAtMs = 3_000L,
+            state = HomeItemHydrationState.CANONICAL_READY
+        )
+        val newFields = HomeDisplayMetadata(title = "New")
+        val b = a.copy(fields = newFields, displayHash = newFields.hydratedHomeDisplayHash())
+
+        assertFalse(a.contentEquals(b))
+    }
+
+    @Test
     fun `freshness uses stale and expiry timestamps`() {
         val overlay = hydratedOverlay(
             updatedAtMs = 1_000L,
