@@ -97,6 +97,35 @@ class WatchProgressRepositoryRouterRoutingTest {
     }
 
     @Test
+    fun `fetchContentMetadata negative caches resolver failures for the same content id`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        coEvery { facade.resolveRequest(any()) } throws IllegalStateException("Identity resolution failed")
+
+        val progress = WatchProgress(
+            contentId = "tt6103712",
+            contentType = "series",
+            name = "Survivor",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tt6103712:50:11",
+            season = 50,
+            episode = 11,
+            episodeTitle = null,
+            position = 0L,
+            duration = 0L,
+            lastWatched = 0L
+        )
+
+        val repo = buildRepository(facade = facade)
+
+        assertEquals(null, repo.fetchContentMetadata(progress))
+        assertEquals(null, repo.fetchContentMetadata(progress))
+
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+    }
+
+    @Test
     fun `fetchContentMetadata falls back to WatchProgress fields when displayMetadata has nulls`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         coEvery { facade.resolveRequest(any()) } returns successResult().copy(

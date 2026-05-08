@@ -151,6 +151,19 @@ class TraktProgressResolveRequestTest {
         assertEquals(null, result)
     }
 
+    @Test
+    fun `fetchContentMetadata negative caches resolver failures for the same content id`() = runTest {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        coEvery { facade.resolveRequest(any()) } throws IllegalStateException("Identity resolution failed")
+
+        val service = buildService(facade)
+
+        assertEquals(null, service.fetchContentMetadata("tt6103712", "series"))
+        assertEquals(null, service.fetchContentMetadata("tt6103712", "series"))
+
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

@@ -224,6 +224,7 @@ class TraktProgressService @Inject constructor(
         val myShowsNextUpAll: MutableStateFlow<List<NextUpEntry>> = MutableStateFlow(emptyList()),
         val optimisticProgress: MutableStateFlow<Map<String, OptimisticProgressEntry>> = MutableStateFlow(emptyMap()),
         val metadataState: MutableStateFlow<Map<String, ContentMetadata>> = MutableStateFlow(emptyMap()),
+        val metadataFailureState: MutableStateFlow<Map<String, Long>> = MutableStateFlow(emptyMap()),
         val hiddenProgressState: MutableStateFlow<HiddenProgressSnapshot> = MutableStateFlow(HiddenProgressSnapshot()),
         val episodeProgressState: MutableStateFlow<Map<String, EpisodeProgressCacheEntry>> = MutableStateFlow(emptyMap()),
         val showNextUpState: MutableStateFlow<Map<String, ShowNextUpCacheEntry>> = MutableStateFlow(emptyMap()),
@@ -262,6 +263,7 @@ class TraktProgressService @Inject constructor(
             myShowsNextUpAll.value = emptyList()
             optimisticProgress.value = emptyMap()
             metadataState.value = emptyMap()
+            metadataFailureState.value = emptyMap()
             hiddenProgressState.value = HiddenProgressSnapshot()
             episodeProgressState.value = emptyMap()
             showNextUpState.value = emptyMap()
@@ -325,6 +327,7 @@ class TraktProgressService @Inject constructor(
     private val myShowsNextUpAll get() = runtimeState().myShowsNextUpAll
     private val optimisticProgress get() = runtimeState().optimisticProgress
     private val metadataState get() = runtimeState().metadataState
+    private val metadataFailureState get() = runtimeState().metadataFailureState
     private val hiddenProgressState get() = runtimeState().hiddenProgressState
     private val episodeProgressState get() = runtimeState().episodeProgressState
     private val showNextUpState get() = runtimeState().showNextUpState
@@ -426,6 +429,7 @@ class TraktProgressService @Inject constructor(
     private val optimisticTtlMs = 3 * 60_000L
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 110
+    private val metadataFailureTtlMs = 15 * 60_000L
     private val metadataFetchSemaphore = Semaphore(5)
     private val nextUpValidationSemaphore = Semaphore(2)
     private val fastSyncThrottleMs = 15_000L
@@ -588,6 +592,7 @@ class TraktProgressService @Inject constructor(
 
     fun invalidateLocalizedMetadata() {
         metadataState.value = emptyMap()
+        metadataFailureState.value = emptyMap()
         scope.launch {
             metadataMutex.withLock {
                 inFlightMetadataKeys.clear()
@@ -2344,10 +2349,12 @@ class TraktProgressService @Inject constructor(
             val contentId = progress.contentId
             if (contentId.isBlank()) return@forEach
             if (metadataState.value.containsKey(contentId)) return@forEach
+            if (hasFreshMetadataFailure(contentId)) return@forEach
 
             scope.launch {
                 val shouldFetch = metadataMutex.withLock {
                     if (metadataState.value.containsKey(contentId)) return@withLock false
+                    if (hasFreshMetadataFailure(contentId)) return@withLock false
                     if (inFlightMetadataKeys.contains(contentId)) return@withLock false
                     inFlightMetadataKeys.add(contentId)
                     true
@@ -2377,6 +2384,7 @@ class TraktProgressService @Inject constructor(
         contentId: String,
         contentType: String
     ): ContentMetadata? {
+        if (hasFreshMetadataFailure(contentId)) return null
         val request = MetadataRequest(
             contentId = contentId,
             contentType = ContentType.fromString(contentType),
@@ -2388,10 +2396,15 @@ class TraktProgressService @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "fetchContentMetadata resolveRequest failed for $contentId: ${e.message}", e)
+            recordMetadataFailure(contentId)
+            Log.w(TAG, "fetchContentMetadata resolveRequest failed for $contentId: ${e.message}")
             return null
         }
-        if (canonical.route == null) return null
+        if (canonical.route == null) {
+            recordMetadataFailure(contentId)
+            return null
+        }
+        clearMetadataFailure(contentId)
         val display = canonical.displayMetadata
         return ContentMetadata(
             name = display.title,
@@ -2400,6 +2413,23 @@ class TraktProgressService @Inject constructor(
             logo = display.logo,
             episodes = emptyMap()
         )
+    }
+
+    private fun hasFreshMetadataFailure(contentId: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val failedAtMs = metadataFailureState.value[contentId] ?: return false
+        return nowMs - failedAtMs < metadataFailureTtlMs
+    }
+
+    private fun recordMetadataFailure(contentId: String, nowMs: Long = System.currentTimeMillis()) {
+        if (contentId.isBlank()) return
+        metadataFailureState.update { current ->
+            current.filterValues { failedAtMs -> nowMs - failedAtMs < metadataFailureTtlMs } +
+                (contentId to nowMs)
+        }
+    }
+
+    private fun clearMetadataFailure(contentId: String) {
+        metadataFailureState.update { current -> current - contentId }
     }
 
     suspend fun addHistoryBatch(
