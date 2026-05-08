@@ -855,6 +855,140 @@ class ArtworkAssetRepositoryTest {
         assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value)
     }
 
+    @Test
+    fun `fetchOrFallback suppresses fallback materialization on soft network failure when prior asset record exists`() = runTest {
+        val remoteSourceFile = temp.newFile("remote-sources-soft.json")
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val materialized = ArtworkSourceMaterializer(
+            remoteSourcesByHash = emptyMap(),
+            remoteSourceStore = remoteSourceStore
+        ).materialize(decision)!!
+        val seededRecord = ArtworkAssetRecord(
+            assetKey = materialized.assetKey,
+            decisionKey = decision.decisionKey,
+            provider = materialized.provider,
+            imageType = decision.imageType,
+            relativePath = "stub/${materialized.assetKey.value}",
+            sourceHash = materialized.sourceHash,
+            mimeType = ByteArrayIntegrationCodec.mimeType,
+            byteCount = 4L,
+            policyVersion = decision.policyVersion,
+            fetchedAtMs = 0L,
+            expiresAtMs = decision.expiresAtMs,
+            staleUntilMs = decision.staleUntilMs ?: decision.expiresAtMs
+        )
+        val recordStore = RecordingArtworkAssetRecordStore().apply { put(seededRecord) }
+        val traceSink = RecordingArtworkTraceSink()
+        val runtime = LoadingIntegrationRuntime()
+        val repository = repository(
+            runtime = runtime,
+            sourceMaterializer = ArtworkSourceMaterializer(
+                remoteSourcesByHash = emptyMap(),
+                remoteSourceStore = remoteSourceStore
+            ),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.NetworkError(IllegalStateException("simulated network blip"))
+            },
+            assetRecordStore = recordStore,
+            traceSink = traceSink
+        )
+
+        val result = repository.fetchOrFallback(decision)
+
+        assertNull("soft network failure must suppress fallback when prior asset record exists", result)
+        assertNull(
+            "fallback must not be materialized on soft network failure",
+            traceSink.events.firstOrNull { it.eventType == "artwork.fallback_materialized" }
+        )
+        val suppressed = traceSink.events.single { it.eventType == "artwork.fallback_suppressed_soft_failure" }
+        val payload = suppressed.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), payload["decisionKeyHash"])
+        assertEquals("soft_failure_prior_asset_recoverable", payload["reason"])
+        assertEquals("network_error:IllegalStateException", payload["loadErrorClass"])
+    }
+
+    @Test
+    fun `fetchOrFallback runs fallback on soft failure when no prior asset record exists`() = runTest {
+        val remoteSourceFile = temp.newFile("remote-sources-no-prior.json")
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            sourceMaterializer = ArtworkSourceMaterializer(
+                remoteSourcesByHash = emptyMap(),
+                remoteSourceStore = remoteSourceStore
+            ),
+            byteLoader = premiumFailsRemoteSucceedsLoader(),
+            traceSink = traceSink
+        )
+
+        val result = repository.fetchOrFallback(decision)
+
+        assertNotNull(result)
+        assertEquals("FALLBACK_MATERIALIZED", result!!.cacheDecision)
+        assertEquals(
+            1,
+            traceSink.events.count { it.eventType == "artwork.fallback_materialized" }
+        )
+    }
+
+    @Test
+    fun `fetchOrFallback runs fallback on hard HTTP 403 even when prior asset record exists`() = runTest {
+        val remoteSourceFile = temp.newFile("remote-sources-hard.json")
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(remoteSourceFile, Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val materialized = ArtworkSourceMaterializer(
+            remoteSourcesByHash = emptyMap(),
+            remoteSourceStore = remoteSourceStore
+        ).materialize(decision)!!
+        val seededRecord = ArtworkAssetRecord(
+            assetKey = materialized.assetKey,
+            decisionKey = decision.decisionKey,
+            provider = materialized.provider,
+            imageType = decision.imageType,
+            relativePath = "stub/${materialized.assetKey.value}",
+            sourceHash = materialized.sourceHash,
+            mimeType = ByteArrayIntegrationCodec.mimeType,
+            byteCount = 4L,
+            policyVersion = decision.policyVersion,
+            fetchedAtMs = 0L,
+            expiresAtMs = decision.expiresAtMs,
+            staleUntilMs = decision.staleUntilMs ?: decision.expiresAtMs
+        )
+        val recordStore = RecordingArtworkAssetRecordStore().apply { put(seededRecord) }
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            sourceMaterializer = ArtworkSourceMaterializer(
+                remoteSourcesByHash = emptyMap(),
+                remoteSourceStore = remoteSourceStore
+            ),
+            byteLoader = ArtworkByteLoader { source, _ ->
+                when (source) {
+                    is ArtworkSource.ProviderTemplate ->
+                        IntegrationLoadResult.HttpError(statusCode = 403)
+                    is ArtworkSource.RemoteUrl ->
+                        IntegrationLoadResult.Success("fallback-bytes".toByteArray())
+                    else ->
+                        IntegrationLoadResult.HttpError(statusCode = 404)
+                }
+            },
+            assetRecordStore = recordStore,
+            traceSink = traceSink
+        )
+
+        val result = repository.fetchOrFallback(decision)
+
+        assertNotNull("hard credential failure must allow fallback materialization", result)
+        assertEquals("FALLBACK_MATERIALIZED", result!!.cacheDecision)
+        assertNull(
+            "hard failure must not be classified as soft",
+            traceSink.events.firstOrNull { it.eventType == "artwork.fallback_suppressed_soft_failure" }
+        )
+    }
+
     private fun assertTracePayloadsDoNotContain(
         traceSink: RecordingArtworkTraceSink,
         vararg sensitiveValues: String

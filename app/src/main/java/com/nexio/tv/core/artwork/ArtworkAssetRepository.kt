@@ -118,7 +118,7 @@ class ArtworkAssetRepository @Inject constructor(
     }
 
     private suspend fun materializeFoundDecision(decision: ArtworkDecision): ArtworkAssetResult? {
-        val result = getOrFetch(decision) ?: getOrFetchFallback(decision)
+        val result = fetchOrFallback(decision)
         traceArtwork(
             eventType = "artwork.asset_materialized",
             payload = mapOf(
@@ -277,8 +277,42 @@ class ArtworkAssetRepository @Inject constructor(
         )
     }
 
-    suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? {
-        val materialized = sourceMaterializer.materialize(decision) ?: return null
+    suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? =
+        (fetchInternal(decision) as? FetchOutcome.Success)?.result
+
+    /**
+     * Calls [getOrFetch]; on failure, only invokes [getOrFetchFallback] when the failure
+     * mode warrants it. Soft transient failures (network missing, timeouts, 5xx, 429)
+     * combined with a recoverable prior asset (file on disk or asset record present) are
+     * suppressed, preserving the previously-resolved premium artwork rather than swapping
+     * in a weaker fallback for one bad refresh.
+     */
+    suspend fun fetchOrFallback(decision: ArtworkDecision): ArtworkAssetResult? {
+        return when (val outcome = fetchInternal(decision)) {
+            is FetchOutcome.Success -> outcome.result
+            is FetchOutcome.SoftFailure -> {
+                if (outcome.priorAssetRecoverable) {
+                    traceArtwork(
+                        eventType = "artwork.fallback_suppressed_soft_failure",
+                        payload = mapOf(
+                            "decisionKeyHash" to decision.decisionKey.hashedForTrace(),
+                            "reason" to "soft_failure_prior_asset_recoverable",
+                            "loadErrorClass" to outcome.loadErrorClass
+                        )
+                    )
+                    null
+                } else {
+                    getOrFetchFallback(decision)
+                }
+            }
+            is FetchOutcome.HardFailure -> getOrFetchFallback(decision)
+            FetchOutcome.NotMaterialized -> null
+        }
+    }
+
+    private suspend fun fetchInternal(decision: ArtworkDecision): FetchOutcome {
+        val materialized = sourceMaterializer.materialize(decision)
+            ?: return FetchOutcome.NotMaterialized
         diskCache.getExistingFile(materialized.assetKey)?.let { existing ->
             existingAssetResultOrNull(
                 file = existing,
@@ -286,12 +320,13 @@ class ArtworkAssetRepository @Inject constructor(
                 decision = decision,
                 cacheDecision = "ARTWORK_DISK_HIT",
                 networkExecuted = false
-            )?.let { return it }
+            )?.let { return FetchOutcome.Success(it) }
         }
 
         val apiShapeId = materialized.apiShapeId
         val runtimeProvider = materialized.runtimeProvider
         var loaderInvoked = false
+        var lastLoadResult: IntegrationLoadResult<ByteArray>? = null
         val result = runtime.get(
             IntegrationSpec(
                 provider = runtimeProvider,
@@ -308,20 +343,32 @@ class ArtworkAssetRepository @Inject constructor(
                 scope = IntegrationScope.GlobalEnglishImage,
                 load = {
                     loaderInvoked = true
-                    byteLoader.load(materialized.source, decision)
+                    val loaded = byteLoader.load(materialized.source, decision)
+                    lastLoadResult = loaded
+                    loaded
                 }
             )
         )
 
         val bytes = result.bytesOrNull()
         if (bytes == null) {
-            return diskCache.getExistingFile(materialized.assetKey)?.let { existing ->
+            diskCache.getExistingFile(materialized.assetKey)?.let { existing ->
                 existingAssetResultOrNull(
                     file = existing,
                     materialized = materialized,
                     decision = decision,
                     cacheDecision = "ARTWORK_DISK_HIT_AFTER_RUNTIME_MISS",
                     networkExecuted = loaderInvoked
+                )?.let { return FetchOutcome.Success(it) }
+            }
+            val priorAssetRecoverable = priorAssetRecoverable(materialized)
+            return when {
+                lastLoadResult.isSoftFailure() -> FetchOutcome.SoftFailure(
+                    priorAssetRecoverable = priorAssetRecoverable,
+                    loadErrorClass = lastLoadResult.classifyForTrace()
+                )
+                else -> FetchOutcome.HardFailure(
+                    loadErrorClass = lastLoadResult.classifyForTrace()
                 )
             }
         }
@@ -337,16 +384,50 @@ class ArtworkAssetRepository @Inject constructor(
         )
         val write = diskCache.write(record, bytes)
         persistAssetRecordBestEffort(write.record)
-        return ArtworkAssetResult(
-            assetKey = materialized.assetKey,
-            localFile = write.file,
-            record = write.record,
-            runtimeResult = result,
-            runtimeApiShapeId = apiShapeId,
-            cacheDecision = result.cacheDecision(),
-            mimeType = write.record.mimeType,
-            networkExecuted = loaderInvoked
+        return FetchOutcome.Success(
+            ArtworkAssetResult(
+                assetKey = materialized.assetKey,
+                localFile = write.file,
+                record = write.record,
+                runtimeResult = result,
+                runtimeApiShapeId = apiShapeId,
+                cacheDecision = result.cacheDecision(),
+                mimeType = write.record.mimeType,
+                networkExecuted = loaderInvoked
+            )
         )
+    }
+
+    private fun priorAssetRecoverable(materialized: MaterializedArtworkSource): Boolean {
+        if (diskCache.getExistingFile(materialized.assetKey) != null) return true
+        return runCatching { assetRecordStore.get(materialized.assetKey) }.getOrNull() != null
+    }
+
+    private fun IntegrationLoadResult<*>?.isSoftFailure(): Boolean = when (this) {
+        null, is IntegrationLoadResult.Success<*> -> false
+        is IntegrationLoadResult.NetworkError -> true
+        is IntegrationLoadResult.HttpError -> when (statusCode) {
+            408, 429 -> true
+            in 500..599 -> true
+            else -> false
+        }
+    }
+
+    private fun IntegrationLoadResult<*>?.classifyForTrace(): String = when (this) {
+        null -> "no_load_attempted"
+        is IntegrationLoadResult.Success<*> -> "success"
+        is IntegrationLoadResult.NetworkError -> "network_error:${throwable::class.java.simpleName}"
+        is IntegrationLoadResult.HttpError -> "http_error:$statusCode"
+    }
+
+    private sealed interface FetchOutcome {
+        data class Success(val result: ArtworkAssetResult) : FetchOutcome
+        data class SoftFailure(
+            val priorAssetRecoverable: Boolean,
+            val loadErrorClass: String
+        ) : FetchOutcome
+        data class HardFailure(val loadErrorClass: String) : FetchOutcome
+        data object NotMaterialized : FetchOutcome
     }
 
     fun getExistingFile(assetKey: ArtworkAssetKey): File? =
