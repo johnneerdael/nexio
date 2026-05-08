@@ -87,9 +87,12 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         cleanBaseRating != null -> base.ratingSource.orDefault()
         else -> null
     }
+    val appliedPoster = preferDurableArtworkRef(displayPoster, base.poster)
+    val appliedBackground = preferDurableArtworkRef(displayBackdrop, base.background)
+    val appliedLogo = preferDurableArtworkRef(displayLogo, base.logo)
     return base.copy(
         name = title ?: base.name,
-        logo = displayLogo ?: base.logo,
+        logo = appliedLogo,
         description = description ?: base.description,
         genres = if (genres.isNotEmpty()) genres else base.genres,
         releaseInfo = releaseInfo ?: base.releaseInfo,
@@ -97,11 +100,41 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         imdbRating = appliedRating,
         ratingSource = appliedRatingSource,
         tomatoesRating = tomatoesRating ?: base.tomatoesRating,
-        poster = displayPoster ?: base.poster,
-        posterProviderTag = if (displayPoster != null) posterProviderTag else base.posterProviderTag,
-        background = displayBackdrop ?: base.background,
+        poster = appliedPoster,
+        // Pin posterProviderTag to whichever side actually owns the chosen poster ref so
+        // a base-preserved durable RPDB ref doesn't get tagged with the overlay's
+        // bare-URL provider.
+        posterProviderTag = when {
+            appliedPoster === base.poster && appliedPoster != null -> base.posterProviderTag
+            displayPoster != null -> posterProviderTag
+            else -> base.posterProviderTag
+        },
+        background = appliedBackground,
         artwork = mergeAppliedArtwork(base)
     )
+}
+
+/**
+ * Prefers a durable `nexio-artwork://...` artwork reference on the base item over a
+ * bare-URL overlay value. The metadata router's resolved-doc fields can carry a bare
+ * TMDB/TVDB URL (e.g., `https://image.tmdb.org/...`), while the rail's first-paint
+ * pipeline (PosterRatingsUrlResolver.applyArtworkRef) stamps `nexio-artwork://decision/...`
+ * onto MetaPreview.poster. Without this guard, the overlay merge silently demotes the
+ * durable premium ref back to a raw URL, causing the user-visible "premium poster
+ * pops then disappears" cold-start flicker.
+ *
+ * Both sides durable: prefer overlay (it's the freshest selection).
+ * Only base durable: keep base.
+ * Neither durable: fall back to overlay if present, else base.
+ */
+private fun preferDurableArtworkRef(overlayValue: String?, baseValue: String?): String? {
+    val overlayDurable = overlayValue?.startsWith("nexio-artwork://") == true
+    val baseDurable = baseValue?.startsWith("nexio-artwork://") == true
+    return when {
+        overlayDurable -> overlayValue
+        baseDurable -> baseValue
+        else -> overlayValue ?: baseValue
+    }
 }
 
 fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {

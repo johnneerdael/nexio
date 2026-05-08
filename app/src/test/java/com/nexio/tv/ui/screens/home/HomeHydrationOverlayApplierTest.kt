@@ -7,6 +7,7 @@ import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -182,6 +183,43 @@ class HomeHydrationOverlayApplierTest {
         val updated = row.applyHydratedHomeOverlays(overlaysByAlias)
 
         assertEquals("The Boys", updated.items.single().name)
+    }
+
+    @Test
+    fun `applyTo preserves base nexio-artwork poster against bare URL overlay poster`() {
+        val basePremiumRef = "nexio-artwork://decision/artwork-decision:poster:canonical:tmdb:series-76479:provider:RPDB:premium:true:settings:abc:credential:def:imageLang:en:policy:1"
+        val item = preview(id = "trakt:171028", title = "First-paint title").copy(
+            poster = basePremiumRef,
+            posterProviderTag = "rpdb"
+        )
+        val overlayMetadata = HomeDisplayMetadata(
+            title = "The Boys",
+            poster = "https://image.tmdb.org/t/p/w500/abc.jpg",
+            posterProviderTag = "tmdb"
+        )
+
+        val applied = overlayMetadata.applyTo(item)
+
+        assertEquals(basePremiumRef, applied.poster)
+        assertEquals("rpdb", applied.posterProviderTag)
+        assertEquals("The Boys", applied.name)
+    }
+
+    @Test
+    fun `applyTo prefers overlay poster when overlay carries a nexio-artwork ref`() {
+        val overlayPremiumRef = "nexio-artwork://decision/artwork-decision:poster:canonical:tmdb:series-76479:provider:RPDB:premium:true:settings:def:credential:abc:imageLang:en:policy:1"
+        val item = preview(id = "trakt:171028", title = "First-paint title").copy(
+            poster = "https://image.tmdb.org/t/p/w500/abc.jpg"
+        )
+        val overlayMetadata = HomeDisplayMetadata(
+            poster = overlayPremiumRef,
+            posterProviderTag = "rpdb"
+        )
+
+        val applied = overlayMetadata.applyTo(item)
+
+        assertEquals(overlayPremiumRef, applied.poster)
+        assertEquals("rpdb", applied.posterProviderTag)
     }
 
     private fun preview(id: String, title: String) = MetaPreview(
