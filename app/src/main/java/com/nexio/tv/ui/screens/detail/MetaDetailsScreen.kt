@@ -92,6 +92,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
+import com.nexio.tv.core.metadata.parseRuntimeMinutes
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.ContentType
@@ -691,7 +692,7 @@ fun MetaDetailsScreen(
                                     null,
                                     genresString,
                                     yearString,
-                                    null,
+                                    parseRuntimeMinutes(meta.runtime),
                                     meta.language,
                                     uiState.deterministicAutoplayEnabled,
                                     resolveImdbStreamVideoId(
