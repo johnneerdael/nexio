@@ -420,14 +420,31 @@ class DurableArtworkDecisionCache(
         }
 
         pendingFlush = executor.schedule(
-            {
-                synchronized(lock) {
-                    flushPendingWritesLocked()
-                }
-            },
+            ::executeScheduledFlush,
             thumbnailWriteDebounceMs,
             TimeUnit.MILLISECONDS
         )
+    }
+
+    /**
+     * Executes a debounced flush from the [flushExecutor] without holding [lock] during
+     * disk IO. The map lock is acquired only long enough to snapshot the in-memory state
+     * to JSON and clear the dirty flag; the actual file write happens lock-free.
+     *
+     * The single-threaded scheduled executor naturally serializes disk writes, so no
+     * separate flush lock is needed. This eliminates the
+     * `Long monitor contention with owner ArtworkDecisionCacheFlush` warnings observed
+     * during home startup, where the previous implementation held [lock] across disk IO
+     * and blocked main-thread readers (`get`, `lookup`, `loadState`).
+     */
+    private fun executeScheduledFlush() {
+        val storeJson = synchronized(lock) {
+            pendingFlush = null
+            if (!dirty) return
+            dirty = false
+            toStoreJson()
+        }
+        persistJsonToFile(storeJson)
     }
 
     private fun flushPendingWritesLocked() {
@@ -446,13 +463,23 @@ class DurableArtworkDecisionCache(
     }
 
     private fun persistLocked() {
+        persistJsonToFile(toStoreJson())
+    }
+
+    /**
+     * Writes the supplied store JSON to disk atomically. Callable from any thread; does
+     * not require [lock]. The synchronous put/remove paths still hold [lock] when they
+     * invoke this, but the debounced flush path captures the JSON under the lock and
+     * then calls this lock-free.
+     */
+    private fun persistJsonToFile(storeJson: JsonObject) {
         var tempFile: File? = null
         try {
             val parent = file.parentFile
             if (parent != null && !parent.exists()) parent.mkdirs()
 
             tempFile = File(parent ?: File("."), "${file.name}.tmp")
-            tempFile.writeText(gson.toJson(toStoreJson()))
+            tempFile.writeText(gson.toJson(storeJson))
             try {
                 Files.move(
                     tempFile.toPath(),
