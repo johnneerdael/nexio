@@ -2,12 +2,25 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import com.google.gson.JsonObject
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
+import com.nexio.tv.data.repository.ContinueWatchingCanonicalKey
+import com.nexio.tv.data.repository.ContinueWatchingRecord
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
+import com.nexio.tv.data.repository.IdentityConfidence
+import com.nexio.tv.data.repository.ResumeIdentity
+import com.nexio.tv.data.repository.StreamFetchIdentity
+import com.nexio.tv.data.repository.StreamIdScheme
 import com.nexio.tv.data.repository.TrackingNextUpEntry
+import com.nexio.tv.data.repository.ContinueWatchingSource
+import com.nexio.tv.data.repository.TrackingIdentity
+import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
@@ -180,6 +193,127 @@ class ContinueWatchingSnapshotStoreTest {
         assertEquals(snapshot.resumeItems, restored?.resumeItems)
         assertEquals(1_500L, restored?.nextUpItems?.singleOrNull()?.activityAtMs)
         assertEquals(1_500L, restored?.traktUpNextItems?.singleOrNull()?.activityAtMs)
+    }
+
+    @Test
+    fun `write persists canonical records with stream and resume identities`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "393268",
+            providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+        )
+        val record = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:393268",
+            contentId = "series:tvdb:393268:s2e1",
+            provider = TrackingProvider.TRAKT,
+            routingVersion = 3,
+            positionMs = 5_000L,
+            durationMs = 10_000L,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(season = 2, number = 1),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = 20_000L,
+            canonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = identity,
+                season = 2,
+                episode = 1,
+                profileId = 1
+            ),
+            displayIdentity = identity,
+            streamFetchIdentity = StreamFetchIdentity(
+                contentId = "tt9794044",
+                videoId = "tt9794044:2:1",
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf("resolved imdb episode")
+            ),
+            trackingIdentity = TrackingIdentity(
+                traktShowId = 10,
+                traktEpisodeId = 20,
+                traktPlaybackId = 30L,
+                providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+            ),
+            resumeIdentities = listOf(
+                ResumeIdentity(
+                    source = ContinueWatchingSource.LOCAL,
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    season = 2,
+                    episode = 1,
+                    positionMs = 4_000L,
+                    durationMs = 10_000L,
+                    progressPercent = 40f,
+                    lastWatchedMs = 10_000L
+                ),
+                ResumeIdentity(
+                    source = ContinueWatchingSource.TRAKT_PLAYBACK,
+                    contentId = "tt9794044",
+                    videoId = "tt9794044:2:1",
+                    season = 2,
+                    episode = 1,
+                    positionMs = 5_000L,
+                    durationMs = 10_000L,
+                    progressPercent = 50f,
+                    lastWatchedMs = 20_000L
+                )
+            ),
+            primaryResumeLookupKey = "tt9794044|tt9794044:2:1|2|1",
+            identityConfidence = IdentityConfidence.HIGH,
+            identityWarnings = listOf("used alias"),
+            languageTag = "en"
+        )
+
+        store.write(
+            ContinueWatchingSnapshot(
+                records = listOf(record),
+                updatedAtMs = 30_000L
+            )
+        )
+
+        val restored = store.read()
+
+        assertEquals(listOf(record), restored?.records)
+        assertEquals(record.streamFetchIdentity, restored?.records?.singleOrNull()?.streamFetchIdentity)
+        assertEquals(record.resumeIdentities, restored?.records?.singleOrNull()?.resumeIdentities)
+        assertEquals(record.primaryResumeLookupKey, restored?.records?.singleOrNull()?.primaryResumeLookupKey)
+    }
+
+    @Test
+    fun `read accepts current snapshots without records`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 1,
+              "languageTag": "en",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "displayMetadataByItemKey": {},
+              "metadataSnapshotsByItemKey": {},
+              "updatedAtMs": 100
+            }
+            """.trimIndent()
+        ).commit()
+
+        val restored = store.read()
+
+        assertEquals(100L, restored?.updatedAtMs)
+        assertEquals(emptyList<ContinueWatchingRecord>(), restored?.records)
     }
 
     @Test

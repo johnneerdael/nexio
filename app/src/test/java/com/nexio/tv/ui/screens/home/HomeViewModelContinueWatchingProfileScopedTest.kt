@@ -300,7 +300,7 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         val source = sourceFile.readText()
         val functionStart = source.indexOf("private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession")
         val cancelIndex = source.indexOf("continueWatchingEnrichmentJob?.cancel()", functionStart)
-        val transformIndex = source.indexOf("buildMixedContinueWatchingTimeline(", functionStart)
+        val transformIndex = source.indexOf("buildContinueWatchingItemsForSnapshot(snapshot, nowMs)", functionStart)
         val eligibilityIndex = source.indexOf("shouldEnrichContinueWatchingProviderMetadata", functionStart)
 
         assertTrue(functionStart >= 0)
@@ -309,6 +309,7 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         assertTrue(eligibilityIndex >= 0)
         assertTrue(cancelIndex < transformIndex)
         assertTrue(cancelIndex < eligibilityIndex)
+        assertTrue(transformIndex < eligibilityIndex)
     }
 
     @Test

@@ -1279,6 +1279,7 @@ internal fun buildContinueWatchingStreamRoute(
     return when (item) {
         is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
             videoId = item.progress.videoId,
+            streamVideoId = item.streamFetchVideoId,
             contentType = item.progress.contentType,
             title = item.progress.name,
             poster = item.displayMetadata().displayPoster,
@@ -1306,6 +1307,7 @@ internal fun buildContinueWatchingStreamRoute(
 
         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
             videoId = item.info.videoId,
+            streamVideoId = item.info.streamFetchVideoId,
             contentType = item.info.contentType,
             title = item.info.name,
             poster = item.displayMetadata().displayPoster,
@@ -1349,6 +1351,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
     return when (item) {
         is ContinueWatchingItem.InProgress -> buildManualSelectionStreamRoute(
             videoId = item.progress.videoId,
+            streamVideoId = item.streamFetchVideoId,
             contentType = item.progress.contentType,
             title = item.progress.name,
             poster = item.displayMetadata().displayPoster,
@@ -1371,6 +1374,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
 
         is ContinueWatchingItem.NextUp -> buildManualSelectionStreamRoute(
             videoId = item.info.videoId,
+            streamVideoId = item.info.streamFetchVideoId,
             contentType = item.info.contentType,
             title = item.info.name,
             poster = item.displayMetadata().displayPoster,
