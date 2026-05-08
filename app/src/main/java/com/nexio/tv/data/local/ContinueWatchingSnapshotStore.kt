@@ -195,31 +195,61 @@ class ContinueWatchingSnapshotStore private constructor(
         val durationMs = obj.longOrNull("durationMs", "g")?.takeIf { it >= 0L } ?: return null
         val updatedAt = obj.longOrNull("updatedAt", "k")?.takeIf { it > 0L } ?: return null
         val episodeContext = decodeEpisodeContext(obj.objectOrNull("episodeContext", "h"))
-        val resumeIdentities = decodeResumeIdentities(obj.arrayOrNull("resumeIdentities", "p"))
+        val decodedResumeIdentities = decodeResumeIdentities(obj.arrayOrNull("resumeIdentities", "p"))
+        val trackingIdentity = decodeTrackingIdentity(obj.objectOrNull("trackingIdentity", "o"))
+
+        val explicitProvider = obj.enumOrNull<TrackingProvider>("provider", "d")
+        val explicitSource = obj.enumOrNull<ContinueWatchingRecord.Source>("source", "j")
+
+        val source = inferRecordSource(
+            explicit = explicitSource,
+            resumeIdentities = decodedResumeIdentities,
+            trackingIdentity = trackingIdentity
+        ) ?: return null
+        val provider = inferRecordProvider(
+            explicit = explicitProvider,
+            trackingIdentity = trackingIdentity
+        ) ?: return null
+
+        val resumeIdentities = decodedResumeIdentities.ifEmpty {
+            synthesizeLegacyResumeIdentity(
+                contentId = contentId,
+                episodeContext = episodeContext,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                updatedAt = updatedAt,
+                source = source
+            )
+        }
+        if (resumeIdentities.isEmpty()) return null
+
         val resumeLookupKeys = resumeIdentities.map { it.lookupKey() }.toSet()
         val primaryResumeLookupKey = obj.stringOrNull("primaryResumeLookupKey", "q")
             ?.takeIf { it in resumeLookupKeys }
             ?: resumeIdentities.firstOrNull()?.lookupKey()
+
+        val clickTimeDisplayMetadata = runCatching {
+            obj.objectOrNull("clickTimeDisplayMetadata", "i")
+                ?.let { gson.fromJson(it, ContinueWatchingMetadataSnapshot::class.java) }
+        }.getOrNull()
 
         return runCatching {
             ContinueWatchingRecord(
                 profileId = profileId,
                 parentId = parentId,
                 contentId = contentId,
-                provider = obj.enumOrNull<TrackingProvider>("provider", "d") ?: TrackingProvider.TRAKT,
+                provider = provider,
                 routingVersion = routingVersion,
                 positionMs = positionMs,
                 durationMs = durationMs,
                 episodeContext = episodeContext,
-                clickTimeDisplayMetadata = obj.objectOrNull("clickTimeDisplayMetadata", "i")
-                    ?.let { gson.fromJson(it, ContinueWatchingMetadataSnapshot::class.java) },
-                source = obj.enumOrNull<ContinueWatchingRecord.Source>("source", "j")
-                    ?: ContinueWatchingRecord.Source.REMOTE,
+                clickTimeDisplayMetadata = clickTimeDisplayMetadata,
+                source = source,
                 updatedAt = updatedAt,
                 canonicalKey = decodeCanonicalKey(obj.objectOrNull("canonicalKey", "l")),
                 displayIdentity = decodeContentIdentity(obj.objectOrNull("displayIdentity", "m")),
                 streamFetchIdentity = decodeStreamFetchIdentity(obj.objectOrNull("streamFetchIdentity", "n")),
-                trackingIdentity = decodeTrackingIdentity(obj.objectOrNull("trackingIdentity", "o")),
+                trackingIdentity = trackingIdentity,
                 resumeIdentities = resumeIdentities,
                 primaryResumeLookupKey = primaryResumeLookupKey,
                 identityConfidence = obj.enumOrNull<IdentityConfidence>("identityConfidence", "r")
@@ -228,6 +258,61 @@ class ContinueWatchingSnapshotStore private constructor(
                 languageTag = obj.stringOrNull("languageTag", "t")?.takeIf { it.isNotBlank() }
             )
         }.getOrNull()
+    }
+
+    private fun inferRecordProvider(
+        explicit: TrackingProvider?,
+        trackingIdentity: TrackingIdentity?
+    ): TrackingProvider? =
+        explicit ?: trackingIdentity?.takeIf {
+            it.traktShowId != null ||
+                it.traktEpisodeId != null ||
+                it.traktPlaybackId != null ||
+                it.traktMovieId != null
+        }?.let { TrackingProvider.TRAKT }
+
+    private fun inferRecordSource(
+        explicit: ContinueWatchingRecord.Source?,
+        resumeIdentities: List<ResumeIdentity>,
+        trackingIdentity: TrackingIdentity?
+    ): ContinueWatchingRecord.Source? =
+        explicit ?: when {
+            resumeIdentities.any { it.source == ContinueWatchingSource.LOCAL } -> ContinueWatchingRecord.Source.LOCAL
+            trackingIdentity != null -> ContinueWatchingRecord.Source.REMOTE
+            resumeIdentities.any { it.source == ContinueWatchingSource.SYNTHETIC } -> ContinueWatchingRecord.Source.SYNTHETIC
+            else -> null
+        }
+
+    private fun synthesizeLegacyResumeIdentity(
+        contentId: String,
+        episodeContext: ContinueWatchingRecord.EpisodeContext?,
+        positionMs: Long,
+        durationMs: Long,
+        updatedAt: Long,
+        source: ContinueWatchingRecord.Source?
+    ): List<ResumeIdentity> {
+        val resumeSource = when (source) {
+            ContinueWatchingRecord.Source.LOCAL -> ContinueWatchingSource.LOCAL
+            ContinueWatchingRecord.Source.REMOTE -> ContinueWatchingSource.TRAKT_PLAYBACK
+            ContinueWatchingRecord.Source.SYNTHETIC -> ContinueWatchingSource.SYNTHETIC
+            null -> return emptyList()
+        }
+        val videoId = episodeContext?.let { "$contentId:${it.season}:${it.number}" } ?: contentId
+        return runCatching {
+            listOf(
+                ResumeIdentity(
+                    source = resumeSource,
+                    contentId = contentId,
+                    videoId = videoId,
+                    season = episodeContext?.season,
+                    episode = episodeContext?.number,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    progressPercent = null,
+                    lastWatchedMs = updatedAt
+                )
+            )
+        }.getOrDefault(emptyList())
     }
 
     private fun decodeEpisodeContext(
