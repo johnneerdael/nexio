@@ -114,23 +114,28 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
-    fun `mergeFallback does not let fallback typed artwork override primary raw poster`() {
+    fun `mergeFallback preserves fallback typed artwork when legacy display strings exist`() {
+        val fallbackArtwork = ArtworkBundle(
+            poster = ArtworkDisplayRef.RuntimeAsset(
+                decisionKey = ArtworkDecisionKey("fallbackDecision"),
+                assetKey = ArtworkAssetKey("fallbackAsset"),
+                imageType = ArtworkType.POSTER,
+                selectedProvider = null,
+                sourceRole = ArtworkSourceRole.PRIMARY,
+                trace = ArtworkTrace.empty()
+            )
+        )
         val fallback = HomeDisplayMetadata(
+            poster = "fallbackPoster",
             artwork = ArtworkBundle(
-                poster = ArtworkDisplayRef.RuntimeAsset(
-                    decisionKey = ArtworkDecisionKey("fallbackDecision"),
-                    assetKey = ArtworkAssetKey("fallbackAsset"),
-                    imageType = ArtworkType.POSTER,
-                    selectedProvider = null,
-                    sourceRole = ArtworkSourceRole.PRIMARY,
-                    trace = ArtworkTrace.empty()
-                )
+                poster = fallbackArtwork.poster
             )
         )
 
         val merged = HomeDisplayMetadata(poster = "primaryPoster").mergeFallback(fallback)
 
-        assertEquals("primaryPoster", merged.displayPoster)
+        assertEquals(fallbackArtwork.poster, merged.artwork?.poster)
+        assertEquals("nexio-artwork://asset/fallbackAsset", merged.displayPoster)
     }
 
     @Test
@@ -350,7 +355,7 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
-    fun `HomeDisplayMetadata applyTo does not let base fallback typed artwork override incoming raw poster`() {
+    fun `HomeDisplayMetadata applyTo preserves base typed artwork when incoming raw poster exists`() {
         val fallbackArtwork = ArtworkBundle(
             poster = artworkRef("fallbackPosterDecision", "fallbackPosterAsset", ArtworkType.POSTER)
         )
@@ -360,9 +365,9 @@ class HomeDisplayMetadataTest {
             poster = "primaryRawPoster"
         ).applyTo(base)
 
-        assertNull(applied.artwork?.poster)
+        assertEquals(fallbackArtwork.poster, applied.artwork?.poster)
         assertEquals("primaryRawPoster", applied.poster)
-        assertEquals("primaryRawPoster", applied.displayPoster)
+        assertEquals("nexio-artwork://asset/fallbackPosterAsset", applied.displayPoster)
     }
 
     @Test

@@ -25,11 +25,12 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HomeResolvedDisplayMapperTest {
     @Test
-    fun `mapper uses final home item and overlay trace without applying overlays again`() {
+    fun `mapper merges hydrated overlay fields and preserves overlay trace`() {
         val finalItem = preview(
             id = "tmdb:550",
             title = "Final Home Title",
@@ -55,8 +56,8 @@ class HomeResolvedDisplayMapperTest {
             nowMs = 10_000L
         ).single()
 
-        assertEquals("Final Home Title", resolved.display.title)
-        assertEquals("Final Home Overview", resolved.display.overview)
+        assertEquals("Overlay Title That Must Not Be Reapplied", resolved.display.title)
+        assertEquals("Overlay Overview That Must Not Be Reapplied", resolved.display.overview)
         assertEquals("tt0137523", resolved.imdbId)
         assertEquals("550", resolved.stableIds.tmdb)
         assertEquals(8.8, resolved.rating?.value ?: 0.0, 0.000001)
@@ -64,6 +65,143 @@ class HomeResolvedDisplayMapperTest {
         assertEquals("top_posters", resolved.artwork.backdrop?.trace?.selectedProvider)
         assertEquals(HydrationState.CANONICAL_READY, resolved.hydrationState)
         assertEquals("POSTER", resolved.sourceTrace.single().field)
+    }
+
+    @Test
+    fun `trakt tv row without first paint poster uses hydrated overlay artwork`() {
+        val overlayPoster = artworkRef("rpdb-poster-94997", ArtworkType.POSTER)
+        val overlayBackdrop = artworkRef("tvdb-backdrop-94997", ArtworkType.BACKDROP)
+        val overlayLogo = artworkRef("tvdb-logo-94997", ArtworkType.LOGO)
+        val firstPaint = preview(
+            id = "trakt:94997",
+            title = "House of the Dragon",
+            overview = "Overview",
+            rating = null,
+            artwork = ArtworkBundle(),
+            contentType = ContentType.TV,
+            poster = null,
+            background = null,
+            logo = null
+        )
+        val overlay = overlay(
+            itemKey = "tv:trakt:94997",
+            canonicalProvider = ProviderId.TRAKT,
+            canonicalId = "94997",
+            imdbId = "tt11198330",
+            contentType = ContentType.TV,
+            fields = HomeDisplayMetadata(
+                artwork = ArtworkBundle(
+                    poster = overlayPoster,
+                    backdrop = overlayBackdrop,
+                    logo = overlayLogo
+                )
+            )
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(firstPaint)),
+            overlaysByItemKey = mapOf("tv:trakt:94997" to overlay),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(overlayPoster, resolved.artwork.poster)
+        assertEquals(overlayBackdrop, resolved.artwork.backdrop)
+        assertEquals(overlayLogo, resolved.artwork.logo)
+        assertEquals(HydrationState.CANONICAL_READY, resolved.hydrationState)
+        assertEquals(ProviderId.TRAKT.name, resolved.canonicalProvider)
+        assertEquals("94997", resolved.stableIds.trakt)
+    }
+
+    @Test
+    fun `movie row with first paint poster uses hydrated premium poster when available`() {
+        val hydratedPoster = artworkRef("rpdb-poster-550", ArtworkType.POSTER)
+        val firstPaint = preview(
+            id = "tmdb:550",
+            title = "Fight Club",
+            overview = "Overview",
+            rating = null,
+            artwork = ArtworkBundle(),
+            poster = "https://image.tmdb.org/t/p/w500/legacy.jpg"
+        )
+        val overlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = HomeDisplayMetadata(
+                artwork = ArtworkBundle(poster = hydratedPoster)
+            )
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(firstPaint)),
+            overlaysByItemKey = mapOf("movie:tmdb:550" to overlay),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(hydratedPoster, resolved.artwork.poster)
+    }
+
+    @Test
+    fun `resolved display mapper enforces artwork type boundaries on overlay artwork`() {
+        val firstPaintPoster = artworkRef("first-poster-550", ArtworkType.POSTER)
+        val firstPaintLogo = artworkRef("first-logo-550", ArtworkType.LOGO)
+        val overlayBackdrop = artworkRef("overlay-backdrop-550", ArtworkType.BACKDROP)
+        val firstPaint = preview(
+            id = "tmdb:550",
+            title = "Fight Club",
+            overview = "Overview",
+            rating = null,
+            artwork = ArtworkBundle(
+                poster = firstPaintPoster,
+                logo = firstPaintLogo
+            ),
+            poster = null,
+            background = null,
+            logo = null
+        )
+        val overlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = HomeDisplayMetadata(
+                artwork = ArtworkBundle(
+                    poster = artworkRef("wrong-poster-550", ArtworkType.BACKDROP),
+                    backdrop = overlayBackdrop,
+                    logo = artworkRef("wrong-logo-550", ArtworkType.POSTER)
+                )
+            )
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(firstPaint)),
+            overlaysByItemKey = mapOf("movie:tmdb:550" to overlay),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(firstPaintPoster, resolved.artwork.poster)
+        assertEquals(overlayBackdrop, resolved.artwork.backdrop)
+        assertEquals(firstPaintLogo, resolved.artwork.logo)
+        assertNull(resolved.artwork.thumbnail)
+    }
+
+    @Test
+    fun `overlay valid rating overrides out of range first paint rating`() {
+        val firstPaint = preview(
+            id = "tmdb:94997",
+            title = "House of the Dragon",
+            overview = "Overview",
+            rating = 1767427f,
+            artwork = ArtworkBundle(),
+            stableIds = ProviderIds(tmdb = "94997")
+        )
+        val overlay = overlay(
+            itemKey = "movie:tmdb:94997",
+            fields = HomeDisplayMetadata(imdbRating = 8.3f)
+        )
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = listOf(row(firstPaint)),
+            overlaysByItemKey = mapOf("movie:tmdb:94997" to overlay),
+            nowMs = 10_000L
+        ).single()
+
+        assertEquals(8.3, resolved.rating?.value ?: 0.0, 0.000001)
     }
 
     @Test
@@ -261,16 +399,20 @@ class HomeResolvedDisplayMapperTest {
         rating: Float?,
         artwork: ArtworkBundle,
         stableIds: ProviderIds = ProviderIds(),
-        trailerYtIds: List<String> = emptyList()
+        trailerYtIds: List<String> = emptyList(),
+        contentType: ContentType = ContentType.MOVIE,
+        poster: String? = "legacy-poster",
+        background: String? = "legacy-backdrop",
+        logo: String? = null
     ) = MetaPreview(
         id = id,
-        type = ContentType.MOVIE,
-        rawType = "movie",
+        type = contentType,
+        rawType = contentType.toApiString(),
         name = title,
-        poster = "legacy-poster",
+        poster = poster,
         posterShape = PosterShape.POSTER,
-        background = "legacy-backdrop",
-        logo = null,
+        background = background,
+        logo = logo,
         description = overview,
         releaseInfo = "1999",
         runtime = "139m",
@@ -310,14 +452,15 @@ class HomeResolvedDisplayMapperTest {
         fields: HomeDisplayMetadata,
         canonicalProvider: ProviderId = ProviderId.TMDB,
         canonicalId: String = "550",
-        imdbId: String? = "tt0137523"
+        imdbId: String? = "tt0137523",
+        contentType: ContentType = ContentType.MOVIE
     ) = HydratedHomeOverlay(
-        overlayKey = "canonical:${canonicalProvider.name}:$canonicalId:type:MOVIE:lang:en:policy:1",
+        overlayKey = "canonical:${canonicalProvider.name}:$canonicalId:type:${contentType.name}:lang:en:policy:1",
         itemKey = itemKey,
         canonicalProvider = canonicalProvider,
         canonicalId = canonicalId,
         imdbId = imdbId,
-        contentType = ContentType.MOVIE,
+        contentType = contentType,
         languageTag = "en",
         fields = fields,
         fieldTrace = listOf(HydratedHomeFieldTrace("POSTER", "TOP_POSTERS", "ARTWORK")),
@@ -327,10 +470,13 @@ class HomeResolvedDisplayMapperTest {
         expiresAtMs = 30_000L
     )
 
-    private fun artworkRef(key: String) = ArtworkDisplayRef.RuntimeAsset(
+    private fun artworkRef(
+        key: String,
+        imageType: ArtworkType = ArtworkType.BACKDROP
+    ) = ArtworkDisplayRef.RuntimeAsset(
         decisionKey = ArtworkDecisionKey(key),
         assetKey = null,
-        imageType = ArtworkType.BACKDROP,
+        imageType = imageType,
         selectedProvider = null,
         sourceRole = ArtworkSourceRole.PREMIUM,
         trace = ArtworkTrace(selectedProvider = "top_posters", sourceRole = "ARTWORK")
