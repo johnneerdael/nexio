@@ -3,9 +3,13 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
+import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -22,6 +26,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import javax.inject.Inject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,7 +79,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
      * Auth is always false → upstream combine never fires → rawSnapshotState stays
      * at its initial empty value until we seed it via the mutation helpers.
      */
-    private fun buildService(): ContinueWatchingSnapshotService {
+    private fun buildService(
+        continueWatchingIdentityResolver: ContinueWatchingIdentityResolver = canonicalResolver()
+    ): ContinueWatchingSnapshotService {
         val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
             every { state } returns flowOf(EffectiveTrackingProviderState())
         }
@@ -100,9 +107,89 @@ class ContinueWatchingSnapshotServiceMutationTest {
             trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
             metadataDiskCacheStore = metadataDiskCacheStore,
-            snapshotStore = snapshotStore
+            snapshotStore = snapshotStore,
+            continueWatchingIdentityResolver = continueWatchingIdentityResolver
         )
     }
+
+    private fun canonicalResolver(
+        resolver: suspend (RawContinueWatchingInput) -> ContinueWatchingRecord = { input ->
+            canonicalRecord(input)
+        }
+    ): ContinueWatchingIdentityResolver =
+        mockk {
+            coEvery { resolveOrFallback(any()) } coAnswers {
+                resolver(firstArg())
+            }
+        }
+
+    private fun canonicalRecord(
+        input: RawContinueWatchingInput,
+        canonicalProvider: ProviderId? = input.progress.contentId.canonicalProvider(),
+        canonicalId: String? = input.progress.contentId.substringAfter(':', input.progress.contentId),
+        identityConfidence: IdentityConfidence = IdentityConfidence.HIGH,
+        warnings: List<String> = emptyList()
+    ): ContinueWatchingRecord {
+        val progress = input.progress
+        val providerIds = ProviderIds(
+            imdb = if (canonicalProvider == ProviderId.IMDB) canonicalId else null,
+            tvdb = if (canonicalProvider == ProviderId.TVDB) canonicalId else null
+        )
+        val identity = ContentIdentity(
+            canonicalProvider = canonicalProvider,
+            canonicalId = canonicalId,
+            providerIds = providerIds
+        )
+        val episodeContext = if (progress.season != null && progress.episode != null) {
+            ContinueWatchingRecord.EpisodeContext(progress.season, progress.episode)
+        } else {
+            null
+        }
+        val resumeIdentity = progress.toResumeIdentity()
+        val canonicalKey = if (canonicalProvider != null && canonicalId != null) {
+            ContinueWatchingCanonicalKey(
+                mediaKind = if (episodeContext == null) MetadataMediaKind.MOVIE else MetadataMediaKind.SERIES,
+                canonicalParent = identity,
+                season = episodeContext?.season,
+                episode = episodeContext?.number,
+                profileId = input.profileId
+            )
+        } else {
+            null
+        }
+
+        return ContinueWatchingRecord(
+            profileId = input.profileId,
+            parentId = progress.contentId,
+            contentId = progress.videoId,
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = progress.position,
+            durationMs = progress.duration,
+            episodeContext = episodeContext,
+            clickTimeDisplayMetadata = null,
+            source = if (progress.source == WatchProgress.SOURCE_LOCAL) {
+                ContinueWatchingRecord.Source.LOCAL
+            } else {
+                ContinueWatchingRecord.Source.REMOTE
+            },
+            updatedAt = progress.lastWatched.coerceAtLeast(1L),
+            canonicalKey = canonicalKey,
+            displayIdentity = identity.takeIf { canonicalKey != null },
+            resumeIdentities = listOf(resumeIdentity),
+            primaryResumeLookupKey = resumeIdentity.lookupKey(),
+            identityConfidence = identityConfidence,
+            identityWarnings = warnings,
+            languageTag = input.languageTag
+        )
+    }
+
+    private fun String.canonicalProvider(): ProviderId? =
+        when (substringBefore(':').lowercase()) {
+            "imdb" -> ProviderId.IMDB
+            "tvdb" -> ProviderId.TVDB
+            else -> null
+        }
 
     private class RecordingAirScheduler : ContinueWatchingAirScheduler {
         val scheduledAt = mutableListOf<Long?>()
@@ -177,6 +264,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 IntegrationOwnershipService::class.java -> null
                 ActiveRailTracker::class.java -> ActiveRailTracker()
                 RailMediaIdentityResolver::class.java -> RailMediaIdentityResolver()
+                ContinueWatchingIdentityResolver::class.java -> canonicalResolver()
                 MetadataRouterFacade::class.java -> null
                 else -> null
             }
@@ -219,25 +307,116 @@ class ContinueWatchingSnapshotServiceMutationTest {
         method.invoke(service, entries, nowMs)
     }
 
-    private fun invokeBuildRawSnapshot(
+    private suspend fun invokeBuildRawSnapshot(
         service: ContinueWatchingSnapshotService,
         allProgress: List<WatchProgress>,
         nextUpEntries: List<TrackingNextUpEntry>,
-        traktUpNextEntries: List<TrackingNextUpEntry>
+        traktUpNextEntries: List<TrackingNextUpEntry>,
+        profileId: Int = 1,
+        languageTag: String = "en-US"
     ): ContinueWatchingSnapshot {
-        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
-            "buildRawSnapshot",
-            List::class.java,
-            List::class.java,
-            List::class.java
+        return service.buildRawSnapshotForTest(
+            profileId = profileId,
+            languageTag = languageTag,
+            allProgress = allProgress,
+            nextUpEntries = nextUpEntries,
+            traktUpNextEntries = traktUpNextEntries
         )
-        method.isAccessible = true
-        return method.invoke(
-            service,
-            allProgress,
-            nextUpEntries,
-            traktUpNextEntries
-        ) as ContinueWatchingSnapshot
+    }
+
+    @Test
+    fun `canonical snapshot records merge Citadel local TVDB and remote IMDb rows and preserve unresolved rows`() =
+        runTest {
+            val citadelKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = ContentIdentity(
+                    canonicalProvider = ProviderId.TVDB,
+                    canonicalId = "393268",
+                    providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+                ),
+                season = 2,
+                episode = 1,
+                profileId = 4
+            )
+            val resolver = canonicalResolver { input ->
+                when (input.progress.contentId) {
+                    "tvdb:393268", "tt9794044" -> canonicalRecord(
+                        input = input,
+                        canonicalProvider = ProviderId.TVDB,
+                        canonicalId = "393268"
+                    ).copy(
+                        parentId = "series:tvdb:393268",
+                        contentId = "series:tvdb:393268:s2e1",
+                        canonicalKey = citadelKey,
+                        displayIdentity = citadelKey.canonicalParent
+                    )
+                    else -> canonicalRecord(
+                        input = input,
+                        canonicalProvider = null,
+                        canonicalId = null,
+                        identityConfidence = IdentityConfidence.LOW,
+                        warnings = listOf("identity resolution failed: unresolved")
+                    )
+                }
+            }
+            val service = buildService(continueWatchingIdentityResolver = resolver)
+            val localTvdb = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L,
+                source = WatchProgress.SOURCE_LOCAL
+            )
+            val remoteImdb = resume(
+                contentId = "tt9794044",
+                videoId = "tt9794044:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 20_000L,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            )
+            val unresolved = resume(
+                contentId = "addon:unknown",
+                videoId = "addon:unknown:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 30_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                profileId = 4,
+                languageTag = "nl",
+                allProgress = listOf(localTvdb, remoteImdb, unresolved),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(listOf(unresolved, remoteImdb, localTvdb), snapshot.resumeItems)
+            assertEquals(2, snapshot.records.size)
+            val citadel = snapshot.records.single { it.canonicalKey == citadelKey }
+            assertEquals(2, citadel.resumeIdentities.size)
+            assertTrue(citadel.resumeLookupKeys.contains(localTvdb.toResumeIdentity().lookupKey()))
+            assertTrue(citadel.resumeLookupKeys.contains(remoteImdb.toResumeIdentity().lookupKey()))
+            assertEquals("nl", citadel.languageTag)
+            val unresolvedRecord = snapshot.records.single { it.identityConfidence == IdentityConfidence.LOW }
+            assertEquals("addon:unknown", unresolvedRecord.parentId)
+            assertTrue(unresolvedRecord.identityWarnings.single().contains("unresolved"))
+        }
+
+    @Test
+    fun `production constructor requires ContinueWatchingIdentityResolver`() {
+        val productionConstructor = ContinueWatchingSnapshotService::class.java.declaredConstructors
+            .firstOrNull { constructor ->
+                constructor.getAnnotation(Inject::class.java) != null
+            }
+            ?: error("ContinueWatchingSnapshotService must have an @Inject constructor")
+
+        assertTrue(
+            "Production @Inject constructor must require ContinueWatchingIdentityResolver",
+            productionConstructor.parameterTypes.any { it == ContinueWatchingIdentityResolver::class.java }
+        )
     }
 
     private fun awaitCondition(timeoutMs: Long = 2_000L, condition: () -> Boolean) {
