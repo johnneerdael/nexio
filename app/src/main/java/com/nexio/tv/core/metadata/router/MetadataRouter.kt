@@ -486,8 +486,10 @@ class MetadataRouter @Inject constructor(
 
     private fun String.numericProviderTarget(prefix: String): String? {
         val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
-        val raw = if (trimmed.startsWith("$prefix:", ignoreCase = true)) {
-            trimmed.substringAfter(':').trim()
+        // Use the centralized parser so typed shapes like `tmdb:tv:1399` extract "1399"
+        // instead of being rejected by the digit-only validator after a naive split.
+        val raw = if (trimmed.contains(':')) {
+            providerNativeIdFromContentId(trimmed, prefix) ?: return null
         } else {
             trimmed
         }
