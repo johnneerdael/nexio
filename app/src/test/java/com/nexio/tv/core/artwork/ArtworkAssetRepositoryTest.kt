@@ -22,6 +22,7 @@ import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -335,6 +336,92 @@ class ArtworkAssetRepositoryTest {
         assertEquals(false, fallbackPayload.containsKey("decisionKey"))
         assertEquals(false, fallbackPayload.containsKey("assetKey"))
         assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, result.assetKey.value)
+    }
+
+    @Test
+    fun `fallback materialization does not write tmdb asset under rpdb decision key`() = runTest {
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(temp.newFile("tmdb-fallback-sources.json"), Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(decision)
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap(), remoteSourceStore),
+            byteLoader = premiumFailsRemoteSucceedsLoader(),
+            assetRecordStore = recordStore
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        result!!
+        assertEquals("FALLBACK_MATERIALIZED", result.cacheDecision)
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB), result.record.provider)
+        assertNotEquals(decision.decisionKey, result.record.decisionKey)
+        assertNull(recordStore.findLatestAssetForDecision(decision.decisionKey))
+        assertEquals(result.record, recordStore.findLatestAssetForDecision(result.record.decisionKey!!))
+    }
+
+    @Test
+    fun `tmdb fallback decision does not include rpdb credential hash`() = runTest {
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(temp.newFile("tmdb-fallback-credentials.json"), Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(decision)
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap(), remoteSourceStore),
+            byteLoader = premiumFailsRemoteSucceedsLoader()
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        result!!
+        val fallbackDecisionKey = result.record.decisionKey!!.value
+        assertTrue(fallbackDecisionKey.contains("provider:TMDB"))
+        assertTrue(fallbackDecisionKey.contains("settings:none"))
+        assertTrue(fallbackDecisionKey.contains("credential:none"))
+        assertEquals(false, fallbackDecisionKey.contains("settingshash"))
+        assertEquals(false, fallbackDecisionKey.contains("credentialhash"))
+        assertEquals(false, result.assetKey.value.contains("settingshash"))
+        assertEquals(false, result.assetKey.value.contains("credentialhash"))
+    }
+
+    @Test
+    fun `fallback materialized trace distinguishes requested and fallback decision`() = runTest {
+        val remoteSourceStore = FileBackedArtworkRemoteSourceStore(temp.newFile("tmdb-fallback-trace.json"), Gson())
+        val decision = rpdbDecisionWithTmdbFallback(remoteSourceStore)
+        val expectedFallbackDecisionKey = tmdbFallbackDecisionKey(decision)
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(decision)
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap(), remoteSourceStore),
+            byteLoader = premiumFailsRemoteSucceedsLoader(),
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        result!!
+        val fallbackPayload = traceSink.events
+            .single { it.eventType == "artwork.fallback_materialized" }
+            .payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), fallbackPayload["requestedDecisionKeyHash"])
+        assertEquals(artworkDecisionShortSha256(result.record.decisionKey!!.value), fallbackPayload["fallbackDecisionKeyHash"])
+        assertNotEquals(fallbackPayload["requestedDecisionKeyHash"], fallbackPayload["fallbackDecisionKeyHash"])
+        assertEquals(artworkDecisionShortSha256(expectedFallbackDecisionKey.value), fallbackPayload["fallbackDecisionKeyHash"])
+        assertEquals(false, fallbackPayload.containsKey("decisionKey"))
+        assertEquals(false, fallbackPayload.containsKey("requestedDecisionKey"))
+        assertEquals(false, fallbackPayload.containsKey("fallbackDecisionKey"))
+        assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value, expectedFallbackDecisionKey.value)
     }
 
     @Test
@@ -1108,6 +1195,59 @@ class ArtworkAssetRepositoryTest {
             policyVersion = 1,
             remoteSourceStore = remoteSourceStore
         )
+
+    private fun rpdbDecisionWithTmdbFallback(
+        remoteSourceStore: ArtworkRemoteSourceStore
+    ): ArtworkDecision {
+        val selected = rpdbTemplateDecision().copy(
+            decisionKey = ArtworkCacheKeys.decisionKey(
+                ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+                imageType = ArtworkType.POSTER,
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                premiumEnabled = true,
+                settingsHash = "settingshash",
+                credentialHash = "credentialhash",
+                policyVersion = 1
+            )
+        )
+        val fallback = remotePreviewCandidateFromProductionSource(remoteSourceStore)
+        return selected.copy(
+            rejectedCandidates = listOf(
+                RejectedArtworkCandidate(
+                    provider = fallback.provider,
+                    sourceRole = fallback.sourceRole,
+                    reason = "available_fallback",
+                    sourceHash = fallback.sourceHash,
+                    redactedSourceForTrace = fallback.redactedSourceForTrace,
+                    providerTemplate = fallback.providerTemplate,
+                    priority = fallback.priority
+                )
+            )
+        )
+    }
+
+    private fun tmdbFallbackDecisionKey(decision: ArtworkDecision): ArtworkDecisionKey =
+        ArtworkCacheKeys.decisionKey(
+            ownerKey = decision.ownerKey,
+            imageType = decision.imageType,
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            premiumEnabled = false,
+            settingsHash = null,
+            credentialHash = null,
+            policyVersion = decision.policyVersion
+        )
+
+    private fun premiumFailsRemoteSucceedsLoader(): ArtworkByteLoader =
+        ArtworkByteLoader { source, _ ->
+            when (source) {
+                is ArtworkSource.ProviderTemplate ->
+                    IntegrationLoadResult.NetworkError(IllegalStateException("premium unavailable"))
+                is ArtworkSource.RemoteUrl ->
+                    IntegrationLoadResult.Success(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01))
+                else ->
+                    IntegrationLoadResult.NetworkError(IllegalStateException("fallback source unavailable"))
+            }
+        }
 
     private fun topPostersThumbnailDecision(): ArtworkDecision =
         ArtworkDecision(
