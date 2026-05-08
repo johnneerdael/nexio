@@ -3543,7 +3543,17 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + kitsuPrefs.hashCode()
     signature = (signature * 31) + persistedKitsuSyntheticGroups.hashCode()
     signature = (signature * 31) + disabledHomeCatalogKeys.hashCode()
-    signature = (signature * 31) + hydratedHomeOverlaysByItemKey.hashCode()
+    // Fold each overlay's displayHash (already content-derived) instead of the raw map's
+    // hashCode. HydratedHomeOverlay's data-class hashCode includes updatedAtMs/staleAtMs/
+    // expiresAtMs, which the hydration coordinator stamps fresh on every rebuild — without
+    // this content-only fold the catalog signature would change on every cache-hit
+    // re-hydration even when displayHash and fields are identical, defeating the
+    // lastCatalogComputationSignature short-circuit one layer up.
+    val overlayContentSignature = hydratedHomeOverlaysByItemKey
+        .toSortedMap()
+        .entries
+        .joinToString(separator = "|") { (key, overlay) -> "$key=${overlay.displayHash}" }
+    signature = (signature * 31) + overlayContentSignature.hashCode()
     signature = (signature * 31) + startupHydrationPending.hashCode()
     signature = (signature * 31) + refreshInProgress.hashCode()
     signature = (signature * 31) + hasPersistedCatalogSnapshot.hashCode()
