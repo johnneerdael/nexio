@@ -475,6 +475,118 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `read does not default missing provider and source to trakt remote`() {
+        val store = storeWithRawSnapshot(
+            """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 1,
+              "languageTag": "en",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "records": [{
+                "profileId": 1,
+                "parentId": "movie:tmdb:1",
+                "contentId": "movie:tmdb:1",
+                "routingVersion": 1,
+                "positionMs": 10,
+                "durationMs": 100,
+                "source": null,
+                "updatedAt": 1000,
+                "resumeIdentities": [{
+                  "source": "LOCAL",
+                  "contentId": "tt1",
+                  "videoId": "tt1",
+                  "positionMs": 10,
+                  "durationMs": 100,
+                  "lastWatchedMs": 1000
+                }],
+                "primaryResumeLookupKey": "tt1|tt1|null|null"
+              }],
+              "displayMetadataByItemKey": {},
+              "metadataSnapshotsByItemKey": {},
+              "updatedAtMs": 1000
+            }
+            """.trimIndent(),
+            languageTag = "en"
+        )
+
+        assertTrue(store.read(profileId = 1)?.records.orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `read keeps record when click time metadata is malformed`() {
+        val store = storeWithRawSnapshot(
+            validRecordJson(
+                clickTimeDisplayMetadata = """{"routingVersion":"bad-int"}"""
+            ),
+            languageTag = "en"
+        )
+
+        val record = store.read(profileId = 1)?.records?.singleOrNull()
+
+        assertEquals("movie:tmdb:1", record?.parentId)
+        assertNull(record?.clickTimeDisplayMetadata)
+    }
+
+    private fun storeWithRawSnapshot(
+        rawSnapshot: String,
+        languageTag: String
+    ): ContinueWatchingSnapshotStore {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs(languageTag))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        prefs.edit().putString("snapshot", rawSnapshot).commit()
+        return ContinueWatchingSnapshotStore(context, metadataStore)
+    }
+
+    private fun validRecordJson(
+        clickTimeDisplayMetadata: String? = null
+    ): String {
+        val clickTimeField = clickTimeDisplayMetadata
+            ?.let { """, "clickTimeDisplayMetadata": $it""" }
+            .orEmpty()
+        return """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 1,
+              "languageTag": "en",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "records": [{
+                "profileId": 1,
+                "parentId": "movie:tmdb:1",
+                "contentId": "movie:tmdb:1",
+                "provider": "TRAKT",
+                "routingVersion": 1,
+                "positionMs": 10,
+                "durationMs": 100,
+                "source": "LOCAL",
+                "updatedAt": 1000,
+                "resumeIdentities": [{
+                  "source": "LOCAL",
+                  "contentId": "tt1",
+                  "videoId": "tt1",
+                  "positionMs": 10,
+                  "durationMs": 100,
+                  "lastWatchedMs": 1000
+                }],
+                "primaryResumeLookupKey": "tt1|tt1|null|null"
+                $clickTimeField
+              }],
+              "displayMetadataByItemKey": {},
+              "metadataSnapshotsByItemKey": {},
+              "updatedAtMs": 1000
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `explicit profile id keeps continue watching snapshots isolated`() {
         val profileOnePrefs = InMemorySharedPreferences()
         val profileTwoPrefs = InMemorySharedPreferences()
