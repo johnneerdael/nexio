@@ -513,7 +513,9 @@ class ArtworkAssetRepositoryTest {
 
         assertNotNull(result)
         result!!
-        assertEquals("ARTWORK_DISK_HIT", result.cacheDecision)
+        // Read AND write fail → result is non-durable, cacheDecision surfaces the failure.
+        assertEquals(false, result.durable)
+        assertEquals("EPHEMERAL_RECORD_WRITE_FAILED", result.cacheDecision)
         assertArrayEquals("disk-image".toByteArray(), result.localFile.readBytes())
         val readEvent = traceSink.events.single { it.eventType == "artwork.asset_record_store_read_failed" }
         val readPayload = readEvent.payload as Map<*, *>
@@ -853,6 +855,43 @@ class ArtworkAssetRepositoryTest {
         assertEquals(false, materializedPayload.containsKey("assetKey"))
         assertEquals(false, materializedPayload["success"])
         assertTracePayloadsDoNotContain(traceSink, decision.decisionKey.value)
+    }
+
+    @Test
+    fun `getOrFetch returns non-durable result with EPHEMERAL_RECORD_WRITE_FAILED when asset record store write fails`() = runTest {
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            assetRecordStore = ThrowingArtworkAssetRecordStore(),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("fresh-bytes".toByteArray())
+            },
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetch(rpdbTemplateDecision())
+
+        assertNotNull(result)
+        assertEquals(false, result!!.durable)
+        assertEquals("EPHEMERAL_RECORD_WRITE_FAILED", result.cacheDecision)
+        val event = traceSink.events.single { it.eventType == "artwork.asset_record_store_write_failed" }
+        val payload = event.payload as Map<*, *>
+        assertEquals("record store unavailable", payload["errorMessage"])
+    }
+
+    @Test
+    fun `getOrFetch returns durable result when asset record store write succeeds`() = runTest {
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("fresh-bytes".toByteArray())
+            }
+        )
+
+        val result = repository.getOrFetch(rpdbTemplateDecision())
+
+        assertNotNull(result)
+        assertEquals(true, result!!.durable)
     }
 
     @Test

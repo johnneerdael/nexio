@@ -37,7 +37,15 @@ data class ArtworkAssetResult(
     val runtimeApiShapeId: String,
     val cacheDecision: String,
     val mimeType: String?,
-    val networkExecuted: Boolean
+    val networkExecuted: Boolean,
+    /**
+     * False when bytes are on disk but [ArtworkAssetRepository.persistAssetRecordBestEffort]
+     * could not write the record-store entry. Downstream snapshot/overlay writers must NOT
+     * promote this asset to a `nexio-artwork://asset/<assetKey>` durable reference until a
+     * subsequent record write succeeds, otherwise the URI becomes a dangling pointer that
+     * `getOrRehydrateAsset` cannot recover.
+     */
+    val durable: Boolean = true
 )
 
 @Singleton
@@ -383,7 +391,7 @@ class ArtworkAssetRepository @Inject constructor(
             fetchedAtMs = System.currentTimeMillis()
         )
         val write = diskCache.write(record, bytes)
-        persistAssetRecordBestEffort(write.record)
+        val durable = persistAssetRecordBestEffort(write.record)
         return FetchOutcome.Success(
             ArtworkAssetResult(
                 assetKey = materialized.assetKey,
@@ -391,9 +399,14 @@ class ArtworkAssetRepository @Inject constructor(
                 record = write.record,
                 runtimeResult = result,
                 runtimeApiShapeId = apiShapeId,
-                cacheDecision = result.cacheDecision(),
+                // Non-durable signals to downstream snapshot/overlay writers that the asset
+                // record was not persisted; promoting it to a stored nexio-artwork://asset/
+                // reference would create a dangling pointer that getOrRehydrateAsset cannot
+                // recover. Wired in a follow-up plan; for now the flag is informational.
+                cacheDecision = if (durable) result.cacheDecision() else "EPHEMERAL_RECORD_WRITE_FAILED",
                 mimeType = write.record.mimeType,
-                networkExecuted = loaderInvoked
+                networkExecuted = loaderInvoked,
+                durable = durable
             )
         )
     }
@@ -450,48 +463,57 @@ class ArtworkAssetRepository @Inject constructor(
             byteCount = bytes.size.toLong(),
             fetchedAtMs = file.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
         )
-        persistAssetRecordBestEffort(record)
+        val durable = persistAssetRecordBestEffort(record)
         return ArtworkAssetResult(
             assetKey = materialized.assetKey,
             localFile = file,
             record = record,
             runtimeResult = IntegrationFetchResult.Fresh(bytes),
             runtimeApiShapeId = materialized.apiShapeId,
-            cacheDecision = cacheDecision,
+            cacheDecision = if (durable) cacheDecision else "EPHEMERAL_RECORD_WRITE_FAILED",
             mimeType = record.mimeType,
-            networkExecuted = networkExecuted
+            networkExecuted = networkExecuted,
+            durable = durable
         )
     }
 
-    private fun persistAssetRecordBestEffort(record: ArtworkAssetRecord) {
-        val existing = runCatching {
-            assetRecordStore.get(record.assetKey)
-        }.onFailure { error ->
+    /**
+     * Persists the record. Returns true if the store entry is now durable (either it was
+     * already present with identical contents, or a fresh write succeeded). Returns false
+     * when the underlying store throws — callers must treat the asset as non-durable so
+     * downstream snapshot/overlay writers do not promote it to a stored URI reference.
+     */
+    private fun persistAssetRecordBestEffort(record: ArtworkAssetRecord): Boolean {
+        val readResult = runCatching { assetRecordStore.get(record.assetKey) }
+        readResult.onFailure { error ->
             traceArtwork(
                 eventType = "artwork.asset_record_store_read_failed",
                 payload = mapOf(
                     "assetKeyHash" to record.assetKey.hashedForTrace(),
                     "decisionKeyHash" to record.decisionKey?.hashedForTrace(),
-                    "errorClass" to error::class.java.name
+                    "errorClass" to error::class.java.name,
+                    "errorMessage" to (error.message ?: "")
                 )
             )
-        }.getOrNull()
-        if (existing == record) {
-            return
+        }
+        if (readResult.isSuccess && readResult.getOrNull() == record) {
+            return true
         }
 
-        runCatching {
+        return runCatching {
             assetRecordStore.put(record)
+            true
         }.onFailure { error ->
             traceArtwork(
                 eventType = "artwork.asset_record_store_write_failed",
                 payload = mapOf(
                     "assetKeyHash" to record.assetKey.hashedForTrace(),
                     "decisionKeyHash" to record.decisionKey?.hashedForTrace(),
-                    "errorClass" to error::class.java.name
+                    "errorClass" to error::class.java.name,
+                    "errorMessage" to (error.message ?: "")
                 )
             )
-        }
+        }.getOrDefault(false)
     }
 
     private fun traceArtwork(
