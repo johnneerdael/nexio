@@ -7,14 +7,19 @@ import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = 20L * 60L * 1_000_000L
+// Long.MAX_VALUE / 2 — an effectively unbounded horizon that still leaves headroom for
+// TextRenderer's `horizonUs = positionUs + prefetchDurationUs` arithmetic without overflow.
+private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = Long.MAX_VALUE / 2
 private const val BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS = 60_000L
+private const val BUILT_IN_SUBTITLE_DISPATCH_DEBOUNCE_MS = 250L
+private const val BUILT_IN_SUBTITLE_DISPATCH_MAX_BATCH_CUE_GROUPS = 60
 
 internal class BuiltInSubtitleCueTranslator(
     private val scope: CoroutineScope,
@@ -25,11 +30,18 @@ internal class BuiltInSubtitleCueTranslator(
     private val onTranslatingChanged: (Boolean) -> Unit,
     private val onTranslationError: (String?) -> Unit,
     private val providerFailureCooldownMs: Long = BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS,
+    private val dispatchDebounceMs: Long = BUILT_IN_SUBTITLE_DISPATCH_DEBOUNCE_MS,
+    private val maxBatchCueGroups: Int = BUILT_IN_SUBTITLE_DISPATCH_MAX_BATCH_CUE_GROUPS,
     private val nowMs: () -> Long = { System.currentTimeMillis() }
 ) : CueGroupSubtitleTranslator {
 
     private val activeRequestCount = AtomicInteger(0)
     private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
+
+    private val pendingLock = Any()
+    private val pendingEntries = mutableListOf<PendingTranslate>()
+    private var pendingCueGroupCount = 0
+    private var flushJob: Job? = null
 
     override fun getConfigurationToken(format: Format): String? {
         if (!isEnabledProvider()) {
@@ -77,27 +89,98 @@ internal class BuiltInSubtitleCueTranslator(
             }
         }
 
+        val entry = PendingTranslate(
+            format = format,
+            cueGroups = cueGroups,
+            callback = callback,
+            configurationToken = configurationToken,
+            settings = settings,
+            targetLanguage = targetLanguage
+        )
+
         updateActiveRequests(delta = 1)
-        scope.launch(Dispatchers.IO) {
-            try {
-                val sourceTexts = cueGroups
-                    .flatMap { cueGroup -> cueGroup.cues }
-                    .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
-                    .distinct()
 
-                if (sourceTexts.isEmpty()) {
-                    onTranslationError(null)
-                    callback.onSuccess(cueGroups)
-                    return@launch
+        val immediateFlush: List<PendingTranslate>? = synchronized(pendingLock) {
+            pendingEntries.add(entry)
+            pendingCueGroupCount += cueGroups.size
+            if (pendingCueGroupCount >= maxBatchCueGroups) {
+                flushJob?.cancel()
+                flushJob = null
+                drainPendingLocked()
+            } else {
+                if (flushJob == null) {
+                    flushJob = scope.launch {
+                        delay(dispatchDebounceMs)
+                        val drained = synchronized(pendingLock) {
+                            flushJob = null
+                            drainPendingLocked()
+                        } ?: return@launch
+                        dispatchBatch(drained)
+                    }
                 }
+                null
+            }
+        }
 
-                translationService.translateCueTexts(
-                    texts = sourceTexts,
-                    targetLanguageCode = targetLanguage,
-                    sourceLanguageCode = format.language,
-                    settings = settings
-                ).onSuccess { translatedTexts ->
-                    val translatedCueGroups = cueGroups.map { cueGroup ->
+        immediateFlush?.let { dispatchBatch(it) }
+    }
+
+    private fun drainPendingLocked(): List<PendingTranslate>? {
+        if (pendingEntries.isEmpty()) return null
+        val drained = pendingEntries.toList()
+        pendingEntries.clear()
+        pendingCueGroupCount = 0
+        return drained
+    }
+
+    private fun dispatchBatch(entries: List<PendingTranslate>) {
+        if (entries.isEmpty()) return
+        // Group by configurationToken so a mid-flight provider/model/apiKey change splits
+        // into independent dispatches that don't share translation state.
+        entries.groupBy { it.configurationToken }.forEach { (_, sameTokenEntries) ->
+            scope.launch {
+                dispatchSameTokenEntries(sameTokenEntries)
+            }
+        }
+    }
+
+    private suspend fun dispatchSameTokenEntries(entries: List<PendingTranslate>) {
+        val anchor = entries.first()
+        val sourceTexts = entries
+            .asSequence()
+            .flatMap { it.cueGroups.asSequence() }
+            .flatMap { cueGroup -> cueGroup.cues.asSequence() }
+            .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
+            .distinct()
+            .toList()
+
+        if (sourceTexts.isEmpty()) {
+            onTranslationError(null)
+            entries.forEach { entry ->
+                try {
+                    entry.callback.onSuccess(entry.cueGroups)
+                } finally {
+                    updateActiveRequests(delta = -1)
+                }
+            }
+            return
+        }
+
+        try {
+            translationService.translateCueTexts(
+                texts = sourceTexts,
+                targetLanguageCode = anchor.targetLanguage,
+                sourceLanguageCode = anchor.format.language,
+                settings = anchor.settings
+            ).onSuccess { translatedTexts ->
+                onTranslationError(null)
+                suppressedProviderFailure.get()?.let { failure ->
+                    if (failure.configurationToken == anchor.configurationToken) {
+                        suppressedProviderFailure.compareAndSet(failure, null)
+                    }
+                }
+                entries.forEach { entry ->
+                    val translatedCueGroups = entry.cueGroups.map { cueGroup ->
                         CueGroup(
                             cueGroup.cues.map { cue ->
                                 val sourceText = cue.text?.toString()?.trim()
@@ -115,29 +198,25 @@ internal class BuiltInSubtitleCueTranslator(
                             cueGroup.presentationTimeUs
                         )
                     }
-                    onTranslationError(null)
-                    suppressedProviderFailure.get()?.let { failure ->
-                        if (failure.configurationToken == configurationToken) {
-                            suppressedProviderFailure.compareAndSet(failure, null)
-                        }
-                    }
-                    callback.onSuccess(translatedCueGroups)
-                }.onFailure { error ->
-                    val message = error.message?.takeIf(String::isNotBlank)
-                        ?: "Failed to translate subtitle."
-                    suppressedProviderFailure.set(
-                        SuppressedProviderFailure(
-                            configurationToken = configurationToken,
-                            message = message,
-                            retryAfterMs = nowMs() + providerFailureCooldownMs
-                        )
-                    )
-                    onTranslationError(message)
-                    callback.onFailure(Exception(message, error))
+                    entry.callback.onSuccess(translatedCueGroups)
                 }
-            } finally {
-                updateActiveRequests(delta = -1)
+            }.onFailure { error ->
+                val message = error.message?.takeIf(String::isNotBlank)
+                    ?: "Failed to translate subtitle."
+                suppressedProviderFailure.set(
+                    SuppressedProviderFailure(
+                        configurationToken = anchor.configurationToken,
+                        message = message,
+                        retryAfterMs = nowMs() + providerFailureCooldownMs
+                    )
+                )
+                onTranslationError(message)
+                entries.forEach { entry ->
+                    entry.callback.onFailure(Exception(message, error))
+                }
             }
+        } finally {
+            entries.forEach { _ -> updateActiveRequests(delta = -1) }
         }
     }
 
@@ -156,6 +235,15 @@ internal class BuiltInSubtitleCueTranslator(
     ): String {
         return "${format.sampleMimeType}|${format.language.orEmpty()}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
     }
+
+    private data class PendingTranslate(
+        val format: Format,
+        val cueGroups: List<CueGroup>,
+        val callback: CueGroupSubtitleTranslator.TranslationCallback,
+        val configurationToken: String,
+        val settings: SubtitleTranslationSettings,
+        val targetLanguage: String
+    )
 
     private data class SuppressedProviderFailure(
         val configurationToken: String,
