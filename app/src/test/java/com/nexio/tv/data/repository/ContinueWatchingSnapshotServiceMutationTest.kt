@@ -524,9 +524,93 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             val records = service.observeContinueWatching(profileId = 1).first()
 
-            assertEquals(listOf("show-kept:s1e3"), records.map { it.contentId })
+            assertEquals(listOf("show-kept:1:3"), records.map { it.contentId })
             assertFalse(records.any { it.parentId == removedResume.contentId })
             assertFalse(records.any { it.parentId == markedResume.contentId })
+        }
+
+    @Test
+    fun `removeShowOptimistically preserves canonical resume aliases for unaffected records`() =
+        runTest {
+            val service = buildService()
+            val resume = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val record = canonicalRecord(
+                RawContinueWatchingInput(profileId = 1, progress = resume, languageTag = "en-US")
+            ).copy(
+                parentId = "series:tvdb:393268",
+                contentId = "series:tvdb:393268:s2e1",
+                resumeIdentities = listOf(
+                    resume.toResumeIdentity(),
+                    resume.copy(contentId = "tt9794044", videoId = "tt9794044:2:1").toResumeIdentity()
+                ),
+                primaryResumeLookupKey = resume.toResumeIdentity().lookupKey()
+            )
+            val unrelatedNextUp = nextUp(
+                contentId = "show-next-up-only",
+                firstAiredMs = 20_000L,
+                episode = 2
+            )
+            setPublishedSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    resumeItems = listOf(resume),
+                    nextUpItems = listOf(unrelatedNextUp),
+                    records = listOf(record),
+                    updatedAtMs = 1L
+                )
+            )
+
+            service.removeShowOptimistically("show-next-up-only")
+
+            val snapshot = rawSnapshot(service)
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(listOf(record), snapshot.records)
+            assertTrue(snapshot.records.single().resumeLookupKeys.contains("tt9794044|tt9794044:2:1|2|1"))
+        }
+
+    @Test
+    fun `removeResumeEntry filters only affected canonical resume record`() =
+        runTest {
+            val service = buildService()
+            val removedResume = resume(
+                contentId = "show-removed",
+                videoId = "show-removed:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val keptResume = resume(
+                contentId = "show-kept",
+                videoId = "show-kept:1:2",
+                season = 1,
+                episode = 2,
+                lastWatched = 20_000L
+            )
+            val removedRecord = canonicalRecord(RawContinueWatchingInput(1, removedResume, "en-US"))
+            val keptRecord = canonicalRecord(RawContinueWatchingInput(1, keptResume, "en-US"))
+            setPublishedSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    resumeItems = listOf(removedResume, keptResume),
+                    records = listOf(removedRecord, keptRecord),
+                    updatedAtMs = 1L
+                )
+            )
+
+            service.removeResumeEntry(removedResume.videoId)
+
+            val snapshot = rawSnapshot(service)
+
+            assertEquals(listOf(keptResume), snapshot.resumeItems)
+            assertEquals(listOf(keptRecord), snapshot.records)
+            assertFalse(snapshot.records.any { it.resumeLookupKeys.contains(removedResume.toResumeIdentity().lookupKey()) })
         }
 
     @Test

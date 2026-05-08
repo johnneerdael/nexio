@@ -155,6 +155,60 @@ private fun ContinueWatchingSnapshot.withInvalidatedCanonicalRecords(): Continue
     return if (records.isEmpty()) this else copy(records = emptyList())
 }
 
+private data class CanonicalRecordRemovalRef(
+    val contentId: String,
+    val videoId: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null
+)
+
+private fun ContinueWatchingSnapshot.withCanonicalRecordsRemovedFor(
+    refs: List<CanonicalRecordRemovalRef>
+): ContinueWatchingSnapshot {
+    if (records.isEmpty() || refs.isEmpty()) return this
+    val normalizedRefs = refs
+        .mapNotNull { ref ->
+            val contentId = ref.contentId.trim()
+            if (contentId.isBlank()) return@mapNotNull null
+            ref.copy(
+                contentId = contentId,
+                videoId = ref.videoId?.trim()?.takeIf { it.isNotBlank() }
+            )
+        }
+    if (normalizedRefs.isEmpty()) return this
+
+    return copy(
+        records = records.filterNot { record ->
+            normalizedRefs.any { ref -> record.matchesRemovalRef(ref) }
+        }
+    )
+}
+
+private fun ContinueWatchingRecord.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
+    if (resumeIdentities.any { identity -> identity.matchesRemovalRef(ref) }) return true
+    if (ref.videoId != null && contentId == ref.videoId) return true
+    if (parentId != ref.contentId) return false
+    if (ref.season == null && ref.episode == null) return true
+    return episodeContext?.let { context ->
+        context.season == ref.season && context.number == ref.episode
+    } == true
+}
+
+private fun ResumeIdentity.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
+    if (ref.videoId != null && videoId == ref.videoId) return true
+    if (contentId != ref.contentId) return false
+    if (ref.season == null && ref.episode == null) return true
+    return season == ref.season && episode == ref.episode
+}
+
+private fun WatchProgress.toCanonicalRecordRemovalRef(): CanonicalRecordRemovalRef =
+    CanonicalRecordRemovalRef(
+        contentId = contentId,
+        videoId = videoId,
+        season = season,
+        episode = episode
+    )
+
 private data class LiveContinueWatchingSnapshotEmission(
     val profileId: Int,
     val hasLoadedRemoteSnapshot: Boolean,
@@ -500,10 +554,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun removeResumeEntry(videoId: String) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removed = current.snapshot.resumeItems.filter { it.videoId == videoId }
                 current.copy(
                     snapshot = current.snapshot.copy(
-                        resumeItems = current.snapshot.resumeItems.filterNot { it.videoId == videoId }
-                    ).withInvalidatedCanonicalRecords()
+                        resumeItems = current.snapshot.resumeItems - removed.toSet()
+                    ).withCanonicalRecordsRemovedFor(
+                        removed.map { it.toCanonicalRecordRemovalRef() }
+                    )
                 )
             }
         }
@@ -515,10 +572,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun removeAllForShow(showId: String) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removed = current.snapshot.resumeItems.filter { it.contentId == showId }
                 current.copy(
                     snapshot = current.snapshot.copy(
-                        resumeItems = current.snapshot.resumeItems.filterNot { it.contentId == showId }
-                    ).withInvalidatedCanonicalRecords()
+                        resumeItems = current.snapshot.resumeItems - removed.toSet()
+                    ).withCanonicalRecordsRemovedFor(
+                        removed.map { it.toCanonicalRecordRemovalRef() }
+                    )
                 )
             }
         }
@@ -589,6 +649,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (episodes.isEmpty()) return
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                val removedResumes = current.snapshot.resumeItems.filter { progress ->
+                    episodes.any { ref ->
+                        progress.contentId == ref.showId &&
+                            progress.season == ref.seasonNumber &&
+                            progress.episode == ref.episodeNumber
+                    }
+                }
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems.filterNot { progress ->
@@ -612,7 +679,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                     entry.episode == ref.episodeNumber
                             }
                         }
-                    ).withInvalidatedCanonicalRecords()
+                    ).withCanonicalRecordsRemovedFor(
+                        removedResumes.map { it.toCanonicalRecordRemovalRef() }
+                    )
                 )
             }
         }
@@ -679,7 +748,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     snapshot = current.snapshot.copy(
                         nextUpItems = current.snapshot.nextUpItems.filterNot { it.contentId == target },
                         traktUpNextItems = current.snapshot.traktUpNextItems.filterNot { it.contentId == target }
-                    ).withInvalidatedCanonicalRecords()
+                    )
                 )
             }
         }
