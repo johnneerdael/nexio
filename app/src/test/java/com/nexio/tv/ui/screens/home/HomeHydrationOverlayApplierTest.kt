@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -126,6 +127,61 @@ class HomeHydrationOverlayApplierTest {
         assertEquals("Resolved title", publishedRows.single().items.single().name)
         assertEquals("resolved-poster", publishedRows.single().items.single().poster)
         assertEquals(8.8f, publishedRows.single().items.single().imdbRating ?: 0f, 0f)
+    }
+
+    @Test
+    fun `applyHydratedHomeOverlays applies overlay stored under canonical alias to trakt-keyed series row`() {
+        val item = MetaPreview(
+            id = "trakt:171028",
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "First-paint title",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            firstPaintStableIds = ProviderIds(
+                trakt = "171028",
+                tvdb = "355567",
+                imdb = "tt1190634"
+            )
+        )
+        val row = CatalogRow(
+            addonId = "trakt-addon",
+            addonName = "Trakt",
+            addonBaseUrl = "https://trakt.example",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = ContentType.SERIES,
+            items = listOf(item),
+            hasMore = false
+        )
+        val overlay = HydratedHomeOverlay(
+            overlayKey = "canonical:TVDB:355567:type:SERIES:lang:en:policy:1",
+            itemKey = "series:trakt:171028",
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "355567",
+            imdbId = "tt1190634",
+            contentType = ContentType.SERIES,
+            languageTag = "en",
+            fields = HomeDisplayMetadata(title = "The Boys"),
+            fieldTrace = listOf(HydratedHomeFieldTrace("TITLE", "TVDB", "PRIMARY")),
+            displayHash = HomeDisplayMetadata(title = "The Boys").hydratedHomeDisplayHash(),
+            updatedAtMs = 1L,
+            staleAtMs = 2L,
+            expiresAtMs = 3L
+        )
+        // Overlay stored ONLY under the canonical TVDB alias key, mimicking the store-flow path
+        // that returns Map<aliasKey, overlay> after the read scope expanded the row's lookup.
+        val overlaysByAlias = mapOf("series:tvdb:355567" to overlay)
+
+        val updated = row.applyHydratedHomeOverlays(overlaysByAlias)
+
+        assertEquals("The Boys", updated.items.single().name)
     }
 
     private fun preview(id: String, title: String) = MetaPreview(

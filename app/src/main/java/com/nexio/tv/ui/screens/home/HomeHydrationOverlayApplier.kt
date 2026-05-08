@@ -15,13 +15,41 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
 
     var changed = false
     val updatedItems = items.map { item ->
-        val overlay = overlaysByItemKey[item.homeOverlayItemKey()] ?: return@map item
+        val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
         val updated = overlay.fields.applyTo(item)
         if (updated != item) changed = true
         updated
     }
 
     return if (changed) copy(items = updatedItems) else this
+}
+
+/**
+ * Looks up the hydrated overlay for this preview, probing the row's own
+ * [homeOverlayItemKey] first and then falling through to the same alias set the
+ * read scope used to subscribe ([HomeArtworkOverlayKeys.aliasesFor]). Without
+ * this fall-through, overlays stored under a canonical alias (e.g.,
+ * `series:tvdb:355567`) would never reach a row keyed by a different provider
+ * (e.g., `series:trakt:171028`).
+ */
+internal fun MetaPreview.overlayFromMap(
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): HydratedHomeOverlay? {
+    if (overlaysByItemKey.isEmpty()) return null
+    val rowKey = homeOverlayItemKey()
+    overlaysByItemKey[rowKey]?.let { return it }
+    val aliases = HomeArtworkOverlayKeys.aliasesFor(
+        rowItemKey = rowKey,
+        contentId = id,
+        itemType = apiType,
+        providerIds = firstPaintStableIds,
+        canonicalProvider = null,
+        canonicalId = null
+    )
+    return aliases.asSequence()
+        .filter { it != rowKey }
+        .mapNotNull { overlaysByItemKey[it] }
+        .firstOrNull()
 }
 
 internal fun List<CatalogRow>.applyHydratedHomeOverlays(
