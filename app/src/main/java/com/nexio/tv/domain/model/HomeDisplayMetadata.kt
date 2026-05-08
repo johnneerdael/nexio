@@ -2,6 +2,9 @@ package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
@@ -161,4 +164,58 @@ private fun HomeDisplayMetadata.mergeAppliedArtwork(base: MetaPreview): ArtworkB
 
 fun homeDisplayItemKey(contentType: String, contentId: String): String {
     return "${contentType.lowercase()}:${contentId.trim()}"
+}
+
+/**
+ * Reconstructs a structured [ArtworkBundle] from this metadata.
+ *
+ * Continue Watching snapshots persist [HomeDisplayMetadata] without the structured `artwork`
+ * bundle (it is `@Transient`), but the per-field strings retain the durable
+ * `nexio-artwork://...` references emitted by the artwork pipeline. This helper rebuilds the
+ * bundle from those strings so downstream projections (e.g., `MetaPreview.artwork`) can keep
+ * the resolved provider artwork through restore.
+ *
+ * Raw premium provider URLs (RPDB / top-posters) are rejected because they are non-durable —
+ * they shouldn't appear in display fields, but we defend against bad inputs.
+ */
+fun HomeDisplayMetadata.toArtworkBundleFromDisplayFields(): ArtworkBundle? {
+    val structured = artwork?.enforceArtworkTypeBoundaries()
+    val merged = ArtworkBundle(
+        poster = structured?.poster ?: displayPoster.toLegacyArtworkRef(ArtworkType.POSTER),
+        backdrop = structured?.backdrop ?: displayBackdrop.toLegacyArtworkRef(ArtworkType.BACKDROP),
+        logo = structured?.logo ?: displayLogo.toLegacyArtworkRef(ArtworkType.LOGO),
+        thumbnail = structured?.thumbnail ?: displayThumbnail.toLegacyArtworkRef(ArtworkType.THUMBNAIL)
+    )
+    return merged.enforceArtworkTypeBoundaries().emptyOrNull()
+}
+
+private fun String?.toLegacyArtworkRef(imageType: ArtworkType): ArtworkDisplayRef.LegacyString? {
+    val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return when {
+        value.startsWith("nexio-artwork://asset/") ||
+            value.startsWith("nexio-artwork://decision/") ||
+            value.startsWith("nexio-placeholder://") ->
+            ArtworkDisplayRef.LegacyString(
+                value = value,
+                imageType = imageType,
+                trace = ArtworkTrace.empty()
+            )
+
+        value.startsWith("https://api.top-posters", ignoreCase = true) ||
+            value.startsWith("https://api.ratingposterdb", ignoreCase = true) ->
+            null
+
+        value.startsWith("http://", ignoreCase = true) ||
+            value.startsWith("https://", ignoreCase = true) ->
+            ArtworkDisplayRef.LegacyString(
+                value = value,
+                imageType = imageType,
+                trace = ArtworkTrace(
+                    selectedProvider = "COMPATIBILITY_REMOTE",
+                    sourceRole = "RAIL_PREVIEW"
+                )
+            )
+
+        else -> null
+    }
 }
