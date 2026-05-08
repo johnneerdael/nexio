@@ -628,9 +628,11 @@ internal fun ContinueWatchingItem.displayMetadata(): HomeDisplayMetadata {
 internal fun continueWatchingItemKey(item: ContinueWatchingItem): String {
     return when (item) {
         is ContinueWatchingItem.InProgress ->
-            "cw_inprogress_${item.progress.contentId}_${item.progress.videoId}_${item.progress.season ?: -1}_${item.progress.episode ?: -1}"
+            item.canonicalKey
+                ?: "cw_inprogress_${item.progress.contentId}_${item.progress.videoId}_${item.progress.season ?: -1}_${item.progress.episode ?: -1}"
         is ContinueWatchingItem.NextUp ->
-            "cw_nextup_${item.info.contentId}_${item.info.videoId}_${item.info.season}_${item.info.episode}"
+            item.info.canonicalKey
+                ?: "cw_nextup_${item.info.contentId}_${item.info.videoId}_${item.info.season}_${item.info.episode}"
     }
 }
 
@@ -679,6 +681,13 @@ internal fun ContinueWatchingItem.contentId(): String {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.contentId
         is ContinueWatchingItem.NextUp -> info.contentId
+    }
+}
+
+internal fun ContinueWatchingItem.canonicalOrContentKey(): String {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> canonicalKey ?: progress.contentId
+        is ContinueWatchingItem.NextUp -> info.canonicalKey ?: info.contentId
     }
 }
 
