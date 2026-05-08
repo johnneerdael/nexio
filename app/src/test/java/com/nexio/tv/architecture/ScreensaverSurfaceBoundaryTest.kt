@@ -191,6 +191,49 @@ class ScreensaverSurfaceBoundaryTest {
     }
 
     @Test
+    fun `screensaver projection does not add direct tvdb logo fallback behavior`() {
+        val files = listOf(
+            "app/src/main/java/com/nexio/tv/data/repository/ScreensaverCandidateRepository.kt",
+            "app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverPreparation.kt",
+            "app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverRepository.kt"
+        )
+        val bannedTvdbImportPrefixes = listOf(
+            "com.nexio.tv.core.tvdb.",
+            "com.nexio.tv.data.integration.tvdb."
+        )
+        val importOffenders = files.flatMap { path ->
+            bannedQualifiedImports(
+                source = sourceOf(path),
+                bannedPrefixes = bannedTvdbImportPrefixes,
+                bannedSimpleNames = emptySet()
+            ).map { import -> "$path: import $import" }
+        }
+        val fallbackOffenders = files.flatMap { path ->
+            sourceOf(path).lineSequence().mapIndexedNotNull { index, line ->
+                val localTvdbLogoFallback = line.contains("tvdb", ignoreCase = true) &&
+                    line.contains("logo", ignoreCase = true) &&
+                    (line.contains("?:") || line.contains("if") || line.contains("="))
+                if (localTvdbLogoFallback) {
+                    "$path:${index + 1}: ${line.trim()}"
+                } else {
+                    null
+                }
+            }
+        }
+
+        assertEquals(
+            "Screensaver projection must not import TVDB provider/integration packages.",
+            emptyList<String>(),
+            importOffenders
+        )
+        assertEquals(
+            "Screensaver projection must consume resolved ArtworkBundle.logo without direct TVDB logo fallback behavior.",
+            emptyList<String>(),
+            fallbackOffenders
+        )
+    }
+
+    @Test
     fun `idle screensaver preparation does not call artwork router or rating metadata repositories`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverPreparation.kt")
 

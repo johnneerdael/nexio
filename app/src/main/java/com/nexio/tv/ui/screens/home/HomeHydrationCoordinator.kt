@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.emptyOrNull
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -237,21 +239,14 @@ class HomeHydrationCoordinator @Inject constructor(
     private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
         firstPaintArtwork: ArtworkBundle?
     ): HomeDisplayMetadata {
-        val hydratedArtwork = artwork
-        val merged = firstPaintArtwork?.let { fallback ->
-            ArtworkBundle(
-                poster = hydratedArtwork?.poster ?: fallback.poster.takeIf { displayPoster == null },
-                backdrop = hydratedArtwork?.backdrop ?: fallback.backdrop.takeIf { displayBackdrop == null },
-                logo = hydratedArtwork?.logo ?: fallback.logo.takeIf { displayLogo == null },
-                thumbnail = hydratedArtwork?.thumbnail ?: fallback.thumbnail.takeIf { displayThumbnail == null }
-            )
-        } ?: hydratedArtwork
-        val mergedOrNull = merged?.takeUnless {
-            it.poster == null &&
-                it.backdrop == null &&
-                it.logo == null &&
-                it.thumbnail == null
-        }
+        val hydratedArtwork = artwork?.enforceArtworkTypeBoundaries()
+        val fallbackArtwork = firstPaintArtwork?.enforceArtworkTypeBoundaries()
+        val mergedOrNull = ArtworkBundle(
+            poster = hydratedArtwork?.poster ?: fallbackArtwork?.poster,
+            backdrop = hydratedArtwork?.backdrop ?: fallbackArtwork?.backdrop,
+            logo = hydratedArtwork?.logo ?: fallbackArtwork?.logo,
+            thumbnail = hydratedArtwork?.thumbnail ?: fallbackArtwork?.thumbnail
+        ).enforceArtworkTypeBoundaries().emptyOrNull()
         return copy(
             poster = mergedOrNull?.poster.toLegacyArtworkString() ?: poster,
             backdrop = mergedOrNull?.backdrop.toLegacyArtworkString() ?: backdrop,

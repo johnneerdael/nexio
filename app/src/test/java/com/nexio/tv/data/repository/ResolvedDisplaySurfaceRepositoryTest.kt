@@ -1,6 +1,11 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
@@ -82,6 +87,32 @@ class ResolvedDisplaySurfaceRepositoryTest {
         assertEquals(1, snapshot.size)
         assertEquals("Already Final Home Title", snapshot.single().display.title)
         assertEquals("Already final overview", snapshot.single().display.overview)
+    }
+
+    @Test
+    fun `publishResolvedItems preserves resolved logo artwork`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val logo = artworkRef(key = "logo-94997", imageType = ArtworkType.LOGO)
+        val item = resolvedItem(
+            itemKey = "series:tmdb:94997",
+            title = "House of the Dragon"
+        ).copy(artwork = ArtworkBundle(logo = logo))
+
+        val published = repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(item)
+        )
+
+        assertTrue(published)
+        assertEquals(
+            logo,
+            repository.getSnapshot(ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY, profileId = 1)
+                .single()
+                .artwork
+                .logo
+        )
     }
 
     @Test
@@ -335,5 +366,17 @@ class ResolvedDisplaySurfaceRepositoryTest {
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = emptyList(),
         updatedAtMs = 1L
+    )
+
+    private fun artworkRef(
+        key: String,
+        imageType: ArtworkType
+    ) = ArtworkDisplayRef.RuntimeAsset(
+        decisionKey = ArtworkDecisionKey(key),
+        assetKey = null,
+        imageType = imageType,
+        selectedProvider = null,
+        sourceRole = ArtworkSourceRole.PREMIUM,
+        trace = ArtworkTrace.empty()
     )
 }
