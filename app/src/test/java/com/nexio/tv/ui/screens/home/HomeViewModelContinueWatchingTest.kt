@@ -19,6 +19,7 @@ import com.nexio.tv.data.repository.IdentityConfidence
 import com.nexio.tv.data.repository.ResumeIdentity
 import com.nexio.tv.data.repository.StreamFetchIdentity
 import com.nexio.tv.data.repository.StreamIdScheme
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
@@ -107,6 +108,149 @@ class HomeViewModelContinueWatchingTest {
         assertEquals("tvdb:393268:2:1", item.progress.videoId)
         assertEquals(65_066L, item.progress.position)
         assertEquals(200L, item.progress.lastWatched)
+    }
+
+    @Test
+    fun `canonical records render safe fallback resume when raw progress has invalid episode coordinate`() = runTest {
+        val rawResume = watchProgress(
+            contentId = "tt9794044",
+            videoId = "tt9794044:0:1",
+            position = 65_066L,
+            duration = 2_958_656L,
+            lastWatched = 200L,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK,
+            season = 0,
+            episode = 1
+        )
+        val safeIdentity = ResumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = rawResume.contentId,
+            videoId = rawResume.videoId,
+            season = null,
+            episode = null,
+            positionMs = rawResume.position,
+            durationMs = rawResume.duration,
+            progressPercent = rawResume.progressPercent,
+            lastWatchedMs = rawResume.lastWatched
+        )
+        val record = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:393268",
+            contentId = "series:tvdb:393268",
+            provider = TrackingProvider.TRAKT,
+            routingVersion = 1,
+            positionMs = rawResume.position,
+            durationMs = rawResume.duration,
+            episodeContext = null,
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = rawResume.lastWatched,
+            canonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = ContentIdentity(
+                    canonicalProvider = ProviderId.TVDB,
+                    canonicalId = "393268",
+                    providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+                ),
+                season = null,
+                episode = null,
+                profileId = 1
+            ),
+            streamFetchIdentity = StreamFetchIdentity(
+                contentId = "tt9794044",
+                videoId = "tt9794044:0:1",
+                idScheme = StreamIdScheme.UNRESOLVED,
+                confidence = IdentityConfidence.LOW,
+                trace = listOf("test")
+            ),
+            resumeIdentities = listOf(safeIdentity),
+            primaryResumeLookupKey = safeIdentity.lookupKey()
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(rawResume),
+                records = listOf(record)
+            ),
+            nowMs = 1_000L
+        )
+
+        assertEquals(1, items.size)
+        val item = items.single() as ContinueWatchingItem.InProgress
+        assertEquals(record.identityKey(), item.canonicalKey)
+        assertEquals("tt9794044", item.progress.contentId)
+        assertNull(item.progress.season)
+        assertNull(item.progress.episode)
+    }
+
+    @Test
+    fun `canonical record with imdb primary resume suppresses tvdb next up for same show`() = runTest {
+        val imdbResume = watchProgress(
+            contentId = "tt9794044",
+            videoId = "tt9794044:2:1",
+            position = 65_066L,
+            duration = 2_958_656L,
+            lastWatched = 200L,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        )
+        val imdbIdentity = imdbResume.toResumeIdentity(ContinueWatchingSource.TRAKT_PLAYBACK)
+        val record = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:393268",
+            contentId = "series:tvdb:393268:s2e1",
+            provider = TrackingProvider.TRAKT,
+            routingVersion = 1,
+            positionMs = imdbResume.position,
+            durationMs = imdbResume.duration,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(2, 1),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = imdbResume.lastWatched,
+            canonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = ContentIdentity(
+                    canonicalProvider = ProviderId.TVDB,
+                    canonicalId = "393268",
+                    providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+                ),
+                season = 2,
+                episode = 1,
+                profileId = 1
+            ),
+            streamFetchIdentity = StreamFetchIdentity(
+                contentId = "tt9794044",
+                videoId = "tt9794044:2:1",
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf("test")
+            ),
+            resumeIdentities = listOf(imdbIdentity),
+            primaryResumeLookupKey = imdbIdentity.lookupKey()
+        )
+        val tvdbNextUp = TrackingNextUpEntry(
+            contentId = "tvdb:393268",
+            contentType = "series",
+            name = "Citadel",
+            season = 2,
+            episode = 2,
+            episodeTitle = "Episode 2",
+            videoId = "tvdb:393268:2:2",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 190L
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(imdbResume),
+                nextUpItems = listOf(tvdbNextUp),
+                records = listOf(record)
+            ),
+            nowMs = 1_000L
+        )
+
+        assertEquals(1, items.size)
+        assertEquals(ContinueWatchingItem.InProgress::class, items.single()::class)
     }
 
     @Test
@@ -303,7 +447,9 @@ class HomeViewModelContinueWatchingTest {
         position: Long,
         duration: Long,
         lastWatched: Long,
-        source: String
+        source: String,
+        season: Int? = 2,
+        episode: Int? = 1
     ): WatchProgress {
         return WatchProgress(
             contentId = contentId,
@@ -313,8 +459,8 @@ class HomeViewModelContinueWatchingTest {
             backdrop = null,
             logo = null,
             videoId = videoId,
-            season = 2,
-            episode = 1,
+            season = season,
+            episode = episode,
             episodeTitle = "Episode 1",
             position = position,
             duration = duration,

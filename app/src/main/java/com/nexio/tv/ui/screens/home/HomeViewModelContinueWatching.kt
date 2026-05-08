@@ -23,6 +23,7 @@ import com.nexio.tv.data.repository.ResumeIdentity
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.data.repository.toResumeIdentity
+import com.nexio.tv.data.repository.toSafeResumeIdentity
 import kotlinx.coroutines.CancellationException
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -167,9 +168,11 @@ internal fun buildContinueWatchingItemsForSnapshot(
         resumeItems = snapshot.records,
         nextUpItems = snapshot.nextUpItems,
         resumeRef = ::resumeRefForContinueWatchingRecord,
-        nextUpRef = ::nextUpRefForContinueWatching
+        nextUpRef = ::canonicalNextUpRefForContinueWatching
     )
-    val rawResumeByLookupKey = snapshot.resumeItems.associateBy { it.toResumeIdentity().lookupKey() }
+    val rawResumeByLookupKey = snapshot.resumeItems.mapNotNull { progress ->
+        runCatching { progress.toSafeResumeIdentity().lookupKey() to progress }.getOrNull()
+    }.toMap()
 
     return timeline.mapNotNull { row ->
         when (row) {
@@ -1025,7 +1028,7 @@ private fun resumeRefForContinueWatching(progress: WatchProgress): ContinueWatch
 private fun resumeRefForContinueWatchingRecord(record: ContinueWatchingRecord): ContinueWatchingResumeRef {
     val primaryResume = record.primaryResumeIdentity()
     return ContinueWatchingResumeRef(
-        contentId = primaryResume?.contentId ?: record.streamFetchIdentity?.contentId ?: record.parentId,
+        contentId = record.parentId,
         activityAtMs = record.updatedAt,
         suppressNextUp = record.episodeContext != null || primaryResume?.isEpisode == true
     )
@@ -1036,6 +1039,21 @@ private fun nextUpRefForContinueWatching(
 ): ContinueWatchingNextUpRef {
     return ContinueWatchingNextUpRef(
         contentId = entry.contentId,
+        activityAtMs = entry.activityAtMs,
+        firstAiredMs = entry.firstAiredMs,
+        availabilityInstantMs = entry.tvdbAvailabilityInstantMs
+    )
+}
+
+private fun canonicalNextUpRefForContinueWatching(
+    entry: com.nexio.tv.data.repository.TrackingNextUpEntry
+): ContinueWatchingNextUpRef {
+    return ContinueWatchingNextUpRef(
+        contentId = if (isSeriesType(entry.contentType)) {
+            homeDisplayItemKey(entry.contentType, entry.contentId)
+        } else {
+            entry.contentId
+        },
         activityAtMs = entry.activityAtMs,
         firstAiredMs = entry.firstAiredMs,
         availabilityInstantMs = entry.tvdbAvailabilityInstantMs
