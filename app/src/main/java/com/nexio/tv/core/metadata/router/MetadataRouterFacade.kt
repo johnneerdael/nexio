@@ -6,7 +6,11 @@ import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
+import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.RatingResolver
+import com.nexio.tv.core.metadata.router.resolver.RatingScope
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
@@ -234,11 +238,16 @@ class MetadataRouterFacade(
         val previewCandidate = request.sourceContext
             .toPreviewCandidate(route.provider)
             ?.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
-        val resolvedDocument = fieldResolver.resolveWithPreview(
+        val resolvedDocumentPreRating = fieldResolver.resolveWithPreview(
             preview = previewCandidate,
             primary = runResult.primaryCandidate,
             secondary = runResult.secondaryCandidates,
             requestContentId = request.contentId
+        )
+        val resolvedDocument = applyRatingResolverSelection(
+            document = resolvedDocumentPreRating,
+            preview = previewCandidate,
+            primary = runResult.primaryCandidate
         )
         val displayMetadata = resolvedDocument.toHomeDisplayMetadata(
             initialDisplay.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
@@ -1092,6 +1101,60 @@ class MetadataRouterFacade(
                 provider.name.equals(providerName, ignoreCase = true)
             }
         }
+
+    /**
+     * Applies [RatingResolver] selection to the resolved document's RATING field. Collects
+     * candidates from the primary canonical and the rail preview, runs them through the
+     * resolver (which has its own precedence: CUSTOM_IMDB → MDBLIST → OMDB →
+     * PRIMARY_PROVIDER → PREVIEW_FALLBACK and filters non-positive values), and replaces
+     * the document's `rating`/`sourceProviders[RATING]`/`sourceRoles[RATING]` with the
+     * resolver's pick.
+     *
+     * Without this step, FieldResolver's "primary canonical wins" rule would persist a
+     * TVDB-canonical SERIES rating of `null` over a perfectly-good TMDB rail-preview
+     * rating, so home rows showed `imdbRating = null` despite TMDB carrying a value.
+     *
+     * MDBList/OMDb/CUSTOM_IMDB ingestion is a follow-up — those candidates are only
+     * available on the detail-screen path today via [DetailRatingDisplayRepository].
+     */
+    private fun applyRatingResolverSelection(
+        document: ResolvedMetadataDocument,
+        preview: MetadataCandidate?,
+        primary: MetadataCandidate?
+    ): ResolvedMetadataDocument {
+        val candidates = buildList {
+            primary?.fields?.get(ResolvedField.RATING)?.value?.toRatingCandidate(
+                sourceRole = com.nexio.tv.core.metadata.router.resolver.SourceRole.PRIMARY_PROVIDER,
+                sourceProvider = primary.provider.name
+            )?.let(::add)
+            preview?.fields?.get(ResolvedField.RATING)?.value?.toRatingCandidate(
+                sourceRole = com.nexio.tv.core.metadata.router.resolver.SourceRole.PREVIEW_FALLBACK,
+                sourceProvider = preview.provider.name
+            )?.let(::add)
+        }
+        if (candidates.isEmpty()) return document
+        val resolution = RatingResolver.resolveTitleRating(candidates) ?: return document
+        return document.copy(
+            rating = resolution.value,
+            sourceProviders = document.sourceProviders + (ResolvedField.RATING to resolution.sourceProvider),
+            sourceRoles = document.sourceRoles + (ResolvedField.RATING to com.nexio.tv.core.metadata.router.SourceRole.PRIMARY)
+        )
+    }
+
+    private fun Any.toRatingCandidate(
+        sourceRole: com.nexio.tv.core.metadata.router.resolver.SourceRole,
+        sourceProvider: String
+    ): RatingCandidate? {
+        val number = this as? Number ?: return null
+        val value = number.toDouble().takeIf { it.isFinite() && it > 0.0 } ?: return null
+        return RatingCandidate(
+            value = value,
+            sourceRole = sourceRole,
+            sourceProvider = sourceProvider,
+            confidence = Confidence.MEDIUM,
+            scope = RatingScope.TITLE
+        )
+    }
 
     private fun ResolvedMetadataDocument.toHomeDisplayMetadata(fallback: HomeDisplayMetadata): HomeDisplayMetadata =
         fallback.copy(
