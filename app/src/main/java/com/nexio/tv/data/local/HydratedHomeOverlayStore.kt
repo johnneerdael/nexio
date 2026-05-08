@@ -15,6 +15,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
@@ -32,15 +33,22 @@ class HydratedHomeOverlayStore @Inject constructor(
         policyVersion: Int
     ): Flow<Map<String, HydratedHomeOverlay>> {
         val normalizedKeys = itemKeys.normalizedItemKeys()
-        return version.map {
-            withContext(Dispatchers.IO) {
-                readForItemKeys(
-                    itemKeys = normalizedKeys,
-                    languageTag = languageTag,
-                    policyVersion = policyVersion
-                )
+        // Cold-start hydration writes ~60 overlays in quick succession; without debounce
+        // every write bumps `version`, every consumer re-reads the entire alias index from
+        // disk, and the resulting Map<String, HydratedHomeOverlay> allocations swamp the
+        // GC (observed: 21 concurrent GCs in 35s, heap to 113MB). Debouncing the version
+        // flow coalesces bursty puts into 1-3 reads at the cost of a small publish delay.
+        return version
+            .debounce(VERSION_DEBOUNCE_MS)
+            .map {
+                withContext(Dispatchers.IO) {
+                    readForItemKeys(
+                        itemKeys = normalizedKeys,
+                        languageTag = languageTag,
+                        policyVersion = policyVersion
+                    )
+                }
             }
-        }
     }
 
     suspend fun upsert(
@@ -247,5 +255,6 @@ class HydratedHomeOverlayStore @Inject constructor(
         const val OVERLAY_PREFIX = "overlay::"
         const val ALIAS_PREFIX = "alias::"
         const val OVERLAY_SCHEMA_VERSION = 1
+        const val VERSION_DEBOUNCE_MS = 50L
     }
 }
