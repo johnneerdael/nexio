@@ -9,10 +9,12 @@ import com.nexio.tv.data.remote.dto.MetaPreviewDto
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterRatingsProvider
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -20,6 +22,64 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CatalogRepositoryImplTest {
+    @Test
+    fun `catalog refresh does not apply premium poster resolver to preview rows`() = runTest {
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val rowSlot = slot<CatalogRow>()
+        val repository = CatalogRepositoryImpl(
+            addonCatalogIntegrationProvider = provider,
+            posterRatingsUrlResolver = posterResolver,
+            catalogDiskCacheStore = diskCacheStore
+        )
+
+        every { diskCacheStore.write(any(), capture(rowSlot), any()) } returns Unit
+        coEvery { posterResolver.getActiveProvider() } returns PosterRatingsUrlResolver.ActiveProvider(
+            provider = PosterRatingsProvider.TOP_POSTERS,
+            apiKey = "secret"
+        )
+        every {
+            posterResolver.apply(any<MetaPreview>(), any())
+        } throws AssertionError("Catalog preview rows must not use premium poster resolver")
+        coEvery {
+            provider.getCatalog(
+                addonId = "top-streaming",
+                catalogUrl = any()
+            )
+        } returns NetworkResult.Success(
+            CatalogResponseDto(
+                metas = listOf(
+                    MetaPreviewDto(
+                        id = "tt12042730",
+                        type = "movie",
+                        name = "Project Hail Mary",
+                        poster = "https://image.tmdb.org/t/p/w500/original.jpg",
+                        releaseInfo = "2026"
+                    )
+                )
+            )
+        )
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://top-streaming.example/manifest.json",
+            addonId = "top-streaming",
+            addonName = "Top Streaming",
+            catalogId = "top",
+            catalogName = "Top Streaming",
+            type = "movie",
+            skip = 0,
+            skipStep = 100,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertTrue(rowSlot.isCaptured)
+        assertEquals("https://image.tmdb.org/t/p/w500/original.jpg", rowSlot.captured.items.single().poster)
+        verify(exactly = 0) { posterResolver.apply(any<MetaPreview>(), any()) }
+    }
+
     @Test
     fun `series route preserves mixed addon item types from metas payload`() = runTest {
         val provider = mockk<AddonCatalogIntegrationProvider>()

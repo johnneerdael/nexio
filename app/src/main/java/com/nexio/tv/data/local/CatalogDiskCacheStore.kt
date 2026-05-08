@@ -50,7 +50,7 @@ class CatalogDiskCacheStore @Inject constructor(
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
-                add("catalogRow", gson.toJsonTree(row))
+                add("catalogRow", gson.toJsonTree(row.sanitizedForCache()))
                 addProperty("catalogVersionHash", catalogVersionHash)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
