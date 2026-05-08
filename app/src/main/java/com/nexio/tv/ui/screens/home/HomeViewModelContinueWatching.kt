@@ -22,7 +22,6 @@ import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.ResumeIdentity
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
-import com.nexio.tv.data.repository.toResumeIdentity
 import com.nexio.tv.data.repository.toSafeResumeIdentity
 import kotlinx.coroutines.CancellationException
 import com.nexio.tv.domain.model.ContentType
