@@ -522,6 +522,68 @@ class ArtworkRouterTest {
     }
 
     @Test
+    fun `premium poster wins over tvdb poster for tv`() {
+        val tvProviderIds = ProviderIds(
+            trakt = "171028",
+            tmdb = "76479",
+            tvdb = "355567",
+            imdb = "tt1190634"
+        )
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    providerIds = tvProviderIds
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    providerIds = tvProviderIds
+                )
+            ),
+            policy = policy(rpdbPosterSettings())
+        )
+
+        assertEquals("RPDB", decision.selectedCandidate.provider?.key)
+        val rejected = decision.rejectedCandidates.single()
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB), rejected.provider)
+        assertEquals("premium_artwork_provider_precedence", rejected.reason)
+    }
+
+    @Test
+    fun `premium poster rejected with trace when no supported tv id`() {
+        // Trakt-only IDs: RPDB does not support trakt for TV poster generation.
+        val unsupportedTvIds = ProviderIds(trakt = "171028")
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    providerIds = unsupportedTvIds
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    providerIds = unsupportedTvIds
+                )
+            ),
+            policy = policy(rpdbPosterSettings())
+        )
+
+        assertEquals("TVDB", decision.selectedCandidate.provider?.key)
+        val rejected = decision.rejectedCandidates.single()
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), rejected.provider)
+        // Production rejection vocabulary uses `missing_supported_provider_id` for the
+        // "no supported id" case (plan calls this `NO_SUPPORTED_ID`).
+        assertEquals("missing_supported_provider_id", rejected.reason)
+    }
+
+    @Test
     fun `router rejection reasons are stable codes without spaces`() {
         val decisions = listOf(
             router.select(
