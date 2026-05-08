@@ -46,4 +46,24 @@ class IntegrationPolicyRegistryTest {
         assertFalse(registry.policyFor(IntegrationProvider.TMDB).allowDuringPlayback)
         assertFalse(registry.policyFor(IntegrationProvider.RPDB).allowDuringPlayback)
     }
+
+    @Test
+    fun `subtitle translation policy permits requests during playback`() {
+        val registry = defaultIntegrationPolicyRegistry()
+        val policy = registry.policyFor(IntegrationProvider.SUBTITLE_TRANSLATION)
+
+        assertTrue(
+            "SUBTITLE_TRANSLATION must allow during-playback work: cue translation runs on the " +
+                "playing track, so blocking it at the playback gate short-circuits every request " +
+                "to MISSING and surfaces as 'Subtitle translation request returned empty response'.",
+            policy.allowDuringPlayback
+        )
+
+        val gate = IntegrationPlaybackGate().apply { setPlaybackActive(true) }
+        assertFalse(
+            "Playback gate must not block USER_VISIBLE subtitle translation requests during " +
+                "playback once allowDuringPlayback is set.",
+            gate.isBlocked(policy, IntegrationWorkClass.USER_VISIBLE)
+        )
+    }
 }
