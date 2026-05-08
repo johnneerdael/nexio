@@ -12,8 +12,11 @@ import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDecisionLookupResult
 import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityResult
 import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityValidator
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.NoopArtworkReferenceIntegrityValidator
+import com.nexio.tv.core.artwork.emptyOrNull
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
@@ -471,7 +474,38 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun MetaPreview.repairArtworkWriteInvariant(scope: String): MetaPreview {
+        val withTypeSafeArtwork = if (artwork == null) {
+            this
+        } else {
+            copy(artwork = artwork.enforceArtworkTypeBoundaries().emptyOrNull())
+        }
+        return withTypeSafeArtwork
+            .repairPosterWriteInvariant(scope)
+            .repairScalarArtworkWriteInvariant(scope, fieldName = "background", expectedType = ArtworkType.BACKDROP)
+            .repairScalarArtworkWriteInvariant(scope, fieldName = "logo", expectedType = ArtworkType.LOGO)
+    }
+
+    private fun MetaPreview.repairPosterWriteInvariant(scope: String): MetaPreview {
         val posterRef = poster?.trim().orEmpty()
+        val typeRepair = artworkTypeRepairForRef(
+            ref = posterRef,
+            expectedType = ArtworkType.POSTER,
+            clearReasonForUnknownType = null
+        )
+        if (typeRepair != null) {
+            traceWriteBarrierRepair(
+                scope = scope,
+                fieldName = "poster",
+                action = "clear_poster_ref",
+                reason = typeRepair.reason,
+                decisionKeyHash = decisionKeyHashForRef(posterRef),
+                assetKeyHash = assetKeyHashForRef(posterRef),
+                destructive = true,
+                posterProviderTagAction = "clear"
+            )
+            return copy(poster = null, posterProviderTag = null)
+        }
+
         val validation = artworkReferenceIntegrityValidator.validate(posterRef)
         return when (validation) {
             ArtworkReferenceIntegrityResult.Empty ->
@@ -485,10 +519,13 @@ class HomeCatalogSnapshotStore private constructor(
                 val assetRef = "$ARTWORK_ASSET_PREFIX${validation.assetKey.value}"
                 traceWriteBarrierRepair(
                     scope = scope,
+                    fieldName = "poster",
                     action = "replace_decision_with_asset",
                     reason = "recoverable_asset_for_decision",
                     decisionKeyHash = validation.decisionKey.value.sha256Short(),
-                    assetKeyHash = validation.assetKey.value.sha256Short()
+                    assetKeyHash = validation.assetKey.value.sha256Short(),
+                    destructive = false,
+                    posterProviderTagAction = "preserve"
                 )
                 copy(poster = assetRef)
             }
@@ -497,10 +534,13 @@ class HomeCatalogSnapshotStore private constructor(
                 val safeReason = validation.reason.safeValidatorTraceReason()
                 traceWriteBarrierRepair(
                     scope = scope,
+                    fieldName = "poster",
                     action = "preserve_orphaned_decision_ref",
                     reason = safeReason,
                     decisionKeyHash = validation.decisionKey.value.sha256Short(),
-                    assetKeyHash = null
+                    assetKeyHash = null,
+                    destructive = false,
+                    posterProviderTagAction = "preserve"
                 )
                 traceSnapshot(
                     eventType = "home.snapshot_artwork_rehydrate_requested",
@@ -535,10 +575,13 @@ class HomeCatalogSnapshotStore private constructor(
                 if (isInvalidArtworkRefClearedAtWrite(posterRef)) {
                     traceWriteBarrierRepair(
                         scope = scope,
+                        fieldName = "poster",
                         action = "clear_poster_ref",
                         reason = validation.reason.safeValidatorTraceReason(),
                         decisionKeyHash = decisionKeyHashForRef(posterRef),
-                        assetKeyHash = assetKeyHashForRef(posterRef)
+                        assetKeyHash = assetKeyHashForRef(posterRef),
+                        destructive = true,
+                        posterProviderTagAction = "clear"
                     )
                     copy(poster = null, posterProviderTag = null)
                 } else {
@@ -546,6 +589,58 @@ class HomeCatalogSnapshotStore private constructor(
                 }
         }
     }
+
+    private fun MetaPreview.repairScalarArtworkWriteInvariant(
+        scope: String,
+        fieldName: String,
+        expectedType: ArtworkType
+    ): MetaPreview {
+        val ref = when (fieldName) {
+            "background" -> background
+            "logo" -> logo
+            else -> null
+        }?.trim().orEmpty()
+        val typeRepair = artworkTypeRepairForRef(
+            ref = ref,
+            expectedType = expectedType,
+            clearReasonForUnknownType = "invalid_artwork_ref"
+        ) ?: return this
+
+        traceWriteBarrierRepair(
+            scope = scope,
+            fieldName = fieldName,
+            action = "clear_${fieldName}_ref",
+            reason = typeRepair.reason,
+            decisionKeyHash = decisionKeyHashForRef(ref),
+            assetKeyHash = assetKeyHashForRef(ref),
+            destructive = true,
+            posterProviderTagAction = null
+        )
+        return when (fieldName) {
+            "background" -> copy(background = null)
+            "logo" -> copy(logo = null)
+            else -> this
+        }
+    }
+
+    private fun artworkTypeRepairForRef(
+        ref: String,
+        expectedType: ArtworkType,
+        clearReasonForUnknownType: String?
+    ): ArtworkTypeRepair? {
+        if (!isDurableArtworkRef(ref)) return null
+        val inferredType = artworkTypeForDurableRef(ref)
+        return when {
+            inferredType == null && clearReasonForUnknownType != null ->
+                ArtworkTypeRepair(clearReasonForUnknownType)
+            inferredType != null && inferredType != expectedType ->
+                ArtworkTypeRepair("wrong_artwork_type")
+            else ->
+                null
+        }
+    }
+
+    private data class ArtworkTypeRepair(val reason: String)
 
     private fun String.safeValidatorTraceReason(): String =
         if (this in SAFE_VALIDATOR_REASONS) this else REDACTED_VALIDATOR_REASON
@@ -564,22 +659,29 @@ class HomeCatalogSnapshotStore private constructor(
 
     private fun traceWriteBarrierRepair(
         scope: String,
+        fieldName: String,
         action: String,
         reason: String,
         decisionKeyHash: String?,
-        assetKeyHash: String?
+        assetKeyHash: String?,
+        destructive: Boolean,
+        posterProviderTagAction: String?
     ) {
+        val payload = buildMap<String, Any?> {
+            put("scope", scope)
+            put("field", fieldName)
+            put("action", action)
+            put("reason", reason)
+            put("decisionKeyHash", decisionKeyHash)
+            put("assetKeyHash", assetKeyHash)
+            put("destructive", destructive)
+            if (posterProviderTagAction != null) {
+                put("posterProviderTagAction", posterProviderTagAction)
+            }
+        }
         traceSnapshot(
             eventType = "home.snapshot_write_barrier_repaired",
-            payload = mapOf(
-                "scope" to scope,
-                "action" to action,
-                "reason" to reason,
-                "decisionKeyHash" to decisionKeyHash,
-                "assetKeyHash" to assetKeyHash,
-                "destructive" to (action == "clear_poster_ref"),
-                "posterProviderTagAction" to if (action == "clear_poster_ref") "clear" else "preserve"
-            )
+            payload = payload
         )
     }
 
@@ -632,7 +734,7 @@ class HomeCatalogSnapshotStore private constructor(
                     "Dropping malformed cached items from $label[$index] for catalogId=${row.catalogId}"
                 )
             }
-            row.copy(items = sanitizedItems).sanitizedForCache()
+            row.copy(items = sanitizedItems)
         }
     }
 
@@ -646,7 +748,24 @@ class HomeCatalogSnapshotStore private constructor(
             if (item == null) {
                 Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
             }
-            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot("$label[$index]", traceState)
+            item
+                ?.sanitizedForSnapshot()
+                ?.sanitizePremiumArtworkForSnapshot("$label[$index]", traceState)
+        }
+    }
+
+    private fun MetaPreview.sanitizedForSnapshot(): MetaPreview {
+        val sanitized = sanitizedForCache()
+        val originalPoster = poster?.trim()?.takeIf { it.isNotBlank() }
+        return if (
+            originalPoster != null &&
+            sanitized.poster == originalPoster &&
+            sanitized.posterProviderTag == null &&
+            posterProviderTag != null
+        ) {
+            sanitized.copy(posterProviderTag = posterProviderTag)
+        } else {
+            sanitized
         }
     }
 
@@ -715,6 +834,27 @@ class HomeCatalogSnapshotStore private constructor(
 
     private fun isAssetRef(ref: String): Boolean {
         return ref.startsWith(ARTWORK_ASSET_PREFIX)
+    }
+
+    private fun isDurableArtworkRef(ref: String): Boolean {
+        return isDecisionRef(ref) || isAssetRef(ref)
+    }
+
+    private fun artworkTypeForDurableRef(ref: String): ArtworkType? {
+        val key = when {
+            isDecisionRef(ref) -> ref.removePrefix(ARTWORK_DECISION_PREFIX)
+            isAssetRef(ref) -> ref.removePrefix(ARTWORK_ASSET_PREFIX)
+            else -> return null
+        }
+        val parts = key.split(":")
+        val typeValue = when (parts.firstOrNull()) {
+            "artwork-decision" -> parts.getOrNull(1)
+            "artwork-asset" -> parts.getOrNull(2)
+            else -> null
+        } ?: return null
+        return ArtworkType.entries.firstOrNull { type ->
+            type.name.equals(typeValue, ignoreCase = true)
+        }
     }
 
     private fun decisionKeyHashForRef(ref: String): String? {
