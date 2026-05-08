@@ -75,9 +75,11 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
-                every { state } returns MutableStateFlow(
+                val trackingState = MutableStateFlow(
                     EffectiveTrackingProviderState(traktAuthenticated = true)
                 )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
             },
             traktSettingsDataStore = mockk {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
@@ -132,6 +134,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             },
             trackingProviderStateService = mockk {
                 every { state } returns providerState
+                every { stateForProfile(any()) } returns providerState
             },
             traktSettingsDataStore = mockk {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
@@ -188,9 +191,11 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
-                every { state } returns MutableStateFlow(
+                val trackingState = MutableStateFlow(
                     EffectiveTrackingProviderState(traktAuthenticated = true)
                 )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
             },
             traktSettingsDataStore = mockk {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
@@ -239,9 +244,11 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
-                every { state } returns MutableStateFlow(
+                val trackingState = MutableStateFlow(
                     EffectiveTrackingProviderState(traktAuthenticated = true)
                 )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
             },
             traktSettingsDataStore = mockk {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
