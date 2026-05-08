@@ -10,6 +10,7 @@ import com.nexio.tv.core.artwork.ArtworkAssetRepository
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkType
+import io.mockk.coVerify
 import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import io.mockk.coEvery
@@ -142,6 +143,69 @@ class NexioArtworkFetcherTest {
         val fetcher = NexioArtworkFetcher(
             assetKey = null,
             decisionKey = decisionKey,
+            repository = repository
+        )
+
+        val result = fetcher.fetch()
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `fetcher rehydrates evicted asset URI when on-disk file is missing`() = runTest {
+        val assetKey = ArtworkAssetKey("artwork-asset:TVDB:logo:urlHash:abc:variant:none:imageLang:en:policy:1")
+        val rehydratedFile = temp.newFile("rehydrated-logo.bin")
+        rehydratedFile.writeBytes("logo-bytes".toByteArray())
+        val repository = mockk<ArtworkAssetRepository>()
+        every { repository.getExistingFile(assetKey) } returns null
+        coEvery { repository.getOrRehydrateAsset(assetKey) } returns ArtworkAssetResult(
+            assetKey = assetKey,
+            localFile = rehydratedFile,
+            record = ArtworkAssetRecord(
+                assetKey = assetKey,
+                decisionKey = ArtworkDecisionKey("decision-for-logo"),
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+                imageType = ArtworkType.LOGO,
+                imageLanguage = "en",
+                relativePath = "artwork-assets/TVDB/logo/${assetKey.value}.bin",
+                mimeType = "image/png",
+                byteCount = rehydratedFile.length(),
+                sourceHash = "source-hash",
+                policyVersion = 1,
+                fetchedAtMs = 1_000L,
+                expiresAtMs = 2_000L,
+                staleUntilMs = 3_000L
+            ),
+            runtimeResult = IntegrationFetchResult.Updated<ByteArray>("logo-bytes".toByteArray()),
+            runtimeApiShapeId = "tvdb.artwork.fetch",
+            cacheDecision = "MISS_THEN_NETWORK",
+            mimeType = "image/png",
+            networkExecuted = true
+        )
+        val fetcher = NexioArtworkFetcher(
+            assetKey = assetKey,
+            decisionKey = null,
+            repository = repository
+        )
+
+        val result = fetcher.fetch()
+
+        assertTrue(result is SourceResult)
+        result as SourceResult
+        assertEquals(DataSource.DISK, result.dataSource)
+        assertEquals("image/png", result.mimeType)
+        coVerify(exactly = 1) { repository.getOrRehydrateAsset(assetKey) }
+    }
+
+    @Test
+    fun `fetcher returns null when asset URI cannot be rehydrated`() = runTest {
+        val assetKey = ArtworkAssetKey("artwork-asset:TVDB:logo:orphan")
+        val repository = mockk<ArtworkAssetRepository>()
+        every { repository.getExistingFile(assetKey) } returns null
+        coEvery { repository.getOrRehydrateAsset(assetKey) } returns null
+        val fetcher = NexioArtworkFetcher(
+            assetKey = assetKey,
+            decisionKey = null,
             repository = repository
         )
 
