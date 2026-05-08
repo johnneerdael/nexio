@@ -790,22 +790,33 @@ class ProfileSettingsScopeContractTest {
             identityResolverSource.contains("depth = MetadataDepth.IDENTITY")
         )
         assertTrue(
-            "Home should render Continue Watching from canonical snapshot records when present",
-            homeSource.contains("snapshot.records.isNotEmpty()")
-        )
-        assertTrue(
             "Home should build the row through buildContinueWatchingItemsForSnapshot",
             homeSource.contains("buildContinueWatchingItemsForSnapshot(snapshot, nowMs)")
         )
+        val buildItemsStart = homeSource.indexOf("internal fun buildContinueWatchingItemsForSnapshot(")
+        val emptyRecordsBranch = homeSource.indexOf("if (snapshot.records.isEmpty())", startIndex = buildItemsStart)
+        val rawFallbackReturn = homeSource.indexOf(
+            "return buildRawContinueWatchingItemsForSnapshot(snapshot, nowMs)",
+            startIndex = emptyRecordsBranch
+        )
+        val canonicalRecordsTimeline = homeSource.indexOf("resumeItems = snapshot.records", startIndex = rawFallbackReturn)
+        assertTrue("Home should define buildContinueWatchingItemsForSnapshot", buildItemsStart >= 0)
+        assertTrue("Home should branch on snapshot.records before rendering", emptyRecordsBranch > buildItemsStart)
+        assertTrue("Home should use raw fallback only when snapshot.records is empty", rawFallbackReturn > emptyRecordsBranch)
         assertTrue(
-            "CW in-progress playback should preserve resume videoId and pass the stream fetch id separately",
-            navSource.contains(
-                """
-                is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
-                    videoId = item.progress.videoId,
-                    streamVideoId = item.streamFetchVideoId,
-                """.trimIndent()
-            )
+            "Home should render canonical Continue Watching rows from snapshot.records when records are present",
+            canonicalRecordsTimeline > rawFallbackReturn
+        )
+        val inProgressRouteStart = navSource.indexOf("is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(")
+        val resumeVideoIdArg = navSource.indexOf("videoId = item.progress.videoId", startIndex = inProgressRouteStart)
+        val streamVideoIdArg = navSource.indexOf("streamVideoId = item.streamFetchVideoId", startIndex = inProgressRouteStart)
+        val nextUpRouteStart = navSource.indexOf("is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(")
+        assertTrue("CW in-progress playback route should exist", inProgressRouteStart >= 0)
+        assertTrue("CW in-progress playback should preserve the resume videoId", resumeVideoIdArg > inProgressRouteStart)
+        assertTrue("CW in-progress playback should pass the stream fetch id separately", streamVideoIdArg > resumeVideoIdArg)
+        assertTrue(
+            "CW in-progress playback stream fetch id should be passed before the NextUp route",
+            nextUpRouteStart < 0 || streamVideoIdArg < nextUpRouteStart
         )
     }
 
