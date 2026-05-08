@@ -116,7 +116,12 @@ class HomeHydrationCoordinator @Inject constructor(
 
             overlayStore.upsert(
                 overlay = overlay,
-                aliases = overlayAliases(item = item, bundle = bundle, itemKey = itemKey)
+                aliases = overlayAliases(
+                    item = item,
+                    bundle = bundle,
+                    overlay = overlay,
+                    itemKey = itemKey
+                )
             )
             if (currentGeneration() != expectedGeneration) {
                 traceEvents.emitHomeHydrationIgnored(
@@ -396,27 +401,34 @@ class HomeHydrationCoordinator @Inject constructor(
     private fun overlayAliases(
         item: MetaPreview,
         bundle: StableIdBundle?,
+        overlay: HydratedHomeOverlay,
         itemKey: String
-    ): Set<String> = buildSet {
-        add(itemKey)
-        addStableAliases(item.apiType, item.firstPaintStableIds)
-        bundle?.source?.observedIds?.let { addStableAliases(item.apiType, it) }
-        addStableAliases(
-            item.apiType,
-            ProviderIds(
-                imdb = bundle?.sidecars?.imdbId,
-                tmdb = bundle?.canonical?.tmdbMovieId,
-                tvdb = bundle?.canonical?.tvdbSeriesId,
-                kitsu = bundle?.canonical?.kitsuAnimeId
-            )
+    ): Set<String> {
+        val firstPaintIds = item.firstPaintStableIds
+        val observedIds = bundle?.source?.observedIds
+        val mergedProviderIds = ProviderIds(
+            imdb = firstPaintIds.imdb
+                ?: observedIds?.imdb
+                ?: bundle?.sidecars?.imdbId,
+            tmdb = firstPaintIds.tmdb
+                ?: observedIds?.tmdb
+                ?: bundle?.canonical?.tmdbMovieId,
+            tvdb = firstPaintIds.tvdb
+                ?: observedIds?.tvdb
+                ?: bundle?.canonical?.tvdbSeriesId,
+            trakt = firstPaintIds.trakt ?: observedIds?.trakt,
+            kitsu = firstPaintIds.kitsu
+                ?: observedIds?.kitsu
+                ?: bundle?.canonical?.kitsuAnimeId
         )
-    }
-
-    private fun MutableSet<String>.addStableAliases(type: String, ids: ProviderIds) {
-        ids.imdb?.takeIf { it.isNotBlank() }?.let { add("$type:imdb:$it") }
-        ids.tmdb?.takeIf { it.isNotBlank() }?.let { add("$type:tmdb:$it") }
-        ids.tvdb?.takeIf { it.isNotBlank() }?.let { add("$type:tvdb:$it") }
-        ids.kitsu?.takeIf { it.isNotBlank() }?.let { add("$type:kitsu:$it") }
+        return HomeArtworkOverlayKeys.aliasesFor(
+            rowItemKey = itemKey,
+            contentId = item.id,
+            itemType = item.apiType,
+            providerIds = mergedProviderIds,
+            canonicalProvider = overlay.canonicalProvider,
+            canonicalId = overlay.canonicalId
+        )
     }
 
     private fun MetadataPrimaryProvider.toProviderId(): ProviderId? =
