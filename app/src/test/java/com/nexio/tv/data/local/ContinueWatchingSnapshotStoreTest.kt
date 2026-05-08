@@ -384,6 +384,97 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `read restores release minified schema five record keys`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("nl"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 1,
+              "languageTag": "nl",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "records": [{
+                "a": 1,
+                "b": "series:tvdb:393268",
+                "c": "series:tvdb:393268:s2e1",
+                "d": "TRAKT",
+                "e": 1,
+                "f": 0,
+                "g": 0,
+                "h": {"a": 2, "b": 1},
+                "j": "REMOTE",
+                "k": 1778188317000,
+                "l": {
+                  "a": "SERIES",
+                  "b": {
+                    "canonicalProvider": "TVDB",
+                    "canonicalId": "393268",
+                    "providerIds": {"tvdb": "393268", "imdb": "tt9794044", "trakt": "171028"}
+                  },
+                  "c": 2,
+                  "d": 1,
+                  "e": 1
+                },
+                "m": {
+                  "canonicalProvider": "TVDB",
+                  "canonicalId": "393268",
+                  "providerIds": {"tvdb": "393268", "imdb": "tt9794044", "trakt": "171028"}
+                },
+                "n": {
+                  "a": "tt9794044",
+                  "b": "tt9794044:2:1",
+                  "c": "IMDB_EPISODE",
+                  "d": "HIGH",
+                  "e": ["device fixture"]
+                },
+                "o": {
+                  "a": 171028,
+                  "b": 13018336,
+                  "c": 1748780366,
+                  "e": {"imdb": "tt9794044", "trakt": "171028"}
+                },
+                "p": [{
+                  "a": "TRAKT_PLAYBACK",
+                  "b": "tt9794044",
+                  "c": "tt9794044:2:1",
+                  "d": 2,
+                  "e": 1,
+                  "f": 0,
+                  "g": 0,
+                  "h": 71.8908,
+                  "i": 1778188317000
+                }],
+                "q": "tt9794044|tt9794044:2:1|2|1",
+                "r": "HIGH",
+                "s": [],
+                "t": "nl"
+              }],
+              "displayMetadataByItemKey": {},
+              "metadataSnapshotsByItemKey": {},
+              "updatedAtMs": 1778260165327
+            }
+            """.trimIndent()
+        ).commit()
+
+        val record = store.read(profileId = 1)?.records?.singleOrNull()
+
+        assertEquals("series:tvdb:393268", record?.parentId)
+        assertEquals("tt9794044|tt9794044:2:1|2|1", record?.primaryResumeLookupKey)
+        assertEquals(1, record?.resumeIdentities?.size)
+        assertEquals("393268", record?.canonicalKey?.canonicalParent?.canonicalId)
+        assertEquals("tt9794044:2:1", record?.streamFetchIdentity?.videoId)
+    }
+
+    @Test
     fun `explicit profile id keeps continue watching snapshots isolated`() {
         val profileOnePrefs = InMemorySharedPreferences()
         val profileTwoPrefs = InMemorySharedPreferences()
