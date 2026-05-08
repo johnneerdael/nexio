@@ -132,10 +132,18 @@ internal fun resolveModernCarouselCardArtworkModel(
     val typedModel = if (useBackdrop) {
         artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
     } else {
-        artwork?.poster.toCoilModelOrNull() ?: artwork?.backdrop.toCoilModelOrNull()
+        artwork?.poster.toCoilModelOrNull()
     }
     val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
-    return typedModel ?: fallbackModel.toLegacyArtworkCoilModelOrNull(
+    val legacyFallback = if (useBackdrop) {
+        fallbackModel
+    } else {
+        firstNonBlank(
+            item.metaPreview?.poster,
+            item.heroPreview.poster
+        )
+    }
+    return typedModel ?: legacyFallback.toLegacyArtworkCoilModelOrNull(
         ownerKey = "${item.key}:${fallbackType.name.lowercase()}",
         imageType = fallbackType
     )
@@ -159,9 +167,7 @@ internal fun resolveModernCarouselCardFallbackArtworkModel(
     } else {
         firstNonBlank(
             item.metaPreview?.poster,
-            item.heroPreview.poster,
-            item.metaPreview?.background,
-            item.heroPreview.backdrop
+            item.heroPreview.poster
         )
     }
     return legacyFallback.toLegacyArtworkCoilModelOrNull(

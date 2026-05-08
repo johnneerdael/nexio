@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,7 +36,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://asset/backdropAsset", model)
+        assertEquals("nexio-artwork://decision/decision-backdropAsset", model)
     }
 
     @Test
@@ -55,7 +56,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://asset/backdropAsset", model)
+        assertEquals("nexio-artwork://decision/decision-backdropAsset", model)
     }
 
     @Test
@@ -75,7 +76,56 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://asset/posterAsset", model)
+        assertEquals("nexio-artwork://decision/decision-posterAsset", model)
+    }
+
+    @Test
+    fun `portrait cards do not use typed backdrop when poster is missing`() {
+        val item = carouselItem(
+            ArtworkBundle(
+                backdrop = artworkRef("backdropAsset", ArtworkType.BACKDROP)
+            ),
+            poster = "https://image.tmdb.org/t/p/w500/safe-raw-poster.jpg?token=poster",
+            background = "https://image.tmdb.org/t/p/w780/unsafe-raw-backdrop.jpg?token=backdrop"
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.imageUrl
+        )
+
+        assertNotEquals("nexio-artwork://decision/decision-backdropAsset", model)
+        assertTrue(model is LegacyRemoteArtworkModel)
+        val legacyModel = model as LegacyRemoteArtworkModel
+        assertEquals(ArtworkType.POSTER, legacyModel.imageType)
+        assertTrue(legacyModel.key.contains("legacy-artwork:poster:item:poster:"))
+        assertTrue(legacyModel.url.value.contains("safe-raw-poster"))
+        assertFalse(legacyModel.url.value.contains("unsafe-raw-backdrop"))
+    }
+
+    @Test
+    fun `portrait cards do not use typed logo when poster is missing`() {
+        val item = carouselItem(
+            ArtworkBundle(
+                logo = artworkRef("logoAsset", ArtworkType.LOGO)
+            ),
+            poster = "https://image.tmdb.org/t/p/w500/safe-raw-poster.jpg?token=poster"
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.heroPreview.poster
+        )
+
+        assertNotEquals("nexio-artwork://decision/decision-logoAsset", model)
+        assertTrue(model is LegacyRemoteArtworkModel)
+        assertEquals(ArtworkType.POSTER, (model as LegacyRemoteArtworkModel).imageType)
     }
 
     @Test
@@ -153,11 +203,34 @@ class ModernHomeRowsArtworkModelTest {
             isBackdropExpanded = false
         )
 
-        assertEquals("nexio-artwork://asset/posterDecision", primary)
+        assertEquals("nexio-artwork://decision/decision-posterDecision", primary)
         assertTrue(fallback is LegacyRemoteArtworkModel)
         assertFalse(fallback is String)
         assertFalse(fallback.toString().contains("https://"))
         assertFalse((fallback as LegacyRemoteArtworkModel).key.contains("secret"))
+    }
+
+    @Test
+    fun `portrait fallback model uses raw poster and never raw backdrop`() {
+        val item = carouselItem(
+            artwork = null,
+            poster = "https://image.tmdb.org/t/p/w500/portrait-poster-token.jpg?token=poster",
+            background = "https://image.tmdb.org/t/p/w780/portrait-backdrop-token.jpg?token=backdrop"
+        )
+
+        val fallback = resolveModernCarouselCardFallbackArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false
+        )
+
+        assertTrue(fallback is LegacyRemoteArtworkModel)
+        val legacyModel = fallback as LegacyRemoteArtworkModel
+        assertEquals(ArtworkType.POSTER, legacyModel.imageType)
+        assertTrue(legacyModel.key.contains("legacy-artwork:poster:item:fallback:poster:"))
+        assertTrue(legacyModel.url.value.contains("portrait-poster-token"))
+        assertFalse(legacyModel.url.value.contains("portrait-backdrop-token"))
     }
 
     private fun carouselItem(
