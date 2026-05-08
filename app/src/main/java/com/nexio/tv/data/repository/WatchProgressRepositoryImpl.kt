@@ -76,9 +76,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
     )
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
+    private val metadataFailureState = MutableStateFlow<Map<String, Long>>(emptyMap())
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private val metadataHydrationLimit = 30
+    private val metadataFailureTtlMs = 15 * 60_000L
     private val metadataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun hydrateMetadata(progressList: List<WatchProgress>) {
@@ -94,10 +96,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
             val contentId = progress.contentId
             if (contentId.isBlank()) return@forEach
             if (metadataState.value.containsKey(contentId)) return@forEach
+            if (hasFreshMetadataFailure(contentId)) return@forEach
 
             metadataScope.launch {
                 val shouldFetch = metadataMutex.withLock {
                     if (metadataState.value.containsKey(contentId)) return@withLock false
+                    if (hasFreshMetadataFailure(contentId)) return@withLock false
                     if (inFlightMetadataKeys.contains(contentId)) return@withLock false
                     inFlightMetadataKeys.add(contentId)
                     true
@@ -122,6 +126,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     override fun invalidateLocalizedMetadata() {
         metadataState.value = emptyMap()
+        metadataFailureState.value = emptyMap()
         metadataScope.launch {
             metadataMutex.withLock {
                 inFlightMetadataKeys.clear()
@@ -130,6 +135,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     internal suspend fun fetchContentMetadata(progress: WatchProgress): ContentMetadata? {
+        if (hasFreshMetadataFailure(progress.contentId)) return null
         val request = MetadataRequest(
             contentId = progress.contentId,
             contentType = ContentType.fromString(progress.contentType),
@@ -149,10 +155,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "fetchContentMetadata resolveRequest failed for ${progress.contentId}: ${e.message}", e)
+            recordMetadataFailure(progress.contentId)
+            Log.w(TAG, "fetchContentMetadata resolveRequest failed for ${progress.contentId}: ${e.message}")
             return null
         }
-        if (canonical.route == null) return null
+        if (canonical.route == null) {
+            recordMetadataFailure(progress.contentId)
+            return null
+        }
+        clearMetadataFailure(progress.contentId)
         val display = canonical.displayMetadata
         return ContentMetadata(
             name = display.title ?: progress.name,
@@ -161,6 +172,23 @@ class WatchProgressRepositoryImpl @Inject constructor(
             logo = display.logo ?: progress.logo,
             episodes = emptyMap()
         )
+    }
+
+    private fun hasFreshMetadataFailure(contentId: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val failedAtMs = metadataFailureState.value[contentId] ?: return false
+        return nowMs - failedAtMs < metadataFailureTtlMs
+    }
+
+    private fun recordMetadataFailure(contentId: String, nowMs: Long = System.currentTimeMillis()) {
+        if (contentId.isBlank()) return
+        metadataFailureState.update { current ->
+            current.filterValues { failedAtMs -> nowMs - failedAtMs < metadataFailureTtlMs } +
+                (contentId to nowMs)
+        }
+    }
+
+    private fun clearMetadataFailure(contentId: String) {
+        metadataFailureState.update { current -> current - contentId }
     }
 
     private fun enrichWithMetadata(
