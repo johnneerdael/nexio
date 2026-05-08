@@ -738,7 +738,10 @@ class ProfileSettingsScopeContractTest {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
 
         assertTrue(source.contains("class TraktProgressRuntimeRegistry"))
-        assertTrue(source.contains("private val states = mutableMapOf<Int, TraktProgressRuntimeState>()"))
+        assertTrue(
+            source.contains("private val states = mutableMapOf<Int, TraktProgressRuntimeState>()") ||
+                source.contains("private val states = java.util.concurrent.ConcurrentHashMap<Int, TraktProgressRuntimeState>()")
+        )
         assertTrue(source.contains("fun stateFor(session: TrackingRuntimeSession): TraktProgressRuntimeState"))
         assertTrue(source.contains("fun clearProfile(profileId: Int)"))
         assertTrue(source.contains("private fun runtimeState(): TraktProgressRuntimeState"))
@@ -901,8 +904,10 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(authSource.contains("suspend fun <T> executeAuthorizedWriteRequest("))
         assertTrue(authSource.contains("session: TrackingAuthSession"))
-        assertTrue(scrobbleSource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
-        assertTrue(historySource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
+        assertTrue(scrobbleSource.contains("private fun TraktMutationEnvelope.session(): TrackingAuthSession"))
+        assertTrue(scrobbleSource.contains("profileId = profileId"))
+        assertTrue(historySource.contains("private fun TraktMutationEnvelope.session(): TrackingAuthSession"))
+        assertTrue(historySource.contains("profileId = profileId"))
         assertTrue(!scrobbleSource.contains("traktAuthService.executeAuthorizedWriteRequest { authHeader ->"))
     }
 
@@ -919,7 +924,8 @@ class ProfileSettingsScopeContractTest {
         assertTrue(traktLibrarySource.contains("restoreSnapshotForProfile(profileId)"))
         assertTrue(traktLibrarySource.contains("snapshotStore.read(profileId)"))
         assertTrue(traktLibrarySource.contains("snapshotStore.write(persisted, profileId)"))
-        assertTrue(traktLibrarySource.contains("envelope.copy(profileId = activeProfileId())"))
+        assertTrue(traktLibrarySource.contains("session = mutationSession()"))
+        assertTrue(traktLibrarySource.contains("private suspend fun mutationSession(profileId: Int = activeProfileId())"))
         assertTrue(traktLibrarySource.contains("TrackingAuthSession(TrackingProvider.TRAKT, profileId)"))
         assertTrue(traktLibrarySource.contains("fetchSnapshot(session)"))
         assertTrue(traktLibraryAdapterSource.contains("executor.addToWatchlist(envelope.session(), envelope.listItemsBody())"))
@@ -956,12 +962,14 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(scrobbleServiceSource.contains("val session = authSession(ownerProfileId)"))
         assertTrue(scrobbleServiceSource.contains("?: traktAuthService.currentAuthSession()"))
-        assertTrue(scrobbleAdapterSource.contains("profileId: Int = 1"))
-        assertTrue(scrobbleAdapterSource.contains("profileId = profileId"))
-        assertTrue(historyAdapterSource.contains("profileId: Int = 1"))
-        assertTrue(historyAdapterSource.contains("profileId = profileId"))
-        assertTrue(seasonAdapterSource.contains("profileId: Int = 1"))
-        assertTrue(watchProgressSource.contains("traktAuthService.currentTraktProfileId()"))
+        assertTrue(scrobbleAdapterSource.contains("session: TrackingAuthSession"))
+        assertTrue(scrobbleAdapterSource.contains("profileId = session.profileId"))
+        assertTrue(historyAdapterSource.contains("session: TrackingAuthSession"))
+        assertTrue(historyAdapterSource.contains("profileId = session.profileId"))
+        assertTrue(seasonAdapterSource.contains("session: TrackingAuthSession"))
+        assertTrue(seasonAdapterSource.contains("profileId = session.profileId"))
+        assertTrue(watchProgressSource.contains("accountSessionFor("))
+        assertTrue(watchProgressSource.contains("profileId = profileSession.profileId"))
     }
 
     @Test
