@@ -71,6 +71,41 @@ class TmdbLocalizationPolicyTest {
     }
 
     @Test
+    fun `tmdb localized candidate emits remote ids when imdb id present`() {
+        val policy = LocalizationPolicy.tmdb("en-US")
+        val candidate = buildTmdbLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            policy = policy,
+            requested = enrichment(
+                title = "Title",
+                overview = "Overview",
+                poster = "poster",
+                imdbId = "tt33100314",
+                tvdbId = 12345
+            ),
+            english = null
+        )
+
+        @Suppress("UNCHECKED_CAST")
+        val remoteIds = candidate.fields.getValue(ResolvedField.REMOTE_IDS).value as Map<String, Set<String>>
+        assertEquals(setOf("tt33100314"), remoteIds["imdb"])
+        assertEquals(setOf("12345"), remoteIds["tvdb"])
+    }
+
+    @Test
+    fun `tmdb localized candidate omits remote ids when external ids missing`() {
+        val policy = LocalizationPolicy.tmdb("en-US")
+        val candidate = buildTmdbLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            policy = policy,
+            requested = enrichment(title = "Title", overview = "Overview", poster = "poster"),
+            english = null
+        )
+
+        assertEquals(false, candidate.fields.containsKey(ResolvedField.REMOTE_IDS))
+    }
+
+    @Test
     fun `tmdb localized candidate carries rich cast and organization fields`() {
         val policy = LocalizationPolicy.tmdb("en-US")
         val cast = listOf(MetaCastMember(name = "Actor", tmdbId = 42, provider = "tmdb", providerId = "42"))
@@ -101,7 +136,9 @@ class TmdbLocalizationPolicyTest {
         poster: String?,
         castMembers: List<MetaCastMember> = emptyList(),
         productionCompanies: List<MetaCompany> = emptyList(),
-        networks: List<MetaCompany> = emptyList()
+        networks: List<MetaCompany> = emptyList(),
+        imdbId: String? = null,
+        tvdbId: Int? = null
     ): TmdbEnrichment =
         TmdbEnrichment(
             localizedTitle = title,
@@ -124,6 +161,8 @@ class TmdbLocalizationPolicyTest {
             countries = null,
             language = null,
             collectionId = null,
-            collectionName = null
+            collectionName = null,
+            imdbId = imdbId,
+            tvdbId = tvdbId
         )
 }

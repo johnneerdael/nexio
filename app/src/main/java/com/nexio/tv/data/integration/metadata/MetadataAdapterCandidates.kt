@@ -30,6 +30,13 @@ internal fun TmdbEnrichment?.toMetadataCandidate(provider: MetadataPrimaryProvid
             logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            val remoteIds = buildMap<String, Set<String>> {
+                imdbId?.takeIf { it.isNotBlank() }?.let { put("imdb", setOf(it)) }
+                tvdbId?.let { put("tvdb", setOf(it.toString())) }
+            }
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
         }
     )
 
@@ -298,6 +305,13 @@ internal fun buildTmdbLocalizedCandidate(
             }
             if (organizations.isNotEmpty()) {
                 put(ResolvedField.ORGANIZATION_LIST, FieldValue(organizations, FieldOwner.PRIMARY))
+            }
+            val remoteIds = buildMap<String, Set<String>> {
+                source?.imdbId?.takeIf { it.isNotBlank() }?.let { put("imdb", setOf(it)) }
+                source?.tvdbId?.let { put("tvdb", setOf(it.toString())) }
+            }
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
             }
         },
         localization = buildMap {

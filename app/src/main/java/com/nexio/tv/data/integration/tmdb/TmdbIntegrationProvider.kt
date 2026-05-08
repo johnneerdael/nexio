@@ -1092,7 +1092,9 @@ class TmdbIntegrationProvider private constructor(
                     countries = countries,
                     language = language,
                     collectionId = collectionId,
-                    collectionName = collectionName
+                    collectionName = collectionName,
+                    imdbId = details.externalIds?.imdbId?.takeIf { it.isNotBlank() },
+                    tvdbId = details.externalIds?.tvdbId
                 )
             )
         } catch (exception: Exception) {

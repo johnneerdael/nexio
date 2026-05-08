@@ -1204,7 +1204,9 @@ class MetadataRouterFacade(
             countries = countries.takeIf { it.isNotEmpty() },
             language = language,
             collectionId = null,
-            collectionName = null
+            collectionName = null,
+            imdbId = remoteIds["imdb"]?.firstOrNull()?.takeIf { it.isNotBlank() },
+            tvdbId = remoteIds["tvdb"]?.firstOrNull()?.toIntOrNull()
         )
     }
 

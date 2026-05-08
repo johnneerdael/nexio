@@ -881,7 +881,9 @@ data class TmdbEnrichment(
     val countries: List<String>?,
     val language: String?,
     val collectionId: Int?,
-    val collectionName: String?
+    val collectionName: String?,
+    val imdbId: String? = null,
+    val tvdbId: Int? = null
 )
 
 data class TmdbEpisodeEnrichment(
