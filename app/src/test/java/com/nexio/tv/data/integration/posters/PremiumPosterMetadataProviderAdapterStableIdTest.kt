@@ -320,6 +320,148 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
     }
 
     @Test
+    fun `premium poster candidate generated for tv with tvdb id`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TVDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            parentId = "trakt:171028",
+            targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:355567")
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val template = cache.get(decisionKeyFromRef(value!!))?.selectedCandidate?.providerTemplate
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), template?.provider)
+        assertEquals("tvdb", template?.idType)
+        assertEquals("series-355567", template?.mediaId)
+        assertFalse(template?.mediaId.orEmpty().contains("trakt"))
+    }
+
+    @Test
+    fun `premium poster candidate generated for tv with imdb id`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TVDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            parentId = "trakt:171028",
+            targetIds = mapOf(MetadataPrimaryProvider.IMDB to "tt1190634")
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val template = cache.get(decisionKeyFromRef(value!!))?.selectedCandidate?.providerTemplate
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), template?.provider)
+        assertEquals("imdb", template?.idType)
+        assertEquals("tt1190634", template?.mediaId)
+        assertFalse(template?.mediaId.orEmpty().contains("trakt"))
+    }
+
+    @Test
+    fun `premium poster candidate generated for tv with tmdb series id`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        val route = route(
+            provider = MetadataPrimaryProvider.TVDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            parentId = "trakt:171028",
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:76479")
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val template = cache.get(decisionKeyFromRef(value!!))?.selectedCandidate?.providerTemplate
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), template?.provider)
+        assertEquals("tmdb", template?.idType)
+        assertEquals("series-76479", template?.mediaId)
+        assertFalse(template?.mediaId.orEmpty().contains("trakt"))
+    }
+
+    @Test
+    fun `premium tv candidate uses provider ids when content id is not premium supported`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val adapter = RpdbMetadataProviderAdapter(
+            posterResolver = resolver(
+                PosterRatingsSettings(
+                    rpdbEnabled = true,
+                    rpdbApiKey = "rpdb-key"
+                ),
+                cache
+            )
+        )
+        // Trakt-keyed content id that RPDB does not support, but stable provider IDs (imdb/tvdb/tmdb)
+        // are supplied via the route's targetIds (the bridge for ProviderIds.firstPaintStableIds).
+        val route = route(
+            provider = MetadataPrimaryProvider.TVDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            parentId = "trakt:171028",
+            targetIds = mapOf(
+                MetadataPrimaryProvider.TRAKT to "171028",
+                MetadataPrimaryProvider.TMDB to "76479",
+                MetadataPrimaryProvider.TVDB to "355567",
+                MetadataPrimaryProvider.IMDB to "tt1190634"
+            )
+        )
+
+        val result = adapter.execute(
+            route = route,
+            step = posterStep(MetadataPrimaryProvider.RPDB, PosterApiShapes.RPDB_POSTER_TEMPLATE)
+        )
+
+        val value = result.candidate?.fields?.get(ResolvedField.POSTER)?.value as? String
+        assertInternalArtworkRef(value)
+        val template = cache.get(decisionKeyFromRef(value!!))?.selectedCandidate?.providerTemplate
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), template?.provider)
+        // RPDB selector preference order is imdb, tmdb, tvdb -> imdb wins.
+        assertEquals("imdb", template?.idType)
+        assertEquals("tt1190634", template?.mediaId)
+        // Trakt is not a supported RPDB id type and must not surface as the candidate id.
+        assertFalse(template?.idType.orEmpty().contains("trakt"))
+        assertFalse(template?.mediaId.orEmpty().contains("171028"))
+    }
+
+    @Test
     fun `selected poster provider determines which configured adapter emits candidate`() = runTest {
         val settings = ArtworkProviderSettings(
             rpdbApiKey = "rpdb-key",
