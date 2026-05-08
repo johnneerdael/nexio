@@ -148,6 +148,14 @@ enum class IdentityConfidence {
 }
 
 fun WatchProgress.toResumeIdentity(): ResumeIdentity =
+    toResumeIdentity(season = season, episode = episode)
+
+internal fun WatchProgress.toSafeResumeIdentity(): ResumeIdentity {
+    val safeEpisode = safeEpisodeCoordinate()
+    return toResumeIdentity(season = safeEpisode?.first, episode = safeEpisode?.second)
+}
+
+private fun WatchProgress.toResumeIdentity(season: Int?, episode: Int?): ResumeIdentity =
     ResumeIdentity(
         source = source.toContinueWatchingSource(),
         contentId = contentId,
@@ -159,6 +167,13 @@ fun WatchProgress.toResumeIdentity(): ResumeIdentity =
         progressPercent = progressPercent,
         lastWatchedMs = lastWatched
     )
+
+private fun WatchProgress.safeEpisodeCoordinate(): Pair<Int, Int>? =
+    if (season != null && episode != null && season > 0 && episode > 0) {
+        season to episode
+    } else {
+        null
+    }
 
 fun WatchProgress.toTrackingIdentity(): TrackingIdentity? {
     if (traktPlaybackId == null &&
@@ -174,9 +189,11 @@ fun WatchProgress.toTrackingIdentity(): TrackingIdentity? {
         traktEpisodeId = traktEpisodeId,
         traktPlaybackId = traktPlaybackId,
         traktMovieId = traktMovieId,
-        providerIds = contentId.toProviderIds().withDerivedTraktId(
-            derivedTraktId = (traktShowId ?: traktMovieId)?.toString()
-        )
+        providerIds = contentId.toProviderIds()
+            .withFallbackProviderIds(videoId.toProviderIds())
+            .withDerivedTraktId(
+                derivedTraktId = (traktShowId ?: traktMovieId)?.toString()
+            )
     )
 }
 
@@ -217,17 +234,23 @@ private fun ProviderId.isGloballyStable(): Boolean =
         ProviderId.MDBLIST -> false
     }
 
-private fun String.toProviderIds(): ProviderIds {
+internal fun String.toProviderIds(): ProviderIds {
     val rawId = trim()
-    if (rawId.isImdbTitleId()) {
-        return ProviderIds(imdb = rawId)
+    rawId.toCanonicalImdbTitleIdOrNull()?.let { imdbId ->
+        return ProviderIds(imdb = imdbId)
+    }
+    val rawImdbParentId = rawId.substringBefore(':')
+    rawImdbParentId.toCanonicalImdbTitleIdOrNull()?.let { imdbId ->
+        return ProviderIds(imdb = imdbId)
     }
 
-    val prefix = rawId.substringBefore(':', missingDelimiterValue = "").lowercase()
-    val value = rawId.substringAfter(':', missingDelimiterValue = "").trim().takeIf { it.isNotEmpty() }
+    val segments = rawId.split(':').map { it.trim() }
+    val prefix = segments.firstOrNull()?.lowercase().orEmpty()
+    val valueSegmentIndex = if (segments.getOrNull(1)?.lowercase() in providerTypeSegments) 2 else 1
+    val value = segments.getOrNull(valueSegmentIndex)?.takeIf { it.isNotEmpty() }
 
     return when (prefix) {
-        "imdb" -> ProviderIds(imdb = value?.takeIf { it.isImdbTitleId() })
+        "imdb" -> ProviderIds(imdb = value?.toCanonicalImdbTitleIdOrNull())
         "tmdb" -> ProviderIds(tmdb = value)
         "tvdb" -> ProviderIds(tvdb = value)
         "kitsu" -> ProviderIds(kitsu = value)
@@ -240,7 +263,40 @@ private fun String.toProviderIds(): ProviderIds {
     }
 }
 
+internal fun String.toProviderRequestContentId(): String {
+    val rawId = trim()
+    val segments = rawId.split(':').map { it.trim() }
+    val prefix = segments.firstOrNull()?.lowercase().orEmpty()
+    val typedValue = segments.getOrNull(2)?.takeIf {
+        segments.getOrNull(1)?.lowercase() in providerTypeSegments && it.isNotEmpty()
+    }
+
+    return when {
+        prefix in normalizedRequestProviders && typedValue != null -> "$prefix:$typedValue"
+        else -> rawId
+    }
+}
+
+private fun ProviderIds.withFallbackProviderIds(fallback: ProviderIds): ProviderIds =
+    ProviderIds(
+        imdb = imdb ?: fallback.imdb,
+        tmdb = tmdb ?: fallback.tmdb,
+        tvdb = tvdb ?: fallback.tvdb,
+        trakt = trakt ?: fallback.trakt,
+        simkl = simkl ?: fallback.simkl,
+        kitsu = kitsu ?: fallback.kitsu,
+        slug = slug ?: fallback.slug,
+        mal = mal ?: fallback.mal,
+        anilist = anilist ?: fallback.anilist,
+        anidb = anidb ?: fallback.anidb
+    )
+
 private fun ProviderIds.withDerivedTraktId(derivedTraktId: String?): ProviderIds =
     copy(trakt = trakt ?: derivedTraktId)
 
-private fun String.isImdbTitleId(): Boolean = matches(Regex("^tt\\d+$"))
+private val normalizedRequestProviders = setOf("tmdb", "tvdb", "trakt", "kitsu", "mal", "anilist", "anidb")
+
+private val providerTypeSegments = setOf("anime", "movie", "series", "show", "tv")
+
+private fun String.toCanonicalImdbTitleIdOrNull(): String? =
+    trim().lowercase().takeIf { it.matches(Regex("^tt\\d+$")) }

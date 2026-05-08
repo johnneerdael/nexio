@@ -232,19 +232,30 @@ class ContinueWatchingIdentityModelsTest {
         val cases = listOf(
             "imdb:tt9794044" to ProviderIds(imdb = "tt9794044"),
             "tt9794044" to ProviderIds(imdb = "tt9794044"),
+            "tt9794044:2:1" to ProviderIds(imdb = "tt9794044"),
+            "TT9794044:2:1" to ProviderIds(imdb = "tt9794044"),
             "tmdb:123" to ProviderIds(tmdb = "123"),
+            "tmdb:tv:1399" to ProviderIds(tmdb = "1399"),
             "tvdb:393268" to ProviderIds(tvdb = "393268"),
+            "tvdb:series:393268" to ProviderIds(tvdb = "393268"),
             "kitsu:456" to ProviderIds(kitsu = "456"),
+            "kitsu:anime:42" to ProviderIds(kitsu = "42"),
             "trakt:789" to ProviderIds(trakt = "789"),
+            "trakt:show:42" to ProviderIds(trakt = "42"),
+            "trakt:movie:7" to ProviderIds(trakt = "7"),
             "simkl:321" to ProviderIds(simkl = "321"),
             "mal:5114" to ProviderIds(mal = "5114"),
+            "mal:anime:5114" to ProviderIds(mal = "5114"),
             "anilist:9253" to ProviderIds(anilist = "9253"),
-            "anidb:6107" to ProviderIds(anidb = "6107")
+            "anilist:anime:9253" to ProviderIds(anilist = "9253"),
+            "anidb:6107" to ProviderIds(anidb = "6107"),
+            "anidb:anime:6107" to ProviderIds(anidb = "6107")
         )
 
         cases.forEach { (contentId, expected) ->
             val tracking = validWatchProgress(
                 contentId = contentId,
+                videoId = contentId,
                 traktPlaybackId = 42L
             ).toTrackingIdentity()
 
@@ -259,6 +270,19 @@ class ContinueWatchingIdentityModelsTest {
             assertEquals("contentId=$contentId anilist", expected.anilist, tracking.providerIds.anilist)
             assertEquals("contentId=$contentId anidb", expected.anidb, tracking.providerIds.anidb)
         }
+    }
+
+    @Test
+    fun `tracking identity preserves provider id from video id when content id differs`() {
+        val tracking = validWatchProgress(
+            contentId = "tvdb:393268",
+            videoId = "tt9794044:2:1",
+            traktPlaybackId = 42L
+        ).toTrackingIdentity()
+
+        assertNotNull(tracking)
+        assertEquals("tt9794044", tracking!!.providerIds.imdb)
+        assertEquals("393268", tracking.providerIds.tvdb)
     }
 
     @Test
@@ -329,6 +353,7 @@ class ContinueWatchingIdentityModelsTest {
 
     private fun validWatchProgress(
         contentId: String = "tt9794044",
+        videoId: String = "tvdb:393268:2:1",
         traktPlaybackId: Long? = null,
         traktMovieId: Int? = null,
         traktShowId: Int? = null,
@@ -341,7 +366,7 @@ class ContinueWatchingIdentityModelsTest {
             poster = null,
             backdrop = null,
             logo = null,
-            videoId = "tvdb:393268:2:1",
+            videoId = videoId,
             season = 2,
             episode = 1,
             episodeTitle = "Episode 1",
