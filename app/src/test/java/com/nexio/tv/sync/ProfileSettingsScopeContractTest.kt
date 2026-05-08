@@ -19,6 +19,9 @@ class ProfileSettingsScopeContractTest {
     private val trackingAuthSession = File("app/src/main/java/com/nexio/tv/data/repository/TrackingAuthSession.kt")
     private val traktAuthService = File("app/src/main/java/com/nexio/tv/data/repository/TraktAuthService.kt")
     private val simklAuthService = File("app/src/main/java/com/nexio/tv/data/repository/SimklAuthService.kt")
+    private val continueWatchingSnapshotService = File("app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt")
+    private val continueWatchingIdentityResolver = File("app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingIdentityResolver.kt")
+    private val nexioNavHost = File("app/src/main/java/com/nexio/tv/ui/navigation/NexioNavHost.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
     private val homeContinueWatching = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt")
     private val homeProfileSession = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeProfileSession.kt")
@@ -745,8 +748,8 @@ class ProfileSettingsScopeContractTest {
 
     @Test
     fun `continue watching snapshots carry and enforce profile owner`() {
-        val serviceSource = File("app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt").readText()
-        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
+        val serviceSource = continueWatchingSnapshotService.readText()
+        val homeSource = homeContinueWatching.readText()
 
         assertTrue(serviceSource.contains("val profileId: Int = 1"))
         assertTrue(serviceSource.contains("ProfileOwnedContinueWatchingSnapshot"))
@@ -757,6 +760,53 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homeSource.contains(".flatMapLatest { session ->"))
         assertTrue(homeSource.contains("observeProfileSnapshot(session.profileId)"))
         assertTrue(!homeSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+    }
+
+    @Test
+    fun `continue watching p0 shared identity playback wiring exists`() {
+        val serviceSource = continueWatchingSnapshotService.readText()
+        val identityResolverSource = continueWatchingIdentityResolver.readText()
+        val homeSource = homeContinueWatching.readText()
+        val navSource = nexioNavHost.readText()
+
+        assertTrue(
+            "ContinueWatchingSnapshotService should build raw snapshots through a suspend path",
+            serviceSource.contains("private suspend fun buildRawSnapshot(")
+        )
+        assertTrue(
+            "ContinueWatchingSnapshotService should expose a suspend raw snapshot test helper",
+            serviceSource.contains("internal suspend fun buildRawSnapshotForTest(")
+        )
+        assertTrue(
+            "ContinueWatchingSnapshotService must not use the removed runBlockingSafelyForSnapshot path",
+            !serviceSource.contains("runBlockingSafelyForSnapshot")
+        )
+        assertTrue(
+            "Canonical continue watching rows should be deduped through ContinueWatchingMerger.merge",
+            serviceSource.contains("val records = ContinueWatchingMerger.merge(")
+        )
+        assertTrue(
+            "Continue Watching identity resolution should request identity-only metadata",
+            identityResolverSource.contains("depth = MetadataDepth.IDENTITY")
+        )
+        assertTrue(
+            "Home should render Continue Watching from canonical snapshot records when present",
+            homeSource.contains("snapshot.records.isNotEmpty()")
+        )
+        assertTrue(
+            "Home should build the row through buildContinueWatchingItemsForSnapshot",
+            homeSource.contains("buildContinueWatchingItemsForSnapshot(snapshot, nowMs)")
+        )
+        assertTrue(
+            "CW in-progress playback should preserve resume videoId and pass the stream fetch id separately",
+            navSource.contains(
+                """
+                is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
+                    videoId = item.progress.videoId,
+                    streamVideoId = item.streamFetchVideoId,
+                """.trimIndent()
+            )
+        )
     }
 
     @Test
