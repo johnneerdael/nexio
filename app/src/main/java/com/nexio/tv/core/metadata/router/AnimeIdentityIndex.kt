@@ -89,7 +89,10 @@ object MetadataIdParser {
     }
 
     private fun prefixed(scheme: AnimeIdScheme, raw: String): ParsedMetadataId {
-        val value = raw.substringAfter(":").substringBefore(":")
+        // Use the centralized typed-aware parser so `tmdb:tv:1399` resolves to "1399"
+        // instead of the buggy "tv" yielded by `substringAfter(":").substringBefore(":")`.
+        val providerName = scheme.name.lowercase()
+        val value = providerNativeIdFromContentId(raw, providerName) ?: ""
         return ParsedMetadataId(scheme, normalizeMetadataIdValue(scheme, value), raw)
     }
 }
