@@ -106,7 +106,7 @@ class ContinueWatchingSnapshotStore private constructor(
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
                 add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
                 add("scheduledReemit", encodeNextUpItems(snapshot.scheduledReemit))
-                add("records", gson.toJsonTree(snapshot.records))
+                add("records", encodeRecords(snapshot.records))
                 add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
                 add("metadataSnapshotsByItemKey", gson.toJsonTree(snapshot.metadataSnapshotsByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
@@ -187,21 +187,17 @@ class ContinueWatchingSnapshotStore private constructor(
     private fun decodeRecordObject(
         obj: JsonObject
     ): ContinueWatchingRecord? {
-        val profileId = obj.intOrNull("profileId")?.takeIf { it > 0 } ?: return null
-        val parentId = obj.stringOrNull("parentId")?.takeIf { it.isNotBlank() } ?: return null
-        val contentId = obj.stringOrNull("contentId")?.takeIf { it.isNotBlank() } ?: return null
-        val routingVersion = obj.intOrNull("routingVersion")?.takeIf { it > 0 } ?: return null
-        val positionMs = obj.longOrNull("positionMs")?.takeIf { it >= 0L } ?: return null
-        val durationMs = obj.longOrNull("durationMs")?.takeIf { it >= 0L } ?: return null
-        val updatedAt = obj.longOrNull("updatedAt")?.takeIf { it > 0L } ?: return null
-        val episodeContext = obj.objectOrNull("episodeContext")?.let { episode ->
-            val season = episode.intOrNull("season")?.takeIf { it >= 0 } ?: return@let null
-            val number = episode.intOrNull("number")?.takeIf { it >= 0 } ?: return@let null
-            ContinueWatchingRecord.EpisodeContext(season = season, number = number)
-        }
-        val resumeIdentities = decodeResumeIdentities(obj.arrayOrNull("resumeIdentities"))
+        val profileId = obj.intOrNull("profileId", "a")?.takeIf { it > 0 } ?: return null
+        val parentId = obj.stringOrNull("parentId", "b")?.takeIf { it.isNotBlank() } ?: return null
+        val contentId = obj.stringOrNull("contentId", "c")?.takeIf { it.isNotBlank() } ?: return null
+        val routingVersion = obj.intOrNull("routingVersion", "e")?.takeIf { it > 0 } ?: return null
+        val positionMs = obj.longOrNull("positionMs", "f")?.takeIf { it >= 0L } ?: return null
+        val durationMs = obj.longOrNull("durationMs", "g")?.takeIf { it >= 0L } ?: return null
+        val updatedAt = obj.longOrNull("updatedAt", "k")?.takeIf { it > 0L } ?: return null
+        val episodeContext = decodeEpisodeContext(obj.objectOrNull("episodeContext", "h"))
+        val resumeIdentities = decodeResumeIdentities(obj.arrayOrNull("resumeIdentities", "p"))
         val resumeLookupKeys = resumeIdentities.map { it.lookupKey() }.toSet()
-        val primaryResumeLookupKey = obj.stringOrNull("primaryResumeLookupKey")
+        val primaryResumeLookupKey = obj.stringOrNull("primaryResumeLookupKey", "q")
             ?.takeIf { it in resumeLookupKeys }
             ?: resumeIdentities.firstOrNull()?.lookupKey()
 
@@ -210,28 +206,37 @@ class ContinueWatchingSnapshotStore private constructor(
                 profileId = profileId,
                 parentId = parentId,
                 contentId = contentId,
-                provider = obj.enumOrNull<TrackingProvider>("provider") ?: TrackingProvider.TRAKT,
+                provider = obj.enumOrNull<TrackingProvider>("provider", "d") ?: TrackingProvider.TRAKT,
                 routingVersion = routingVersion,
                 positionMs = positionMs,
                 durationMs = durationMs,
                 episodeContext = episodeContext,
-                clickTimeDisplayMetadata = obj.objectOrNull("clickTimeDisplayMetadata")
+                clickTimeDisplayMetadata = obj.objectOrNull("clickTimeDisplayMetadata", "i")
                     ?.let { gson.fromJson(it, ContinueWatchingMetadataSnapshot::class.java) },
-                source = obj.enumOrNull<ContinueWatchingRecord.Source>("source")
+                source = obj.enumOrNull<ContinueWatchingRecord.Source>("source", "j")
                     ?: ContinueWatchingRecord.Source.REMOTE,
                 updatedAt = updatedAt,
-                canonicalKey = decodeCanonicalKey(obj.objectOrNull("canonicalKey")),
-                displayIdentity = decodeContentIdentity(obj.objectOrNull("displayIdentity")),
-                streamFetchIdentity = decodeStreamFetchIdentity(obj.objectOrNull("streamFetchIdentity")),
-                trackingIdentity = decodeTrackingIdentity(obj.objectOrNull("trackingIdentity")),
+                canonicalKey = decodeCanonicalKey(obj.objectOrNull("canonicalKey", "l")),
+                displayIdentity = decodeContentIdentity(obj.objectOrNull("displayIdentity", "m")),
+                streamFetchIdentity = decodeStreamFetchIdentity(obj.objectOrNull("streamFetchIdentity", "n")),
+                trackingIdentity = decodeTrackingIdentity(obj.objectOrNull("trackingIdentity", "o")),
                 resumeIdentities = resumeIdentities,
                 primaryResumeLookupKey = primaryResumeLookupKey,
-                identityConfidence = obj.enumOrNull<IdentityConfidence>("identityConfidence")
+                identityConfidence = obj.enumOrNull<IdentityConfidence>("identityConfidence", "r")
                     ?: IdentityConfidence.LOW,
-                identityWarnings = obj.stringList("identityWarnings"),
-                languageTag = obj.stringOrNull("languageTag")?.takeIf { it.isNotBlank() }
+                identityWarnings = obj.stringList("identityWarnings", "s"),
+                languageTag = obj.stringOrNull("languageTag", "t")?.takeIf { it.isNotBlank() }
             )
         }.getOrNull()
+    }
+
+    private fun decodeEpisodeContext(
+        obj: JsonObject?
+    ): ContinueWatchingRecord.EpisodeContext? {
+        obj ?: return null
+        val season = obj.intOrNull("season", "a")?.takeIf { it >= 0 } ?: return null
+        val number = obj.intOrNull("number", "b")?.takeIf { it >= 0 } ?: return null
+        return ContinueWatchingRecord.EpisodeContext(season = season, number = number)
     }
 
     private fun decodeResumeIdentities(
@@ -240,24 +245,24 @@ class ContinueWatchingSnapshotStore private constructor(
         if (array == null || array.size() == 0) return emptyList()
         return array.mapNotNull { element ->
             val obj = runCatching { element.asJsonObject }.getOrNull() ?: return@mapNotNull null
-            val contentId = obj.stringOrNull("contentId")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val videoId = obj.stringOrNull("videoId")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val positionMs = obj.longOrNull("positionMs")?.takeIf { it >= 0L } ?: return@mapNotNull null
-            val lastWatchedMs = obj.longOrNull("lastWatchedMs")?.takeIf { it >= 0L } ?: return@mapNotNull null
-            val season = obj.intOrNull("season")
-            val episode = obj.intOrNull("episode")
+            val contentId = obj.stringOrNull("contentId", "b")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val videoId = obj.stringOrNull("videoId", "c")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val positionMs = obj.longOrNull("positionMs", "f")?.takeIf { it >= 0L } ?: return@mapNotNull null
+            val lastWatchedMs = obj.longOrNull("lastWatchedMs", "i")?.takeIf { it >= 0L } ?: return@mapNotNull null
+            val season = obj.intOrNull("season", "d")
+            val episode = obj.intOrNull("episode", "e")
             if ((season == null) != (episode == null)) return@mapNotNull null
             runCatching {
                 ResumeIdentity(
-                    source = obj.enumOrNull<ContinueWatchingSource>("source")
+                    source = obj.enumOrNull<ContinueWatchingSource>("source", "a")
                         ?: ContinueWatchingSource.LOCAL,
                     contentId = contentId,
                     videoId = videoId,
                     season = season,
                     episode = episode,
                     positionMs = positionMs,
-                    durationMs = obj.longOrNull("durationMs")?.takeIf { it >= 0L },
-                    progressPercent = obj.floatOrNull("progressPercent")?.takeIf { it in 0f..100f },
+                    durationMs = obj.longOrNull("durationMs", "g")?.takeIf { it >= 0L },
+                    progressPercent = obj.floatOrNull("progressPercent", "h")?.takeIf { it in 0f..100f },
                     lastWatchedMs = lastWatchedMs
                 )
             }.getOrNull()
@@ -268,14 +273,14 @@ class ContinueWatchingSnapshotStore private constructor(
         obj: JsonObject?
     ): ContinueWatchingCanonicalKey? {
         obj ?: return null
-        val canonicalParent = decodeContentIdentity(obj.objectOrNull("canonicalParent")) ?: return null
+        val canonicalParent = decodeContentIdentity(obj.objectOrNull("canonicalParent", "b")) ?: return null
         return runCatching {
             ContinueWatchingCanonicalKey(
-                mediaKind = obj.enumOrNull<MetadataMediaKind>("mediaKind") ?: MetadataMediaKind.UNKNOWN,
+                mediaKind = obj.enumOrNull<MetadataMediaKind>("mediaKind", "a") ?: MetadataMediaKind.UNKNOWN,
                 canonicalParent = canonicalParent,
-                season = obj.intOrNull("season"),
-                episode = obj.intOrNull("episode"),
-                profileId = obj.intOrNull("profileId") ?: return null
+                season = obj.intOrNull("season", "c"),
+                episode = obj.intOrNull("episode", "d"),
+                profileId = obj.intOrNull("profileId", "e") ?: return null
             )
         }.getOrNull()
     }
@@ -315,11 +320,11 @@ class ContinueWatchingSnapshotStore private constructor(
         obj ?: return null
         return runCatching {
             StreamFetchIdentity(
-                contentId = obj.stringOrNull("contentId")?.takeIf { it.isNotBlank() } ?: return null,
-                videoId = obj.stringOrNull("videoId")?.takeIf { it.isNotBlank() } ?: return null,
-                idScheme = obj.enumOrNull<StreamIdScheme>("idScheme") ?: StreamIdScheme.UNRESOLVED,
-                confidence = obj.enumOrNull<IdentityConfidence>("confidence") ?: IdentityConfidence.LOW,
-                trace = obj.stringList("trace")
+                contentId = obj.stringOrNull("contentId", "a")?.takeIf { it.isNotBlank() } ?: return null,
+                videoId = obj.stringOrNull("videoId", "b")?.takeIf { it.isNotBlank() } ?: return null,
+                idScheme = obj.enumOrNull<StreamIdScheme>("idScheme", "c") ?: StreamIdScheme.UNRESOLVED,
+                confidence = obj.enumOrNull<IdentityConfidence>("confidence", "d") ?: IdentityConfidence.LOW,
+                trace = obj.stringList("trace", "e")
             )
         }.getOrNull()
     }
@@ -330,13 +335,132 @@ class ContinueWatchingSnapshotStore private constructor(
         obj ?: return null
         return runCatching {
             TrackingIdentity(
-                traktShowId = obj.intOrNull("traktShowId"),
-                traktEpisodeId = obj.intOrNull("traktEpisodeId"),
-                traktPlaybackId = obj.longOrNull("traktPlaybackId"),
-                traktMovieId = obj.intOrNull("traktMovieId"),
-                providerIds = decodeProviderIds(obj.objectOrNull("providerIds"))
+                traktShowId = obj.intOrNull("traktShowId", "a"),
+                traktEpisodeId = obj.intOrNull("traktEpisodeId", "b"),
+                traktPlaybackId = obj.longOrNull("traktPlaybackId", "c"),
+                traktMovieId = obj.intOrNull("traktMovieId", "d"),
+                providerIds = decodeProviderIds(obj.objectOrNull("providerIds", "e"))
             )
         }.getOrNull()
+    }
+
+    private fun encodeRecords(records: List<ContinueWatchingRecord>): JsonArray {
+        val array = JsonArray()
+        records.forEach { record ->
+            array.add(encodeRecord(record))
+        }
+        return array
+    }
+
+    private fun encodeRecord(record: ContinueWatchingRecord): JsonObject {
+        return JsonObject().apply {
+            addProperty("profileId", record.profileId)
+            addProperty("parentId", record.parentId)
+            addProperty("contentId", record.contentId)
+            addProperty("provider", record.provider.name)
+            addProperty("routingVersion", record.routingVersion)
+            addProperty("positionMs", record.positionMs)
+            addProperty("durationMs", record.durationMs)
+            record.episodeContext?.let { add("episodeContext", encodeEpisodeContext(it)) }
+            record.clickTimeDisplayMetadata?.let {
+                add("clickTimeDisplayMetadata", gson.toJsonTree(it))
+            }
+            addProperty("source", record.source.name)
+            addProperty("updatedAt", record.updatedAt)
+            record.canonicalKey?.let { add("canonicalKey", encodeCanonicalKey(it)) }
+            record.displayIdentity?.let { add("displayIdentity", encodeContentIdentity(it)) }
+            record.streamFetchIdentity?.let { add("streamFetchIdentity", encodeStreamFetchIdentity(it)) }
+            record.trackingIdentity?.let { add("trackingIdentity", encodeTrackingIdentity(it)) }
+            add("resumeIdentities", encodeResumeIdentities(record.resumeIdentities))
+            record.primaryResumeLookupKey?.let { addProperty("primaryResumeLookupKey", it) }
+            addProperty("identityConfidence", record.identityConfidence.name)
+            add("identityWarnings", JsonArray().apply {
+                record.identityWarnings.forEach { add(it) }
+            })
+            record.languageTag?.let { addProperty("languageTag", it) }
+        }
+    }
+
+    private fun encodeEpisodeContext(context: ContinueWatchingRecord.EpisodeContext): JsonObject {
+        return JsonObject().apply {
+            addProperty("season", context.season)
+            addProperty("number", context.number)
+        }
+    }
+
+    private fun encodeResumeIdentities(items: List<ResumeIdentity>): JsonArray {
+        val array = JsonArray()
+        items.forEach { identity ->
+            array.add(
+                JsonObject().apply {
+                    addProperty("source", identity.source.name)
+                    addProperty("contentId", identity.contentId)
+                    addProperty("videoId", identity.videoId)
+                    identity.season?.let { addProperty("season", it) }
+                    identity.episode?.let { addProperty("episode", it) }
+                    addProperty("positionMs", identity.positionMs)
+                    identity.durationMs?.let { addProperty("durationMs", it) }
+                    identity.progressPercent?.let { addProperty("progressPercent", it) }
+                    addProperty("lastWatchedMs", identity.lastWatchedMs)
+                }
+            )
+        }
+        return array
+    }
+
+    private fun encodeCanonicalKey(key: ContinueWatchingCanonicalKey): JsonObject {
+        return JsonObject().apply {
+            addProperty("mediaKind", key.mediaKind.name)
+            add("canonicalParent", encodeContentIdentity(key.canonicalParent))
+            key.season?.let { addProperty("season", it) }
+            key.episode?.let { addProperty("episode", it) }
+            addProperty("profileId", key.profileId)
+        }
+    }
+
+    private fun encodeContentIdentity(identity: ContentIdentity): JsonObject {
+        return JsonObject().apply {
+            identity.canonicalProvider?.let { addProperty("canonicalProvider", it.name) }
+            identity.canonicalId?.let { addProperty("canonicalId", it) }
+            add("providerIds", encodeProviderIds(identity.providerIds))
+        }
+    }
+
+    private fun encodeProviderIds(ids: ProviderIds): JsonObject {
+        return JsonObject().apply {
+            ids.imdb?.let { addProperty("imdb", it) }
+            ids.tmdb?.let { addProperty("tmdb", it) }
+            ids.tvdb?.let { addProperty("tvdb", it) }
+            ids.trakt?.let { addProperty("trakt", it) }
+            ids.simkl?.let { addProperty("simkl", it) }
+            ids.kitsu?.let { addProperty("kitsu", it) }
+            ids.slug?.let { addProperty("slug", it) }
+            ids.mal?.let { addProperty("mal", it) }
+            ids.anilist?.let { addProperty("anilist", it) }
+            ids.anidb?.let { addProperty("anidb", it) }
+        }
+    }
+
+    private fun encodeStreamFetchIdentity(identity: StreamFetchIdentity): JsonObject {
+        return JsonObject().apply {
+            addProperty("contentId", identity.contentId)
+            addProperty("videoId", identity.videoId)
+            addProperty("idScheme", identity.idScheme.name)
+            addProperty("confidence", identity.confidence.name)
+            add("trace", JsonArray().apply {
+                identity.trace.forEach { add(it) }
+            })
+        }
+    }
+
+    private fun encodeTrackingIdentity(identity: TrackingIdentity): JsonObject {
+        return JsonObject().apply {
+            identity.traktShowId?.let { addProperty("traktShowId", it) }
+            identity.traktEpisodeId?.let { addProperty("traktEpisodeId", it) }
+            identity.traktPlaybackId?.let { addProperty("traktPlaybackId", it) }
+            identity.traktMovieId?.let { addProperty("traktMovieId", it) }
+            add("providerIds", encodeProviderIds(identity.providerIds))
+        }
     }
 
     private fun encodeNextUpItems(
@@ -556,6 +680,39 @@ class ContinueWatchingSnapshotStore private constructor(
                 ?.takeIf { it.isNotBlank() }
         }
     }
+
+    private fun JsonObject.stringList(vararg keys: String): List<String> {
+        keys.forEach { key ->
+            val array = arrayOrNull(key) ?: return@forEach
+            return array.mapNotNull { element ->
+                runCatching { element.takeIf { !it.isJsonNull }?.asString }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+            }
+        }
+        return emptyList()
+    }
+
+    private fun JsonObject.stringOrNull(vararg keys: String): String? =
+        keys.firstNotNullOfOrNull { key -> stringOrNull(key) }
+
+    private fun JsonObject.intOrNull(vararg keys: String): Int? =
+        keys.firstNotNullOfOrNull { key -> intOrNull(key) }
+
+    private fun JsonObject.longOrNull(vararg keys: String): Long? =
+        keys.firstNotNullOfOrNull { key -> longOrNull(key) }
+
+    private fun JsonObject.floatOrNull(vararg keys: String): Float? =
+        keys.firstNotNullOfOrNull { key -> floatOrNull(key) }
+
+    private fun JsonObject.objectOrNull(vararg keys: String): JsonObject? =
+        keys.firstNotNullOfOrNull { key -> objectOrNull(key) }
+
+    private fun JsonObject.arrayOrNull(vararg keys: String): JsonArray? =
+        keys.firstNotNullOfOrNull { key -> arrayOrNull(key) }
+
+    private inline fun <reified T : Enum<T>> JsonObject.enumOrNull(vararg keys: String): T? =
+        keys.firstNotNullOfOrNull { key -> enumOrNull<T>(key) }
 
     private fun JsonObject.tvdbAvailabilityPrecisionOrDefault(): TvdbAirAvailabilityPrecision {
         val value = stringOrNull("tvdbAvailabilityPrecision") ?: return TvdbAirAvailabilityPrecision.UNKNOWN
