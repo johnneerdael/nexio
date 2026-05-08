@@ -41,6 +41,7 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.trailer.rankedTmdbTrailerPlaybackRefs
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
@@ -1099,6 +1100,7 @@ class MetadataRouterFacade(
             description = overview ?: fallback.description,
             runtime = runtimeMinutes?.toString() ?: fallback.runtime,
             imdbRating = (rating as? Number)?.toFloat() ?: fallback.imdbRating,
+            ratingSource = resolvedRatingSource(fallback),
             poster = poster ?: fallback.poster,
             backdrop = backdrop ?: fallback.backdrop,
             releaseInfo = releaseDate ?: fallback.releaseInfo,
@@ -1106,6 +1108,26 @@ class MetadataRouterFacade(
             posterProviderTag = resolvedPosterProviderTag(fallback),
             artwork = mergeResolvedArtwork(fallback)
         )
+
+    /**
+     * Derives [HomeDisplayMetadata.ratingSource] from the resolver's selected provider for
+     * [ResolvedField.RATING]. Maps known providers to the [TitleRatingSource] enum members
+     * that exist today (IMDB / TMDB). For other providers (TVDB, Kitsu, Trakt, etc.) the
+     * source is intentionally left null rather than silently coerced to IMDB — widening
+     * the enum is tracked as a follow-up. The fallback's source is preserved only when the
+     * resolver did not select a provider (no RATING field was resolved).
+     */
+    private fun ResolvedMetadataDocument.resolvedRatingSource(fallback: HomeDisplayMetadata): TitleRatingSource? {
+        val selectedProvider = sourceProviders[ResolvedField.RATING]
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return fallback.ratingSource
+        return when (selectedProvider.uppercase()) {
+            MetadataPrimaryProvider.TMDB.name -> TitleRatingSource.TMDB
+            MetadataPrimaryProvider.IMDB.name -> TitleRatingSource.IMDB
+            else -> null
+        }
+    }
 
     private fun ResolvedMetadataDocument.resolvedPosterProviderTag(fallback: HomeDisplayMetadata): String? {
         val selectedPoster = poster
