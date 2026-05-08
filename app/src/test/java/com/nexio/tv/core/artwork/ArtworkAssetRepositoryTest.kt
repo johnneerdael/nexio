@@ -858,6 +858,105 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
+    fun `getOrRehydrateAsset re-fetches the originating decision when bytes are evicted`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val cache = InMemoryArtworkDecisionCache()
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val decision = rpdbTemplateDecision()
+        cache.put(decision)
+        var loadCount = 0
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                loadCount += 1
+                IntegrationLoadResult.Success("rehydrated".toByteArray())
+            }
+        )
+        // Warm the disk cache + asset record so we have a record to recover from.
+        val warm = repository.getOrFetch(decision)
+        assertNotNull(warm)
+        warm!!
+        assertNotNull(diskCache.getExistingFile(warm.assetKey))
+        assertEquals(1, loadCount)
+
+        // Simulate disk eviction: delete the on-disk file but keep the record store entry.
+        warm.localFile.delete()
+        assertNull(diskCache.getExistingFile(warm.assetKey))
+
+        val rehydrated = repository.getOrRehydrateAsset(warm.assetKey)
+
+        assertNotNull(rehydrated)
+        assertEquals(warm.assetKey, rehydrated!!.assetKey)
+        assertNotNull(diskCache.getExistingFile(warm.assetKey))
+        assertEquals(2, loadCount)
+    }
+
+    @Test
+    fun `getOrRehydrateAsset returns null and emits orphan trace when no asset record exists`() = runTest {
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            assetRecordStore = RecordingArtworkAssetRecordStore(),
+            traceSink = traceSink
+        )
+        val orphanKey = ArtworkAssetKey("artwork-asset:RPDB:poster:tmdb:series-999:settings:abc:credential:def:imageLang:en:policy:1")
+
+        val result = repository.getOrRehydrateAsset(orphanKey)
+
+        assertNull(result)
+        val event = traceSink.events.single { it.eventType == "artwork.orphan_asset_ref_rehydrate_skipped" }
+        val payload = event.payload as Map<*, *>
+        assertEquals(artworkDecisionShortSha256(orphanKey.value), payload["assetKeyHash"])
+        assertEquals(false, payload.containsKey("assetKey"))
+        assertEquals("no_asset_record", payload["reason"])
+    }
+
+    @Test
+    fun `getOrRehydrateAsset returns null and emits orphan trace when decision cache misses`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val emptyDecisionCache = InMemoryArtworkDecisionCache()
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val decision = rpdbTemplateDecision()
+        // Seed only the record store, NOT the decision cache (simulating drift).
+        val materialized = ArtworkSourceMaterializer(emptyMap()).materialize(decision)!!
+        recordStore.put(
+            ArtworkAssetRecord(
+                assetKey = materialized.assetKey,
+                decisionKey = decision.decisionKey,
+                provider = materialized.provider,
+                imageType = decision.imageType,
+                relativePath = "stub/${materialized.assetKey.value}",
+                sourceHash = materialized.sourceHash,
+                mimeType = ByteArrayIntegrationCodec.mimeType,
+                byteCount = 4L,
+                policyVersion = decision.policyVersion,
+                fetchedAtMs = 0L,
+                expiresAtMs = decision.expiresAtMs,
+                staleUntilMs = decision.staleUntilMs ?: decision.expiresAtMs
+            )
+        )
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = emptyDecisionCache,
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrRehydrateAsset(materialized.assetKey)
+
+        assertNull(result)
+        val event = traceSink.events.single { it.eventType == "artwork.orphan_asset_ref_rehydrate_skipped" }
+        val payload = event.payload as Map<*, *>
+        assertEquals("decision_cache_miss", payload["reason"])
+        assertEquals(artworkDecisionShortSha256(decision.decisionKey.value), payload["decisionKeyHash"])
+    }
+
+    @Test
     fun `getOrFetch returns non-durable result with EPHEMERAL_RECORD_WRITE_FAILED when asset record store write fails`() = runTest {
         val traceSink = RecordingArtworkTraceSink()
         val repository = repository(

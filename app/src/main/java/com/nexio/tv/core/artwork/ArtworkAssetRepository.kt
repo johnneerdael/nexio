@@ -446,6 +446,68 @@ class ArtworkAssetRepository @Inject constructor(
     fun getExistingFile(assetKey: ArtworkAssetKey): File? =
         diskCache.getExistingFile(assetKey)
 
+    /**
+     * Attempts to re-materialize an asset whose URI was previously persisted but whose
+     * bytes are no longer on disk. Looks up the originating decision from the asset
+     * record store + decision cache and re-runs [getOrFetch] against it. Returns null
+     * (and emits `artwork.orphan_asset_ref_rehydrate_skipped`) when the recovery chain
+     * is broken — no record, no decision key on the record, or the decision cache no
+     * longer has the entry.
+     */
+    suspend fun getOrRehydrateAsset(assetKey: ArtworkAssetKey): ArtworkAssetResult? {
+        val record = runCatching { assetRecordStore.get(assetKey) }
+            .onFailure { error ->
+                traceArtwork(
+                    eventType = "artwork.orphan_asset_ref_rehydrate_skipped",
+                    payload = mapOf(
+                        "assetKeyHash" to assetKey.hashedForTrace(),
+                        "reason" to "asset_record_store_read_failed",
+                        "errorClass" to error::class.java.name,
+                        "errorMessage" to (error.message ?: "")
+                    )
+                )
+            }
+            .getOrNull()
+
+        if (record == null) {
+            traceArtwork(
+                eventType = "artwork.orphan_asset_ref_rehydrate_skipped",
+                payload = mapOf(
+                    "assetKeyHash" to assetKey.hashedForTrace(),
+                    "reason" to "no_asset_record"
+                )
+            )
+            return null
+        }
+
+        val decisionKey = record.decisionKey
+        if (decisionKey == null) {
+            traceArtwork(
+                eventType = "artwork.orphan_asset_ref_rehydrate_skipped",
+                payload = mapOf(
+                    "assetKeyHash" to assetKey.hashedForTrace(),
+                    "reason" to "asset_record_missing_decision_key"
+                )
+            )
+            return null
+        }
+
+        val decision = decisionCache.get(decisionKey)
+        if (decision == null) {
+            traceArtwork(
+                eventType = "artwork.orphan_asset_ref_rehydrate_skipped",
+                payload = mapOf(
+                    "assetKeyHash" to assetKey.hashedForTrace(),
+                    "decisionKeyHash" to decisionKey.hashedForTrace(),
+                    "reason" to "decision_cache_miss"
+                )
+            )
+            return null
+        }
+
+        return getOrFetch(decision)
+    }
+
     private fun existingAssetResultOrNull(
         file: File,
         materialized: MaterializedArtworkSource,
