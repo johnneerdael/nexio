@@ -317,6 +317,73 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `read restores concrete resume identities from persisted records`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 1,
+              "languageTag": "en",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "records": [
+                {
+                  "profileId": 1,
+                  "parentId": "series:tvdb:393268",
+                  "contentId": "series:tvdb:393268:s2e1",
+                  "provider": "TRAKT",
+                  "routingVersion": 3,
+                  "positionMs": 5000,
+                  "durationMs": 10000,
+                  "episodeContext": { "season": 2, "number": 1 },
+                  "clickTimeDisplayMetadata": null,
+                  "source": "REMOTE",
+                  "updatedAt": 20000,
+                  "canonicalKey": null,
+                  "displayIdentity": null,
+                  "streamFetchIdentity": null,
+                  "trackingIdentity": null,
+                  "resumeIdentities": [
+                    {
+                      "source": "TRAKT_PLAYBACK",
+                      "contentId": "tt9794044",
+                      "videoId": "tt9794044:2:1",
+                      "season": 2,
+                      "episode": 1,
+                      "positionMs": 5000,
+                      "durationMs": 10000,
+                      "progressPercent": 50.0,
+                      "lastWatchedMs": 20000
+                    }
+                  ],
+                  "primaryResumeLookupKey": "tt9794044|tt9794044:2:1|2|1",
+                  "identityConfidence": "HIGH",
+                  "identityWarnings": [],
+                  "languageTag": "en"
+                }
+              ],
+              "displayMetadataByItemKey": {},
+              "metadataSnapshotsByItemKey": {},
+              "updatedAtMs": 100
+            }
+            """.trimIndent()
+        ).commit()
+
+        val record = store.read()?.records?.singleOrNull()
+
+        assertEquals("tt9794044|tt9794044:2:1|2|1", record?.resumeIdentities?.singleOrNull()?.lookupKey())
+        assertEquals("tt9794044|tt9794044:2:1|2|1", record?.primaryResumeLookupKey)
+    }
+
+    @Test
     fun `explicit profile id keeps continue watching snapshots isolated`() {
         val profileOnePrefs = InMemorySharedPreferences()
         val profileTwoPrefs = InMemorySharedPreferences()
