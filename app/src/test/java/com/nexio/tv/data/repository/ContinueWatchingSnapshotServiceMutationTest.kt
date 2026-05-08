@@ -293,6 +293,35 @@ class ContinueWatchingSnapshotServiceMutationTest {
         return rawSnapshotFlow(service).value.snapshot
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun snapshotFlow(
+        service: ContinueWatchingSnapshotService
+    ): MutableStateFlow<ProfileOwnedContinueWatchingSnapshot> {
+        val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("snapshotState")
+        field.isAccessible = true
+        return field.get(service) as MutableStateFlow<ProfileOwnedContinueWatchingSnapshot>
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun persistedSnapshotReadyFlow(
+        service: ContinueWatchingSnapshotService
+    ): MutableStateFlow<Boolean> {
+        val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("persistedSnapshotReady")
+        field.isAccessible = true
+        return field.get(service) as MutableStateFlow<Boolean>
+    }
+
+    private fun setPublishedSnapshot(
+        service: ContinueWatchingSnapshotService,
+        profileId: Int = 1,
+        snapshot: ContinueWatchingSnapshot
+    ) {
+        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = snapshot)
+        rawSnapshotFlow(service).value = owned
+        snapshotFlow(service).value = owned
+        persistedSnapshotReadyFlow(service).value = true
+    }
+
     private fun invokeScheduleReemitIfNeeded(
         service: ContinueWatchingSnapshotService,
         entries: List<TrackingNextUpEntry>,
@@ -403,6 +432,101 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val unresolvedRecord = snapshot.records.single { it.identityConfidence == IdentityConfidence.LOW }
             assertEquals("addon:unknown", unresolvedRecord.parentId)
             assertTrue(unresolvedRecord.identityWarnings.single().contains("unresolved"))
+        }
+
+    @Test
+    fun `observeContinueWatching emits canonical resume records plus synthetic next-up records`() =
+        runTest {
+            val service = buildService()
+            val resume = resume(
+                contentId = "tvdb:393268",
+                videoId = "tvdb:393268:2:1",
+                season = 2,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val nextUp = nextUp(
+                contentId = "tvdb:393268",
+                firstAiredMs = 20_000L,
+                episode = 2
+            ).copy(season = 2, videoId = "tvdb:393268:2:2")
+            val canonicalResume = canonicalRecord(
+                RawContinueWatchingInput(profileId = 1, progress = resume, languageTag = "en-US")
+            ).copy(
+                parentId = "series:tvdb:393268",
+                contentId = "series:tvdb:393268:s2e1"
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(resume),
+                nextUpItems = listOf(nextUp),
+                records = listOf(canonicalResume),
+                updatedAtMs = 1L
+            )
+            setPublishedSnapshot(service, snapshot = snapshot)
+
+            val records = service.observeContinueWatching(profileId = 1).first()
+
+            assertEquals(2, records.size)
+            assertTrue(records.any { it.contentId == "series:tvdb:393268:s2e1" })
+            val synthetic = records.single { it.source == ContinueWatchingRecord.Source.SYNTHETIC }
+            assertEquals("tvdb:393268:s2e2", synthetic.contentId)
+            assertEquals(2, synthetic.episodeContext?.season)
+            assertEquals(2, synthetic.episodeContext?.number)
+        }
+
+    @Test
+    fun `remove and mark watched mutations do not leave stale canonical records observable`() =
+        runTest {
+            val service = buildService()
+            val removedResume = resume(
+                contentId = "show-stale",
+                videoId = "show-stale:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 10_000L
+            )
+            val markedResume = resume(
+                contentId = "show-marked",
+                videoId = "show-marked:1:2",
+                season = 1,
+                episode = 2,
+                lastWatched = 20_000L
+            )
+            val keptResume = resume(
+                contentId = "show-kept",
+                videoId = "show-kept:1:3",
+                season = 1,
+                episode = 3,
+                lastWatched = 30_000L
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(removedResume, markedResume, keptResume),
+                records = listOf(
+                    canonicalRecord(RawContinueWatchingInput(1, removedResume, "en-US")),
+                    canonicalRecord(RawContinueWatchingInput(1, markedResume, "en-US")),
+                    canonicalRecord(RawContinueWatchingInput(1, keptResume, "en-US"))
+                ),
+                updatedAtMs = 1L
+            )
+            setPublishedSnapshot(service, snapshot = snapshot)
+
+            service.removeResumeEntry(removedResume.videoId)
+            service.applyEpisodesMarked(
+                listOf(
+                    ContinueWatchingSnapshotService.EpisodeRef(
+                        showId = markedResume.contentId,
+                        seasonNumber = markedResume.season ?: error("season"),
+                        episodeNumber = markedResume.episode ?: error("episode")
+                    )
+                )
+            )
+            setPublishedSnapshot(service, snapshot = rawSnapshot(service))
+
+            val records = service.observeContinueWatching(profileId = 1).first()
+
+            assertEquals(listOf("show-kept:s1e3"), records.map { it.contentId })
+            assertFalse(records.any { it.parentId == removedResume.contentId })
+            assertFalse(records.any { it.parentId == markedResume.contentId })
         }
 
     @Test

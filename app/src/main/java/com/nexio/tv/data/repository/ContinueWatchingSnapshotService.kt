@@ -88,12 +88,14 @@ data class ProfileOwnedContinueWatchingSnapshot(
 
 internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): List<ContinueWatchingRecord> {
     val now = System.currentTimeMillis().coerceAtLeast(1L)
-    val resumeRecords = snapshot.resumeItems.map { progress ->
+    val legacyResumeRecords = snapshot.resumeItems.map { progress ->
         val parentId = progress.contentId
-        val episodeContext = if (progress.season != null && progress.episode != null) {
+        val season = progress.season
+        val episode = progress.episode
+        val episodeContext = if (season != null && episode != null) {
             ContinueWatchingRecord.EpisodeContext(
-                season = progress.season!!,
-                number = progress.episode!!
+                season = season,
+                number = episode
             )
         } else {
             null
@@ -117,7 +119,7 @@ internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): L
             updatedAt = if (progress.lastWatched > 0L) progress.lastWatched else now
         )
     }
-    val nextUpRecords = snapshot.nextUpItems.map { entry ->
+    val syntheticNextUpRecords = snapshot.nextUpItems.map { entry ->
         val episodeContext = ContinueWatchingRecord.EpisodeContext(
             season = entry.season,
             number = entry.episode
@@ -137,7 +139,20 @@ internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): L
             updatedAt = if (entry.activityAtMs > 0L) entry.activityAtMs else now
         )
     }
-    return resumeRecords + nextUpRecords
+    if (snapshot.records.isEmpty()) {
+        return legacyResumeRecords + syntheticNextUpRecords
+    }
+
+    val canonicalKeys = snapshot.records.map { it.identityKey() }.toSet()
+    val contentIds = snapshot.records.map { it.contentId }.toSet()
+    val missingSyntheticNextUpRecords = syntheticNextUpRecords.filterNot { record ->
+        record.identityKey() in canonicalKeys || record.contentId in contentIds
+    }
+    return snapshot.records + missingSyntheticNextUpRecords
+}
+
+private fun ContinueWatchingSnapshot.withInvalidatedCanonicalRecords(): ContinueWatchingSnapshot {
+    return if (records.isEmpty()) this else copy(records = emptyList())
 }
 
 private data class LiveContinueWatchingSnapshotEmission(
@@ -414,7 +429,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         require(profileId > 0) { "profileId must be positive" }
         return observeSnapshot()
             .filter { it.profileId == profileId }
-            .map { owned -> owned.snapshot.records.ifEmpty { owned.toContinueWatchingRecords() } }
+            .map { owned -> owned.toContinueWatchingRecords() }
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
@@ -488,7 +503,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems.filterNot { it.videoId == videoId }
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
@@ -503,7 +518,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems.filterNot { it.contentId == showId }
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
@@ -518,7 +533,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 val merged = (current.snapshot.resumeItems + entry)
                     .sortedByDescending { it.lastWatched }
                     .distinctBy { it.videoId }
-                current.copy(snapshot = current.snapshot.copy(resumeItems = merged))
+                current.copy(
+                    snapshot = current.snapshot.copy(
+                        resumeItems = merged
+                    ).withInvalidatedCanonicalRecords()
+                )
             }
         }
     }
@@ -593,7 +612,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                     entry.episode == ref.episodeNumber
                             }
                         }
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
@@ -635,7 +654,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         resumeItems = rollbackResume,
                         nextUpItems = rollbackNextUp,
                         traktUpNextItems = rollbackTraktUpNext
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
@@ -660,7 +679,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     snapshot = current.snapshot.copy(
                         nextUpItems = current.snapshot.nextUpItems.filterNot { it.contentId == target },
                         traktUpNextItems = current.snapshot.traktUpNextItems.filterNot { it.contentId == target }
-                    )
+                    ).withInvalidatedCanonicalRecords()
                 )
             }
         }
