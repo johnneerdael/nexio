@@ -1,6 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbSeasonExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbTrailerRecord
 import java.net.URI
 import javax.inject.Inject
 
@@ -11,12 +13,24 @@ private val REJECTED_SCHEMES = setOf("intent", "file", "content", "javascript")
 class TvdbTrailerMapper @Inject constructor() {
 
     fun mapCandidates(series: TvdbSeriesExtendedRecord): List<TvdbTrailerCandidate> {
-        return series.trailers.orEmpty().mapNotNull { trailer ->
+        return mapTrailerRecords(series.trailers, seasonNumber = null)
+    }
+
+    fun mapCandidates(season: TvdbSeasonExtendedRecord): List<TvdbTrailerCandidate> {
+        return mapTrailerRecords(season.trailers, seasonNumber = season.number)
+    }
+
+    private fun mapTrailerRecords(
+        trailers: List<TvdbTrailerRecord>?,
+        seasonNumber: Int?
+    ): List<TvdbTrailerCandidate> {
+        return trailers.orEmpty().mapNotNull { trailer ->
             val url = trailer.url?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             TvdbTrailerCandidate(
                 url = url,
                 name = trailer.name?.trim()?.takeIf { it.isNotBlank() },
-                type = null
+                type = null,
+                seasonNumber = seasonNumber
             )
         }
     }

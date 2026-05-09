@@ -63,6 +63,12 @@ interface TvdbApi {
         @Path("language") language: String
     ): Response<TvdbTranslationResponse>
 
+    @GET("seasons/{id}/extended")
+    suspend fun getSeasonExtended(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: Int
+    ): Response<TvdbSeasonExtendedResponse>
+
     @GET("series/{id}/episodes/{seasonType}/{language}")
     suspend fun getSeriesEpisodesTranslated(
         @Header("Authorization") authorization: String,
@@ -242,10 +248,17 @@ data class TvdbSeriesExtendedRecord(
     @Json(name = "status") val status: TvdbStatusRecord? = null,
     @Json(name = "translations") val translations: TvdbTranslations? = null,
     @Json(name = "defaultSeasonType") val defaultSeasonType: Int? = null,
+    @Json(name = "seasons") val seasons: List<TvdbSeasonBaseRecord>? = emptyList(),
     @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord>? = emptyList(),
     @Json(name = "characters") val characters: List<TvdbCharacterRecord>? = emptyList(),
     @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord>? = emptyList(),
     @Json(name = "trailers") val trailers: List<TvdbTrailerRecord>? = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeasonExtendedResponse(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "data") val data: TvdbSeasonExtendedRecord? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -372,6 +385,27 @@ data class TvdbSeasonTypeRecord(
     @Json(name = "name") val name: String? = null,
     @Json(name = "type") val type: String? = null,
     @Json(name = "alternateName") val alternateName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeasonBaseRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "seriesId") val seriesId: Int? = null,
+    @Json(name = "type") val type: TvdbSeasonTypeRecord? = null,
+    @Json(name = "year") val year: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeasonExtendedRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "seriesId") val seriesId: Int? = null,
+    @Json(name = "type") val type: TvdbSeasonTypeRecord? = null,
+    @Json(name = "year") val year: String? = null,
+    @Json(name = "trailers") val trailers: List<TvdbTrailerRecord>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

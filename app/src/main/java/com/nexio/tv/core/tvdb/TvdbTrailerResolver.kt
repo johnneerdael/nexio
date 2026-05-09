@@ -43,12 +43,10 @@ class TvdbTrailerResolver @Inject constructor(
     ): TvdbTrailerLookupResult = withContext(Dispatchers.IO) {
         if (!isTvdbActiveForTv(type)) return@withContext TvdbTrailerLookupResult.Inactive
 
-        val candidates = fetchAndMapCandidates(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
-
-        // Filter to non-recap title trailers (no season association)
-        val titleCandidates = candidates.filter { !it.isRecap && it.seasonNumber == null }
+        val titleCandidates = fetchDefaultTitleCandidates(contentId)
+            ?: return@withContext TvdbTrailerLookupResult.Missing
         if (titleCandidates.isEmpty()) {
-            Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=no_title_candidates total=${candidates.size}")
+            Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=no_title_candidates")
             return@withContext TvdbTrailerLookupResult.Missing
         }
 
@@ -126,6 +124,57 @@ class TvdbTrailerResolver @Inject constructor(
         }
 
         return candidates
+    }
+
+    private suspend fun fetchDefaultTitleCandidates(contentId: String?): List<TvdbTrailerCandidate>? {
+        val trimmedId = contentId?.trim()?.takeIf { it.isNotBlank() } ?: return null
+
+        val identity = resolveIdentity(trimmedId) ?: run {
+            Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=identity_not_found")
+            return null
+        }
+
+        val record = fetchSeriesRecord(identity) ?: run {
+            Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=record_not_found")
+            return null
+        }
+
+        val seasonCandidates = fetchLatestSeasonTrailerCandidates(record)
+        if (seasonCandidates.isNotEmpty()) {
+            return seasonCandidates
+        }
+
+        val candidates = tvdbTrailerMapper.mapCandidates(record)
+            .filter { !it.isRecap }
+        if (candidates.isEmpty()) {
+            Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=no_trailers_on_record")
+            return null
+        }
+        return candidates
+    }
+
+    private suspend fun fetchLatestSeasonTrailerCandidates(
+        series: TvdbSeriesExtendedRecord
+    ): List<TvdbTrailerCandidate> {
+        val positiveSeasons = series.seasons.orEmpty()
+            .filter { season -> season.id != null && (season.number ?: -1) > 0 }
+
+        val orderedSeasons = positiveSeasons
+            .filter { season -> season.type?.name.equals("Aired Order", ignoreCase = true) }
+            .ifEmpty { positiveSeasons }
+            .sortedByDescending { season -> season.number ?: -1 }
+
+        for (season in orderedSeasons) {
+            val seasonRecord = tvdbIntegrationProvider.fetchSeasonExtended(season.id ?: continue)
+                ?: continue
+            val candidates = tvdbTrailerMapper.mapCandidates(seasonRecord)
+                .filter { !it.isRecap }
+            if (candidates.isNotEmpty()) {
+                return candidates
+            }
+        }
+
+        return emptyList()
     }
 
     private suspend fun fetchSeriesRecord(identity: TvdbSeriesIdentity): TvdbSeriesExtendedRecord? {
@@ -223,4 +272,5 @@ class TvdbTrailerResolver @Inject constructor(
             TvdbTrailerLookupResult.Missing
         }
     }
+
 }

@@ -230,6 +230,7 @@ object TvdbApiShapes {
     const val SEARCH = "tvdb.search"
     const val SERIES_BASE = "tvdb.series.base"
     const val SERIES_EXTENDED = "tvdb.series.extended"
+    const val SEASON_EXTENDED = "tvdb.season.extended"
     const val SERIES_TRANSLATION = "tvdb.series.translation"
     const val SERIES_EPISODES_SEASON_TYPE = "tvdb.series.episodes.season_type"
     const val SERIES_EPISODES_LANGUAGE = "tvdb.series.episodes.language"
