@@ -573,17 +573,37 @@ class HomeCatalogSnapshotStore private constructor(
 
             is ArtworkReferenceIntegrityResult.Invalid ->
                 if (isInvalidArtworkRefClearedAtWrite(posterRef)) {
-                    traceWriteBarrierRepair(
-                        scope = scope,
-                        fieldName = "poster",
-                        action = "clear_poster_ref",
-                        reason = validation.reason.safeValidatorTraceReason(),
-                        decisionKeyHash = decisionKeyHashForRef(posterRef),
-                        assetKeyHash = assetKeyHashForRef(posterRef),
-                        destructive = true,
-                        posterProviderTagAction = "clear"
-                    )
-                    copy(poster = null, posterProviderTag = null)
+                    // Validators may flag a freshly-materialized decision as Invalid
+                    // before its asset bytes are linked. Before nulling, ask the
+                    // decision cache directly: if it still resolves to Found, the ref
+                    // is recoverable and we keep it. This prevents the empty-poster
+                    // (Trakt) and addon-poster-flicker (TMDB) regressions where a
+                    // transient validator miss caused poster=null to be persisted.
+                    if (decisionRefStillResolvesInCache(posterRef)) {
+                        traceWriteBarrierRepair(
+                            scope = scope,
+                            fieldName = "poster",
+                            action = "preserve_invalid_decision_with_cache_hit",
+                            reason = validation.reason.safeValidatorTraceReason(),
+                            decisionKeyHash = decisionKeyHashForRef(posterRef),
+                            assetKeyHash = assetKeyHashForRef(posterRef),
+                            destructive = false,
+                            posterProviderTagAction = "preserve"
+                        )
+                        this
+                    } else {
+                        traceWriteBarrierRepair(
+                            scope = scope,
+                            fieldName = "poster",
+                            action = "clear_poster_ref",
+                            reason = validation.reason.safeValidatorTraceReason(),
+                            decisionKeyHash = decisionKeyHashForRef(posterRef),
+                            assetKeyHash = assetKeyHashForRef(posterRef),
+                            destructive = true,
+                            posterProviderTagAction = "clear"
+                        )
+                        copy(poster = null, posterProviderTag = null)
+                    }
                 } else {
                     this
                 }
@@ -644,6 +664,16 @@ class HomeCatalogSnapshotStore private constructor(
 
     private fun String.safeValidatorTraceReason(): String =
         if (this in SAFE_VALIDATOR_REASONS) this else REDACTED_VALIDATOR_REASON
+
+    private fun decisionRefStillResolvesInCache(ref: String): Boolean {
+        if (!isDecisionRef(ref)) return false
+        val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
+            .takeIf { it.isNotBlank() } ?: return false
+        val result = runCatching {
+            artworkDecisionCache.lookup(ArtworkDecisionKey(keyValue), requiredContext = null)
+        }.getOrNull()
+        return result is ArtworkDecisionLookupResult.Found
+    }
 
     private fun isInvalidArtworkRefClearedAtWrite(ref: String): Boolean {
         if (ref.isBlank()) return false

@@ -43,6 +43,7 @@ import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TitleRatingSource
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
@@ -600,6 +601,9 @@ class HomeHydrationCoordinatorTest {
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
         coEvery { store.upsert(any(), any()) } answers {
             generation = 8L
             Unit
@@ -835,6 +839,9 @@ class HomeHydrationCoordinatorTest {
 
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
         coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
 
         val result = coordinator(facade, store, sink).hydrate(
