@@ -11,7 +11,6 @@ import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
@@ -625,8 +624,7 @@ internal fun composeHydratedHomeOverlaySnapshot(
     fullRows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
     overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-    heroTmdbSettings: TmdbSettings = TmdbSettings(),
-    traceEvents: TraceMetadataEvents? = null
+    heroTmdbSettings: TmdbSettings = TmdbSettings()
 ): HydratedHomeOverlaySnapshotComponents {
     if (overlaysByItemKey.isEmpty()) {
         return HydratedHomeOverlaySnapshotComponents(
@@ -637,8 +635,8 @@ internal fun composeHydratedHomeOverlaySnapshot(
     }
 
     return HydratedHomeOverlaySnapshotComponents(
-        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey, traceEvents),
-        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey, traceEvents),
+        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey),
+        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey),
         heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(
             overlaysByItemKey = overlaysByItemKey,
             tmdbSettings = heroTmdbSettings
@@ -2842,8 +2840,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         fullRows = updateResult.fullRows,
         heroItems = updateResult.heroItems,
         overlaysByItemKey = currentHydratedHomeOverlays,
-        heroTmdbSettings = currentTmdbSettings,
-        traceEvents = traceEvents
+        heroTmdbSettings = currentTmdbSettings
     )
     val displayRows = composedOverlaySnapshot.displayRows
     val baseHeroItems = composedOverlaySnapshot.heroItems
@@ -3068,8 +3065,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         fullRows = filteredSnapshot.fullCatalogRows,
         heroItems = filteredSnapshot.heroItems,
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
-        heroTmdbSettings = currentTmdbSettings,
-        traceEvents = traceEvents
+        heroTmdbSettings = currentTmdbSettings
     )
     _fullCatalogRows.value = composedSnapshot.fullRows
     _uiState.update { state ->
