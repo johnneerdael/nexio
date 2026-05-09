@@ -32,10 +32,21 @@ class IntegrationOwnershipService @Inject constructor(
             val previousItems = railStoreDao.itemsForRail(membership.rail.railKey)
             railStoreDao.upsertRail(membership.rail)
             railStoreDao.replaceRailItems(membership.rail.railKey, membership.items)
-            membership.mediaIdentities.forEach { mediaIdentityDao.upsertMediaIdentity(it) }
+            // Indexed iteration to avoid ArrayList$Itr capture in continuation. The
+            // suspending upsertMediaIdentity call would save the iterator into the
+            // continuation's L$N field, pinning the source List<MediaIdentity> for
+            // the lifetime of the (possibly cancelled) coroutine.
+            val mediaIdentities = membership.mediaIdentities
+            for (i in mediaIdentities.indices) {
+                mediaIdentityDao.upsertMediaIdentity(mediaIdentities[i])
+            }
             val externalIdsByMedia = membership.externalIds.groupBy { it.mediaKey }
-            externalIdsByMedia.forEach { (mediaKey, ids) ->
-                mediaIdentityDao.replaceExternalIds(mediaKey, ids)
+            // Same: replaceExternalIds is suspending; iterate Map entries by snapshotted
+            // key list to avoid retaining the iterator in continuation state.
+            val externalIdKeys = externalIdsByMedia.keys.toList()
+            for (i in externalIdKeys.indices) {
+                val mediaKey = externalIdKeys[i]
+                mediaIdentityDao.replaceExternalIds(mediaKey, externalIdsByMedia.getValue(mediaKey))
             }
             previousItems.map { it.mediaKey }.toSet() -
                 membership.items.map { it.mediaKey }.toSet()
