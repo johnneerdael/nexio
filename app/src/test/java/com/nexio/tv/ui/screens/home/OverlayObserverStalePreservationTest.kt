@@ -22,12 +22,15 @@ class OverlayObserverStalePreservationTest {
     }
 
     @Test
-    fun `non-empty new map for different keys keeps both prior and fresh`() {
+    fun `non-empty new map fully replaces prior entries when keys do not overlap`() {
+        // The observer emits the new authoritative view; old entries from a prior
+        // subscription must NOT linger, otherwise the overlay map grows unboundedly
+        // every time the rail-visibility set changes.
         val merged = preserveStaleOverlays(
             previous = mapOf("k1" to fakeOverlay("k1")),
             next = mapOf("k2" to fakeOverlay("k2"))
         )
-        assertEquals(setOf("k1", "k2"), merged.keys)
+        assertEquals(setOf("k2"), merged.keys)
     }
 
     private fun fakeOverlay(key: String, updatedAt: Long = 0L): HydratedHomeOverlay =
