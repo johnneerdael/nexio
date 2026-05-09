@@ -48,22 +48,29 @@ class IntegrationPolicyRegistryTest {
     }
 
     @Test
-    fun `subtitle translation policy permits requests during playback`() {
+    fun `subtitle providers permit requests during playback`() {
         val registry = defaultIntegrationPolicyRegistry()
-        val policy = registry.policyFor(IntegrationProvider.SUBTITLE_TRANSLATION)
-
-        assertTrue(
-            "SUBTITLE_TRANSLATION must allow during-playback work: cue translation runs on the " +
-                "playing track, so blocking it at the playback gate short-circuits every request " +
-                "to MISSING and surfaces as 'Subtitle translation request returned empty response'.",
-            policy.allowDuringPlayback
-        )
-
         val gate = IntegrationPlaybackGate().apply { setPlaybackActive(true) }
-        assertFalse(
-            "Playback gate must not block USER_VISIBLE subtitle translation requests during " +
-                "playback once allowDuringPlayback is set.",
-            gate.isBlocked(policy, IntegrationWorkClass.USER_VISIBLE)
-        )
+
+        // Subtitle search/download/translation all run on the playing track. Blocking any of them
+        // at the playback gate short-circuits every request to MISSING and produces visible
+        // failures: cue-translation flood ("Subtitle translation request returned empty response"),
+        // empty subtitle search results, or failed sidecar fetches.
+        listOf(
+            IntegrationProvider.SUBTITLE_TRANSLATION,
+            IntegrationProvider.OPEN_SUBTITLES,
+            IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
+            IntegrationProvider.WYZIE_SUBTITLES
+        ).forEach { provider ->
+            val policy = registry.policyFor(provider)
+            assertTrue(
+                "$provider must allow during-playback work",
+                policy.allowDuringPlayback
+            )
+            assertFalse(
+                "Playback gate must not block USER_VISIBLE $provider requests during playback",
+                gate.isBlocked(policy, IntegrationWorkClass.USER_VISIBLE)
+            )
+        }
     }
 }
