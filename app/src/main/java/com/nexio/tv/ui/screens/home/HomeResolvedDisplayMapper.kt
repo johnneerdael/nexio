@@ -26,7 +26,6 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal object HomeResolvedDisplayMapper {
@@ -46,14 +45,23 @@ internal object HomeResolvedDisplayMapper {
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
         val overlay = overlayFromMap(overlaysByItemKey)
-        val firstPaintFields = toHomeDisplayMetadata()
-        val fields = overlay?.fields?.mergeFallback(firstPaintFields) ?: firstPaintFields
-        val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
+
+        val firstPaintSlots = toFirstPaintSlots(nowMs)
+        val overlaySlots = overlay?.toResolvedSlots(nowMs, isStale = overlay.isStale(nowMs))
+        val mergedSlots = HomeRailProjectionReducer.reduce(
+            firstPaint = firstPaintSlots,
+            overlay = overlaySlots,
+            existing = null,
+            profile = null
+        )
+
         val stableIds = firstPaintStableIds.withOverlayStableId(overlay)
+        val title = mergedSlots.title.value ?: name
+        val year = mergedSlots.releaseInfo.value?.take(4)?.takeIf { it.length == 4 }
         val trailerState = resolveHomeTrailerDisplayState(
             itemKey = itemKey,
-            title = fields.title ?: name,
-            year = fields.releaseInfo?.take(4)?.takeIf { it.length == 4 },
+            title = title,
+            year = year,
             stableIds = stableIds,
             fallbackYtIds = trailerYtIds,
             apiType = apiType,
@@ -76,18 +84,21 @@ internal object HomeResolvedDisplayMapper {
             imdbId = stableIds.imdb,
             stableIds = stableIds,
             display = ResolvedDisplayFields(
-                title = fields.title,
-                originalTitle = null,
-                year = fields.releaseInfo?.take(4)?.toIntOrNull(),
-                releaseDate = fields.releaseInfo,
-                overview = fields.description,
-                genres = fields.genres,
-                runtimeText = fields.runtime
+                title = title,
+                originalTitle = mergedSlots.originalTitle.value,
+                year = year?.toIntOrNull(),
+                releaseDate = mergedSlots.releaseInfo.value,
+                overview = mergedSlots.overview.value,
+                genres = mergedSlots.genres.value.orEmpty(),
+                runtimeText = mergedSlots.runtime.value
             ),
-            artwork = fields.toResolvedArtworkBundle(),
-            rating = fields.imdbRating
-                ?.takeIf { RatingValueValidator.validTitleRating(it) }
-                ?.let { value -> TitleRating(value.toDouble(), ratingSource) },
+            artwork = ArtworkBundle(
+                poster = mergedSlots.poster.value,
+                backdrop = mergedSlots.backdrop.value,
+                logo = mergedSlots.logo.value,
+                thumbnail = mergedSlots.thumbnail.value
+            ).enforceArtworkTypeBoundaries(),
+            rating = mergedSlots.rating.value,
             trailer = trailerState,
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
@@ -95,7 +106,8 @@ internal object HomeResolvedDisplayMapper {
                 else -> HydrationState.CANONICAL_READY
             },
             sourceTrace = overlay?.fieldTrace.orEmpty(),
-            updatedAtMs = overlay?.updatedAtMs ?: nowMs
+            updatedAtMs = overlay?.updatedAtMs ?: nowMs,
+            slots = mergedSlots
         )
     }
 
