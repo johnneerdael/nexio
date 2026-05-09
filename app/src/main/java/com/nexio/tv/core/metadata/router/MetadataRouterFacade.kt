@@ -1138,6 +1138,11 @@ class MetadataRouterFacade(
             // stable-id bundle is in scope.
             val ratingRepo = titleRatingOverrideRepository
             val imdbId = request.sourceContext.previewStableIds.imdb
+                ?.takeIf { it.isNotBlank() }
+                ?: (primary?.fields?.get(ResolvedField.REMOTE_IDS)?.value as? Map<*, *>)
+                    ?.get("imdb")
+                    ?.let { it as? Iterable<*> }
+                    ?.firstNotNullOfOrNull { (it as? String)?.trim()?.takeIf(String::isNotBlank) }
             if (ratingRepo != null && !imdbId.isNullOrBlank()) {
                 runCatching {
                     val syntheticPreview = MetaPreview(
@@ -1158,7 +1163,7 @@ class MetadataRouterFacade(
                         ratingRepo.titleRatingCandidates(
                             preview = syntheticPreview,
                             stableIdBundle = null,
-                            providerIds = request.sourceContext.previewStableIds
+                            providerIds = request.sourceContext.previewStableIds.copy(imdb = imdbId)
                         )
                     )
                 }.onFailure { /* tolerate IMDB-API outages; primary/preview candidates still feed the resolver */ }
