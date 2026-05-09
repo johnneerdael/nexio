@@ -1,6 +1,6 @@
 package com.nexio.tv.domain.model
 
-import java.util.Locale
+import kotlin.math.roundToLong
 
 enum class TitleRatingSource {
     IMDB,
@@ -45,8 +45,25 @@ object RatingValueValidator {
 }
 
 object RatingDisplayFormatter {
-    fun formatTitleRating(value: Double): String =
-        String.format(Locale.US, "%.1f", value)
+    /**
+     * "%.1f" without `String.format`. Each `String.format` call allocates a
+     * Formatter + FormatSpecifier + FormatSpecifierParser + Flags +
+     * FormatString[][] tower (~6 objects). On Home, this is called per card
+     * build (catalog row + continue-watching + hero), 1-2× per card; with ~1900
+     * cards × every pipeline emission this saturated the Formatter object pool
+     * (38K retained instances, ~38 MB + ongoing churn) and contributed to GC
+     * pressure that hung Modern Home navigation.
+     *
+     * Manual rounding via [kotlin.math.roundToLong] avoids Formatter entirely.
+     * Output is locale-independent (always uses '.') which matches the prior
+     * `Locale.US` choice — these numbers are display chrome, not localised.
+     */
+    fun formatTitleRating(value: Double): String {
+        val rounded = (value * 10.0).roundToLong()
+        val whole = rounded / 10
+        val tenth = (if (rounded < 0) -rounded else rounded) % 10
+        return "$whole.$tenth"
+    }
 
     fun formatTitleRating(value: Float): String =
         formatTitleRating(value.toDouble())
@@ -55,6 +72,6 @@ object RatingDisplayFormatter {
         if (value % 1.0 == 0.0) {
             value.toInt().toString()
         } else {
-            String.format(Locale.US, "%.1f", value)
+            formatTitleRating(value)
         }
 }
