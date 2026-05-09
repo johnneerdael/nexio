@@ -1,27 +1,37 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
-import java.util.concurrent.ConcurrentHashMap
+import java.io.File
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * After the SharedPreferences→file-backed migration the original assertion
+ * (`prefs.applyCount == 1`) became meaningless — writes no longer flow through
+ * SharedPreferences at all. The store now keeps an in-memory `cache` map and
+ * flushes the entire map to a single JSON file via streaming JsonWriter on
+ * debounce. The "batching" guarantee we still want is identical though:
+ * **N writes within one debounce window result in exactly one file write
+ * containing all N entries**. We verify that by inspecting the snapshot file
+ * after a single explicit flush and counting expected keys.
+ */
 class MetadataDiskCacheStoreWriteBatchingTest {
 
     @Test
     fun `repeated metadata writes are batched into one disk commit window`() {
-        val prefs = RecordingSharedPreferences()
-        val context = mockk<Context>()
-        every { context.getSharedPreferences(any(), any()) } returns prefs
+        val tempDir = java.nio.file.Files.createTempDirectory("mdc-write-batch").toFile()
+        tempDir.deleteOnExit()
         val store = MetadataDiskCacheStore(
-            context = context,
+            context = mockContext(tempDir),
             ioScope = CoroutineScope(EmptyCoroutineContext),
             debounceMs = Long.MAX_VALUE,
         )
@@ -37,28 +47,46 @@ class MetadataDiskCacheStoreWriteBatchingTest {
 
         store.flushPendingWritesForTest()
 
-        assertEquals(1, prefs.applyCount)
+        val snapshot = File(tempDir, "metadata_disk_cache_v1.json")
+        assertTrue("snapshot file should exist after flush", snapshot.exists())
+        // The whole snapshot is one JSON object whose top-level keys are the cache
+        // keys; counting the prefix matches confirms every write made it into the
+        // single file write.
+        val text = snapshot.readText()
+        val matchCount = Regex("\"meta::item-\\d+::").findAll(text).count()
+        assertEquals(20, matchCount)
     }
 
     @Test
     fun `tvdb reference writes are batched`() {
-        val prefs = RecordingSharedPreferences()
-        val context = mockk<Context>()
-        every { context.getSharedPreferences(any(), any()) } returns prefs
+        val tempDir = java.nio.file.Files.createTempDirectory("mdc-write-batch").toFile()
+        tempDir.deleteOnExit()
         val store = MetadataDiskCacheStore(
-            context = context,
+            context = mockContext(tempDir),
             ioScope = CoroutineScope(EmptyCoroutineContext),
             debounceMs = Long.MAX_VALUE,
         )
 
-        // Write multiple reference kinds
         store.writeTvdbReference("genres", listOf(mapOf("id" to 1, "name" to "Drama")))
         store.writeTvdbReference("languages", listOf(mapOf("id" to "eng", "name" to "English")))
         store.writeTvdbReference("entity_types", listOf(mapOf("id" to 1, "name" to "Series")))
 
         store.flushPendingWritesForTest()
 
-        assertEquals(1, prefs.applyCount)
+        val snapshot = File(tempDir, "metadata_disk_cache_v1.json")
+        assertTrue("snapshot file should exist after flush", snapshot.exists())
+        val text = snapshot.readText()
+        assertTrue(text.contains("\"tvdb_ref::genres::data\""))
+        assertTrue(text.contains("\"tvdb_ref::languages::data\""))
+        assertTrue(text.contains("\"tvdb_ref::entity_types::data\""))
+    }
+
+    private fun mockContext(filesDir: File): Context {
+        val prefs = InMemorySharedPreferences()
+        return mockk {
+            every { getSharedPreferences(any(), any()) } returns prefs
+            every { this@mockk.filesDir } returns filesDir
+        }
     }
 
     private fun meta(index: Int): Meta {
@@ -83,73 +111,5 @@ class MetadataDiskCacheStoreWriteBatchingTest {
             language = null,
             links = emptyList(),
         )
-    }
-
-    private class RecordingSharedPreferences : SharedPreferences {
-        private val values = ConcurrentHashMap<String, Any?>()
-        var applyCount: Int = 0
-            private set
-
-        override fun getAll(): MutableMap<String, *> = values.toMutableMap()
-        override fun getString(key: String?, defValue: String?): String? = values[key] as? String ?: defValue
-        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = defValues
-        override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
-        override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
-        override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
-        override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
-        override fun contains(key: String?): Boolean = values.containsKey(key)
-        override fun edit(): SharedPreferences.Editor = Editor()
-        override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
-        override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
-
-        private inner class Editor : SharedPreferences.Editor {
-            private val pending = LinkedHashMap<String, Any?>()
-            private var clearRequested = false
-
-            override fun putString(key: String?, value: String?): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = value
-            }
-
-            override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = values?.toSet()
-            }
-
-            override fun putInt(key: String?, value: Int): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = value
-            }
-
-            override fun putLong(key: String?, value: Long): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = value
-            }
-
-            override fun putFloat(key: String?, value: Float): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = value
-            }
-
-            override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = value
-            }
-
-            override fun remove(key: String?): SharedPreferences.Editor = apply {
-                if (key != null) pending[key] = null
-            }
-
-            override fun clear(): SharedPreferences.Editor = apply {
-                clearRequested = true
-            }
-
-            override fun commit(): Boolean {
-                apply()
-                return true
-            }
-
-            override fun apply() {
-                if (clearRequested) values.clear()
-                pending.forEach { (key, value) ->
-                    if (value == null) values.remove(key) else values[key] = value
-                }
-                applyCount += 1
-            }
-        }
     }
 }

@@ -49,9 +49,7 @@ class MetadataDiskCacheStoreTvdbTest {
         )
         store.flushPendingWritesForTest()
 
-        val key = prefs.all.keys.single { it.startsWith("tvdb::") }
-        val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
-
+        val (key, root) = persistedEntryWithPrefix(store, "tvdb::")
         assertEquals("tvdb::121361::extended::en-US::topposters-tvdb", key)
         assertTrue(root.has("tvdbSchemaVersion"))
         assertFalse(root.has("tmdbSchemaVersion"))
@@ -116,9 +114,7 @@ class MetadataDiskCacheStoreTvdbTest {
         )
         store.flushPendingWritesForTest()
 
-        val key = prefs.all.keys.single { it.startsWith("tvdb_episode::") }
-        val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
-
+        val (key, root) = persistedEntryWithPrefix(store, "tvdb_episode::")
         assertEquals("tvdb_episode::121361::default::1::en-US", key)
         assertTrue(root.has("tvdbEpisodeSchemaVersion"))
         assertFalse(root.has("tmdbSchemaVersion"))
@@ -293,7 +289,7 @@ class MetadataDiskCacheStoreTvdbTest {
             enrichment = TvMetadataEnrichment(seriesTvdbId = 121361, localizedTitle = "Game of Thrones")
         )
         store.flushPendingWritesForTest()
-        rewriteUpdatedAt(prefs, "tvdb::121361::series_extended::en-US::native", 0L)
+        store.rewriteUpdatedAtForTest("tvdb::121361::series_extended::en-US::native", 0L)
 
         assertNull(store.readTvdbEnrichment(121361, "series_extended", "en-US", "native"))
     }
@@ -310,15 +306,30 @@ class MetadataDiskCacheStoreTvdbTest {
             episodes = listOf(TvEpisodeMetadata(seasonNumber = 1, episodeNumber = 1, title = "Winter Is Coming"))
         )
         store.flushPendingWritesForTest()
-        rewriteUpdatedAt(prefs, "tvdb_episode::121361::default::1::en-US", 0L)
+        store.rewriteUpdatedAtForTest("tvdb_episode::121361::default::1::en-US", 0L)
 
         assertNull(store.readTvdbSeasonEpisodes(121361, "default", 1, "en-US"))
     }
 
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
+        val tempDir = java.nio.file.Files.createTempDirectory("metadata-disk-cache-test").toFile()
+        tempDir.deleteOnExit()
         return mockk {
             every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
+            every { filesDir } returns tempDir
         }
+    }
+
+    private fun persistedEntryWithPrefix(
+        store: MetadataDiskCacheStore,
+        prefix: String
+    ): Pair<String, JsonObject> {
+        // The snapshot file is one JSON object whose top-level keys are the cache
+        // keys; pick the single matching key after a flush.
+        val raw = store.snapshotFileForTest().readText()
+        val root = Gson().fromJson(raw, JsonObject::class.java)
+        val matching = root.entrySet().single { it.key.startsWith(prefix) }
+        return matching.key to matching.value.asJsonObject
     }
 
     private fun rewriteUpdatedAt(prefs: InMemorySharedPreferences, key: String, updatedAtMs: Long) {

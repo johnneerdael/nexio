@@ -6,6 +6,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -18,7 +21,17 @@ import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.lang.reflect.Type
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -38,7 +51,13 @@ class MetadataDiskCacheStore @Inject constructor(
 ) {
     companion object {
         private const val TAG = "MetadataDiskCacheStore"
-        private const val PREFS_NAME = "metadata_disk_cache_v1"
+        // Legacy SharedPreferences file name. Read once on boot for migration, then deleted.
+        // See CLAUDE.md hard rule #3 — large blobs in SharedPreferences forced full-XML
+        // re-serialization on every putString and a 200+ KB transient char[] per fromJson.
+        private const val LEGACY_PREFS_NAME = "metadata_disk_cache_v1"
+        // File-backed JSON snapshot. One JSON object whose keys are the cache keys
+        // (META_PREFIX/TMDB_PREFIX/etc.) and whose values are the per-entry JsonObject.
+        private const val SNAPSHOT_FILE_NAME = "metadata_disk_cache_v1.json"
         private const val META_PREFIX = "meta::"
         private const val HOME_DISPLAY_PREFIX = "home_display::"
         private const val TMDB_PREFIX = "tmdb::"
@@ -65,8 +84,18 @@ class MetadataDiskCacheStore @Inject constructor(
     private val gson = Gson()
     private var ioScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var debounceMs: Long = 250L
-    private val pendingWrites = ConcurrentHashMap<String, String?>()
+
+    // Live in-memory cache. Replaces the previous SharedPreferences-backed
+    // pendingWrites + prefs.getString(...) round-trip. Entries are kept as JsonObject
+    // (not String) so reads never call gson.fromJson(rawString, type) — that overload
+    // wraps the String in a StringReader which pins the entire String for the parse,
+    // and was the source of 3 × 205 KiB transient char[] copies of the same TVDB
+    // {"airsDays":...} JSON observed in heap dumps. See CLAUDE.md hard rule #3
+    // (read-side clause).
+    private val cache = ConcurrentHashMap<String, JsonObject>()
     private val flushScheduled = AtomicBoolean(false)
+    private val loaded = AtomicBoolean(false)
+    private val loadLock = Any()
 
     internal constructor(
         context: Context,
@@ -77,14 +106,121 @@ class MetadataDiskCacheStore @Inject constructor(
         this.debounceMs = debounceMs
     }
 
+    private fun snapshotFile(): File = File(context.filesDir, SNAPSHOT_FILE_NAME)
+
+    /**
+     * Lazily loads the snapshot file into [cache] on first access. If the file is
+     * absent but the legacy SharedPreferences file exists, migrates entries from
+     * SharedPreferences (parse each value String once) and schedules a flush; the
+     * legacy prefs file is then deleted.
+     */
+    private fun ensureLoaded() {
+        if (loaded.get()) return
+        synchronized(loadLock) {
+            if (loaded.get()) return
+            try {
+                val file = snapshotFile()
+                if (file.exists()) {
+                    loadSnapshotFromFile(file)
+                } else if (legacyPrefsExists()) {
+                    migrateFromLegacyPrefs()
+                    scheduleFlush()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load metadata disk cache snapshot", e)
+            } finally {
+                loaded.set(true)
+            }
+        }
+    }
+
+    private fun legacyPrefsExists(): Boolean {
+        // SharedPreferences XML files live under /data/data/<pkg>/shared_prefs/.
+        // Probing prefs.all is the safer cross-API check.
+        val prefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.all.isNotEmpty()
+    }
+
+    private fun loadSnapshotFromFile(file: File) {
+        // Streaming read — never materializes the whole file as a String. The hard rule
+        // bans `gson.fromJson(rawString, type)` for cache reads >50 KB.
+        FileInputStream(file).use { fis ->
+            BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                JsonReader(br).use { reader ->
+                    if (reader.peek() == JsonToken.NULL) {
+                        reader.nextNull()
+                        return
+                    }
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        val key = reader.nextName()
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            continue
+                        }
+                        // gson.fromJson(JsonReader, JsonObject::class.java) consumes one
+                        // value at a time; no full-file string materialization happens.
+                        val value = gson.fromJson<JsonObject>(reader, JsonObject::class.java)
+                        if (value != null) cache[key] = value
+                    }
+                    reader.endObject()
+                }
+            }
+        }
+    }
+
+    private fun migrateFromLegacyPrefs() {
+        val prefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.all.forEach { (key, value) ->
+            if (value is String && value.isNotBlank()) {
+                runCatching { gson.fromJson(value, JsonObject::class.java) }
+                    .getOrNull()
+                    ?.let { cache[key] = it }
+            }
+        }
+        // Note: deliberately NOT clearing the legacy prefs here. The snapshot file
+        // is the new source of truth once flush completes, and `ensureLoaded` will
+        // see the file and skip the legacy path on the next boot. Leaving the prefs
+        // file alone keeps a recoverable backup if the JSON snapshot ever gets
+        // corrupted, and avoids losing data on a crash between migration and flush.
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun reloadFromLegacyPrefsForTest() {
+        // Test-only: re-runs the legacy-prefs migration into [cache] without
+        // touching the snapshot file. Lets tests update timestamps in prefs
+        // (rewriteUpdatedAt helper) and have the cache reflect the change.
+        migrateFromLegacyPrefs()
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun rewriteUpdatedAtForTest(key: String, updatedAtMs: Long) {
+        // Test-only: mutates the in-memory entry's `updatedAtMs` so TTL-expiry
+        // tests can simulate a stale entry without going through the legacy prefs
+        // surface. Replacement for tests that previously did
+        // prefs.edit().putString(key, json-with-old-timestamp).commit().
+        ensureLoaded()
+        val entry = cache[key] ?: return
+        entry.addProperty("updatedAtMs", updatedAtMs)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun snapshotFileForTest(): File = snapshotFile()
+
     private fun readPendingEntry(key: String): JsonObject? {
-        val pending = pendingWrites[key] ?: return null
-        return gson.fromJson(pending, JsonObject::class.java)
+        ensureLoaded()
+        return cache[key]
     }
 
     private fun enqueueWrite(key: String, payload: JsonObject) {
-        pendingWrites[key] = gson.toJson(payload)
+        ensureLoaded()
+        cache[key] = payload
         scheduleFlush()
+    }
+
+    private fun removeEntry(key: String) {
+        ensureLoaded()
+        if (cache.remove(key) != null) scheduleFlush()
     }
 
     private fun scheduleFlush() {
@@ -100,27 +236,59 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     private fun flushPendingWrites() {
-        val snapshot = pendingWrites.entries.toList()
-        if (snapshot.isEmpty()) {
+        // Serialize the entire in-memory map to disk. The whole map is normally <300 KB
+        // and the file write happens off-thread on Dispatchers.IO; per CLAUDE.md hard
+        // rule #3 we use a streaming JsonWriter so no `gson.toJson(value): String` ever
+        // materializes the full snapshot as a char[].
+        try {
+            // Snapshot the keys so concurrent puts during the flush don't crash the
+            // serializer. Late writers schedule another flush via scheduleFlush() in
+            // enqueueWrite, so any updates that arrive mid-flush are picked up next pass.
+            val snapshot = HashMap<String, JsonObject>(cache.size)
+            for ((k, v) in cache) snapshot[k] = v
+            writeSnapshotToFile(snapshot, snapshotFile())
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to flush metadata disk cache snapshot", e)
+        } finally {
             flushScheduled.set(false)
-            return
         }
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            snapshot.forEach { (key, value) ->
-                if (value == null) editor.remove(key) else editor.putString(key, value)
+    }
+
+    private fun writeSnapshotToFile(snapshot: Map<String, JsonObject>, target: File) {
+        var tempFile: File? = null
+        try {
+            val parent = target.parentFile
+            if (parent != null && !parent.exists()) parent.mkdirs()
+            tempFile = File(parent ?: File("."), "${target.name}.tmp")
+            FileOutputStream(tempFile).use { fos ->
+                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                    JsonWriter(bw).use { writer ->
+                        writer.beginObject()
+                        for ((key, value) in snapshot) {
+                            writer.name(key)
+                            gson.toJson(value, JsonObject::class.java, writer)
+                        }
+                        writer.endObject()
+                    }
+                }
             }
-            editor.apply()
-            snapshot.forEach { (key, value) ->
-                pendingWrites.remove(key, value)
+            try {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
             }
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to flush pending metadata disk writes", error)
-        }
-        flushScheduled.set(false)
-        if (pendingWrites.isNotEmpty()) {
-            scheduleFlush()
+        } catch (e: Exception) {
+            tempFile?.delete()
+            throw e
         }
     }
 
@@ -136,11 +304,7 @@ class MetadataDiskCacheStore @Inject constructor(
     fun readMeta(itemKey: String, languageTag: String, providerToken: String): Meta? {
         val key = buildMetaKey(itemKey = itemKey, languageTag = languageTag, providerToken = providerToken)
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
             if (schemaVersion != META_CACHE_SCHEMA_VERSION) return null
             decodeMetaSafely(root)?.takeIf { it.hasValidPosterProviderTag(providerToken) }
@@ -182,11 +346,7 @@ class MetadataDiskCacheStore @Inject constructor(
     fun readTmdbEnrichment(tmdbKey: String, languageTag: String, providerToken: String): TmdbEnrichment? {
         val key = buildTmdbKey(tmdbKey = tmdbKey, languageTag = languageTag, providerToken = providerToken)
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("tmdbSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_CACHE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
@@ -230,11 +390,7 @@ class MetadataDiskCacheStore @Inject constructor(
             providerToken = providerToken
         )
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("tvdbSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_CACHE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
@@ -284,11 +440,7 @@ class MetadataDiskCacheStore @Inject constructor(
             languageTag = languageTag
         )
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("tvdbEpisodeSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_EPISODE_CACHE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
@@ -399,39 +551,27 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun hasCurrentMetaForItem(itemKey: String, languageTag: String): Boolean {
-        return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith(expectedPrefix) }
-                .any { (_, value) ->
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java)
-                    val schemaVersion = root?.get("metaSchemaVersion")?.asInt ?: 0
-                    schemaVersion == META_CACHE_SCHEMA_VERSION
-                }
-        }.getOrDefault(false)
+        ensureLoaded()
+        val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
+        for ((key, root) in cache) {
+            if (!key.startsWith(expectedPrefix)) continue
+            val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
+            if (schemaVersion == META_CACHE_SCHEMA_VERSION) return true
+        }
+        return false
     }
 
     fun readCurrentMetaForItem(itemKey: String, languageTag: String): Meta? {
-        return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith(expectedPrefix) }
-                .mapNotNull { (_, value) ->
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java) ?: return@mapNotNull null
-                    val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
-                    if (schemaVersion != META_CACHE_SCHEMA_VERSION) return@mapNotNull null
-                    decodeMetaSafely(root)
-                }
-                .firstOrNull()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to read current metadata for item", error)
-        }.getOrNull()
+        ensureLoaded()
+        val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
+        for ((key, root) in cache) {
+            if (!key.startsWith(expectedPrefix)) continue
+            val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != META_CACHE_SCHEMA_VERSION) continue
+            val decoded = runCatching { decodeMetaSafely(root) }.getOrNull()
+            if (decoded != null) return decoded
+        }
+        return null
     }
 
     fun hasCurrentHomeDisplayMetadataForItem(itemKey: String, languageTag: String): Boolean {
@@ -444,11 +584,7 @@ class MetadataDiskCacheStore @Inject constructor(
     fun readCurrentHomeDisplayMetadataForItem(itemKey: String, languageTag: String): HomeDisplayMetadata? {
         val key = buildHomeDisplayKey(itemKey = itemKey, languageTag = languageTag)
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("homeDisplaySchemaVersion")?.asInt ?: 0
             if (schemaVersion != HOME_DISPLAY_CACHE_SCHEMA_VERSION) return null
             decodeHomeDisplayMetadataSafely(root)
@@ -465,11 +601,7 @@ class MetadataDiskCacheStore @Inject constructor(
     fun <T> readTvdbReference(kind: String, type: Type): List<T>? {
         val key = "${TVDB_REFERENCE_PREFIX}${kind.trim().lowercase()}::data"
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("tvdbReferenceSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_REFERENCE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
@@ -514,13 +646,7 @@ class MetadataDiskCacheStore @Inject constructor(
      */
     fun removeTvdbReference(kind: String) {
         val key = "${TVDB_REFERENCE_PREFIX}${kind.trim().lowercase()}::data"
-        pendingWrites.remove(key)
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(key).apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove TVDB reference cache entry for $kind", error)
-        }
+        removeEntry(key)
     }
 
     /**
@@ -548,42 +674,35 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun clearAll() {
-        pendingWrites.clear()
+        ensureLoaded()
+        cache.clear()
+        scheduleFlush()
+        // Best-effort: also clear any lingering legacy SharedPreferences in case the
+        // migration hasn't run yet.
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().clear().commit()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to clear all metadata cache entries", error)
-        }
+            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().clear().commit()
+        }.onFailure { Log.w(TAG, "Failed to clear legacy metadata prefs", it) }
     }
 
     private fun removePrefixedEntries(prefix: String): Int {
-        return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val keysToRemove = prefs.all.keys.filter { it.startsWith(prefix) }
-            if (keysToRemove.isEmpty()) return 0
-            val editor = prefs.edit()
-            keysToRemove.forEach { key ->
-                editor.remove(key)
-                pendingWrites.remove(key)
-            }
-            editor.apply()
-            keysToRemove.size
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove prefixed entries for $prefix", error)
-        }.getOrDefault(0)
+        ensureLoaded()
+        var removed = 0
+        val keys = ArrayList<String>(cache.size)
+        for (key in cache.keys) {
+            if (key.startsWith(prefix)) keys += key
+        }
+        if (keys.isEmpty()) return 0
+        for (i in keys.indices) {
+            if (cache.remove(keys[i]) != null) removed += 1
+        }
+        if (removed > 0) scheduleFlush()
+        return removed
     }
 
     fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
         // The global language epoch has been retired. Text metadata is selected by
         // languageTag in the key, and image cache entries are language-independent.
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.all.keys
-                .asSequence()
-                .filter { key -> key.startsWith(TVDB_PREFIX) || key.startsWith(TVDB_EPISODE_PREFIX) }
-                .count()
-        }
         return emptyList()
     }
 
@@ -649,11 +768,7 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun readTmdbVideosEntry(key: String): List<TmdbVideoResult>? {
         return runCatching {
-            val root = readPendingEntry(key) ?: run {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-                gson.fromJson(raw, JsonObject::class.java)
-            } ?: return null
+            val root = readPendingEntry(key) ?: return null
             val schemaVersion = root.get("tmdbVideoSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_VIDEO_CACHE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
