@@ -4,7 +4,9 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
@@ -13,7 +15,8 @@ import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal fun CatalogRow.applyHydratedHomeOverlays(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    traceEvents: TraceMetadataEvents? = null
 ): CatalogRow {
     if (overlaysByItemKey.isEmpty()) return this
     val nowMs = System.currentTimeMillis()
@@ -29,6 +32,45 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
             existing = null,
             profile = null
         )
+        if (traceEvents != null) {
+            traceEvents.emitHomeDisplayProjection(
+                itemKey = item.homeOverlayItemKey(),
+                sourceRail = catalogId,
+                firstPaintSummary = mapOf(
+                    "poster" to (firstPaintSlots.poster.rank != DisplaySourceRank.EMPTY),
+                    "backdrop" to (firstPaintSlots.backdrop.rank != DisplaySourceRank.EMPTY),
+                    "logo" to (firstPaintSlots.logo.rank != DisplaySourceRank.EMPTY),
+                    "rating" to firstPaintSlots.rating.value?.value,
+                    "posterValue" to firstPaintSlots.poster.value?.toLegacyArtworkString()
+                ),
+                overlaySummary = mapOf(
+                    "found" to true,
+                    "poster" to overlaySlots.poster.provider,
+                    "backdrop" to overlaySlots.backdrop.provider,
+                    "logo" to overlaySlots.logo.provider,
+                    "rating" to overlaySlots.rating.provider,
+                    "posterValue" to overlaySlots.poster.value?.toLegacyArtworkString(),
+                    "posterRefType" to overlaySlots.poster.value?.let { it::class.simpleName }
+                ),
+                existingSummary = null,
+                selectedSummary = mapOf(
+                    "poster" to mapOf(
+                        "provider" to merged.poster.provider,
+                        "rank" to merged.poster.rank.name,
+                        "value" to merged.poster.value?.toLegacyArtworkString(),
+                        "refType" to merged.poster.value?.let { it::class.simpleName }
+                    ),
+                    "backdrop" to mapOf("provider" to merged.backdrop.provider, "rank" to merged.backdrop.rank.name),
+                    "logo" to mapOf("provider" to merged.logo.provider, "rank" to merged.logo.rank.name),
+                    "rating" to mapOf("provider" to merged.rating.provider, "rank" to merged.rating.rank.name)
+                ),
+                firstPaintSuppressedSummary = mapOf(
+                    "poster" to (merged.poster.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaintSlots.poster.rank == DisplaySourceRank.FIRST_PAINT),
+                    "backdrop" to (merged.backdrop.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaintSlots.backdrop.rank == DisplaySourceRank.FIRST_PAINT),
+                    "logo" to (merged.logo.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaintSlots.logo.rank == DisplaySourceRank.FIRST_PAINT)
+                )
+            )
+        }
         val updated = item.applyMergedSlots(merged, overlay)
         if (updated != item) changed = true
         updated
@@ -106,13 +148,14 @@ internal fun MetaPreview.overlayFromMap(
 }
 
 internal fun List<CatalogRow>.applyHydratedHomeOverlays(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    traceEvents: TraceMetadataEvents? = null
 ): List<CatalogRow> {
     if (overlaysByItemKey.isEmpty()) return this
 
     var changed = false
     val updatedRows = map { row ->
-        val updated = row.applyHydratedHomeOverlays(overlaysByItemKey)
+        val updated = row.applyHydratedHomeOverlays(overlaysByItemKey, traceEvents)
         if (updated !== row) changed = true
         updated
     }
