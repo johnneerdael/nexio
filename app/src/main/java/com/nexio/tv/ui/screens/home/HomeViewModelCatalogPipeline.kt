@@ -4264,26 +4264,30 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
 }
 
 /**
- * Merges a new overlay map with the previous one, preventing stale-clears.
+ * Guards against transient-empty overlay emissions without growing the map unboundedly.
  *
- * When a Trakt rail re-emits with a fresh item-key set, the store can briefly return an
- * empty map before the new overlays arrive. Discarding previous overlays at that point
- * causes visible "pop" as the UI briefly loses all artwork. This function retains any
- * previously built overlays and lets fresh ones override on key collision.
+ * When a rail observer re-subscribes with a different itemKey set, the store can briefly
+ * return an empty map before the new overlays arrive. Discarding previous overlays at that
+ * point causes visible "pop" as the UI briefly loses all artwork. This function retains the
+ * previous map only for that transient-empty window.
+ *
+ * Once a non-empty `next` arrives it represents the new authoritative view and REPLACES
+ * `previous` entirely. Unioning the two maps would cause unbounded growth: each
+ * rail-visibility change spawns a new observer with a different itemKey set, and merging
+ * would accumulate every prior key indefinitely.
  *
  * Rules:
- * - `next` empty  → return `previous` as-is (non-downgrade guard)
- * - `previous` empty → return `next` as-is (first-load fast-path)
- * - both non-empty  → merge with `next` overriding `previous` on collision
+ * - `next` empty AND `previous` non-empty → return `previous` as-is (transient-empty guard)
+ * - `next` non-empty → return `next` as-is (authoritative replacement)
  */
 internal fun preserveStaleOverlays(
     previous: Map<String, HydratedHomeOverlay>,
     next: Map<String, HydratedHomeOverlay>
 ): Map<String, HydratedHomeOverlay> {
-    if (next.isEmpty()) return previous
-    if (previous.isEmpty()) return next
-    val merged = HashMap<String, HydratedHomeOverlay>(previous.size + next.size)
-    merged.putAll(previous)
-    merged.putAll(next)
-    return merged
+    // Transient empty re-emit (e.g., during observer re-subscribe) must not flush
+    // hydrated overlays — keep `previous` until a non-empty emission arrives.
+    // Once the new authoritative view lands, REPLACE entirely; do not union, or the
+    // map grows unboundedly across observer re-subscriptions.
+    if (next.isEmpty() && previous.isNotEmpty()) return previous
+    return next
 }
