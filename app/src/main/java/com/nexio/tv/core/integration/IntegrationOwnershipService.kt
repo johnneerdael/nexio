@@ -52,12 +52,19 @@ class IntegrationOwnershipService @Inject constructor(
 
     suspend fun syncRails(namespacePrefix: String, memberships: List<RailMembership>) {
         val desiredKeys = memberships.map { it.rail.railKey }.toSet()
-        railStoreDao.railsWithPrefix(namespacePrefix).forEach { existing ->
+        // Snapshot the dao result and iterate by index. forEach's lambda would capture
+        // the iterator into our continuation across the suspending removeRail call,
+        // pinning the source List for the duration of the coroutine.
+        val existingRails = railStoreDao.railsWithPrefix(namespacePrefix).toList()
+        for (i in existingRails.indices) {
+            val existing = existingRails[i]
             if (existing.railKey !in desiredKeys) {
                 removeRail(existing.railKey)
             }
         }
-        memberships.forEach { upsertRailMembership(it) }
+        for (i in memberships.indices) {
+            upsertRailMembership(memberships[i])
+        }
     }
 
     suspend fun cleanupOrphansAfterRailRefresh(railKey: String) {
