@@ -199,13 +199,18 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     internal val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
+    // Post-truncation/layout-adjusted catalog rows used for rendering. Held outside
+    // [HomeUiState] (Plan B small Task 26) to avoid Compose SlotTable retention pinning
+    // both legacy CatalogRow instances and resolved Plan B rails simultaneously. UI consumes
+    // this StateFlow directly; do not re-introduce a catalogRows field on HomeUiState.
+    internal val _displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+    val displayCatalogRows: StateFlow<List<CatalogRow>> = _displayCatalogRows.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
     // Not a feedback loop: the consumer at observeResolvedRailRows() writes only
-    // resolvedRailRows back into _uiState; catalogRows is never written here, and
-    // distinctUntilChanged() short-circuits self-triggered re-emissions. Any future
-    // refactor that removes that guard or has the consumer mutate catalogRows will
-    // re-introduce the loop.
+    // resolvedRailRows back into _uiState; _displayCatalogRows is the catalogRows source
+    // here and is written from the catalog pipeline only. Any future refactor that has
+    // the consumer mutate _displayCatalogRows will re-introduce the loop.
     @OptIn(ExperimentalCoroutinesApi::class)
     private val resolvedRailRowsFlow: Flow<List<ResolvedRailRow>> =
         profileManager.activeProfileSession
@@ -221,7 +226,7 @@ class HomeViewModel @Inject constructor(
                 // in which case the cached projection is correct anyway.
                 resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
             }
-            .combine(_uiState.map { it.catalogRows }.distinctUntilChanged()) { resolvedItems, catalogRows ->
+            .combine(_displayCatalogRows) { resolvedItems, catalogRows ->
                 val byItemKey = resolvedItems.associateBy { it.itemKey }
                 val activeItemKeys = mutableSetOf<String>()
                 val activeCatalogIds = mutableSetOf<String>()
@@ -503,10 +508,10 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActiveHomeRails() {
         viewModelScope.launch {
-            _uiState
-                .map { state ->
+            _displayCatalogRows
+                .map { rows ->
                     val profileId = profileManager.activeProfileId.value
-                    state.catalogRows.map { row ->
+                    rows.map { row ->
                         RailKeyFactory.homeCatalog(profileId, row.catalogId)
                     }.toSet()
                 }

@@ -103,8 +103,11 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
         contentType.equals("series", ignoreCase = true)
 }
 
-internal fun hasRenderableHomeContent(uiState: HomeUiState): Boolean {
-    val hasCatalogContent = uiState.catalogRows.any { row ->
+internal fun hasRenderableHomeContent(
+    uiState: HomeUiState,
+    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>
+): Boolean {
+    val hasCatalogContent = catalogRows.any { row ->
         row.items.isNotEmpty() ||
             (uiState.homeLayout == HomeLayout.MODERN && row.isLoading)
     }
@@ -115,11 +118,12 @@ internal fun hasRenderableHomeContent(uiState: HomeUiState): Boolean {
 
 internal fun shouldShowHomeEmptyState(
     uiState: HomeUiState,
+    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     return !startupContentGateTimedOut &&
-        !shouldShowFullHomeLoadingGate(uiState, startupContentGateTimedOut) &&
-        !hasRenderableHomeContent(uiState) &&
+        !shouldShowFullHomeLoadingGate(uiState, catalogRows, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState, catalogRows) &&
         !uiState.isLoading &&
         uiState.error == null
 }
@@ -153,10 +157,11 @@ fun HomeScreen(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasRenderableContent = hasRenderableHomeContent(uiState)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
         mutableStateOf(false)
@@ -164,9 +169,10 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, startupContentGateTimedOut)
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, startupContentGateTimedOut)
     val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
         uiState = uiState,
+        catalogRows = displayCatalogRows,
         startupContentGateTimedOut = false
     )
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
@@ -291,7 +297,7 @@ fun HomeScreen(
                 )
             }
 
-            uiState.error == "No addons installed" && uiState.catalogRows.isEmpty() -> {
+            uiState.error == "No addons installed" && displayCatalogRows.isEmpty() -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -304,7 +310,7 @@ fun HomeScreen(
                 }
             }
 
-            uiState.error == "No catalog addons installed" && uiState.catalogRows.isEmpty() -> {
+            uiState.error == "No catalog addons installed" && displayCatalogRows.isEmpty() -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -317,7 +323,7 @@ fun HomeScreen(
                 }
             }
 
-            shouldShowHomeEmptyState(uiState, startupContentGateTimedOut) -> {
+            shouldShowHomeEmptyState(uiState, displayCatalogRows, startupContentGateTimedOut) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -330,7 +336,7 @@ fun HomeScreen(
                 }
             }
 
-            uiState.error != null && uiState.catalogRows.isEmpty() -> {
+            uiState.error != null && displayCatalogRows.isEmpty() -> {
                 ErrorState(
                     message = uiState.error ?: stringResource(R.string.error_generic),
                     onRetry = { viewModel.onEvent(HomeEvent.OnRetry) }
@@ -350,6 +356,7 @@ fun HomeScreen(
                         HomeLayout.CLASSIC -> ClassicHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
+                            displayCatalogRows = displayCatalogRows,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
                             onContinueWatchingClick = onContinueWatchingClick,
@@ -376,6 +383,7 @@ fun HomeScreen(
                         HomeLayout.MODERN -> ModernHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
+                            displayCatalogRows = displayCatalogRows,
                             idleScreensaverVisible = idleScreensaverVisible,
                             startupSplashVisible = startupSplashVisible,
                             externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
@@ -645,6 +653,7 @@ fun HomeScreen(
 private fun ClassicHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
@@ -660,6 +669,7 @@ private fun ClassicHomeRoute(
     }
     ClassicHomeContent(
         uiState = uiState,
+        catalogRows = displayCatalogRows,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
         trailerPreviewUrls = viewModel.trailerPreviewUrls,
@@ -747,6 +757,7 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     idleScreensaverVisible: Boolean,
     startupSplashVisible: Boolean,
     externalTrailerTakeoverActive: Boolean,
@@ -762,7 +773,7 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val modernContentState = remember(
-        uiState.catalogRows,
+        displayCatalogRows,
         uiState.continueWatchingItems,
         uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
@@ -788,7 +799,7 @@ private fun ModernHomeRoute(
         viewModel.trailerMetadataAvailableKeys
     ) {
         ModernHomeContentState(
-            catalogRows = uiState.catalogRows,
+            catalogRows = displayCatalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
             modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,

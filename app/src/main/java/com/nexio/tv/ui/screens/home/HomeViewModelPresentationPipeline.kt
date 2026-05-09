@@ -214,19 +214,18 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 @OptIn(FlowPreview::class)
 internal fun HomeViewModel.observeModernHomePresentationPipeline() {
     viewModelScope.launch {
-        _uiState
-            .map { state ->
-                ModernHomePresentationInput(
-                    catalogRows = state.catalogRows,
-                    resolvedRailRows = state.resolvedRailRows,
-                    continueWatchingItems = state.continueWatchingItems,
-                    useLandscapePosters = state.modernLandscapePostersEnabled,
-                    showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
-                    continueWatchingTitle = appContext.getString(R.string.continue_watching),
-                    airsDateTemplate = appContext.getString(R.string.cw_airs_date),
-                    upcomingLabel = appContext.getString(R.string.cw_upcoming)
-                )
-            }
+        combine(_uiState, _displayCatalogRows) { state, catalogRows ->
+            ModernHomePresentationInput(
+                catalogRows = catalogRows,
+                resolvedRailRows = state.resolvedRailRows,
+                continueWatchingItems = state.continueWatchingItems,
+                useLandscapePosters = state.modernLandscapePostersEnabled,
+                showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
+                continueWatchingTitle = appContext.getString(R.string.continue_watching),
+                airsDateTemplate = appContext.getString(R.string.cw_airs_date),
+                upcomingLabel = appContext.getString(R.string.cw_upcoming)
+            )
+        }
             .distinctUntilChanged()
             .debounce(80)
             .collectLatest { input ->
