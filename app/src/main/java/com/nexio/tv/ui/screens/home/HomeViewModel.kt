@@ -211,6 +211,16 @@ class HomeViewModel @Inject constructor(
     // heroItems field on HomeUiState.
     internal val _displayHeroItems = MutableStateFlow<List<MetaPreview>>(emptyList())
     val displayHeroItems: StateFlow<List<MetaPreview>> = _displayHeroItems.asStateFlow()
+    // Resolved hero projection (Plan B Task 9). Held outside [HomeUiState] for the
+    // same reason as [_displayHeroItems] and [_displayCatalogRows] — Compose's
+    // SnapshotStateRecord chain pins prior versions of every observed list field
+    // (CLAUDE.md hard rule #2). Composable consumers collect this StateFlow
+    // directly. Derived from observeHomeSurface(profileId) joined with
+    // [_displayHeroItems] by itemKey; per-item projections are memoized via
+    // [ResolvedDisplayProjectionCache.projectHero] and the outer list is
+    // memoized via [ResolvedDisplayProjectionCache.internHeroList].
+    internal val _resolvedHeroItems = MutableStateFlow<List<HeroDisplayItem>>(emptyList())
+    val resolvedHeroItems: StateFlow<List<HeroDisplayItem>> = _resolvedHeroItems.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
     // Not a feedback loop: the consumer at observeResolvedRailRows() writes only
@@ -256,6 +266,36 @@ class HomeViewModel @Inject constructor(
                 // the guard and pushing identical content into _uiState — which in
                 // turn defeats Compose stability skipping in the home tree.
                 projectionCache.internRailsList(rails)
+            }
+
+    // Plan B Task 9 — resolved-hero counterpart to [resolvedRailRowsFlow]. Joins
+    // the home surface's resolved items with the existing hero MetaPreview list
+    // (already populated by the legacy hero pipeline at [_displayHeroItems]) by
+    // itemKey, projects via [HeroDisplayItem.from] (memoized through
+    // projectionCache.projectHero), and stabilises the outer list reference via
+    // internHeroList. Profile switches are handled via flatMapLatest on the
+    // active profile session — same pattern as resolvedRailRowsFlow; the cache
+    // is rebound to the new profile's active item-key set on the next emission.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val resolvedHeroItemsFlow: Flow<List<HeroDisplayItem>> =
+        profileManager.activeProfileSession
+            .map { it.profileId }
+            .distinctUntilChanged()
+            .flatMapLatest { profileId ->
+                resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
+            }
+            .combine(_displayHeroItems) { resolvedItems, heroMetas ->
+                val byItemKey = resolvedItems.associateBy { it.itemKey }
+                val activeKeys = HashSet<String>(heroMetas.size)
+                val out = heroMetas.mapNotNull { meta ->
+                    val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
+                    byItemKey[itemKey]?.let { resolved ->
+                        activeKeys += itemKey
+                        projectionCache.projectHero(resolved)
+                    }
+                }
+                projectionCache.retainOnlyHeroItems(activeKeys)
+                projectionCache.internHeroList(out)
             }
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
@@ -492,6 +532,7 @@ class HomeViewModel @Inject constructor(
         loadContinueWatching()
         observeInstalledAddons()
         observeResolvedRailRows()
+        observeResolvedHeroItems()
     }
 
     private fun observeResolvedRailRows() {
@@ -499,6 +540,21 @@ class HomeViewModel @Inject constructor(
             .onEach { rails ->
                 _uiState.update { state ->
                     if (state.resolvedRailRows === rails) state else state.copy(resolvedRailRows = rails)
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    // Plan B Task 9 — collects [resolvedHeroItemsFlow] into [_resolvedHeroItems].
+    // The flow already memoizes the outer list via internHeroList, so this `===`
+    // guard short-circuits on unchanged content and avoids waking up StateFlow
+    // collectors. Mirrors observeResolvedRailRows() but writes to a dedicated
+    // StateFlow rather than HomeUiState (CLAUDE.md hard rule #2).
+    private fun observeResolvedHeroItems() {
+        resolvedHeroItemsFlow
+            .onEach { items ->
+                if (_resolvedHeroItems.value !== items) {
+                    _resolvedHeroItems.value = items
                 }
             }
             .launchIn(viewModelScope)
