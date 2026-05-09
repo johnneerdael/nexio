@@ -31,7 +31,11 @@ import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -136,8 +140,7 @@ class HomeCatalogSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ): Snapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() }
+            val raw = readSnapshotJson(profileId)?.takeIf { it.isNotBlank() }
                 ?: run {
                     traceSnapshot(
                         eventType = "home.snapshot_read",
@@ -216,7 +219,6 @@ class HomeCatalogSnapshotStore private constructor(
     ) {
         runCatching {
             val sanitizedSnapshot = snapshot.sanitize().repairArtworkWriteInvariants()
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
@@ -227,7 +229,13 @@ class HomeCatalogSnapshotStore private constructor(
                 add("heroItems", gson.toJsonTree(sanitizedSnapshot.heroItems))
                 add("orderedGroupKeys", gson.toJsonTree(sanitizedSnapshot.orderedGroupKeys))
             }
-            val success = prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
+            val success = runCatching {
+                writeSnapshotJsonToFile(gson.toJson(payload), snapshotFileFor(profileId))
+                true
+            }.getOrElse { error ->
+                Log.w(TAG, "Failed to persist home snapshot to file", error)
+                false
+            }
             traceSnapshot(
                 eventType = "home.snapshot_write",
                 payload = mapOf(
@@ -253,10 +261,77 @@ class HomeCatalogSnapshotStore private constructor(
 
     fun clear(profileId: Int = activeProfileId()) {
         runCatching {
+            val target = snapshotFileFor(profileId)
+            if (target.exists()) {
+                target.delete()
+            }
+            // Also remove the legacy SharedPreferences key if present (cleanup)
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(snapshotKey(profileId)).commit()
+            if (prefs.contains(snapshotKey(profileId))) {
+                prefs.edit().remove(snapshotKey(profileId)).apply()
+            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
+        }
+    }
+
+    private fun readSnapshotJson(profileId: Int): String? {
+        val file = snapshotFileFor(profileId)
+        if (file.exists()) {
+            return runCatching { file.readText() }.getOrNull()
+        }
+        // One-time migration: legacy SharedPreferences-backed payloads
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val legacy = prefs.getString(snapshotKey(profileId), null)
+        if (legacy != null) {
+            // Migrate: write legacy JSON to file, remove the legacy SharedPreferences key.
+            runCatching { writeSnapshotJsonToFile(legacy, file) }
+                .onFailure { error ->
+                    Log.w(TAG, "Failed to migrate legacy snapshot to file", error)
+                }
+            runCatching {
+                prefs.edit().remove(snapshotKey(profileId)).apply()
+            }
+        }
+        return legacy
+    }
+
+    private fun snapshotFileFor(profileId: Int): File {
+        val parent = File(context.filesDir, "home-catalog-snapshot-v1")
+        if (!parent.exists()) parent.mkdirs()
+        // Mirror the legacy SharedPreferences key shape: profile + language tag, so
+        // distinct app languages keep distinct snapshots without overwriting each other.
+        val sanitizedTag = currentLanguageTag()
+            .lowercase()
+            .replace(Regex("[^a-z0-9_-]"), "_")
+            .ifBlank { "unknown" }
+        return File(parent, "p${profileId}_${sanitizedTag}.json")
+    }
+
+    private fun writeSnapshotJsonToFile(json: String, target: File) {
+        var tempFile: File? = null
+        try {
+            val parent = target.parentFile
+            if (parent != null && !parent.exists()) parent.mkdirs()
+            tempFile = File(parent ?: File("."), "${target.name}.tmp")
+            tempFile.writeText(json)
+            try {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        } catch (error: Exception) {
+            tempFile?.delete()
+            throw error
         }
     }
 
