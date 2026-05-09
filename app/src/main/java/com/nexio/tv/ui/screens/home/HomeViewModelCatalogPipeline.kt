@@ -572,7 +572,12 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     ) {
         return
     }
-    uniqueItems.forEach { item ->
+    // Indexed iteration to avoid ArrayList$Itr capture in continuation. The
+    // suspending homeHydrationCoordinator.hydrate(...) call inside the body would
+    // otherwise save the iterator into the continuation's L$N field, pinning the
+    // uniqueItems list for the lifetime of the (possibly cancelled) coroutine.
+    for (i in uniqueItems.indices) {
+        val item = uniqueItems[i]
         if (!isNonPlaybackHomeWorkAllowed()) return
         if (
             homeHydrationScopeMismatchReason(
@@ -584,8 +589,8 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             return
         }
         val itemKey = item.homeOverlayItemKey()
-        if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
-        if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) return@forEach
+        if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) continue
+        if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) continue
         try {
             if (
                 homeHydrationScopeMismatchReason(
@@ -596,7 +601,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             ) {
                 return
             }
-            if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
+            if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) continue
             homeHydrationCoordinator.hydrate(
                 item = item,
                 trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
