@@ -214,50 +214,56 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         var refreshedCatalogCount = 0
         refreshMutex.withLock {
             val refreshedEntries = mutableListOf<SerialRefreshEntry>()
-            addons.forEach { addon ->
-                addon.catalogs
-                    .asSequence()
+            // Indexed iteration over addons + materialized catalog list. Suspending
+            // refreshCatalogToDisk inside the body would otherwise save the
+            // ArrayList$Itr (and the asSequence chain's iterator) into the
+            // continuation, pinning addons + catalogs lists for the lifetime of the
+            // (possibly cancelled) coroutine.
+            for (addonIndex in addons.indices) {
+                val addon = addons[addonIndex]
+                val catalogs = addon.catalogs
                     .filterNot { it.isSearchOnlyCatalog() }
                     .filterNot { isCatalogDisabled(addon, it) }
-                    .forEach { catalog ->
-                        val supportsSkip = catalog.supportsExtra("skip")
-                        val refreshed = catalogRepository.refreshCatalogToDisk(
-                            addonBaseUrl = addon.baseUrl,
-                            addonId = addon.id,
-                            addonName = addon.displayName,
-                            catalogId = catalog.id,
-                            catalogName = catalog.name,
-                            type = catalog.apiType,
-                            skip = 0,
-                            skipStep = catalog.skipStep(),
-                            supportsSkip = supportsSkip
-                        ).getOrNull() ?: return@forEach
-                        refreshedCatalogCount += 1
+                for (catIndex in catalogs.indices) {
+                    val catalog = catalogs[catIndex]
+                    val supportsSkip = catalog.supportsExtra("skip")
+                    val refreshed = catalogRepository.refreshCatalogToDisk(
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        addonName = addon.displayName,
+                        catalogId = catalog.id,
+                        catalogName = catalog.name,
+                        type = catalog.apiType,
+                        skip = 0,
+                        skipStep = catalog.skipStep(),
+                        supportsSkip = supportsSkip
+                    ).getOrNull() ?: continue
+                    refreshedCatalogCount += 1
 
-                        val catalogKey = "${addon.id}_${catalog.apiType}_${catalog.id}"
-                        val oldItems = getCurrentRow(catalogKey)?.items.orEmpty()
-                        val diff = diffCatalogItems(oldItems = oldItems, newItems = refreshed.items)
-                        val oldItemKeys = oldItems.asSequence()
-                            .map { "${it.apiType}:${it.id}" }
-                            .toSet()
-                        val retainedCount = refreshed.items.count { "${it.apiType}:${it.id}" in oldItemKeys }
-                        val newCount = diff.addedOrChanged.size
-                        val removedCount = diff.removed.size
+                    val catalogKey = "${addon.id}_${catalog.apiType}_${catalog.id}"
+                    val oldItems = getCurrentRow(catalogKey)?.items.orEmpty()
+                    val diff = diffCatalogItems(oldItems = oldItems, newItems = refreshed.items)
+                    val oldItemKeys = oldItems.asSequence()
+                        .map { "${it.apiType}:${it.id}" }
+                        .toSet()
+                    val retainedCount = refreshed.items.count { "${it.apiType}:${it.id}" in oldItemKeys }
+                    val newCount = diff.addedOrChanged.size
+                    val removedCount = diff.removed.size
 
-                        onLog(
-                            "catalog_refresh_stats",
-                            "catalogKey=$catalogKey total=${refreshed.items.size} retained=$retainedCount refreshed=$newCount removed=$removedCount"
-                        )
+                    onLog(
+                        "catalog_refresh_stats",
+                        "catalogKey=$catalogKey total=${refreshed.items.size} retained=$retainedCount refreshed=$newCount removed=$removedCount"
+                    )
 
-                        onCatalogReady(catalogKey, refreshed, diff)
-                        onLog("catalog_publish_ready", "catalogKey=$catalogKey")
+                    onCatalogReady(catalogKey, refreshed, diff)
+                    onLog("catalog_publish_ready", "catalogKey=$catalogKey")
 
-                        refreshedEntries += SerialRefreshEntry(
-                            catalogKey = catalogKey,
-                            row = refreshed,
-                            oldItems = oldItems,
-                            diff = diff
-                        )
+                    refreshedEntries += SerialRefreshEntry(
+                        catalogKey = catalogKey,
+                        row = refreshed,
+                        oldItems = oldItems,
+                        diff = diff
+                    )
                 }
             }
 
@@ -272,7 +278,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 onLog = onLog
             )
 
-            refreshedEntries.zip(hydratedRows).forEach { (entry, hydrated) ->
+            // Same: zip().forEach with suspending body captures both the zipped
+            // SequenceIterator AND the underlying List iterators.
+            for (entryIndex in refreshedEntries.indices) {
+                if (entryIndex >= hydratedRows.size) break
+                val entry = refreshedEntries[entryIndex]
+                val hydrated = hydratedRows[entryIndex]
                 if (hydrated != entry.row) {
                     val currentRow = getCurrentRow(entry.catalogKey)
                     val rowToPublish = currentRow?.let { current ->
@@ -292,8 +303,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     }
                 }
 
-                entry.diff.removed.forEach { removed ->
-                    val itemKey = "${removed.apiType}:${removed.id}"
+                val removed = entry.diff.removed
+                for (removedIndex in removed.indices) {
+                    val item = removed[removedIndex]
+                    val itemKey = "${item.apiType}:${item.id}"
                     if (!isItemReferencedElsewhere(itemKey, entry.catalogKey)) {
                         val urls = metadataDiskCacheStore.removeMetaEntriesForItem(itemKey)
                         evictImageUrls(urls)
