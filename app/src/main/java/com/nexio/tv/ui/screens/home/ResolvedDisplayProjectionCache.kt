@@ -21,6 +21,11 @@ import javax.inject.Singleton
 class ResolvedDisplayProjectionCache @Inject constructor() {
     private val itemCache = mutableMapOf<String, Pair<Long, ModernHomeRowItem>>()
     private val railCache = mutableMapOf<String, Pair<Int, ResolvedRailRow>>()
+    // Single-slot cache of the most recently emitted rails list. When the next
+    // emission produces a list whose elements are reference-identical to the
+    // prior emission's, we return the prior list reference so consumers'
+    // `===` guards (e.g. observeResolvedRailRows) skip redundant state updates.
+    private var lastRailsList: List<ResolvedRailRow>? = null
 
     @Synchronized
     fun projectItem(resolved: ResolvedDisplayItem): ModernHomeRowItem {
@@ -53,5 +58,29 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
     @Synchronized
     fun retainOnlyRails(activeCatalogIds: Set<String>) {
         railCache.keys.retainAll(activeCatalogIds)
+    }
+
+    /**
+     * Returns a [List] reference equal to [rails] in content but reusing the
+     * prior emission's list when every element is reference-identical and the
+     * list size is unchanged. This complements [projectRail] by also stabilising
+     * the OUTER list, so `_uiState.update { it.copy(resolvedRailRows = rails) }`
+     * can short-circuit via a `===` guard when nothing changed.
+     */
+    @Synchronized
+    fun internRailsList(rails: List<ResolvedRailRow>): List<ResolvedRailRow> {
+        val prior = lastRailsList
+        if (prior != null && prior.size == rails.size) {
+            var allSame = true
+            for (i in rails.indices) {
+                if (prior[i] !== rails[i]) {
+                    allSame = false
+                    break
+                }
+            }
+            if (allSame) return prior
+        }
+        lastRailsList = rails
+        return rails
     }
 }
