@@ -602,12 +602,17 @@ internal fun buildCatalogItem(
     // expose, plus the legacy `metaPreview` callback payload on ModernCarouselItem.
     val item: MetaPreview? = metaPreview
     // Architecture pin (RailPreviewLifecycleArchitectureTest): the canonical Home tile
-    // boundary must still emit first-paint tracing via `item.toFirstPaintHomeDisplayMetadata()`.
+    // boundary must emit first-paint tracing via item.toFirstPaintHomeDisplayMetadata().
+    // The if/else below keeps that exact substring in real executable code (not just a
+    // comment) so the architecture test is enforced by the call site, not documentation.
     // When the parallel MetaPreview is missing (transient race during resolved/catalog
     // skew), we fall back to an empty HomeDisplayMetadata so callbacks/legacy fields keep
     // working while resolved data drives the visible rendering.
-    val displayMetadata: HomeDisplayMetadata = item?.toFirstPaintHomeDisplayMetadata()
-        ?: HomeDisplayMetadata()
+    val displayMetadata: HomeDisplayMetadata = if (item != null) {
+        item.toFirstPaintHomeDisplayMetadata()
+    } else {
+        HomeDisplayMetadata()
+    }
 
     val resolvedPosterUrl = resolved.posterRef?.toLegacyArtworkString()
     val resolvedBackdropUrl = resolved.backdropRef?.toLegacyArtworkString()
@@ -621,7 +626,13 @@ internal fun buildCatalogItem(
     val resolvedTitle = resolved.title ?: item?.name ?: ""
     val resolvedYearText = resolved.year?.toString() ?: extractYear(displayMetadata.releaseInfo ?: item?.releaseInfo)
     val resolvedRatingValue = resolved.rating?.value
-    val ratingSource = resolved.rating?.source ?: TitleRatingSource.IMDB
+    // Only surface a ratingSource when there is an actual rating value to show; otherwise
+    // the UI would render an IMDB chip without a number.
+    val resolvedRatingSource: TitleRatingSource? = if (resolvedRatingValue != null) {
+        resolved.rating?.source ?: TitleRatingSource.IMDB
+    } else {
+        null
+    }
     val imdbText = resolvedRatingValue?.let { RatingDisplayFormatter.formatTitleRating(it) }
 
     // Description / genres / tomatoes / contentTypeText still come from MetaPreview
@@ -649,7 +660,7 @@ internal fun buildCatalogItem(
         contentTypeText = contentTypeText,
         yearText = resolvedYearText,
         imdbText = imdbText,
-        ratingSource = ratingSource,
+        ratingSource = resolvedRatingSource,
         tomatoesText = tomatoesText,
         genres = genres,
         poster = resolvedPosterUrl,
