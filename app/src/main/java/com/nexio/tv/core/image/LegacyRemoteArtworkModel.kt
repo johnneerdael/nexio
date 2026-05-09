@@ -4,6 +4,7 @@ import coil.key.Keyer
 import coil.request.Options
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.util.toHexLowercase
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Locale
@@ -64,7 +65,7 @@ private fun String.cacheIdentity(): String {
 
 private fun String.sha256(): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-    return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+    return digest.toHexLowercase()
 }
 
 class LegacyRemoteArtworkKeyer : Keyer<LegacyRemoteArtworkModel> {

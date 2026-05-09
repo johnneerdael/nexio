@@ -1,6 +1,7 @@
 package com.nexio.tv.core.trace
 
 import com.google.gson.Gson
+import com.nexio.tv.core.util.toHexLowercase
 import java.io.File
 import java.security.SecureRandom
 import java.util.UUID
@@ -64,6 +65,6 @@ class TraceSessionManager @Inject constructor(
 
     private fun randomSalt(): String {
         val bytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.toHexLowercase()
     }
 }

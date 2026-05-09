@@ -1,5 +1,6 @@
 package com.nexio.tv.core.trace
 
+import com.nexio.tv.core.util.toHexLowercase
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -8,6 +9,6 @@ object TraceHash {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(salt.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val raw = mac.doFinal(value.toByteArray(Charsets.UTF_8))
-        return raw.joinToString("") { "%02x".format(it) }.take(12)
+        return raw.toHexLowercase().take(12)
     }
 }

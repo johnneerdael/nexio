@@ -2,6 +2,7 @@ package com.nexio.tv.core.image
 
 import coil.key.Keyer
 import coil.request.Options
+import com.nexio.tv.core.util.toHexLowercase
 import java.net.URI
 import java.security.MessageDigest
 import java.util.LinkedHashMap
@@ -77,7 +78,7 @@ class SearchSuggestionPosterRegistry(
 
     private fun String.sha256(): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-        return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+        return digest.toHexLowercase()
     }
 
     private companion object {
