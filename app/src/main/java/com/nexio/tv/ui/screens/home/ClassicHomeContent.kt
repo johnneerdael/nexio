@@ -45,6 +45,7 @@ internal fun catalogRowContentType(row: com.nexio.tv.domain.model.CatalogRow): S
 fun ClassicHomeContent(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    heroItems: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
     trailerPreviewUrls: Map<String, String>,

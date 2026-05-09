@@ -105,7 +105,8 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
 
 internal fun hasRenderableHomeContent(
     uiState: HomeUiState,
-    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>
+    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    heroItems: List<MetaPreview>
 ): Boolean {
     val hasCatalogContent = catalogRows.any { row ->
         row.items.isNotEmpty() ||
@@ -113,17 +114,18 @@ internal fun hasRenderableHomeContent(
     }
     return hasCatalogContent ||
         uiState.continueWatchingItems.isNotEmpty() ||
-        uiState.heroItems.isNotEmpty()
+        heroItems.isNotEmpty()
 }
 
 internal fun shouldShowHomeEmptyState(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    heroItems: List<MetaPreview>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     return !startupContentGateTimedOut &&
-        !shouldShowFullHomeLoadingGate(uiState, catalogRows, startupContentGateTimedOut) &&
-        !hasRenderableHomeContent(uiState, catalogRows) &&
+        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItems, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState, catalogRows, heroItems) &&
         !uiState.isLoading &&
         uiState.error == null
 }
@@ -158,10 +160,11 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
+    val displayHeroItems by viewModel.displayHeroItems.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, displayHeroItems)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
         mutableStateOf(false)
@@ -169,10 +172,11 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, startupContentGateTimedOut)
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, displayHeroItems, startupContentGateTimedOut)
     val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
         uiState = uiState,
         catalogRows = displayCatalogRows,
+        heroItems = displayHeroItems,
         startupContentGateTimedOut = false
     )
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
@@ -323,7 +327,7 @@ fun HomeScreen(
                 }
             }
 
-            shouldShowHomeEmptyState(uiState, displayCatalogRows, startupContentGateTimedOut) -> {
+            shouldShowHomeEmptyState(uiState, displayCatalogRows, displayHeroItems, startupContentGateTimedOut) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -357,6 +361,7 @@ fun HomeScreen(
                             viewModel = viewModel,
                             uiState = uiState,
                             displayCatalogRows = displayCatalogRows,
+                            displayHeroItems = displayHeroItems,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
                             onContinueWatchingClick = onContinueWatchingClick,
@@ -653,6 +658,7 @@ private fun ClassicHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
     displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    displayHeroItems: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
@@ -669,6 +675,7 @@ private fun ClassicHomeRoute(
     ClassicHomeContent(
         uiState = uiState,
         catalogRows = displayCatalogRows,
+        heroItems = displayHeroItems,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
         trailerPreviewUrls = viewModel.trailerPreviewUrls,
