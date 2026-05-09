@@ -34,9 +34,9 @@ fun defaultIntegrationPolicyRegistry(): IntegrationPolicyRegistry =
             IntegrationProvider.SHADOW_COLLECTOR to IntegrationProviderPolicy(),
             IntegrationProvider.GITHUB to IntegrationProviderPolicy(),
             IntegrationProvider.YOUTUBE_TRAILER to IntegrationProviderPolicy(),
-            IntegrationProvider.OPEN_SUBTITLES to IntegrationProviderPolicy(),
-            IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD to IntegrationProviderPolicy(),
+            IntegrationProvider.OPEN_SUBTITLES to IntegrationProviderPolicy(allowDuringPlayback = true),
+            IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD to IntegrationProviderPolicy(allowDuringPlayback = true),
             IntegrationProvider.SUBTITLE_TRANSLATION to IntegrationProviderPolicy(allowDuringPlayback = true),
-            IntegrationProvider.WYZIE_SUBTITLES to IntegrationProviderPolicy()
+            IntegrationProvider.WYZIE_SUBTITLES to IntegrationProviderPolicy(allowDuringPlayback = true)
         )
     )
