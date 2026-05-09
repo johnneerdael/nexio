@@ -3,6 +3,9 @@ package com.nexio.tv.core.tvdb
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbSeasonBaseRecord
+import com.nexio.tv.data.remote.api.TvdbSeasonExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbSeasonTypeRecord
 import com.nexio.tv.data.remote.api.TvdbTrailerRecord
 import com.nexio.tv.domain.model.TvdbSettings
 import io.mockk.coEvery
@@ -52,6 +55,60 @@ class TvdbTrailerResolverTest {
         coVerify(exactly = 1) {
             provider.fetchSeriesExtended(tvdbId = 100, meta = null, short = false)
         }
+    }
+
+    @Test
+    fun `title trailer defaults to latest season record trailer when tvdb lists multiple seasons`() = runTest {
+        val settingsDataStore = mockk<TvdbSettingsDataStore>()
+        every { settingsDataStore.settings } returns MutableStateFlow(TvdbSettings(enabled = true))
+        val identityService = mockk<TvdbIdentityService>()
+        coEvery {
+            identityService.resolveSeriesByTvdbId(100)
+        } returns TvdbSeriesIdentity(tvdbId = 100)
+        val provider = mockk<TvdbIntegrationProvider>()
+        coEvery {
+            provider.fetchSeriesExtended(tvdbId = 100, meta = null, short = false)
+        } returns TvdbSeriesExtendedRecord(
+            id = 100,
+            trailers = listOf(
+                TvdbTrailerRecord(name = "Series Trailer", url = "https://youtu.be/aaaaaaaaaaa")
+            ),
+            seasons = listOf(
+                tvdbSeason(id = 101, number = 1),
+                tvdbSeason(id = 102, number = 2),
+                tvdbSeason(id = 103, number = 3)
+            )
+        )
+        coEvery {
+            provider.fetchSeasonExtended(103)
+        } returns TvdbSeasonExtendedRecord(
+            id = 103,
+            number = 3,
+            trailers = listOf(
+                TvdbTrailerRecord(name = "Trailer", url = "https://youtu.be/ccccccccccc")
+            )
+        )
+        coEvery { provider.fetchSeasonExtended(102) } returns null
+        coEvery { provider.fetchSeasonExtended(101) } returns null
+        val resolver = TvdbTrailerResolver(
+            tvdbSettingsDataStore = settingsDataStore,
+            tvdbIdentityService = identityService,
+            tvdbIntegrationProvider = provider,
+            tvdbTrailerMapper = TvdbTrailerMapper()
+        )
+
+        val result = resolver.resolveTitleTrailer(
+            contentId = "tvdb:100",
+            type = "tv",
+            title = "Example",
+            year = "2026"
+        )
+
+        assertTrue(result is TvdbTrailerLookupResult.ResolvedYouTube)
+        assertEquals("ccccccccccc", (result as TvdbTrailerLookupResult.ResolvedYouTube).videoId)
+        coVerify(exactly = 1) { provider.fetchSeasonExtended(103) }
+        coVerify(exactly = 0) { provider.fetchSeasonExtended(102) }
+        coVerify(exactly = 0) { provider.fetchSeasonExtended(101) }
     }
 
     @Test
@@ -148,4 +205,10 @@ class TvdbTrailerResolverTest {
 
         assertEquals(TvdbTrailerLookupResult.Missing, result)
     }
+
+    private fun tvdbSeason(id: Int, number: Int) = TvdbSeasonBaseRecord(
+        id = id,
+        number = number,
+        type = TvdbSeasonTypeRecord(name = "Aired Order")
+    )
 }

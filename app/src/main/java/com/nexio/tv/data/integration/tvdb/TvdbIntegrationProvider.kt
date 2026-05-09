@@ -35,6 +35,7 @@ import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbSeasonExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.data.integration.metadata.LocalizationPolicy
 import com.nexio.tv.data.integration.metadata.LocalizedEpisodeBundle
@@ -264,6 +265,12 @@ class TvdbIntegrationProvider @Inject constructor(
     suspend fun fetchSeriesBase(tvdbId: Int): TvdbSeriesBaseRecord? {
         return callAuthenticated(TvdbApiShapes.SERIES_BASE, "tvdb.fetch_series_base", IntegrationWorkClass.USER_VISIBLE) { authorization ->
             tvdbApi.getSeriesBase(authorization, tvdbId)
+        }?.data
+    }
+
+    suspend fun fetchSeasonExtended(seasonId: Int): TvdbSeasonExtendedRecord? {
+        return callAuthenticated(TvdbApiShapes.SEASON_EXTENDED, "tvdb.fetch_season_extended", IntegrationWorkClass.USER_VISIBLE) { authorization ->
+            tvdbApi.getSeasonExtended(authorization, seasonId)
         }?.data
     }
 
