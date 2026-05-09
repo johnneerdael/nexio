@@ -31,6 +31,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 class HomeCatalogSnapshotStoreTest {
 
@@ -1201,8 +1203,17 @@ class HomeCatalogSnapshotStoreTest {
             staleUntilMs = 300
         )
 
-    private fun persistedSnapshotJson(prefs: InMemorySharedPreferences): String =
-        prefs.getAll().values.single() as String
+    private fun persistedSnapshotJson(prefs: InMemorySharedPreferences): String {
+        val filesDir = filesDirsByPrefs[prefs]
+            ?: error("No filesDir registered for InMemorySharedPreferences instance")
+        val snapshotDir = File(filesDir, "home-catalog-snapshot-v1")
+        val files = snapshotDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") }
+            ?: emptyList()
+        require(files.size == 1) {
+            "Expected exactly one snapshot file in ${snapshotDir.absolutePath}, found ${files.map { it.name }}"
+        }
+        return files.single().readText()
+    }
 
     private fun assertClearedPosterFields(snapshot: HomeCatalogSnapshotStore.Snapshot?) {
         val items = buildList {
@@ -1276,11 +1287,18 @@ class HomeCatalogSnapshotStoreTest {
         }
     }
 
+    private val filesDirsByPrefs = mutableMapOf<InMemorySharedPreferences, File>()
+
     private fun mockContext(
         snapshotPrefs: InMemorySharedPreferences,
         expectedName: String,
         localePrefs: InMemorySharedPreferences
     ): Context {
+        val filesDir = filesDirsByPrefs.getOrPut(snapshotPrefs) {
+            Files.createTempDirectory("home-catalog-snapshot-test").toFile().also { dir ->
+                dir.deleteOnExit()
+            }
+        }
         return mockk {
             every { getSharedPreferences(any(), Context.MODE_PRIVATE) } answers {
                 when (firstArg<String>()) {
@@ -1289,6 +1307,7 @@ class HomeCatalogSnapshotStoreTest {
                     else -> throw IllegalArgumentException("Unexpected prefs ${firstArg<String>()}")
                 }
             }
+            every { this@mockk.filesDir } returns filesDir
         }
     }
 
