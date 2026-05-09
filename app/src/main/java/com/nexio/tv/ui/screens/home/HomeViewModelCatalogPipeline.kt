@@ -700,7 +700,9 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
             if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, overlays)) {
                 return@collectLatest
             }
-            hydratedHomeOverlaysByItemKey.value = overlays
+            hydratedHomeOverlaysByItemKey.update { previous ->
+                preserveStaleOverlays(previous = previous, next = overlays)
+            }
             scheduleUpdateCatalogRows()
         }
     }
@@ -4257,4 +4259,29 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             )
         }
     }
+}
+
+/**
+ * Merges a new overlay map with the previous one, preventing stale-clears.
+ *
+ * When a Trakt rail re-emits with a fresh item-key set, the store can briefly return an
+ * empty map before the new overlays arrive. Discarding previous overlays at that point
+ * causes visible "pop" as the UI briefly loses all artwork. This function retains any
+ * previously built overlays and lets fresh ones override on key collision.
+ *
+ * Rules:
+ * - `next` empty  → return `previous` as-is (non-downgrade guard)
+ * - `previous` empty → return `next` as-is (first-load fast-path)
+ * - both non-empty  → merge with `next` overriding `previous` on collision
+ */
+internal fun preserveStaleOverlays(
+    previous: Map<String, HydratedHomeOverlay>,
+    next: Map<String, HydratedHomeOverlay>
+): Map<String, HydratedHomeOverlay> {
+    if (next.isEmpty()) return previous
+    if (previous.isEmpty()) return next
+    val merged = HashMap<String, HydratedHomeOverlay>(previous.size + next.size)
+    merged.putAll(previous)
+    merged.putAll(next)
+    return merged
 }
