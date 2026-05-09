@@ -1,10 +1,19 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.homeDisplayItemKey
+
 internal fun buildModernHomePresentation(
     input: ModernHomePresentationInput,
     cache: ModernCarouselRowBuildCache
 ): ModernHomePresentationState {
     val visibleCatalogRows = modernVisibleCatalogRows(input.catalogRows)
+    // Index catalog rows by catalogId so each ResolvedRailRow can locate its parallel
+    // CatalogRow (for addonBaseUrl, addonId, focus key context, and the per-item
+    // MetaPreview lookup used to populate ModernCarouselItem.metaPreview for callbacks).
+    val catalogRowByCatalogId = LinkedHashMap<String, CatalogRow_>(visibleCatalogRows.size).also { map ->
+        visibleCatalogRows.forEach { row -> map[row.catalogId] = row }
+    }
     val rows = buildList {
         val activeCatalogKeys = LinkedHashSet<String>(visibleCatalogRows.size)
 
@@ -47,75 +56,110 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingRow = null
         }
 
-        visibleCatalogRows.forEachIndexed { index, row ->
-            val rowKey = catalogRowKey(row)
+        // Iterate ResolvedRailRows (the rendering authority). For each rail, resolve the
+        // parallel CatalogRow so we can: (1) build a stable rowKey + apply addon context,
+        // (2) pull MetaPreview values to populate ModernCarouselItem.metaPreview for
+        // callback compatibility (focus, watched-state, long press, preload).
+        var globalIndex = 0
+        input.resolvedRailRows.forEach { resolvedRail ->
+            val sourceRow = catalogRowByCatalogId[resolvedRail.catalogId] ?: return@forEach
+            val rowKey = catalogRowKey(sourceRow)
             activeCatalogKeys += rowKey
+
             val cached = cache.catalogRows[rowKey]
+            // Resolved authority gates cache reuse: the rail row instance returned by
+            // ResolvedDisplayProjectionCache is stable when content is unchanged, so a
+            // referential identity check on the projection is the right invalidation key.
+            // We additionally pin the source CatalogRow to keep MetaPreview lookups (used
+            // for ModernCarouselItem.metaPreview) consistent with the resolved snapshot.
             val canReuseMappedRow =
                 cached != null &&
-                    cached.source == row &&
+                    cached.source === sourceRow &&
                     cached.useLandscapePosters == input.useLandscapePosters &&
-                    cached.showCatalogTypeSuffix == input.showCatalogTypeSuffix
+                    cached.showCatalogTypeSuffix == input.showCatalogTypeSuffix &&
+                    cached.resolvedRail === resolvedRail
 
             val mappedRow = if (canReuseMappedRow) {
                 val cachedMappedRow = checkNotNull(cached).mappedRow
-                if (cachedMappedRow.globalRowIndex == index) {
+                if (cachedMappedRow.globalRowIndex == globalIndex) {
                     cachedMappedRow
                 } else {
-                    cachedMappedRow.copy(globalRowIndex = index)
+                    cachedMappedRow.copy(globalRowIndex = globalIndex)
                 }
             } else {
+                // Build a per-rail MetaPreview lookup: resolved itemKey -> MetaPreview
+                // (homeDisplayItemKey of (apiType, id)). MetaPreview may be missing during
+                // a transient race; buildCatalogItem tolerates null.
+                val metaByItemKey = HashMap<String, MetaPreview>(sourceRow.items.size)
+                sourceRow.items.forEach { meta ->
+                    metaByItemKey[homeDisplayItemKey(meta.apiType, meta.id)] = meta
+                }
+
                 val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
                 val rowItemCache = cache.catalogItemCache.getOrPut(rowKey) { mutableMapOf() }
+                val activeItemCacheKeys = mutableSetOf<String>()
+
                 HeroCarouselRow(
                     key = rowKey,
                     title = catalogRowTitle(
-                        row = row,
+                        row = sourceRow,
                         showCatalogTypeSuffix = input.showCatalogTypeSuffix
                     ),
-                    globalRowIndex = index,
-                    catalogId = row.catalogId,
-                    addonId = row.addonId,
-                    apiType = row.apiType,
-                    supportsSkip = row.supportsSkip,
-                    hasMore = row.hasMore,
-                    isLoading = row.isLoading,
-                    items = row.items.map { item ->
-                        val occurrence = rowItemOccurrenceCounts.getOrDefault(item.id, 0)
-                        rowItemOccurrenceCounts[item.id] = occurrence + 1
-                        val cacheKey = "${item.id}_$occurrence"
+                    globalRowIndex = globalIndex,
+                    catalogId = sourceRow.catalogId,
+                    addonId = sourceRow.addonId,
+                    apiType = sourceRow.apiType,
+                    supportsSkip = sourceRow.supportsSkip,
+                    hasMore = sourceRow.hasMore,
+                    isLoading = sourceRow.isLoading,
+                    items = resolvedRail.items.map { resolvedItem ->
+                        val metaPreview = metaByItemKey[resolvedItem.itemKey]
+                        val itemIdForKey = metaPreview?.id ?: resolvedItem.contentId
+                        val occurrence = rowItemOccurrenceCounts.getOrDefault(itemIdForKey, 0)
+                        rowItemOccurrenceCounts[itemIdForKey] = occurrence + 1
+                        val cacheKey = "${itemIdForKey}_$occurrence"
+                        activeItemCacheKeys += cacheKey
                         val cachedItem = rowItemCache[cacheKey]
                         if (cachedItem != null &&
-                            cachedItem.source == item &&
+                            cachedItem.resolvedSource === resolvedItem &&
+                            cachedItem.metaSource === metaPreview &&
                             cachedItem.useLandscapePosters == input.useLandscapePosters
                         ) {
                             cachedItem.carouselItem
                         } else {
                             val built = buildCatalogItem(
-                                item = item,
-                                row = row,
+                                resolved = resolvedItem,
+                                metaPreview = metaPreview,
+                                row = sourceRow,
                                 useLandscapePosters = input.useLandscapePosters,
                                 occurrence = occurrence,
                                 previousCachedItem = cachedItem?.carouselItem
                             )
                             rowItemCache[cacheKey] = CachedCarouselItem(
-                                source = item,
+                                resolvedSource = resolvedItem,
+                                metaSource = metaPreview,
                                 useLandscapePosters = input.useLandscapePosters,
                                 carouselItem = built
                             )
                             built
                         }
                     }
-                )
+                ).also {
+                    // Trim per-rail cache to active items only (drop entries that disappeared
+                    // when the rail recomposes with fewer/different items).
+                    rowItemCache.keys.retainAll(activeItemCacheKeys)
+                }
             }
 
             cache.catalogRows[rowKey] = ModernCatalogRowBuildCacheEntry(
-                source = row,
+                source = sourceRow,
+                resolvedRail = resolvedRail,
                 useLandscapePosters = input.useLandscapePosters,
                 showCatalogTypeSuffix = input.showCatalogTypeSuffix,
                 mappedRow = mappedRow
             )
             add(mappedRow)
+            globalIndex += 1
         }
 
         cache.catalogRows.keys.retainAll(activeCatalogKeys)
@@ -127,3 +171,8 @@ internal fun buildModernHomePresentation(
         lookups = buildCarouselRowLookups(rows)
     )
 }
+
+// Type alias to avoid an extra import for CatalogRow at the top of this file. The
+// alias keeps the buildModernHomePresentation body readable without re-importing the
+// already-resolved type from buildCatalogItem's signature.
+private typealias CatalogRow_ = com.nexio.tv.domain.model.CatalogRow

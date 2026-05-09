@@ -218,6 +218,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
             .map { state ->
                 ModernHomePresentationInput(
                     catalogRows = state.catalogRows,
+                    resolvedRailRows = state.resolvedRailRows,
                     continueWatchingItems = state.continueWatchingItems,
                     useLandscapePosters = state.modernLandscapePostersEnabled,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
