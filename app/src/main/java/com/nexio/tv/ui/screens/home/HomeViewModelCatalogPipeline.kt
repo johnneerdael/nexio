@@ -2906,8 +2906,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
             rows = _uiState.value.catalogRows,
             overlaysByItemKey = currentHydratedHomeOverlays,
-            resolveTrailer = null,
-            traceEvents = traceEvents
+            resolveTrailer = null
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
             surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
@@ -3005,8 +3004,7 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
         rows = rows,
         overlaysByItemKey = overlaysByItemKey,
-        resolveTrailer = null,
-        traceEvents = traceEvents
+        resolveTrailer = null
     )
     val published = resolvedDisplaySurfaceRepository.publishResolvedItems(
         surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
