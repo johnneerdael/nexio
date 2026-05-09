@@ -1,12 +1,23 @@
 package com.nexio.tv.ui.screens.home
 
 import android.view.KeyEvent
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -160,19 +171,33 @@ class ModernHomeModelsTest {
             imdbRating = null,
             genres = emptyList()
         )
+        val originalResolved = resolvedRowItem(
+            meta = original,
+            backdropUrl = "original-backdrop",
+            logoUrl = "original-logo",
+            posterUrl = "poster"
+        )
         val cached = buildCatalogItem(
-            item = original,
+            resolved = originalResolved,
+            metaPreview = original,
             row = row,
             useLandscapePosters = true,
             occurrence = 0
         )
-        val enriched = original.copy(
+        val enrichedResolved = resolvedRowItem(
+            meta = original,
+            backdropUrl = "enriched-backdrop",
+            logoUrl = "enriched-logo",
+            posterUrl = "poster"
+        )
+        val enrichedMeta = original.copy(
             background = "enriched-backdrop",
             logo = "enriched-logo"
         )
 
         val rebuilt = buildCatalogItem(
-            item = enriched,
+            resolved = enrichedResolved,
+            metaPreview = enrichedMeta,
             row = row,
             useLandscapePosters = true,
             occurrence = 0,
@@ -183,6 +208,51 @@ class ModernHomeModelsTest {
         assertEquals("original-logo", rebuilt.heroPreview.frozenLogoUrl)
         assertEquals("enriched-backdrop", rebuilt.heroPreview.backdrop)
         assertEquals("enriched-logo", rebuilt.heroPreview.logo)
+    }
+
+    private fun resolvedRowItem(
+        meta: MetaPreview,
+        posterUrl: String? = meta.poster,
+        backdropUrl: String? = meta.background,
+        logoUrl: String? = meta.logo
+    ): ModernHomeRowItem {
+        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
+        return ModernHomeRowItem.from(
+            ResolvedDisplayItem(
+                itemKey = itemKey,
+                contentId = meta.id,
+                parentId = meta.id,
+                itemType = meta.type,
+                mediaKind = MetadataMediaKind.UNKNOWN,
+                canonicalProvider = null,
+                canonicalId = null,
+                imdbId = null,
+                stableIds = ProviderIds(),
+                display = ResolvedDisplayFields(
+                    title = meta.name,
+                    originalTitle = null,
+                    year = null,
+                    releaseDate = null,
+                    overview = meta.description,
+                    genres = meta.genres,
+                    runtimeText = null
+                ),
+                artwork = ArtworkBundle(
+                    poster = posterUrl?.takeIf { it.isNotBlank() }
+                        ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.POSTER, ArtworkTrace.empty()) },
+                    backdrop = backdropUrl?.takeIf { it.isNotBlank() }
+                        ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.BACKDROP, ArtworkTrace.empty()) },
+                    logo = logoUrl?.takeIf { it.isNotBlank() }
+                        ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.LOGO, ArtworkTrace.empty()) }
+                ),
+                rating = null,
+                trailer = TrailerDisplayState(),
+                hydrationState = HydrationState.PREVIEW_ONLY,
+                sourceTrace = emptyList(),
+                updatedAtMs = 0L,
+                slots = null
+            )
+        )
     }
 
     @Test
