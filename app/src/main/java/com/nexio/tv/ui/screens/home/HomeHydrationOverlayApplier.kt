@@ -13,7 +13,8 @@ import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal fun CatalogRow.applyHydratedHomeOverlays(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    appliedOverlayHashes: MutableMap<String, String>? = null
 ): CatalogRow {
     if (overlaysByItemKey.isEmpty()) return this
     val nowMs = System.currentTimeMillis()
@@ -21,11 +22,10 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
     var changed = false
     val updatedItems = items.map { item ->
         val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
-        // Cheap short-circuit: if the row's MetaPreview already projects to a HomeDisplayMetadata
-        // whose displayHash matches the overlay's displayHash, the apply seam has nothing new to
-        // do. Skip slot conversion + reducer + down-projection. Drops per-sweep allocation cost
-        // from O(items-with-overlays) to O(items-with-changed-overlays) on Modern Home.
-        if (item.displayHashForHomeOverlay() == overlay.displayHash) {
+        val itemKey = item.homeOverlayItemKey()
+        // Cache short-circuit: if this row's last-applied overlay hash matches the
+        // current overlay's hash, the projection is already in MetaPreview. Skip.
+        if (appliedOverlayHashes != null && appliedOverlayHashes[itemKey] == overlay.displayHash) {
             return@map item
         }
         val firstPaintSlots = item.toFirstPaintSlots(nowMs)
@@ -38,6 +38,8 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
         )
         val updated = item.applyMergedSlots(merged, overlay)
         if (updated != item) changed = true
+        // Record the hash AFTER successful application so subsequent sweeps short-circuit.
+        appliedOverlayHashes?.set(itemKey, overlay.displayHash)
         updated
     }
 
@@ -113,13 +115,14 @@ internal fun MetaPreview.overlayFromMap(
 }
 
 internal fun List<CatalogRow>.applyHydratedHomeOverlays(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    appliedOverlayHashes: MutableMap<String, String>? = null
 ): List<CatalogRow> {
     if (overlaysByItemKey.isEmpty()) return this
 
     var changed = false
     val updatedRows = map { row ->
-        val updated = row.applyHydratedHomeOverlays(overlaysByItemKey)
+        val updated = row.applyHydratedHomeOverlays(overlaysByItemKey, appliedOverlayHashes)
         if (updated !== row) changed = true
         updated
     }

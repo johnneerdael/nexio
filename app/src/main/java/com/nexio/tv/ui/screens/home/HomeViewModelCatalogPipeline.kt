@@ -624,7 +624,8 @@ internal fun composeHydratedHomeOverlaySnapshot(
     fullRows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
     overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-    heroTmdbSettings: TmdbSettings = TmdbSettings()
+    heroTmdbSettings: TmdbSettings = TmdbSettings(),
+    appliedOverlayHashes: MutableMap<String, String>? = null
 ): HydratedHomeOverlaySnapshotComponents {
     if (overlaysByItemKey.isEmpty()) {
         return HydratedHomeOverlaySnapshotComponents(
@@ -635,8 +636,8 @@ internal fun composeHydratedHomeOverlaySnapshot(
     }
 
     return HydratedHomeOverlaySnapshotComponents(
-        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey),
-        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey),
+        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey, appliedOverlayHashes),
+        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey, appliedOverlayHashes),
         heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(
             overlaysByItemKey = overlaysByItemKey,
             tmdbSettings = heroTmdbSettings
@@ -2840,7 +2841,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         fullRows = updateResult.fullRows,
         heroItems = updateResult.heroItems,
         overlaysByItemKey = currentHydratedHomeOverlays,
-        heroTmdbSettings = currentTmdbSettings
+        heroTmdbSettings = currentTmdbSettings,
+        appliedOverlayHashes = appliedOverlayHashes
     )
     val displayRows = composedOverlaySnapshot.displayRows
     val baseHeroItems = composedOverlaySnapshot.heroItems
@@ -3063,7 +3065,8 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         fullRows = filteredSnapshot.fullCatalogRows,
         heroItems = filteredSnapshot.heroItems,
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
-        heroTmdbSettings = currentTmdbSettings
+        heroTmdbSettings = currentTmdbSettings,
+        appliedOverlayHashes = appliedOverlayHashes
     )
     _fullCatalogRows.value = composedSnapshot.fullRows
     _uiState.update { state ->
