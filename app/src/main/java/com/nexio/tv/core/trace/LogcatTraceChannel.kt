@@ -20,6 +20,7 @@ enum class LogcatTraceChannel(val tag: String) {
             eventType.startsWith("media_clip.") -> META_ROUTE
             eventType.startsWith("home.hydration_") -> META_ROUTE
             eventType.startsWith("home.snapshot_") -> META_ROUTE
+            eventType.startsWith("home.display_") -> META_ROUTE
             eventType.startsWith("screensaver.") -> META_ROUTE
             eventType.startsWith("runtime.") -> INT_RUNTIME
             eventType.startsWith("http.") -> INT_RUNTIME
