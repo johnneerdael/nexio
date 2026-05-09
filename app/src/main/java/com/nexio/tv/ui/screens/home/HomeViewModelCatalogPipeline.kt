@@ -165,7 +165,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
 
         withContext(Dispatchers.Main.immediate) {
             val hasRenderedContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
-                _uiState.value.heroItems.isNotEmpty()
+                _displayHeroItems.value.isNotEmpty()
             if (hasRenderedContent) {
                 return@withContext
             }
@@ -280,9 +280,9 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogOrderDiagnosticsSignature = null
     _fullCatalogRows.value = emptyList()
     _displayCatalogRows.value = emptyList()
+    _displayHeroItems.value = emptyList()
     _uiState.update { state ->
         state.copy(
-            heroItems = emptyList(),
             heroCatalogKeys = emptyList(),
             continueWatchingItems = emptyList(),
             traktUpNextItems = emptyList(),
@@ -2152,7 +2152,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
 
     try {
         val hasRestoredContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
-            _uiState.value.heroItems.isNotEmpty()
+            _displayHeroItems.value.isNotEmpty()
         val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
             catalogsLoadInProgress = catalogsLoadInProgress,
             traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
@@ -2869,7 +2869,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     truncatedRowCache.clear()
     truncatedRowCache.putAll(nextTruncatedRowCache)
 
-    val hasCurrentRenderedContent = hasRenderableHomeContent(currentState, _displayCatalogRows.value)
+    val hasCurrentRenderedContent = hasRenderableHomeContent(
+        currentState,
+        _displayCatalogRows.value,
+        _displayHeroItems.value
+    )
     val shouldKeepVisibleContent =
         hasCurrentRenderedContent &&
             displayRows.isEmpty() &&
@@ -3075,6 +3079,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     )
     _fullCatalogRows.value = composedSnapshot.fullRows
     _displayCatalogRows.value = composedSnapshot.displayRows
+    _displayHeroItems.value = composedSnapshot.heroItems
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(
@@ -3087,7 +3092,6 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         }
 
         state.copy(
-            heroItems = composedSnapshot.heroItems,
             gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
             isLoading = false,
             error = null

@@ -205,6 +205,12 @@ class HomeViewModel @Inject constructor(
     // this StateFlow directly; do not re-introduce a catalogRows field on HomeUiState.
     internal val _displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val displayCatalogRows: StateFlow<List<CatalogRow>> = _displayCatalogRows.asStateFlow()
+    // Hero items held outside [HomeUiState] (mirrors small Task 26 catalogRows pattern) so
+    // Compose's SnapshotStateRecord history does not pin prior MetaPreview lists alongside
+    // the current set. UI consumes this StateFlow directly; do not re-introduce a
+    // heroItems field on HomeUiState.
+    internal val _displayHeroItems = MutableStateFlow<List<MetaPreview>>(emptyList())
+    val displayHeroItems: StateFlow<List<MetaPreview>> = _displayHeroItems.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
     // Not a feedback loop: the consumer at observeResolvedRailRows() writes only
