@@ -383,7 +383,6 @@ fun HomeScreen(
                         HomeLayout.MODERN -> ModernHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
-                            displayCatalogRows = displayCatalogRows,
                             idleScreensaverVisible = idleScreensaverVisible,
                             startupSplashVisible = startupSplashVisible,
                             externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
@@ -757,7 +756,6 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
-    displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     idleScreensaverVisible: Boolean,
     startupSplashVisible: Boolean,
     externalTrailerTakeoverActive: Boolean,
@@ -773,7 +771,6 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val modernContentState = remember(
-        displayCatalogRows,
         uiState.continueWatchingItems,
         uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
@@ -799,7 +796,6 @@ private fun ModernHomeRoute(
         viewModel.trailerMetadataAvailableKeys
     ) {
         ModernHomeContentState(
-            catalogRows = displayCatalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
             modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
