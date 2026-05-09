@@ -523,13 +523,13 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
     if (changed) {
         lastCatalogComputationSignature = null
         scheduleUpdateCatalogRows()
+        resolvedDisplaySurfaceRepository.publishResolvedItems(
+            surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = expectedProfileSession,
+            items = listOf(overlay.toResolvedDisplayItem()),
+            replace = false
+        )
     }
-    resolvedDisplaySurfaceRepository.publishResolvedItems(
-        surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
-        profileSession = expectedProfileSession,
-        items = listOf(overlay.toResolvedDisplayItem()),
-        replace = false
-    )
     return true
 }
 
