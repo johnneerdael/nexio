@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import androidx.annotation.VisibleForTesting
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
@@ -32,15 +33,72 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal object HomeResolvedDisplayMapper {
+
+    /**
+     * Cache key for memoization. We rely on structural equality of the underlying
+     * [MetaPreview] and [HydratedHomeOverlay] (both `data class`-shaped) by hashing
+     * them with [Any.hashCode]. Two distinct content tuples could theoretically
+     * collide on hash; to defend against that, we store/look up under a key that
+     * includes the [itemKey] plus both content hashes — collisions across
+     * different itemKeys are isolated, and within an itemKey a hash collision on
+     * both meta and overlay is extremely unlikely. If a collision ever occurred,
+     * the worst case is a single stale-but-content-shaped projection on a single
+     * key — far cheaper than the GC death-spiral the cache prevents.
+     */
+    private data class MapperCacheKey(
+        val itemKey: String,
+        val metaContentHash: Int,
+        val overlayContentHash: Int
+    )
+
+    private val cache = mutableMapOf<MapperCacheKey, ResolvedDisplayItem>()
+
+    @Synchronized
     fun toResolvedDisplayItems(
         rows: List<CatalogRow>,
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
         traceEvents: TraceMetadataEvents? = null
-    ): List<ResolvedDisplayItem> =
-        rows.flatMap { row -> row.items }
-            .map { item -> item.toResolvedDisplayItem(overlaysByItemKey, nowMs, resolveTrailer, traceEvents) }
+    ): List<ResolvedDisplayItem> {
+        val items = rows.flatMap { row -> row.items }
+        val activeKeys = HashSet<MapperCacheKey>(items.size)
+        val result = items.map { item ->
+            val itemKey = homeDisplayItemKey(item.apiType, item.id)
+            val overlay = overlaysByItemKey[itemKey]
+            val cacheKey = MapperCacheKey(
+                itemKey = itemKey,
+                metaContentHash = item.hashCode(),
+                overlayContentHash = overlay?.hashCode() ?: 0
+            )
+            activeKeys += cacheKey
+            // Cache hit: skip recomputation entirely. We deliberately do NOT emit
+            // a projection trace on hit because nothing was resolved — the cached
+            // item's slots/updatedAtMs are reused verbatim, so there is no new
+            // projection event to record. Trace emission only happens on miss
+            // inside [toResolvedDisplayItem].
+            val cached = cache[cacheKey]
+            if (cached != null) {
+                cached
+            } else {
+                val computed = item.toResolvedDisplayItem(
+                    overlaysByItemKey, nowMs, resolveTrailer, traceEvents
+                )
+                cache[cacheKey] = computed
+                computed
+            }
+        }
+        // Bound the cache to entries whose itemKey was in this batch's active set
+        // — this keeps cache memory proportional to the live home surface.
+        cache.keys.retainAll(activeKeys)
+        return result
+    }
+
+    @Synchronized
+    @VisibleForTesting
+    internal fun clearCacheForTest() {
+        cache.clear()
+    }
 
     private fun MetaPreview.toResolvedDisplayItem(
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
