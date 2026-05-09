@@ -11,6 +11,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
@@ -21,6 +23,13 @@ import javax.inject.Singleton
 private const val TAG = "InAppYouTubeExtractor"
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
 private const val PREFERRED_SEPARATE_CLIENT = "ios"
+// Cap concurrent in-flight YouTube watch-page extractions. Heap dumps showed up
+// to 3 simultaneous 1.26 MiB HTML char[] allocations + 271 KiB InnerTube JSON
+// responses (each fetch holds the body String for the duration of the regex
+// parse + JSON decode). Multiple consumers (Hero, Screensaver, Detail) can
+// race a fetch storm; the semaphore serializes the heaviest portion at a small
+// permit count without changing per-call throughput beyond the parallelism cap.
+private const val EXTRACTOR_MAX_CONCURRENCY = 1
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 private val API_KEY_REGEX = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
@@ -164,6 +173,7 @@ class InAppYouTubeExtractor @Inject constructor(
     private val integrationProvider: YouTubeTrailerIntegrationProvider
 ) {
     private val gson = Gson()
+    private val concurrencyLimiter = Semaphore(EXTRACTOR_MAX_CONCURRENCY)
 
     suspend fun extractPlaybackSource(youtubeUrl: String): TrailerPlaybackSource? = withContext(Dispatchers.IO) {
         if (youtubeUrl.isBlank()) return@withContext null
@@ -171,7 +181,9 @@ class InAppYouTubeExtractor @Inject constructor(
         Log.d(TAG, "Starting Kotlin extraction for ${summarizeUrl(youtubeUrl)}")
         val source = try {
             withTimeout(EXTRACTOR_TIMEOUT_MS) {
-                extractPlaybackSourceInternal(youtubeUrl)
+                concurrencyLimiter.withPermit {
+                    extractPlaybackSourceInternal(youtubeUrl)
+                }
             }
         } catch (error: NonEnglishYouTubeTrailerException) {
             Log.w(
