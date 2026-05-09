@@ -44,6 +44,7 @@ import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.trailer.rankedTmdbTrailerPlaybackRefs
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.MetaCompany
@@ -85,7 +86,8 @@ class MetadataRouterFacade(
     private val organizationPersonResolver: OrganizationPersonResolver? = null,
     private val tmdbOrganizationService: TmdbOrganizationService? = null,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
-    private val seasonTrailerRefResolver: SeasonTrailerRefResolver? = null
+    private val seasonTrailerRefResolver: SeasonTrailerRefResolver? = null,
+    private val titleRatingOverrideRepository: TitleRatingOverrideRepository? = null
 ) {
     private val effectiveTrailerResolver: TrailerResolver by lazy {
         trailerResolver ?: TrailerResolver(traceEvents)
@@ -109,7 +111,8 @@ class MetadataRouterFacade(
         organizationPersonResolver: OrganizationPersonResolver? = null,
         tmdbOrganizationService: TmdbOrganizationService? = null,
         posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
-        seasonTrailerRefResolver: ProviderSeasonTrailerRefResolver
+        seasonTrailerRefResolver: ProviderSeasonTrailerRefResolver,
+        titleRatingOverrideRepository: TitleRatingOverrideRepository
     ) : this(
         router = router,
         providerPlanExecutor = providerPlanExecutor,
@@ -129,7 +132,8 @@ class MetadataRouterFacade(
         organizationPersonResolver = organizationPersonResolver,
         tmdbOrganizationService = tmdbOrganizationService,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
-        seasonTrailerRefResolver = seasonTrailerRefResolver
+        seasonTrailerRefResolver = seasonTrailerRefResolver,
+        titleRatingOverrideRepository = titleRatingOverrideRepository
     )
 
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
