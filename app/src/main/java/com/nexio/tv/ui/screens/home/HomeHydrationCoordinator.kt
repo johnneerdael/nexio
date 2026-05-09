@@ -114,6 +114,32 @@ class HomeHydrationCoordinator @Inject constructor(
                 return null
             }
 
+            // Content-equality gate. Prevents a feedback loop where unconditional upsert
+                // bumps the version flow, which re-triggers downstream apply-seams and
+                // re-spawns hero/visible hydration -> upsert again. The 73/sec
+                // home.hydration_applied flood + cascading SharedPreferences writes were
+                // the dominant ANR source. We compare displayHash (canonical content
+                // identity) and fields; if both match a stored overlay we skip upsert and
+                // return the existing instance so callers see a stable identity.
+            val existingOverlay = overlayStore.readByCanonicalIdentity(
+                canonicalProvider = overlay.canonicalProvider,
+                canonicalId = overlay.canonicalId,
+                contentType = overlay.contentType,
+                languageTag = overlay.languageTag,
+                policyVersion = overlay.policyVersion
+            )
+            if (existingOverlay != null &&
+                existingOverlay.displayHash == overlay.displayHash &&
+                existingOverlay.fields == overlay.fields
+            ) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "overlay_content_unchanged",
+                    trigger = trigger.name
+                )
+                return existingOverlay
+            }
+
             overlayStore.upsert(
                 overlay = overlay,
                 aliases = overlayAliases(
