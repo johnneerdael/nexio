@@ -248,7 +248,10 @@ class MetadataDiskCacheStoreTest {
         store.writeMeta("movie:tt1", "en", "RPDB:12345", meta)
         store.flushPendingWritesForTest()
 
-        val raw = prefs.all.getValue("meta::movie:tt1::en::RPDB:12345") as String
+        // After the SharedPreferences→file migration, persisted JSON lives in the
+        // snapshot file rather than a prefs map. Read that file's text to verify
+        // sanitization removed the sensitive URL bits.
+        val raw = store.snapshotFileForTest().readText()
         assertFalse(raw.contains("api.ratingposterdb.com"))
         assertFalse(raw.contains("secret"))
         assertFalse(raw.contains("posterProviderTag"))
@@ -423,7 +426,7 @@ class MetadataDiskCacheStoreTest {
             enrichment = tmdbEnrichment("Fight Club")
         )
         store.flushPendingWritesForTest()
-        rewriteUpdatedAt(prefs, "tmdb::550:MOVIE::en-US::native", 0L)
+        store.rewriteUpdatedAtForTest("tmdb::550:MOVIE::en-US::native", 0L)
 
         assertNull(store.readTmdbEnrichment("550:MOVIE", "en-US", "native"))
     }
@@ -894,11 +897,11 @@ class MetadataDiskCacheStoreTest {
         store.writeTvdbReference("genres", listOf(mapOf("id" to 1, "name" to "Drama")))
         store.flushPendingWritesForTest()
 
-        // Verify the key uses tvdb_ref:: prefix
-        val keys = prefs.all.keys
+        // Verify the key uses tvdb_ref:: prefix in the persisted snapshot file.
+        val raw = store.snapshotFileForTest().readText()
         assertTrue(
             "Expected a key starting with tvdb_ref::genres::",
-            keys.any { it.startsWith("tvdb_ref::genres::") }
+            raw.contains("\"tvdb_ref::genres::")
         )
 
         // Verify we can read it back
@@ -1010,8 +1013,13 @@ class MetadataDiskCacheStoreTest {
     }
 
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
+        // Each store now also writes a streaming JSON snapshot to context.filesDir;
+        // give every test its own temp directory so they don't share on-disk state.
+        val tempDir = java.nio.file.Files.createTempDirectory("metadata-disk-cache-test").toFile()
+        tempDir.deleteOnExit()
         return mockk {
             every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
+            every { filesDir } returns tempDir
         }
     }
 
@@ -1019,5 +1027,18 @@ class MetadataDiskCacheStoreTest {
         val root = com.google.gson.Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
         root.addProperty("updatedAtMs", updatedAtMs)
         prefs.edit().putString(key, root.toString()).commit()
+    }
+
+    private fun rewriteUpdatedAtAndReload(
+        prefs: InMemorySharedPreferences,
+        store: MetadataDiskCacheStore,
+        key: String,
+        updatedAtMs: Long
+    ) {
+        rewriteUpdatedAt(prefs, key, updatedAtMs)
+        // Migration is one-shot per ensureLoaded() call, so the cache is frozen at
+        // first-read time. Tests that mutate prefs after the store has lazily
+        // loaded must re-pull the migrated entries from prefs into the cache.
+        store.reloadFromLegacyPrefsForTest()
     }
 }
