@@ -897,7 +897,12 @@ class HomeViewModel @Inject constructor(
                 pendingCatalogLoads > 8 -> 200L
                 pendingCatalogLoads > 3 -> 150L
                 pendingCatalogLoads > 0 -> 100L
-                else -> 50L
+                // Steady state (nothing actively loading): the pipeline can be invoked
+                // by incidental triggers (focus moves, recomposition wake-ups, observer
+                // re-emits) at high rate. Coalesce to 200 ms so the heavy
+                // updateCatalogRowsPipeline runs at most ~5/sec instead of ~20/sec
+                // when no actual new catalog content is in flight.
+                else -> 200L
             }
             delay(debounceMs)
             updateCatalogRows(profileSessionForUpdate)
