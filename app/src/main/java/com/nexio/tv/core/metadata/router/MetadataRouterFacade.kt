@@ -251,7 +251,8 @@ class MetadataRouterFacade(
         val resolvedDocument = applyRatingResolverSelection(
             document = resolvedDocumentPreRating,
             preview = previewCandidate,
-            primary = runResult.primaryCandidate
+            primary = runResult.primaryCandidate,
+            request = request
         )
         val displayMetadata = resolvedDocument.toHomeDisplayMetadata(
             initialDisplay.withoutSilentLocalizedTextFallback(primary = runResult.primaryCandidate)
@@ -1121,12 +1122,47 @@ class MetadataRouterFacade(
      * MDBList/OMDb/CUSTOM_IMDB ingestion is a follow-up — those candidates are only
      * available on the detail-screen path today via [DetailRatingDisplayRepository].
      */
-    private fun applyRatingResolverSelection(
+    private suspend fun applyRatingResolverSelection(
         document: ResolvedMetadataDocument,
         preview: MetadataCandidate?,
-        primary: MetadataCandidate?
+        primary: MetadataCandidate?,
+        request: MetadataRequest
     ): ResolvedMetadataDocument {
         val candidates = buildList {
+            // CUSTOM_IMDB candidates from the bulk-IMDB integration.
+            // RatingResolver's precedence ordering is CUSTOM_IMDB → MDBLIST → OMDB →
+            // PRIMARY_PROVIDER → PREVIEW_FALLBACK, so a successful IMDB lookup wins
+            // over an empty TVDB primary or a preview rating from a less-trusted source.
+            // The repository handles the bulk-IMDB API call and response caching;
+            // the imdbId lookup falls through to providerIds.imdb when no
+            // stable-id bundle is in scope.
+            val ratingRepo = titleRatingOverrideRepository
+            val imdbId = request.sourceContext.previewStableIds.imdb
+            if (ratingRepo != null && !imdbId.isNullOrBlank()) {
+                runCatching {
+                    val syntheticPreview = MetaPreview(
+                        id = request.contentId,
+                        type = request.contentType,
+                        name = request.sourceContext.addonMetadata?.title ?: request.contentId,
+                        poster = null,
+                        posterShape = com.nexio.tv.domain.model.PosterShape.POSTER,
+                        background = null,
+                        logo = null,
+                        description = null,
+                        releaseInfo = null,
+                        imdbRating = null,
+                        genres = emptyList(),
+                        firstPaintStableIds = request.sourceContext.previewStableIds
+                    )
+                    addAll(
+                        ratingRepo.titleRatingCandidates(
+                            preview = syntheticPreview,
+                            stableIdBundle = null,
+                            providerIds = request.sourceContext.previewStableIds
+                        )
+                    )
+                }.onFailure { /* tolerate IMDB-API outages; primary/preview candidates still feed the resolver */ }
+            }
             primary?.fields?.get(ResolvedField.RATING)?.value?.toRatingCandidate(
                 sourceRole = com.nexio.tv.core.metadata.router.resolver.SourceRole.PRIMARY_PROVIDER,
                 sourceProvider = primary.provider.name
