@@ -1411,9 +1411,11 @@ class HomeCatalogRefreshCoordinatorTest {
 
         assertEquals("nexio-artwork://decision/rpdb", hydratedRows.single().items.single().poster)
         assertEquals("rpdb", hydratedRows.single().items.single().posterProviderTag)
+        // Reducer preserves the persisted primary-fallback ref (STALE_RESOLVED beats FIRST_PAINT raw URL).
+        // applyArtworkRef receives the persisted ref and the RPDB provider upgrades it to the premium ref.
         verify(exactly = 1) {
             posterRatingsUrlResolver.applyArtworkRef(
-                match { it.poster == "https://image.tmdb.org/t/p/w500/raw.jpg" },
+                match { it.poster == "nexio-artwork://decision/primary-fallback" },
                 any()
             )
         }
@@ -1465,9 +1467,12 @@ class HomeCatalogRefreshCoordinatorTest {
 
         assertEquals("nexio-artwork://decision/primary-fallback", hydratedRows.single().items.single().poster)
         assertEquals(null, hydratedRows.single().items.single().posterProviderTag)
+        // Reducer preserves the persisted RPDB ref (STALE_RESOLVED beats FIRST_PAINT raw URL).
+        // applyArtworkRef receives the persisted RPDB ref; since the provider is now DEFAULT, it
+        // demotes the artwork to the primary fallback. The final poster is primary-fallback, as asserted above.
         verify(exactly = 1) {
             posterRatingsUrlResolver.applyArtworkRef(
-                match { it.poster == "https://image.tmdb.org/t/p/w500/raw.jpg" },
+                match { it.poster == "nexio-artwork://decision/rpdb" },
                 any()
             )
         }
