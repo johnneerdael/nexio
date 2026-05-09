@@ -93,7 +93,10 @@ internal suspend fun resolveProjectedContinueWatchingIdentityKeys(
     resolver: AnimeSeasonProjectionResolver
 ): Map<Int, String> {
     val result = mutableMapOf<Int, String>()
-    items.forEachIndexed { index, item ->
+    // Indexed iteration to avoid ArrayList$Itr capture in continuation.
+    // resolver.resolveWork/resolveEpisodeProjection are suspending and would otherwise pin the items list.
+    for (index in items.indices) {
+        val item = items[index]
         val contentId = item.contentId()
         val fallbackKey = item.canonicalOrContentKey()
         val season = item.season()

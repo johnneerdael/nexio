@@ -466,7 +466,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         if (entries.isEmpty()) return
         if (playbackActivityTracker.isActive.value) return
         val imageLoader = appContext.imageLoader
-        entries.forEach { entry ->
+        // Indexed iteration to avoid ArrayList$Itr capture in continuation.
+        // imageLoader.execute(...) is suspending and would otherwise pin the entries list.
+        for (i in entries.indices) {
+            val entry = entries[i]
             runCatching {
                 imageLoader.execute(
                     ImageRequest.Builder(appContext)
