@@ -21,6 +21,13 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
     var changed = false
     val updatedItems = items.map { item ->
         val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
+        // Cheap short-circuit: if the row's MetaPreview already projects to a HomeDisplayMetadata
+        // whose displayHash matches the overlay's displayHash, the apply seam has nothing new to
+        // do. Skip slot conversion + reducer + down-projection. Drops per-sweep allocation cost
+        // from O(items-with-overlays) to O(items-with-changed-overlays) on Modern Home.
+        if (item.displayHashForHomeOverlay() == overlay.displayHash) {
+            return@map item
+        }
         val firstPaintSlots = item.toFirstPaintSlots(nowMs)
         val overlaySlots = overlay.toResolvedSlots(nowMs, isStale = overlay.isStale(nowMs))
         val merged = HomeRailProjectionReducer.reduce(
