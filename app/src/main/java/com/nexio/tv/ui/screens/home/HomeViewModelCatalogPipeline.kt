@@ -3486,13 +3486,15 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         ensureActive()
         homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
         ensureActive()
-        val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId) ?: latestSnapshot
+        // Use the in-memory snapshot directly. The atomic-rename file write is strongly
+        // consistent, so re-reading + re-parsing 7.65 MB of JSON would only verify what
+        // we already know is on disk and burn ~30 MB of transient allocation per persist
+        // (16 MB UTF-16 char[] from file.readText() + Gson tree). With debounce at 5 s
+        // that became death-spiral fuel.
         Log.d(
             HomeViewModel.TAG,
             "Persisted merged home snapshot write rows=${latestSnapshot.catalogRows.size} fullRows=${latestSnapshot.fullCatalogRows.size} " +
-                "hero=${latestSnapshot.heroItems.size} orderedKeys=${latestSnapshot.orderedGroupKeys.size}; " +
-                "readbackRows=${persistedSnapshot.catalogRows.size} readbackFullRows=${persistedSnapshot.fullCatalogRows.size} " +
-                "readbackHero=${persistedSnapshot.heroItems.size} readbackOrderedKeys=${persistedSnapshot.orderedGroupKeys.size}"
+                "hero=${latestSnapshot.heroItems.size} orderedKeys=${latestSnapshot.orderedGroupKeys.size}"
         )
         withContext(Dispatchers.Main.immediate) {
             if (!isCurrentHomeProfileGeneration(profileGeneration)) return@withContext
@@ -3500,7 +3502,7 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
                 pendingHomeSnapshotPersist = null
             }
             applyPersistedHomeSnapshotIfEligiblePipeline(
-                snapshot = persistedSnapshot,
+                snapshot = latestSnapshot,
                 requireSourceCachesReady = false
             )
         }
