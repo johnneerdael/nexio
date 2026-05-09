@@ -8,6 +8,7 @@ import coil.fetch.Fetcher
 import coil.fetch.SourceResult
 import coil.request.Options
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.util.toHexLowercase
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
 import com.nexio.tv.data.integration.posters.transport.PosterTransport
@@ -153,5 +154,5 @@ private fun createTempFileSource(bytes: ByteArray): ImageSource {
 
 private fun String.sha256(): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-    return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+    return digest.toHexLowercase()
 }

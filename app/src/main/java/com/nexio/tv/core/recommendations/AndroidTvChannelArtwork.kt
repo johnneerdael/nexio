@@ -2,6 +2,7 @@ package com.nexio.tv.core.recommendations
 
 import android.content.Context
 import android.net.Uri
+import com.nexio.tv.core.util.toHexLowercase
 import java.io.File
 import java.security.MessageDigest
 
@@ -55,7 +56,7 @@ internal object AndroidTvChannelArtwork {
     private fun fileNameForDiskCacheKey(diskCacheKey: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(diskCacheKey.toByteArray(Charsets.UTF_8))
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
+            .toHexLowercase()
         return "$digest.jpg"
     }
 }

@@ -1,5 +1,6 @@
 package com.nexio.tv.core.artwork
 
+import com.nexio.tv.core.util.toHexLowercase
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Locale
@@ -181,7 +182,7 @@ object ArtworkCacheKeys {
     private fun sha256(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { byte -> "%02x".format(byte) }
+        return digest.toHexLowercase()
     }
 
     private fun ArtworkOwnerKey.keyPart(): String =

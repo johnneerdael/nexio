@@ -37,6 +37,7 @@ import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.core.util.toHexLowercase
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.ProviderIds
@@ -649,7 +650,7 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun stableHashHex(s: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256")
             .digest(s.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { byte -> "%02x".format(byte) }
+        return bytes.toHexLowercase()
     }
 
     private fun providerUrlPrefix(hostToken: String): String =

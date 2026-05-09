@@ -1,5 +1,6 @@
 package com.nexio.tv.core.artwork
 
+import com.nexio.tv.core.util.toHexLowercase
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import java.security.MessageDigest
@@ -42,6 +43,6 @@ object ArtworkDecisionPolicy {
     private fun stableHashHex(value: String): String {
         val bytes = MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { byte -> "%02x".format(byte) }
+        return bytes.toHexLowercase()
     }
 }

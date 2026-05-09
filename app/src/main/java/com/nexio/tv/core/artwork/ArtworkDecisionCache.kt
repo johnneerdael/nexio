@@ -1,5 +1,7 @@
 package com.nexio.tv.core.artwork
 
+import com.nexio.tv.core.util.toHexLowercase
+
 data class ArtworkDecisionAuthorityContext(
     val storeIdHash: String,
     val schemaVersion: Int,
@@ -284,7 +286,7 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheD
 internal fun artworkDecisionShortSha256(value: String): String =
     java.security.MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))
-        .joinToString(separator = "") { byte -> "%02x".format(byte) }
+        .toHexLowercase()
         .take(12)
 
 internal fun ArtworkDecisionStoreLoadState.nonAuthoritativeReason(

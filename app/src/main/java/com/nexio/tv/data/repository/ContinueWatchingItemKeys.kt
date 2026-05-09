@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.util.toHexLowercase
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
@@ -77,5 +78,5 @@ private fun ProviderIds.bestKnownProviderKey(): String? =
 private fun String.stableRawHash(): String {
     val raw = trim()
     val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
-    return digest.joinToString(separator = "") { "%02x".format(it) }.take(16)
+    return digest.toHexLowercase().take(16)
 }
