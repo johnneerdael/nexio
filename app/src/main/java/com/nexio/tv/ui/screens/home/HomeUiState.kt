@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.WatchProgress
 @Immutable
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
+    val resolvedRailRows: List<ResolvedRailRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
