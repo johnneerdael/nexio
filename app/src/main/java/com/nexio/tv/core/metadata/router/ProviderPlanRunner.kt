@@ -30,7 +30,15 @@ class ProviderPlanRunner @Inject constructor(
             }
         )
 
-        val stepResults = plan.steps.mapNotNull { step ->
+        // Indexed-for + mutableListOf instead of `plan.steps.mapNotNull { ... suspend ... }`.
+        // mapNotNull allocates an Iterator whose this$0 pins `plan.steps` across every
+        // adapter.execute() suspension; with concurrent ProviderPlanRunner.run calls this
+        // accumulates thousands of pinned iterators in continuations (HARD RULE #4 in
+        // CLAUDE.md). Indexed-for compiles to a primitive int counter — no iterator,
+        // nothing pinned across suspensions.
+        val stepResults = mutableListOf<ProviderStepResult>()
+        for (i in plan.steps.indices) {
+            val step = plan.steps[i]
             val adapter = adapters
                 .filter { it.provider == step.provider && it.supports(step) }
                 .sortedWith(
@@ -38,11 +46,12 @@ class ProviderPlanRunner @Inject constructor(
                         .thenBy { it::class.qualifiedName.orEmpty() }
                 )
                 .firstOrNull()
-            when {
+            val result = when {
                 adapter != null -> adapter.execute(route = plan.route, step = step)
                 step.required -> throw MetadataRouteFailure.MissingPlanStepAdapter(step.apiShapeId)
                 else -> null  // optional step with no registered adapter — skip silently
             }
+            if (result != null) stepResults += result
         }
 
         val candidates = stepResults.mapNotNull { it.candidate }

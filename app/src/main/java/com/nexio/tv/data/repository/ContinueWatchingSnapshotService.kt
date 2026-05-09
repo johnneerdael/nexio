@@ -794,17 +794,21 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
-        val records = ContinueWatchingMerger.merge(
-            resumeItems.map { progress ->
-                continueWatchingIdentityResolver.resolveOrFallback(
-                    RawContinueWatchingInput(
-                        profileId = profileId,
-                        progress = progress,
-                        languageTag = languageTag
-                    )
+        // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
+        // suspends, and List.map's iterator pins resumeItems into the calling continuation
+        // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
+        // ContinueWatchingSnapshotService$buildRawSnapshot$1.L$9 holding live iterators.
+        val resolvedRecords = ArrayList<ContinueWatchingRecord>(resumeItems.size)
+        for (i in resumeItems.indices) {
+            resolvedRecords += continueWatchingIdentityResolver.resolveOrFallback(
+                RawContinueWatchingInput(
+                    profileId = profileId,
+                    progress = resumeItems[i],
+                    languageTag = languageTag
                 )
-            }
-        )
+            )
+        }
+        val records = ContinueWatchingMerger.merge(resolvedRecords)
         val normalizedNextUpItems = nextUpEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
