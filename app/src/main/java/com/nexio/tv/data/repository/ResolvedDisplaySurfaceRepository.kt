@@ -140,12 +140,37 @@ private fun mergeIncrementalItems(
     existing: List<ResolvedDisplayItem>,
     incoming: List<ResolvedDisplayItem>
 ): List<ResolvedDisplayItem> {
-    val existingByKey = existing.associateBy { item -> item.itemKey }
-    val mergedIncoming = incoming.map { item ->
-        item.withPreservedTrailerState(existingByKey[item.itemKey])
+    if (existing.isEmpty()) return incoming
+    // Fast path: incoming items are already reference-equal to existing in the same
+    // order (HomeResolvedDisplayMapper memoization makes this the steady-state
+    // case). Skip the associateBy / map / toSet / filterNot / + cascade — those
+    // allocate ~5 collections per publish even when content is unchanged.
+    if (existing.size == incoming.size) {
+        var sameInPlace = true
+        for (i in existing.indices) {
+            if (existing[i] !== incoming[i]) { sameInPlace = false; break }
+        }
+        if (sameInPlace) return existing
     }
-    val incomingKeys = mergedIncoming.map { item -> item.itemKey }.toSet()
-    return existing.filterNot { item -> item.itemKey in incomingKeys } + mergedIncoming
+    val existingByKey = HashMap<String, ResolvedDisplayItem>(existing.size)
+    for (i in existing.indices) {
+        val item = existing[i]
+        existingByKey[item.itemKey] = item
+    }
+    val mergedIncoming = ArrayList<ResolvedDisplayItem>(incoming.size)
+    val incomingKeys = HashSet<String>(incoming.size)
+    for (i in incoming.indices) {
+        val item = incoming[i]
+        mergedIncoming += item.withPreservedTrailerState(existingByKey[item.itemKey])
+        incomingKeys += item.itemKey
+    }
+    val out = ArrayList<ResolvedDisplayItem>(existing.size + mergedIncoming.size)
+    for (i in existing.indices) {
+        val item = existing[i]
+        if (item.itemKey !in incomingKeys) out += item
+    }
+    for (i in mergedIncoming.indices) out += mergedIncoming[i]
+    return out
 }
 
 private fun ResolvedDisplayItem.withPreservedTrailerState(
@@ -175,15 +200,33 @@ private fun shouldSuppressSurfaceUpdate(
     // (rare); in the common no-op steady-state path it returns `this`, so element
     // refs stay stable and this short-circuit fires.
     ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY ->
-        existing.size == nextItems.size &&
-            existing.zip(nextItems).all { (a, b) -> a === b }
+        existing.refEqualsByIndex(nextItems)
     else -> false
+}
+
+// Indexed-for ref-equality compare. `existing.zip(other).all { (a, b) -> a === b }`
+// allocates a List<Pair> ~equal in size to the surface (~300 items per publish);
+// indexed-for allocates nothing.
+private fun <T> List<T>.refEqualsByIndex(other: List<T>): Boolean {
+    if (size != other.size) return false
+    for (i in indices) {
+        if (this[i] !== other[i]) return false
+    }
+    return true
 }
 
 private fun List<ResolvedDisplayItem>.semanticallySameScreensaverSurface(
     other: List<ResolvedDisplayItem>
-): Boolean =
-    map { item -> item.screensaverStablePayload() } == other.map { item -> item.screensaverStablePayload() }
+): Boolean {
+    // Avoid `map { stablePayload } == other.map { stablePayload }` — that allocates
+    // 2 × N copies of ResolvedDisplayItem (one per side), each copy() walks every
+    // field of the data class. Pairwise compare is allocation-free.
+    if (size != other.size) return false
+    for (i in indices) {
+        if (this[i].screensaverStablePayload() != other[i].screensaverStablePayload()) return false
+    }
+    return true
+}
 
 private fun ResolvedDisplayItem.screensaverStablePayload(): ResolvedDisplayItem =
     copy(
