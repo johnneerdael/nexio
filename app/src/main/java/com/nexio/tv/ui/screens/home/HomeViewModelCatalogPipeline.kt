@@ -2744,14 +2744,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             ),
             retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )
-        val effectiveOrderedRows = mergeCachedRowsWithLiveRows(
-            cachedRows = currentVisibleFullRows,
-            liveRows = liveOrderedRows,
-            preservationState = preservationState,
-            orderedGroupKeys = effectiveOrderKeys,
-            rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey,
-            currentTmdbCatalogIds = currentCachedTmdbCatalogIds,
-            currentKitsuCatalogIds = currentCachedKitsuCatalogIds
+        val effectiveOrderedRows = catalogRowMemo.intern(
+            mergeCachedRowsWithLiveRows(
+                cachedRows = currentVisibleFullRows,
+                liveRows = liveOrderedRows,
+                preservationState = preservationState,
+                orderedGroupKeys = effectiveOrderKeys,
+                rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey,
+                currentTmdbCatalogIds = currentCachedTmdbCatalogIds,
+                currentKitsuCatalogIds = currentCachedKitsuCatalogIds
+            )
         )
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
