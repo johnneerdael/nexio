@@ -119,6 +119,96 @@ class ResolvedDisplayProjectionCacheTest {
     }
 
     @Test
+    fun `internRailsList returns prior list when items reference-equal`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val a = cache.projectItem(resolved("movie:tmdb:a", updatedAtMs = 1L))
+        val railA = cache.projectRail("c", "C", listOf(a))
+
+        val first = cache.internRailsList(listOf(railA))
+        val second = cache.internRailsList(listOf(railA))
+
+        assertSame(first, second)
+    }
+
+    @Test
+    fun `internRailsList returns new list when an element changes`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val a = cache.projectItem(resolved("movie:tmdb:a", updatedAtMs = 1L))
+        val b = cache.projectItem(resolved("movie:tmdb:b", updatedAtMs = 1L))
+        val railA = cache.projectRail("c-a", "A", listOf(a))
+        val railB = cache.projectRail("c-b", "B", listOf(b))
+
+        val first = cache.internRailsList(listOf(railA))
+        val second = cache.internRailsList(listOf(railA, railB))
+
+        assertNotSame(first, second)
+    }
+
+    @Test
+    fun `projectHero returns same instance when called twice with same ResolvedDisplayItem reference`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val item = resolved("movie:tmdb:1", updatedAtMs = 100L)
+
+        val first = cache.projectHero(item)
+        val second = cache.projectHero(item)
+
+        assertSame(first, second)
+    }
+
+    @Test
+    fun `projectHero returns new instance when source ResolvedDisplayItem reference changes`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val before = resolved("movie:tmdb:1", updatedAtMs = 100L, title = "Old")
+        val after = resolved("movie:tmdb:1", updatedAtMs = 200L, title = "New")
+
+        val first = cache.projectHero(before)
+        val second = cache.projectHero(after)
+
+        assertNotSame(first, second)
+        assertTrue(second.title == "New")
+    }
+
+    @Test
+    fun `retainOnlyHeroItems evicts entries not in active set`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val a = resolved("movie:tmdb:a", updatedAtMs = 1L)
+        val b = resolved("movie:tmdb:b", updatedAtMs = 1L)
+
+        val firstA = cache.projectHero(a)
+        val firstB = cache.projectHero(b)
+
+        cache.retainOnlyHeroItems(setOf("movie:tmdb:a"))
+
+        // a survived → re-projection returns the original cached instance.
+        assertSame(firstA, cache.projectHero(a))
+        // b was evicted → re-projection yields a fresh instance.
+        assertNotSame(firstB, cache.projectHero(b))
+    }
+
+    @Test
+    fun `internHeroList returns prior list when items reference-equal`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val item = cache.projectHero(resolved("movie:tmdb:1", updatedAtMs = 1L))
+
+        val first = cache.internHeroList(listOf(item))
+        val second = cache.internHeroList(listOf(item))
+
+        assertSame(first, second)
+    }
+
+    @Test
+    fun `internHeroList returns new list when an item changes`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val a = cache.projectHero(resolved("movie:tmdb:a", updatedAtMs = 1L))
+        val b = cache.projectHero(resolved("movie:tmdb:b", updatedAtMs = 1L))
+
+        val first = cache.internHeroList(listOf(a))
+        val second = cache.internHeroList(listOf(a, b))
+
+        assertNotSame(first, second)
+    }
+
+    @Test
     fun `retainOnlyRails evicts unused rails`() {
         val cache = ResolvedDisplayProjectionCache()
         val a = cache.projectItem(resolved("movie:tmdb:a", updatedAtMs = 1L))

@@ -21,11 +21,24 @@ import javax.inject.Singleton
 class ResolvedDisplayProjectionCache @Inject constructor() {
     private val itemCache = mutableMapOf<String, Pair<Long, ModernHomeRowItem>>()
     private val railCache = mutableMapOf<String, Pair<Int, ResolvedRailRow>>()
+    // Hero-panel projection cache. Keyed by itemKey; the value's first slot is
+    // the source `ResolvedDisplayItem` reference used as a fast-path identity
+    // check. Upstream (`HomeResolvedDisplayMapper`) already memoizes resolved
+    // instances so the same itemKey yields the same reference until content
+    // actually changes — reference equality on the source is therefore both
+    // sufficient and equivalent to `(itemKey, updatedAtMs)` keying used by
+    // [projectItem].
+    private val heroItemCache = mutableMapOf<String, Pair<ResolvedDisplayItem, HeroDisplayItem>>()
     // Single-slot cache of the most recently emitted rails list. When the next
     // emission produces a list whose elements are reference-identical to the
     // prior emission's, we return the prior list reference so consumers'
     // `===` guards (e.g. observeResolvedRailRows) skip redundant state updates.
     private var lastRailsList: List<ResolvedRailRow>? = null
+    // Single-slot cache of the most recently emitted hero items list. Same
+    // rationale as [lastRailsList] but for the hero surface (Plan B Task 9):
+    // observeResolvedHeroItems' `===` guard relies on this so identical content
+    // does not get pushed into the hero StateFlow on every upstream tick.
+    private var lastHeroList: List<HeroDisplayItem>? = null
 
     @Synchronized
     fun projectItem(resolved: ResolvedDisplayItem): ModernHomeRowItem {
@@ -61,6 +74,26 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
     }
 
     /**
+     * Returns a [HeroDisplayItem] for [resolved], reusing the prior projection
+     * when the source `ResolvedDisplayItem` reference is unchanged. Mirrors
+     * [projectItem] but for the hero surface — see [HeroDisplayItem.from] for
+     * the projection rules (notably `backdrop ?: poster` for the background ref).
+     */
+    @Synchronized
+    fun projectHero(resolved: ResolvedDisplayItem): HeroDisplayItem {
+        val cached = heroItemCache[resolved.itemKey]
+        if (cached != null && cached.first === resolved) return cached.second
+        val fresh = HeroDisplayItem.from(resolved)
+        heroItemCache[resolved.itemKey] = resolved to fresh
+        return fresh
+    }
+
+    @Synchronized
+    fun retainOnlyHeroItems(activeItemKeys: Set<String>) {
+        heroItemCache.keys.retainAll(activeItemKeys)
+    }
+
+    /**
      * Returns a [List] reference equal to [rails] in content but reusing the
      * prior emission's list when every element is reference-identical and the
      * list size is unchanged. This complements [projectRail] by also stabilising
@@ -82,5 +115,28 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
         }
         lastRailsList = rails
         return rails
+    }
+
+    /**
+     * Hero-list counterpart to [internRailsList]. Reuses the prior emission's
+     * outer list reference when every element is reference-identical, so the
+     * consumer's `===` guard against `_resolvedHeroItems.value` short-circuits
+     * when content is unchanged.
+     */
+    @Synchronized
+    fun internHeroList(items: List<HeroDisplayItem>): List<HeroDisplayItem> {
+        val prior = lastHeroList
+        if (prior != null && prior.size == items.size) {
+            var allSame = true
+            for (i in items.indices) {
+                if (prior[i] !== items[i]) {
+                    allSame = false
+                    break
+                }
+            }
+            if (allSame) return prior
+        }
+        lastHeroList = items
+        return items
     }
 }
