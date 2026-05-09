@@ -22,7 +22,13 @@ data class ResolvedDisplayItem(
     val trailer: TrailerDisplayState,
     val hydrationState: HydrationState,
     val sourceTrace: List<HydratedHomeFieldTrace>,
-    val updatedAtMs: Long
+    val updatedAtMs: Long,
+    /**
+     * Per-field rank-aware slots. Populated by [HomeRailProjectionReducer]; null
+     * when the item was constructed by legacy paths that haven't migrated yet.
+     * Consumers must tolerate null and fall back to the flat fields above.
+     */
+    val slots: ResolvedDisplayFieldSlots? = null
 )
 
 @Immutable
