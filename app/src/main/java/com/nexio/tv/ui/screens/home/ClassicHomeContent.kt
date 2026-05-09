@@ -44,6 +44,7 @@ internal fun catalogRowContentType(row: com.nexio.tv.domain.model.CatalogRow): S
 @Composable
 fun ClassicHomeContent(
     uiState: HomeUiState,
+    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
     trailerPreviewUrls: Map<String, String>,
@@ -112,8 +113,8 @@ fun ClassicHomeContent(
             focusState.verticalScrollIndex == 0 &&
             focusState.verticalScrollOffset == 0
     }
-    val catalogRowsByCatalogId = remember(uiState.catalogRows) {
-        uiState.catalogRows.associateBy { it.catalogId }
+    val catalogRowsByCatalogId = remember(catalogRows) {
+        catalogRows.associateBy { it.catalogId }
     }
     val visiblePairs: List<Pair<ResolvedRailRow, CatalogRow>> = remember(
         uiState.resolvedRailRows,

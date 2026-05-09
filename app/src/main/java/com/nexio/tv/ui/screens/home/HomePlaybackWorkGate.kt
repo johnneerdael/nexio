@@ -19,7 +19,7 @@ internal fun HomeViewModel.observePlaybackWorkGate() {
                 if (!shouldRunHomeBackgroundWork(snapshot)) {
                     cancelNonPlaybackHomeWorkForPlayback()
                 } else {
-                    val rows = _uiState.value.catalogRows
+                    val rows = _displayCatalogRows.value
                     if (rows.isNotEmpty()) {
                         refreshTrailerMetadataAvailabilityPipeline(rows)
                         schedulePosterStatusReconcilePipeline(rows)

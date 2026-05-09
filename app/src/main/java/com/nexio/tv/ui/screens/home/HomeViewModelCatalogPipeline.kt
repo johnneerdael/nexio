@@ -164,7 +164,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         }
 
         withContext(Dispatchers.Main.immediate) {
-            val hasRenderedContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
+            val hasRenderedContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
                 _uiState.value.heroItems.isNotEmpty()
             if (hasRenderedContent) {
                 return@withContext
@@ -279,9 +279,9 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
     _fullCatalogRows.value = emptyList()
+    _displayCatalogRows.value = emptyList()
     _uiState.update { state ->
         state.copy(
-            catalogRows = emptyList(),
             heroItems = emptyList(),
             heroCatalogKeys = emptyList(),
             continueWatchingItems = emptyList(),
@@ -1583,7 +1583,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             "tmdbGroups=${persistedTmdbSyntheticGroups.size} tmdbRows=${persistedTmdbSyntheticGroups.sumOf { it.rows.size }}"
     )
 
-    val visibleItemsBeforeSettle = _uiState.value.catalogRows
+    val visibleItemsBeforeSettle = _displayCatalogRows.value
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
@@ -1602,7 +1602,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
-    val visibleItems = _uiState.value.catalogRows
+    val visibleItems = _displayCatalogRows.value
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
@@ -2151,7 +2151,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     setEnrichingItemId(null)
 
     try {
-        val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
+        val hasRestoredContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
             _uiState.value.heroItems.isNotEmpty()
         val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
             catalogsLoadInProgress = catalogsLoadInProgress,
@@ -2869,7 +2869,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     truncatedRowCache.clear()
     truncatedRowCache.putAll(nextTruncatedRowCache)
 
-    val hasCurrentRenderedContent = hasRenderableHomeContent(currentState)
+    val hasCurrentRenderedContent = hasRenderableHomeContent(currentState, _displayCatalogRows.value)
     val shouldKeepVisibleContent =
         hasCurrentRenderedContent &&
             displayRows.isEmpty() &&
@@ -2912,7 +2912,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         )
         applyHomeSnapshotToUiPipeline(transientSnapshot)
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
-            rows = _uiState.value.catalogRows,
+            rows = _displayCatalogRows.value,
             overlaysByItemKey = currentHydratedHomeOverlays,
             resolveTrailer = null
         )
@@ -3074,6 +3074,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         heroTmdbSettings = currentTmdbSettings
     )
     _fullCatalogRows.value = composedSnapshot.fullRows
+    _displayCatalogRows.value = composedSnapshot.displayRows
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(
@@ -3086,7 +3087,6 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         }
 
         state.copy(
-            catalogRows = composedSnapshot.displayRows,
             heroItems = composedSnapshot.heroItems,
             gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
             isLoading = false,

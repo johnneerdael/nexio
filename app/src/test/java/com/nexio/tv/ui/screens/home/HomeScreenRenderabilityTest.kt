@@ -15,26 +15,25 @@ class HomeScreenRenderabilityTest {
     @Test
     fun `modern home treats loading catalog rows as renderable`() {
         val state = HomeUiState(
-            homeLayout = HomeLayout.MODERN,
-            catalogRows = listOf(loadingRow())
+            homeLayout = HomeLayout.MODERN
         )
+        val rows = listOf(loadingRow())
 
-        assertTrue(hasRenderableHomeContent(state))
+        assertTrue(hasRenderableHomeContent(state, rows))
     }
 
     @Test
     fun `classic and grid homes do not treat loading only catalog rows as renderable`() {
         val classic = HomeUiState(
-            homeLayout = HomeLayout.CLASSIC,
-            catalogRows = listOf(loadingRow())
+            homeLayout = HomeLayout.CLASSIC
         )
         val grid = HomeUiState(
-            homeLayout = HomeLayout.GRID,
-            catalogRows = listOf(loadingRow())
+            homeLayout = HomeLayout.GRID
         )
+        val rows = listOf(loadingRow())
 
-        assertFalse(hasRenderableHomeContent(classic))
-        assertFalse(hasRenderableHomeContent(grid))
+        assertFalse(hasRenderableHomeContent(classic, rows))
+        assertFalse(hasRenderableHomeContent(grid, rows))
     }
 
     @Test
@@ -42,7 +41,6 @@ class HomeScreenRenderabilityTest {
         val sessionId = "profile:2:test-session"
         val state = HomeUiState(
             homeLayout = HomeLayout.MODERN,
-            catalogRows = listOf(contentRow()),
             installedAddonsCount = 3,
             isLoading = false,
             homeReadiness = HomeInitialReadiness.started(
@@ -50,9 +48,10 @@ class HomeScreenRenderabilityTest {
                 profileId = 2
             ).markLoading(HomeInitialGate.CONTINUE_WATCHING)
         )
+        val rows = listOf(contentRow())
 
-        assertTrue(hasRenderableHomeContent(state))
-        assertFalse(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
+        assertTrue(hasRenderableHomeContent(state, rows))
+        assertFalse(shouldShowFullHomeLoadingGate(state, rows, startupContentGateTimedOut = false))
     }
 
     @Test
@@ -60,7 +59,6 @@ class HomeScreenRenderabilityTest {
         val sessionId = "profile:2:test-session"
         val state = HomeUiState(
             homeLayout = HomeLayout.MODERN,
-            catalogRows = emptyList(),
             installedAddonsCount = 3,
             isLoading = false,
             homeReadiness = HomeInitialReadiness.started(
@@ -69,7 +67,7 @@ class HomeScreenRenderabilityTest {
             ).markLoading(HomeInitialGate.CONTINUE_WATCHING)
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -77,7 +75,6 @@ class HomeScreenRenderabilityTest {
         val sessionId = "profile:2:test-session"
         val state = HomeUiState(
             homeLayout = HomeLayout.MODERN,
-            catalogRows = emptyList(),
             installedAddonsCount = 3,
             isLoading = true,
             homeReadiness = HomeInitialReadiness.started(
@@ -86,8 +83,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
-        assertFalse(shouldShowHomeEmptyState(state, startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), startupContentGateTimedOut = false))
+        assertFalse(shouldShowHomeEmptyState(state, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -95,7 +92,6 @@ class HomeScreenRenderabilityTest {
         val sessionId = "profile:2:test-session"
         val state = HomeUiState(
             homeLayout = HomeLayout.MODERN,
-            catalogRows = emptyList(),
             installedAddonsCount = 3,
             isLoading = false,
             homeReadiness = HomeInitialReadiness.started(
@@ -104,8 +100,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertFalse(shouldShowFullHomeLoadingGate(state, startupContentGateTimedOut = false))
-        assertTrue(shouldShowHomeEmptyState(state, startupContentGateTimedOut = false))
+        assertFalse(shouldShowFullHomeLoadingGate(state, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowHomeEmptyState(state, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test

@@ -400,6 +400,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -533,6 +534,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -619,6 +621,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns linkedMapOf()
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -762,6 +765,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
         val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
         val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
         val visiblePreview = preview(id = "tt-visible-refresh", poster = "poster").copy(
@@ -794,6 +798,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
         every { viewModel.homeProfileGeneration } returns 1L
@@ -822,7 +827,7 @@ class HomeCatalogRefreshCoordinatorTest {
         )
         coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = listOf(fullRow)
-            uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
+            displayCatalogRows.value = listOf(displayRow)
         }
         coEvery {
             coordinator.refreshSerially(
@@ -895,6 +900,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
         val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
         val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
         val visiblePreview = preview(id = "tt-visible-session-race", poster = "poster").copy(
@@ -924,6 +930,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
         every { viewModel.homeProfileGeneration } returns 1L
@@ -952,7 +959,7 @@ class HomeCatalogRefreshCoordinatorTest {
         )
         coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = listOf(displayRow)
-            uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
+            displayCatalogRows.value = listOf(displayRow)
         }
         coEvery {
             coordinator.refreshSerially(
@@ -1043,7 +1050,8 @@ class HomeCatalogRefreshCoordinatorTest {
         val fullCatalogRows = MutableStateFlow(
             listOf(fullRow)
         )
-        val uiState = MutableStateFlow(HomeUiState(catalogRows = emptyList()))
+        val uiState = MutableStateFlow(HomeUiState())
+        val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
 
         every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
         every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
@@ -1055,6 +1063,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
