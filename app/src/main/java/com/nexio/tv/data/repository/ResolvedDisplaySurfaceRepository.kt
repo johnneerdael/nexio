@@ -44,9 +44,6 @@ class ResolvedDisplaySurfaceRepository(
     suspend fun getSnapshot(surfaceKey: String, profileId: Int): List<ResolvedDisplayItem> =
         surfaces.value[surfaceKey]?.get(profileId).orEmpty()
 
-    fun snapshotNow(profileId: Int): List<ResolvedDisplayItem> =
-        surfaces.value[HOME_SURFACE_KEY]?.get(profileId).orEmpty()
-
     @Synchronized
     fun publishResolvedItems(
         surfaceKey: String,
