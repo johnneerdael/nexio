@@ -228,7 +228,6 @@ class HomeViewModel @Inject constructor(
         val truncatedRow: CatalogRow
     )
     internal val truncatedRowCache = mutableMapOf<String, TruncatedRowCacheEntry>()
-    internal val appliedOverlayHashes: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
     internal var inMemoryHomeSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
     internal var pendingRestoredCatalogSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistJob: Job? = null
