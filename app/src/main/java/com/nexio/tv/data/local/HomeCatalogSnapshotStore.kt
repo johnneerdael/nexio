@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
@@ -31,7 +32,10 @@ import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 import java.net.URI
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -122,6 +126,10 @@ class HomeCatalogSnapshotStore private constructor(
 
     private val gson = Gson()
     private val traceSequence = AtomicLong(0L)
+
+    private val catalogRowListType = object : TypeToken<List<CatalogRow>>() {}.type
+    private val metaPreviewListType = object : TypeToken<List<MetaPreview>>() {}.type
+    private val stringListType = object : TypeToken<List<String>>() {}.type
 
     suspend fun currentPosterProviderToken(): String {
         val provider = posterRatingsUrlResolver.getActiveProvider() ?: return "native"
@@ -219,18 +227,15 @@ class HomeCatalogSnapshotStore private constructor(
     ) {
         runCatching {
             val sanitizedSnapshot = snapshot.sanitize().repairArtworkWriteInvariants()
-            val payload = JsonObject().apply {
-                addProperty("schemaVersion", SCHEMA_VERSION)
-                addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
-                addProperty("languageTag", currentLanguageTag())
-                addProperty("posterProviderToken", posterProviderToken)
-                add("catalogRows", gson.toJsonTree(sanitizedSnapshot.catalogRows))
-                add("fullCatalogRows", gson.toJsonTree(sanitizedSnapshot.fullCatalogRows))
-                add("heroItems", gson.toJsonTree(sanitizedSnapshot.heroItems))
-                add("orderedGroupKeys", gson.toJsonTree(sanitizedSnapshot.orderedGroupKeys))
-            }
             val success = runCatching {
-                writeSnapshotJsonToFile(gson.toJson(payload), snapshotFileFor(profileId))
+                streamSnapshotToFile(
+                    snapshot = sanitizedSnapshot,
+                    schemaVersion = SCHEMA_VERSION,
+                    languageEpoch = metadataDiskCacheStore.currentLanguageEpoch(),
+                    languageTag = currentLanguageTag(),
+                    posterProviderToken = posterProviderToken,
+                    target = snapshotFileFor(profileId)
+                )
                 true
             }.getOrElse { error ->
                 Log.w(TAG, "Failed to persist home snapshot to file", error)
@@ -306,6 +311,61 @@ class HomeCatalogSnapshotStore private constructor(
             .replace(Regex("[^a-z0-9_-]"), "_")
             .ifBlank { "unknown" }
         return File(parent, "p${profileId}_${sanitizedTag}.json")
+    }
+
+    private fun streamSnapshotToFile(
+        snapshot: Snapshot,
+        schemaVersion: Int,
+        languageEpoch: Int,
+        languageTag: String,
+        posterProviderToken: String,
+        target: File
+    ) {
+        var tempFile: File? = null
+        try {
+            val parent = target.parentFile
+            if (parent != null && !parent.exists()) parent.mkdirs()
+            tempFile = File(parent ?: File("."), "${target.name}.tmp")
+
+            FileOutputStream(tempFile).use { fos ->
+                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                    JsonWriter(bw).use { writer ->
+                        writer.beginObject()
+                        writer.name("schemaVersion").value(schemaVersion)
+                        writer.name("languageEpoch").value(languageEpoch)
+                        writer.name("languageTag").value(languageTag)
+                        writer.name("posterProviderToken").value(posterProviderToken)
+                        writer.name("catalogRows")
+                        gson.toJson(snapshot.catalogRows, catalogRowListType, writer)
+                        writer.name("fullCatalogRows")
+                        gson.toJson(snapshot.fullCatalogRows, catalogRowListType, writer)
+                        writer.name("heroItems")
+                        gson.toJson(snapshot.heroItems, metaPreviewListType, writer)
+                        writer.name("orderedGroupKeys")
+                        gson.toJson(snapshot.orderedGroupKeys, stringListType, writer)
+                        writer.endObject()
+                    }
+                }
+            }
+
+            try {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    tempFile.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        } catch (error: Exception) {
+            tempFile?.delete()
+            throw error
+        }
     }
 
     private fun writeSnapshotJsonToFile(json: String, target: File) {

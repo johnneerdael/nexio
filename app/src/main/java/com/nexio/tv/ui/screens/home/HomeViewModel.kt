@@ -166,7 +166,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         internal const val CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY = 2
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
-        internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 750L
+        internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 5000L
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
