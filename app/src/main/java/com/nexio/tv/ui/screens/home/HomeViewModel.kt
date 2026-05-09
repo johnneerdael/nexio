@@ -238,7 +238,13 @@ class HomeViewModel @Inject constructor(
                 }
                 projectionCache.retainOnly(activeItemKeys)
                 projectionCache.retainOnlyRails(activeCatalogIds)
-                rails
+                // Stabilise the OUTER list reference so observeResolvedRailRows's
+                // `===` guard can short-circuit when content is unchanged. Without
+                // this, every emission allocates a fresh `rails` list (even when
+                // every element is reference-identical via projectRail), defeating
+                // the guard and pushing identical content into _uiState — which in
+                // turn defeats Compose stability skipping in the home tree.
+                projectionCache.internRailsList(rails)
             }
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
