@@ -147,6 +147,7 @@ class HomeViewModel @Inject constructor(
     internal val traceEvents: TraceMetadataEvents,
     internal val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),
     internal val animeSeasonProjectionResolver: com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver,
+    internal val catalogRowMemo: CatalogRowMemo,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
