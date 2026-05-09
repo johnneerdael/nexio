@@ -6,9 +6,13 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.integration.IntegrationProvider
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStreamWriter
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -139,7 +143,14 @@ class DurableArtworkAssetRecordStore(
             }
 
             tempFile = File.createTempFile("${file.name}.", ".tmp", parent ?: File("."))
-            tempFile.writeText(gson.toJson(toStoreDto(records)))
+            val storeDto = toStoreDto(records)
+            FileOutputStream(tempFile).use { fos ->
+                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                    JsonWriter(bw).use { writer ->
+                        gson.toJson(storeDto, ArtworkAssetRecordStoreDto::class.java, writer)
+                    }
+                }
+            }
             try {
                 Files.move(
                     tempFile.toPath(),

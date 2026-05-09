@@ -6,11 +6,15 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -485,7 +489,13 @@ class DurableArtworkDecisionCache(
             if (parent != null && !parent.exists()) parent.mkdirs()
 
             tempFile = File(parent ?: File("."), "${file.name}.tmp")
-            tempFile.writeText(gson.toJson(storeJson))
+            FileOutputStream(tempFile).use { fos ->
+                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                    JsonWriter(bw).use { writer ->
+                        gson.toJson(storeJson, writer)
+                    }
+                }
+            }
             try {
                 Files.move(
                     tempFile.toPath(),

@@ -2,7 +2,12 @@ package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonWriter
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
+import java.util.SortedMap
 
 interface ArtworkRemoteSourceStore {
     fun put(
@@ -79,11 +84,23 @@ class FileBackedArtworkRemoteSourceStore(
     private fun flush() {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile ?: File("."), "${file.name}.tmp")
-        tmp.writeText(gson.toJson(sourcesByHash.toSortedMap()))
+        val sorted: SortedMap<String, String> = sourcesByHash.toSortedMap()
+        FileOutputStream(tmp).use { fos ->
+            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                JsonWriter(bw).use { writer ->
+                    gson.toJson(sorted, REMOTE_SOURCE_MAP_TYPE, writer)
+                }
+            }
+        }
         if (!tmp.renameTo(file)) {
             tmp.copyTo(file, overwrite = true)
             tmp.delete()
         }
+    }
+
+    private companion object {
+        private val REMOTE_SOURCE_MAP_TYPE =
+            object : TypeToken<SortedMap<String, String>>() {}.type
     }
 }
 
