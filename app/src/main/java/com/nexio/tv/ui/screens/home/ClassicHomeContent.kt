@@ -66,7 +66,8 @@ fun ClassicHomeContent(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onRequestTrailerPreview: (MetaPreview) -> Unit,
     onItemFocus: (MetaPreview) -> Unit = {},
-    onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
+    onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit,
+    resolvedHeroItems: List<HeroDisplayItem> = emptyList()
 ) {
 
     // Nested prefetch: when LazyColumn prefetches a row ahead of scrolling,
@@ -204,7 +205,8 @@ fun ClassicHomeContent(
                             item.apiType,
                             ""
                         )
-                    }
+                    },
+                    resolvedHeroItems = resolvedHeroItems
                 )
             }
         }

@@ -81,7 +81,8 @@ fun GridHomeContent(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onItemFocus: (com.nexio.tv.domain.model.MetaPreview) -> Unit = {},
-    onSaveGridFocusState: (Int, Int) -> Unit
+    onSaveGridFocusState: (Int, Int) -> Unit,
+    resolvedHeroItems: List<HeroDisplayItem> = emptyList()
 ) {
     val gridState = rememberLazyGridState(
         initialFirstVisibleItemIndex = gridFocusState.verticalScrollIndex,
@@ -222,7 +223,8 @@ fun GridHomeContent(
                                         item.apiType,
                                         ""
                                     )
-                                }
+                                },
+                                resolvedHeroItems = resolvedHeroItems
                             )
                         }
                     }
