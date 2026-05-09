@@ -74,6 +74,20 @@ Files.move(tempFile, target, ATOMIC_MOVE, REPLACE_EXISTING)
 
 **Don't read-after-write for diagnostic verification.** Atomic rename is strongly consistent. Re-parsing what you just wrote allocates O(file_size) for no information gain (commit `1c78824d7`).
 
+**For JSON cache reads >50 KB, do not use `gson.fromJson(rawString, type)`.** That overload wraps the String in a `java.io.StringReader` whose `str` field pins the entire String for the duration of the parse. Multiple concurrent reads of similarly-shaped TVDB cache entries (per Modern Home pipeline emission) appeared in the heap as 3 × 205 KiB transient `char[]` orphans plus the String backing storage — observed via `heaptrail -i ... -l --preview-bytes 65536` showing matching `{"airsDays":...}` content held by `StringReader.str`. Use a streaming `JsonReader` over a `BufferedReader` so the file/bytes-on-disk are never materialized as a String at all:
+
+```kotlin
+FileInputStream(file).use { fis ->
+    BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+        JsonReader(br).use { reader ->
+            gson.fromJson<T>(reader, type)  // streams tokens; no big String
+        }
+    }
+}
+```
+
+When SharedPreferences is the read source, the prefs map already materializes each entry as a String (no streaming entry point exists), so the rule only applies once the migration to file-backed JSON has happened — but that migration is itself implied by the >50 KB SharedPreferences ban above.
+
 ### 4. Coroutines — no suspending forEach over lists
 
 `list.forEach { ... suspend ... }` allocates an `ArrayList$Itr` whose `this$0` field pins the parent list. When the lambda body suspends, the iterator is saved in the continuation — pinning the list across all suspension points until the function completes. On this codebase that retained 33,000+ iterators with hundreds of MB of CatalogRow chains (commit `7bdffc525` audit).
