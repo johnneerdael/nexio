@@ -1,10 +1,16 @@
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import coil.imageLoader
 import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.emptyOrNull
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
+import com.nexio.tv.core.artwork.takeIfImageType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -19,9 +25,12 @@ import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
+import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.skipStep
@@ -407,6 +416,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
 
+    @Deprecated("redundant after reducer; remove once Plan B (UI consumption migration) lands")
     private fun MetaPreview.withCompatiblePersistedInternalPoster(
         persistedFallback: MetaPreview?,
         artworkProviderSettings: ArtworkProviderSettings
@@ -469,16 +479,134 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
         }
     }
+
+    companion object {
+        /**
+         * Test entry-point: projects [rawRailItem] against [persistedFallback] using the
+         * reducer so tests can assert non-downgrade behaviour without constructing a full
+         * DI-backed coordinator instance.
+         */
+        @VisibleForTesting
+        internal fun projectRailRowAgainstPersistedForTest(
+            rawRailItem: MetaPreview,
+            persistedFallback: MetaPreview?,
+            externalMeta: MetaPreview?
+        ): MetaPreview = projectRailRowAgainstPersisted(rawRailItem, persistedFallback, externalMeta)
+    }
 }
 
+/**
+ * Projects a freshly-emitted rail row against the persisted (overlay-applied) row using
+ * [HomeRailProjectionReducer]. The rail row is FIRST_PAINT input; the persisted row
+ * carries STALE_RESOLVED (or RESOLVED if a hydration just landed) state. Reducer
+ * guarantees first-paint cannot downgrade resolved fields. Replaces the prior
+ * `mergeFallback`-with-rail-as-primary inversion that allowed raw rail URLs to overwrite
+ * durable artwork refs.
+ *
+ * [externalMeta] is a [Meta] from an external source (e.g. metadata router response) that
+ * can supply RESOLVED fields when available. If neither [persistedFallback] nor
+ * [externalMeta] are present the rail item is returned as-is.
+ */
 internal fun mergePersistedHomeDisplayMetadata(
     currentItem: MetaPreview,
     persistedFallback: MetaPreview?,
     externalMeta: Meta?
 ): MetaPreview {
-    val mergedMetadata = (externalMeta?.toHomeDisplayMetadata() ?: currentItem.toHomeDisplayMetadata())
-        .mergeFallback(persistedFallback?.toHomeDisplayMetadata())
-    return mergedMetadata.applyTo(currentItem)
+    if (persistedFallback == null && externalMeta == null) return currentItem
+    val externalAsPreview: MetaPreview? = externalMeta?.let { meta ->
+        currentItem.copy(
+            name = meta.name ?: currentItem.name,
+            description = meta.description,
+            genres = meta.genres,
+            releaseInfo = meta.releaseInfo,
+            runtime = meta.runtime,
+            imdbRating = meta.imdbRating,
+            ratingSource = meta.ratingSource ?: currentItem.ratingSource,
+            poster = meta.poster ?: currentItem.poster,
+            background = meta.background ?: currentItem.background,
+            logo = meta.logo ?: currentItem.logo,
+            posterProviderTag = meta.posterProviderTag ?: currentItem.posterProviderTag,
+            artwork = meta.artwork ?: currentItem.artwork
+        )
+    }
+    return projectRailRowAgainstPersisted(
+        rawRailItem = currentItem,
+        persistedFallback = persistedFallback,
+        externalMeta = externalAsPreview
+    )
+}
+
+/**
+ * Core reducer projection: routes [rawRailItem] through [HomeRailProjectionReducer] with
+ * [persistedFallback] / [externalMeta] promoted to STALE_RESOLVED rank. The result is
+ * applied back onto [rawRailItem] so non-display fields (ids, type, stable ids, etc.)
+ * are preserved from the fresh rail row.
+ */
+private fun projectRailRowAgainstPersisted(
+    rawRailItem: MetaPreview,
+    persistedFallback: MetaPreview?,
+    externalMeta: MetaPreview?
+): MetaPreview {
+    if (persistedFallback == null && externalMeta == null) return rawRailItem
+    val nowMs = System.currentTimeMillis()
+    val firstPaintSlots = rawRailItem.toFirstPaintSlots(nowMs)
+    val resolvedRow = externalMeta ?: persistedFallback!!
+    val resolvedSlots = resolvedRow.toFirstPaintSlots(nowMs).toStaleResolved()
+    val merged = HomeRailProjectionReducer.reduce(
+        firstPaint = firstPaintSlots,
+        overlay = null,
+        existing = resolvedSlots,
+        profile = null
+    )
+    return rawRailItem.applyMergedSlotsForRefresh(merged)
+}
+
+private fun MetaPreview.applyMergedSlotsForRefresh(
+    slots: ResolvedDisplayFieldSlots
+): MetaPreview {
+    val posterRef = slots.poster.value
+    val backdropRef = slots.backdrop.value
+    val logoRef = slots.logo.value
+    val thumbnailRef = slots.thumbnail.value
+    val rating = slots.rating.value
+    return copy(
+        name = slots.title.value ?: name,
+        description = slots.overview.value ?: description,
+        genres = slots.genres.value ?: genres,
+        releaseInfo = slots.releaseInfo.value ?: releaseInfo,
+        runtime = slots.runtime.value ?: runtime,
+        imdbRating = rating?.value?.toFloat() ?: imdbRating,
+        ratingSource = rating?.source ?: ratingSource,
+        poster = posterRef.toLegacyArtworkString() ?: poster,
+        background = backdropRef.toLegacyArtworkString() ?: background,
+        logo = logoRef.toLegacyArtworkString() ?: logo,
+        posterProviderTag = slots.posterProviderTag.value ?: posterProviderTag,
+        artwork = ArtworkBundle(
+            poster = posterRef.takeIfImageType(com.nexio.tv.core.artwork.ArtworkType.POSTER),
+            backdrop = backdropRef.takeIfImageType(com.nexio.tv.core.artwork.ArtworkType.BACKDROP),
+            logo = logoRef.takeIfImageType(com.nexio.tv.core.artwork.ArtworkType.LOGO),
+            thumbnail = thumbnailRef.takeIfImageType(com.nexio.tv.core.artwork.ArtworkType.THUMBNAIL)
+        ).enforceArtworkTypeBoundaries().emptyOrNull()
+    )
+}
+
+private fun ResolvedDisplayFieldSlots.toStaleResolved(): ResolvedDisplayFieldSlots {
+    fun <T> ResolvedSlot<T>.promoted(): ResolvedSlot<T> =
+        if (rank == DisplaySourceRank.FIRST_PAINT) copy(rank = DisplaySourceRank.STALE_RESOLVED) else this
+    return ResolvedDisplayFieldSlots(
+        title = title.promoted(),
+        originalTitle = originalTitle.promoted(),
+        overview = overview.promoted(),
+        genres = genres.promoted(),
+        releaseInfo = releaseInfo.promoted(),
+        runtime = runtime.promoted(),
+        rating = rating.promoted(),
+        poster = poster.promoted(),
+        backdrop = backdrop.promoted(),
+        logo = logo.promoted(),
+        thumbnail = thumbnail.promoted(),
+        posterProviderTag = posterProviderTag.promoted()
+    )
 }
 
 internal fun shouldReusePersistedHomeItem(

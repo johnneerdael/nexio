@@ -39,6 +39,7 @@ import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import com.nexio.tv.ui.screens.home.order.toHomeRailDefinitions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -700,7 +701,9 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
             if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, overlays)) {
                 return@collectLatest
             }
-            hydratedHomeOverlaysByItemKey.value = overlays
+            hydratedHomeOverlaysByItemKey.update { previous ->
+                preserveStaleOverlays(previous = previous, next = overlays)
+            }
             scheduleUpdateCatalogRows()
         }
     }
@@ -3455,10 +3458,12 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
     homeSnapshotPersistJob?.cancel()
     homeSnapshotPersistJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS)
+        ensureActive()
         if (homeSnapshotPersistGeneration != persistGeneration) return@launch
         if (!isCurrentHomeProfileGeneration(profileGeneration)) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        ensureActive()
         integrationOwnershipService.syncRails(
             RailKeyFactory.homeCatalogNamespace(profileId),
             homeCatalogSnapshotStore.buildRailMemberships(
@@ -3467,7 +3472,9 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
                 profileId = profileId
             )
         )
+        ensureActive()
         homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
+        ensureActive()
         val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId) ?: latestSnapshot
         Log.d(
             HomeViewModel.TAG,
@@ -4257,4 +4264,33 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             )
         }
     }
+}
+
+/**
+ * Guards against transient-empty overlay emissions without growing the map unboundedly.
+ *
+ * When a rail observer re-subscribes with a different itemKey set, the store can briefly
+ * return an empty map before the new overlays arrive. Discarding previous overlays at that
+ * point causes visible "pop" as the UI briefly loses all artwork. This function retains the
+ * previous map only for that transient-empty window.
+ *
+ * Once a non-empty `next` arrives it represents the new authoritative view and REPLACES
+ * `previous` entirely. Unioning the two maps would cause unbounded growth: each
+ * rail-visibility change spawns a new observer with a different itemKey set, and merging
+ * would accumulate every prior key indefinitely.
+ *
+ * Rules:
+ * - `next` empty AND `previous` non-empty → return `previous` as-is (transient-empty guard)
+ * - `next` non-empty → return `next` as-is (authoritative replacement)
+ */
+internal fun preserveStaleOverlays(
+    previous: Map<String, HydratedHomeOverlay>,
+    next: Map<String, HydratedHomeOverlay>
+): Map<String, HydratedHomeOverlay> {
+    // Transient empty re-emit (e.g., during observer re-subscribe) must not flush
+    // hydrated overlays — keep `previous` until a non-empty emission arrives.
+    // Once the new authoritative view lands, REPLACE entirely; do not union, or the
+    // map grows unboundedly across observer re-subscriptions.
+    if (next.isEmpty() && previous.isNotEmpty()) return previous
+    return next
 }
