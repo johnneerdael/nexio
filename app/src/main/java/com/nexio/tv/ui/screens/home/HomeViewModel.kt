@@ -285,14 +285,37 @@ class HomeViewModel @Inject constructor(
                 resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
             }
             .combine(_displayHeroItems) { resolvedItems, heroMetas ->
-                val byItemKey = resolvedItems.associateBy { it.itemKey }
-                val activeKeys = HashSet<String>(heroMetas.size)
-                val out = heroMetas.mapNotNull { meta ->
-                    val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
-                    byItemKey[itemKey]?.let { resolved ->
-                        activeKeys += itemKey
-                        projectionCache.projectHero(resolved)
+                // Hero list is small (~7 items). Avoid allocating a 1900-entry
+                // associateBy() Map per emission of observeHomeSurface — that
+                // alone added ~9 MB/sec of HashMap churn on top of the rails
+                // flow doing the same thing. Build a tiny lookup keyed only by
+                // the keys we actually need (max ~7 entries), then linear-scan
+                // resolvedItems just for those.
+                if (heroMetas.isEmpty()) {
+                    projectionCache.retainOnlyHeroItems(emptySet())
+                    return@combine projectionCache.internHeroList(emptyList())
+                }
+                val wantedKeys = HashSet<String>(heroMetas.size)
+                for (i in heroMetas.indices) {
+                    val meta = heroMetas[i]
+                    wantedKeys += homeDisplayItemKey(meta.apiType, meta.id)
+                }
+                val resolvedByWantedKey = HashMap<String, com.nexio.tv.domain.model.ResolvedDisplayItem>(heroMetas.size)
+                for (i in resolvedItems.indices) {
+                    val item = resolvedItems[i]
+                    if (item.itemKey in wantedKeys) {
+                        resolvedByWantedKey[item.itemKey] = item
+                        if (resolvedByWantedKey.size == wantedKeys.size) break
                     }
+                }
+                val activeKeys = HashSet<String>(heroMetas.size)
+                val out = ArrayList<HeroDisplayItem>(heroMetas.size)
+                for (i in heroMetas.indices) {
+                    val meta = heroMetas[i]
+                    val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
+                    val resolved = resolvedByWantedKey[itemKey] ?: continue
+                    activeKeys += itemKey
+                    out += projectionCache.projectHero(resolved)
                 }
                 projectionCache.retainOnlyHeroItems(activeKeys)
                 projectionCache.internHeroList(out)
