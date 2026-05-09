@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
@@ -32,9 +34,12 @@ import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.URI
 import java.nio.file.AtomicMoveNotSupportedException
@@ -148,33 +153,37 @@ class HomeCatalogSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ): Snapshot? {
         return runCatching {
-            val raw = readSnapshotJson(profileId)?.takeIf { it.isNotBlank() }
-                ?: run {
-                    traceSnapshot(
-                        eventType = "home.snapshot_read",
-                        payload = mapOf(
-                            "success" to true,
-                            "profileId" to profileId,
-                            "snapshotFound" to false,
-                            "reason" to "missing_snapshot"
-                        )
-                    )
-                    return null
+            val file = snapshotFileFor(profileId)
+            // Streaming read directly off the file, never materializing the whole
+            // payload as a String or JsonObject tree (CLAUDE.md hard rule #3 read
+            // clause). Heap dumps showed `file.readText()` + `gson.fromJson(raw,
+            // JsonObject::class)` cost a 109 MB transient char[] *plus* a ~100 MB
+            // JsonObject tree per cold-start when the snapshot grew with Plan A's
+            // larger catalogRows.
+            val decoded = if (file.exists()) {
+                streamReadSnapshot(file, posterProviderToken)
+            } else {
+                // One-time legacy migration path: small SharedPreferences-stored payload.
+                // The legacy data is at most a few hundred KB (pre-Plan A schema), so
+                // the small-allocation decode is acceptable here. After migration
+                // returns, future reads will hit the streaming path.
+                migrateLegacySnapshotToFile(profileId, file)?.let { migratedRaw ->
+                    decodeSnapshot(migratedRaw, posterProviderToken)
                 }
+            } ?: run {
+                val snapshotFound = file.exists()
+                traceSnapshot(
+                    eventType = "home.snapshot_read",
+                    payload = mapOf(
+                        "success" to !snapshotFound,
+                        "profileId" to profileId,
+                        "snapshotFound" to snapshotFound,
+                        "reason" to if (snapshotFound) "decode_or_policy_rejected" else "missing_snapshot"
+                    )
+                )
+                return null
+            }
             val requiredPosterProviderTag = requiredPosterProviderTag(posterProviderToken)
-            val decoded = decodeSnapshot(raw, posterProviderToken)
-                ?: run {
-                    traceSnapshot(
-                        eventType = "home.snapshot_read",
-                        payload = mapOf(
-                            "success" to false,
-                            "profileId" to profileId,
-                            "snapshotFound" to true,
-                            "reason" to "decode_or_policy_rejected"
-                        )
-                    )
-                    return null
-                }
             val sanitizeResult = decoded.sanitizeForSnapshot()
             val sanitized = sanitizeResult.snapshot
             val providerTagMismatches = sanitized.posterProviderTagMismatches(
@@ -280,24 +289,112 @@ class HomeCatalogSnapshotStore private constructor(
         }
     }
 
-    private fun readSnapshotJson(profileId: Int): String? {
-        val file = snapshotFileFor(profileId)
-        if (file.exists()) {
-            return runCatching { file.readText() }.getOrNull()
-        }
-        // One-time migration: legacy SharedPreferences-backed payloads
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val legacy = prefs.getString(snapshotKey(profileId), null)
-        if (legacy != null) {
-            // Migrate: write legacy JSON to file, remove the legacy SharedPreferences key.
-            runCatching { writeSnapshotJsonToFile(legacy, file) }
-                .onFailure { error ->
-                    Log.w(TAG, "Failed to migrate legacy snapshot to file", error)
+    /**
+     * Streams the snapshot JSON file directly via [JsonReader] over a [BufferedReader]
+     * over a [FileInputStream]. Validates schemaVersion / languageTag /
+     * posterProviderToken on the fly so a mismatch can short-circuit before the
+     * expensive list parses ever start.
+     *
+     * Replaces the previous `file.readText()` + `gson.fromJson(raw,
+     * JsonObject::class)` path that materialized the full snapshot as a 109 MB
+     * `String` *plus* a comparable JsonObject tree per cold-start (heap dump
+     * `RootJavaFrame`-pinned char[] of `{"schemaVersion":4,...}`).
+     */
+    private fun streamReadSnapshot(file: File, posterProviderToken: String): Snapshot? {
+        val expectedLanguageTag = currentLanguageTag()
+        var schemaVersion: Int = -1
+        var languageTag: String? = null
+        var cachedPosterToken: String? = null
+        var catalogRows: List<CatalogRow> = emptyList()
+        var fullCatalogRows: List<CatalogRow> = emptyList()
+        var heroItems: List<MetaPreview> = emptyList()
+        var orderedGroupKeys: List<String> = emptyList()
+
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            return@runCatching null
+                        }
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "schemaVersion" -> {
+                                    schemaVersion = reader.nextInt()
+                                    if (schemaVersion != SCHEMA_VERSION) return@runCatching null
+                                }
+                                "languageTag" -> {
+                                    languageTag = reader.nextString().trim()
+                                    if (languageTag.isNullOrBlank() ||
+                                        languageTag != expectedLanguageTag
+                                    ) {
+                                        return@runCatching null
+                                    }
+                                }
+                                "posterProviderToken" -> {
+                                    cachedPosterToken = reader.nextString().trim()
+                                    if (cachedPosterToken != posterProviderToken) {
+                                        Log.d(
+                                            TAG,
+                                            "Poster provider changed " +
+                                                "($cachedPosterToken -> $posterProviderToken), " +
+                                                "invalidating snapshot"
+                                        )
+                                        return@runCatching null
+                                    }
+                                }
+                                "catalogRows" -> {
+                                    catalogRows = gson.fromJson<List<CatalogRow>>(reader, catalogRowListType)
+                                        ?: emptyList()
+                                }
+                                "fullCatalogRows" -> {
+                                    fullCatalogRows = gson.fromJson<List<CatalogRow>>(reader, catalogRowListType)
+                                        ?: emptyList()
+                                }
+                                "heroItems" -> {
+                                    heroItems = gson.fromJson<List<MetaPreview>>(reader, metaPreviewListType)
+                                        ?: emptyList()
+                                }
+                                "orderedGroupKeys" -> {
+                                    orderedGroupKeys = gson.fromJson<List<String>>(reader, stringListType)
+                                        ?: emptyList()
+                                }
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
                 }
-            runCatching {
-                prefs.edit().remove(snapshotKey(profileId)).apply()
             }
-        }
+            // All gates passed; return the canonical Snapshot.
+            Snapshot(
+                catalogRows = catalogRows,
+                fullCatalogRows = fullCatalogRows,
+                heroItems = heroItems,
+                orderedGroupKeys = orderedGroupKeys
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read home snapshot from file", error)
+        }.getOrNull()
+    }
+
+    /**
+     * Migrates a legacy SharedPreferences-stored snapshot blob (pre-file backed
+     * Plan-A path) to the new file-backed format and returns the legacy JSON for
+     * the caller to decode. Only invoked when [snapshotFileFor] does not exist.
+     * Legacy payloads are at most a few hundred KB (pre-Plan A schema), so the
+     * small-allocation decode in [decodeSnapshot] is acceptable for them.
+     */
+    private fun migrateLegacySnapshotToFile(profileId: Int, file: File): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val legacy = prefs.getString(snapshotKey(profileId), null) ?: return null
+        runCatching { writeSnapshotJsonToFile(legacy, file) }
+            .onFailure { error ->
+                Log.w(TAG, "Failed to migrate legacy snapshot to file", error)
+            }
+        runCatching { prefs.edit().remove(snapshotKey(profileId)).apply() }
         return legacy
     }
 
