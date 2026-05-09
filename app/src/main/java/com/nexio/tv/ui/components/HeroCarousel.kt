@@ -51,11 +51,15 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RatingDisplayFormatter
+import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
+import com.nexio.tv.ui.screens.home.HeroDisplayItem
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import kotlinx.coroutines.delay
@@ -70,9 +74,20 @@ fun HeroCarousel(
     onItemClick: (MetaPreview) -> Unit,
     onItemFocus: (MetaPreview) -> Unit = {},
     focusRequester: FocusRequester? = null,
+    resolvedHeroItems: List<HeroDisplayItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     if (items.isEmpty()) return
+
+    // Plan B Task 10 — overlay map keyed by [homeDisplayItemKey]; same key shape
+    // [HomeViewModel.resolvedHeroItemsFlow] uses when projecting hero metas. Built
+    // once per [resolvedHeroItems] reference (interned upstream by
+    // [ResolvedDisplayProjectionCache.internHeroList]) so per-slide lookups stay
+    // O(1) without re-allocating the map on every recomposition.
+    val resolvedByItemKey: Map<String, HeroDisplayItem> = remember(resolvedHeroItems) {
+        if (resolvedHeroItems.isEmpty()) emptyMap()
+        else resolvedHeroItems.associateBy { it.itemKey }
+    }
 
     var activeIndex by remember { mutableIntStateOf(0) }
     var isFocused by remember { mutableStateOf(false) }
@@ -135,7 +150,8 @@ fun HeroCarousel(
             label = "heroSlide"
         ) { index ->
             val item = items.getOrNull(index) ?: return@Crossfade
-            HeroCarouselSlide(item = item)
+            val resolved = resolvedByItemKey[homeDisplayItemKey(item.apiType, item.id)]
+            HeroCarouselSlide(item = item, resolved = resolved)
         }
 
         // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
@@ -179,7 +195,8 @@ fun HeroCarousel(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun HeroCarouselSlide(
-    item: MetaPreview
+    item: MetaPreview,
+    resolved: HeroDisplayItem?
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -189,12 +206,33 @@ private fun HeroCarouselSlide(
     }
     val requestHeightPx = remember(density) { with(density) { 400.dp.roundToPx() } }
     val logoRequestHeightPx = remember(density) { with(density) { 80.dp.roundToPx() } }
-    val displayBackground = item.displayBackground
-    val displayLogo = item.displayLogo
-    val backgroundModel = remember(context, displayBackground, requestWidthPx, requestHeightPx) {
+
+    // Plan B Task 10 — overlay HeroDisplayItem fields onto legacy MetaPreview
+    // when a resolved match exists (display authority is ResolvedDisplayItem;
+    // see CLAUDE.md Rule 1). Falls back to MetaPreview fields so first paint
+    // never downgrades while the resolved feed is still hydrating. Memoized via
+    // remember(item, resolved) so recomposition of the same slide with stable
+    // upstream references doesn't re-derive (Rule 5).
+    val effectiveBackground: String? = remember(item, resolved) {
+        resolved?.backgroundRef?.toLegacyArtworkString() ?: item.displayBackground
+    }
+    val effectiveLogo: String? = remember(item, resolved) {
+        resolved?.logoRef?.toLegacyArtworkString() ?: item.displayLogo
+    }
+    val effectiveTitle: String = remember(item, resolved) {
+        resolved?.title ?: item.name
+    }
+    val effectiveRating: Float? = remember(item, resolved) {
+        resolved?.rating?.value?.toFloat() ?: item.imdbRating
+    }
+    val effectiveRatingSource: TitleRatingSource? = remember(item, resolved) {
+        resolved?.rating?.source ?: item.ratingSource
+    }
+
+    val backgroundModel = remember(context, effectiveBackground, requestWidthPx, requestHeightPx) {
         ImageRequest.Builder(context)
             .data(
-                displayBackground.toLegacyArtworkCoilModelOrNull(
+                effectiveBackground.toLegacyArtworkCoilModelOrNull(
                     ownerKey = "${item.id}:hero-backdrop",
                     imageType = ArtworkType.BACKDROP
                 )
@@ -203,8 +241,8 @@ private fun HeroCarouselSlide(
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }
-    val logoModel = remember(context, displayLogo, requestWidthPx, logoRequestHeightPx) {
-        displayLogo?.let {
+    val logoModel = remember(context, effectiveLogo, requestWidthPx, logoRequestHeightPx) {
+        effectiveLogo?.let {
             ImageRequest.Builder(context)
                 .data(
                     it.toLegacyArtworkCoilModelOrNull(
@@ -217,8 +255,8 @@ private fun HeroCarouselSlide(
                 .build()
         }
     }
-    var logoLoadFailed by remember(displayLogo) { mutableStateOf(false) }
-    val showLogo = !displayLogo.isNullOrBlank() && !logoLoadFailed
+    var logoLoadFailed by remember(effectiveLogo) { mutableStateOf(false) }
+    val showLogo = !effectiveLogo.isNullOrBlank() && !logoLoadFailed
 
     val bgColor = NexioColors.Background
     val bottomGradient = remember(bgColor) {
@@ -251,7 +289,7 @@ private fun HeroCarouselSlide(
         // Background image
         AsyncImage(
             model = backgroundModel,
-            contentDescription = item.name,
+            contentDescription = effectiveTitle,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter
@@ -282,7 +320,7 @@ private fun HeroCarouselSlide(
             if (showLogo) {
                 AsyncImage(
                     model = logoModel,
-                    contentDescription = item.name,
+                    contentDescription = effectiveTitle,
                     onError = { logoLoadFailed = true },
                     modifier = Modifier
                         .height(80.dp)
@@ -292,7 +330,7 @@ private fun HeroCarouselSlide(
                 )
             } else {
                 Text(
-                    text = item.name,
+                    text = effectiveTitle,
                     style = MaterialTheme.typography.headlineLarge,
                     color = Color.White,
                     maxLines = 2,
@@ -307,12 +345,12 @@ private fun HeroCarouselSlide(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                item.imdbRating?.let { rating ->
+                effectiveRating?.let { rating ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        val ratingBadge = remember(item.ratingSource) { titleRatingBadge(item.ratingSource.orDefault()) }
+                        val ratingBadge = remember(effectiveRatingSource) { titleRatingBadge(effectiveRatingSource.orDefault()) }
                         val ratingModel = remember(context, ratingBadge.logoRes) {
                             ImageRequest.Builder(context)
                                 .data(ratingBadge.logoRes)
