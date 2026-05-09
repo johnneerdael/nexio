@@ -109,7 +109,10 @@ internal suspend fun HomeViewModel.warmContinueWatchingRuntimeIfNeededPipeline()
     val candidates = continueWatchingItemsMissingRuntime(_uiState.value.continueWatchingItems)
     if (candidates.isEmpty()) return
 
-    candidates.forEach { item ->
+    // Indexed iteration to avoid ArrayList$Itr capture in continuation.
+    // resolveContinueWatchingRuntimeMinutes(...) is suspending and would otherwise pin the candidates list.
+    for (i in candidates.indices) {
+        val item = candidates[i]
         if (!isNonPlaybackHomeWorkAllowed()) return
         val runtime = try {
             resolveContinueWatchingRuntimeMinutes(item)
