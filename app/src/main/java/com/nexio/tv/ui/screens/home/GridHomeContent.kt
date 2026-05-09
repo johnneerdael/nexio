@@ -50,11 +50,13 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.GridContinueWatchingSection
 import com.nexio.tv.ui.components.HeroCarousel
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
+import com.nexio.tv.ui.components.overlayResolvedDisplay
 import com.nexio.tv.ui.theme.NexioColors
 
 /** Minimum interval between processed key repeat events to prevent HWUI overload. */
@@ -100,6 +102,16 @@ fun GridHomeContent(
     val gridItems = uiState.gridItems
     val continueWatchingItems = uiState.continueWatchingItems
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
+
+    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = remember(uiState.resolvedRailRows) {
+        val builder = mutableMapOf<String, ModernHomeRowItem>()
+        uiState.resolvedRailRows.forEach { rail ->
+            rail.items.forEach { resolved ->
+                builder[resolved.itemKey] = resolved
+            }
+        }
+        builder
+    }
 
     // Build index-to-section mapping for sticky header
     val sectionMapping = remember(gridItems, continueWatchingOffset) {
@@ -318,22 +330,29 @@ fun GridHomeContent(
                             span = { GridItemSpan(1) },
                             contentType = "content"
                         ) {
+                            val originalItem = gridItem.item
+                            val resolvedItem = resolvedItemsByItemKey[
+                                homeDisplayItemKey(originalItem.apiType, originalItem.id)
+                            ]
+                            val effectiveItem = remember(originalItem, resolvedItem) {
+                                overlayResolvedDisplay(originalItem, resolvedItem)
+                            }
                             GridContentCard(
-                                item = gridItem.item,
+                                item = effectiveItem,
                                 focusRequester = focusRequester,
                                 posterCardStyle = posterCardStyle,
                                 showLabel = uiState.posterLabelsEnabled,
-                                isWatched = isCatalogItemWatched(gridItem.item),
-                                onFocused = { onItemFocus(gridItem.item) },
+                                isWatched = isCatalogItemWatched(originalItem),
+                                onFocused = { onItemFocus(originalItem) },
                                 onClick = {
                                     onNavigateToDetail(
-                                        gridItem.item.id,
-                                        gridItem.item.apiType,
+                                        originalItem.id,
+                                        originalItem.apiType,
                                         gridItem.addonBaseUrl
                                     )
                                 },
                                 onLongPress = {
-                                    onCatalogItemLongPress(gridItem.item, gridItem.addonBaseUrl)
+                                    onCatalogItemLongPress(originalItem, gridItem.addonBaseUrl)
                                 }
                             )
                         }

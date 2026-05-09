@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.CatalogRowSection
 import com.nexio.tv.ui.components.ContinueWatchingSection
@@ -111,11 +112,33 @@ fun ClassicHomeContent(
             focusState.verticalScrollIndex == 0 &&
             focusState.verticalScrollOffset == 0
     }
-    val visibleCatalogRows = remember(uiState.catalogRows) {
-        uiState.catalogRows.filter { it.items.isNotEmpty() }
+    val catalogRowsByCatalogId = remember(uiState.catalogRows) {
+        uiState.catalogRows.associateBy { it.catalogId }
     }
-    val visibleCatalogKeys = remember(visibleCatalogRows) {
-        visibleCatalogRows.mapTo(mutableSetOf()) { "${it.addonId}_${it.apiType}_${it.catalogId}" }
+    val visiblePairs: List<Pair<ResolvedRailRow, CatalogRow>> = remember(
+        uiState.resolvedRailRows,
+        catalogRowsByCatalogId
+    ) {
+        uiState.resolvedRailRows.mapNotNull { rail ->
+            if (rail.items.isEmpty()) return@mapNotNull null
+            val catalogRow = catalogRowsByCatalogId[rail.catalogId] ?: return@mapNotNull null
+            if (catalogRow.items.isEmpty()) return@mapNotNull null
+            rail to catalogRow
+        }
+    }
+    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = remember(uiState.resolvedRailRows) {
+        val builder = mutableMapOf<String, ModernHomeRowItem>()
+        uiState.resolvedRailRows.forEach { rail ->
+            rail.items.forEach { resolved ->
+                builder[resolved.itemKey] = resolved
+            }
+        }
+        builder
+    }
+    val visibleCatalogKeys = remember(visiblePairs) {
+        visiblePairs.mapTo(mutableSetOf()) { (_, row) ->
+            "${row.addonId}_${row.apiType}_${row.catalogId}"
+        }
     }
 
     LaunchedEffect(visibleCatalogKeys) {
@@ -246,10 +269,11 @@ fun ClassicHomeContent(
         }
 
         itemsIndexed(
-            items = visibleCatalogRows,
-            key = { _, item -> "${item.addonId}_${item.apiType}_${item.catalogId}" },
-            contentType = { _, item -> catalogRowContentType(item) }
-        ) { index, catalogRow ->
+            items = visiblePairs,
+            key = { _, pair -> "${pair.second.addonId}_${pair.second.apiType}_${pair.second.catalogId}" },
+            contentType = { _, pair -> catalogRowContentType(pair.second) }
+        ) { index, pair ->
+            val catalogRow = pair.second
             val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val shouldInitialFocusFirstCatalogRow =
@@ -272,6 +296,7 @@ fun ClassicHomeContent(
 
             CatalogRowSection(
                 catalogRow = catalogRow,
+                resolvedItemsByItemKey = resolvedItemsByItemKey,
                 posterCardStyle = posterCardStyle,
                 showPosterLabels = uiState.posterLabelsEnabled,
                 showAddonName = uiState.catalogAddonNameEnabled,
