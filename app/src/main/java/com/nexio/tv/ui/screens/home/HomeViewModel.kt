@@ -62,6 +62,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
@@ -73,17 +74,23 @@ import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -137,6 +144,7 @@ class HomeViewModel @Inject constructor(
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
+    internal val projectionCache: ResolvedDisplayProjectionCache,
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
     internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
     internal val integrationHydrationCoordinator: IntegrationHydrationCoordinator = NoOpIntegrationHydrationCoordinator,
@@ -191,6 +199,34 @@ class HomeViewModel @Inject constructor(
     internal val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val resolvedRailRowsFlow: Flow<List<ResolvedRailRow>> =
+        profileManager.activeProfileSession
+            .map { it.profileId }
+            .distinctUntilChanged()
+            .flatMapLatest { profileId ->
+                resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
+            }
+            .combine(_uiState.map { it.catalogRows }.distinctUntilChanged()) { resolvedItems, catalogRows ->
+                val byItemKey = resolvedItems.associateBy { it.itemKey }
+                val activeItemKeys = mutableSetOf<String>()
+                val activeCatalogIds = mutableSetOf<String>()
+                val rails = catalogRows.map { row ->
+                    val items = row.items.mapNotNull { meta ->
+                        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
+                        byItemKey[itemKey]?.let { resolved ->
+                            activeItemKeys += itemKey
+                            projectionCache.projectItem(resolved)
+                        }
+                    }
+                    activeCatalogIds += row.catalogId
+                    projectionCache.projectRail(row.catalogId, row.catalogName, items)
+                }
+                projectionCache.retainOnly(activeItemKeys)
+                projectionCache.retainOnlyRails(activeCatalogIds)
+                rails
+            }
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
@@ -425,6 +461,17 @@ class HomeViewModel @Inject constructor(
         observePremiumArtworkInvalidations()
         loadContinueWatching()
         observeInstalledAddons()
+        observeResolvedRailRows()
+    }
+
+    private fun observeResolvedRailRows() {
+        resolvedRailRowsFlow
+            .onEach { rails ->
+                _uiState.update { state ->
+                    if (state.resolvedRailRows === rails) state else state.copy(resolvedRailRows = rails)
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     private fun observePremiumArtworkInvalidations() {
