@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.takeIfImageType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HydratedHomeOverlay
@@ -32,12 +33,21 @@ fun MetaPreview.toFirstPaintSlots(nowMs: Long): ResolvedDisplayFieldSlots {
         releaseInfo = stringSlot(releaseInfo, railProvider, ROLE_RAIL_PREVIEW, nowMs),
         runtime = stringSlot(runtime, railProvider, ROLE_RAIL_PREVIEW, nowMs),
         rating = ratingSlot(imdbRating, ratingSource, railProvider, ROLE_RAIL_PREVIEW, nowMs),
-        poster = artworkSlot(poster, ArtworkType.POSTER, railProvider, ROLE_RAIL_PREVIEW, nowMs),
-        backdrop = artworkSlot(background, ArtworkType.BACKDROP, railProvider, ROLE_RAIL_PREVIEW, nowMs),
-        logo = artworkSlot(logo, ArtworkType.LOGO, railProvider, ROLE_RAIL_PREVIEW, nowMs),
-        thumbnail = artworkSlot(
-            artwork?.thumbnail?.toLegacyArtworkString(),
-            ArtworkType.THUMBNAIL, railProvider, ROLE_RAIL_PREVIEW, nowMs
+        poster = artworkSlotFromBundle(
+            artwork?.poster.takeIfImageType(ArtworkType.POSTER), poster,
+            ArtworkType.POSTER, railProvider, ROLE_RAIL_PREVIEW, nowMs, DisplaySourceRank.FIRST_PAINT
+        ),
+        backdrop = artworkSlotFromBundle(
+            artwork?.backdrop.takeIfImageType(ArtworkType.BACKDROP), background,
+            ArtworkType.BACKDROP, railProvider, ROLE_RAIL_PREVIEW, nowMs, DisplaySourceRank.FIRST_PAINT
+        ),
+        logo = artworkSlotFromBundle(
+            artwork?.logo.takeIfImageType(ArtworkType.LOGO), logo,
+            ArtworkType.LOGO, railProvider, ROLE_RAIL_PREVIEW, nowMs, DisplaySourceRank.FIRST_PAINT
+        ),
+        thumbnail = artworkSlotFromBundle(
+            artwork?.thumbnail.takeIfImageType(ArtworkType.THUMBNAIL), artwork?.thumbnail?.toLegacyArtworkString(),
+            ArtworkType.THUMBNAIL, railProvider, ROLE_RAIL_PREVIEW, nowMs, DisplaySourceRank.FIRST_PAINT
         ),
         posterProviderTag = stringSlot(posterProviderTag, railProvider, ROLE_RAIL_PREVIEW, nowMs)
     )
@@ -66,10 +76,10 @@ fun HydratedHomeOverlay.toResolvedSlots(nowMs: Long, isStale: Boolean): Resolved
         releaseInfo = stringSlot(fields.releaseInfo, providerFor("releaseInfo"), roleFor("releaseInfo"), updatedAtMs, rank),
         runtime = stringSlot(fields.runtime, providerFor("runtime"), roleFor("runtime"), updatedAtMs, rank),
         rating = ratingSlot(fields.imdbRating, fields.ratingSource, providerFor("rating"), roleFor("rating"), updatedAtMs, rank),
-        poster = artworkSlotFromBundle(fields.artwork?.poster, fields.poster, ArtworkType.POSTER, providerFor("poster"), roleFor("poster"), updatedAtMs, rank),
-        backdrop = artworkSlotFromBundle(fields.artwork?.backdrop, fields.backdrop, ArtworkType.BACKDROP, providerFor("backdrop"), roleFor("backdrop"), updatedAtMs, rank),
-        logo = artworkSlotFromBundle(fields.artwork?.logo, fields.logo, ArtworkType.LOGO, providerFor("logo"), roleFor("logo"), updatedAtMs, rank),
-        thumbnail = artworkSlotFromBundle(fields.artwork?.thumbnail, fields.thumbnail, ArtworkType.THUMBNAIL, providerFor("thumbnail"), roleFor("thumbnail"), updatedAtMs, rank),
+        poster = artworkSlotFromBundle(fields.artwork?.poster.takeIfImageType(ArtworkType.POSTER), fields.poster, ArtworkType.POSTER, providerFor("poster"), roleFor("poster"), updatedAtMs, rank),
+        backdrop = artworkSlotFromBundle(fields.artwork?.backdrop.takeIfImageType(ArtworkType.BACKDROP), fields.backdrop, ArtworkType.BACKDROP, providerFor("backdrop"), roleFor("backdrop"), updatedAtMs, rank),
+        logo = artworkSlotFromBundle(fields.artwork?.logo.takeIfImageType(ArtworkType.LOGO), fields.logo, ArtworkType.LOGO, providerFor("logo"), roleFor("logo"), updatedAtMs, rank),
+        thumbnail = artworkSlotFromBundle(fields.artwork?.thumbnail.takeIfImageType(ArtworkType.THUMBNAIL), fields.thumbnail, ArtworkType.THUMBNAIL, providerFor("thumbnail"), roleFor("thumbnail"), updatedAtMs, rank),
         posterProviderTag = stringSlot(fields.posterProviderTag, providerFor("posterProviderTag"), roleFor("posterProviderTag"), updatedAtMs, rank)
     )
 }
