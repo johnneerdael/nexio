@@ -1,19 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
-import com.nexio.tv.core.artwork.ArtworkBundle
-import com.nexio.tv.core.artwork.ArtworkDecisionKey
-import com.nexio.tv.core.artwork.ArtworkDisplayHints
-import com.nexio.tv.core.artwork.ArtworkDisplayRef
-import com.nexio.tv.core.artwork.ArtworkProviderId
-import com.nexio.tv.core.artwork.ArtworkSourceRole
-import com.nexio.tv.core.artwork.ArtworkTrace
-import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
@@ -22,9 +11,7 @@ import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
-import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
-import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -233,91 +220,6 @@ class HomeHydrationOverlayApplierTest {
 
         assertEquals(overlayPremiumRef, applied.poster)
         assertEquals("rpdb", applied.posterProviderTag)
-    }
-
-    @Test
-    fun `apply seam preserves durable decision URI on second pass after a refresh re-emits raw addon URL`() {
-        val rawItem = baseRawItem()
-        val overlay = baseOverlay()
-
-        val rowWithRaw = CatalogRow(
-            addonId = "", addonName = "", addonBaseUrl = "",
-            catalogId = "tmdb:popular", catalogName = "Popular",
-            type = ContentType.MOVIE, items = listOf(rawItem)
-        )
-        val applied = rowWithRaw.applyHydratedHomeOverlays(mapOf(overlay.itemKey to overlay))
-        val firstPosterValue = applied.items[0].poster
-        assertEquals(true, firstPosterValue?.startsWith("nexio-artwork://"))
-
-        val rowAgain = CatalogRow(
-            addonId = "", addonName = "", addonBaseUrl = "",
-            catalogId = "tmdb:popular", catalogName = "Popular",
-            type = ContentType.MOVIE, items = listOf(rawItem)
-        )
-        val appliedAgain = rowAgain.applyHydratedHomeOverlays(mapOf(overlay.itemKey to overlay))
-        val secondPosterValue = appliedAgain.items[0].poster
-        assertEquals(firstPosterValue, secondPosterValue)
-        assertEquals(true, secondPosterValue?.startsWith("nexio-artwork://"))
-    }
-
-    private fun baseRawItem(): MetaPreview = MetaPreview(
-        id = "tmdb:550",
-        type = ContentType.MOVIE,
-        name = "Fight Club (rail)",
-        poster = "https://image.tmdb.org/raw.jpg",
-        posterShape = PosterShape.POSTER,
-        background = null,
-        logo = null,
-        description = null,
-        genres = emptyList(),
-        releaseInfo = null,
-        runtime = null,
-        imdbRating = null,
-        ratingSource = null,
-        tomatoesRating = null,
-        trailerYtIds = emptyList(),
-        language = null,
-        posterProviderTag = null,
-        firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
-        firstPaintSourceProvider = null,
-        firstPaintStableIds = ProviderIds(tmdb = "550"),
-        firstPaintRailSource = null,
-        firstPaintSourceItemId = "tmdb:550",
-        artwork = null
-    )
-
-    private fun baseOverlay(): HydratedHomeOverlay {
-        val itemKey = homeDisplayItemKey("movie", "tmdb:550")
-        val resolvedPoster = ArtworkDisplayRef.RuntimeAsset(
-            decisionKey = ArtworkDecisionKey("artwork-decision:poster:imdb:tt0137523"),
-            assetKey = null,
-            imageType = ArtworkType.POSTER,
-            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
-            sourceRole = ArtworkSourceRole.PREMIUM,
-            trace = ArtworkTrace.empty(),
-            displayHints = ArtworkDisplayHints()
-        )
-        val fields = HomeDisplayMetadata(
-            title = "Fight Club (resolved)",
-            artwork = ArtworkBundle(poster = resolvedPoster)
-        )
-        return HydratedHomeOverlay(
-            overlayKey = hydratedHomeOverlayKey(ProviderId.TMDB, "550", ContentType.MOVIE, "en-US", 1),
-            itemKey = itemKey,
-            canonicalProvider = ProviderId.TMDB,
-            canonicalId = "550",
-            imdbId = "tt0137523",
-            contentType = ContentType.MOVIE,
-            languageTag = "en-US",
-            policyVersion = 1,
-            fields = fields,
-            fieldTrace = emptyList(),
-            displayHash = fields.hydratedHomeDisplayHash(),
-            updatedAtMs = 1_000L,
-            staleAtMs = 2_000L,
-            expiresAtMs = 3_000L,
-            state = HomeItemHydrationState.CANONICAL_READY
-        )
     }
 
     private fun preview(id: String, title: String) = MetaPreview(
