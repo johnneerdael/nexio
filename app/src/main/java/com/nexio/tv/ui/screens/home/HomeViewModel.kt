@@ -200,12 +200,24 @@ class HomeViewModel @Inject constructor(
     val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
+    // Not a feedback loop: the consumer at observeResolvedRailRows() writes only
+    // resolvedRailRows back into _uiState; catalogRows is never written here, and
+    // distinctUntilChanged() short-circuits self-triggered re-emissions. Any future
+    // refactor that removes that guard or has the consumer mutate catalogRows will
+    // re-introduce the loop.
     @OptIn(ExperimentalCoroutinesApi::class)
     private val resolvedRailRowsFlow: Flow<List<ResolvedRailRow>> =
         profileManager.activeProfileSession
             .map { it.profileId }
             .distinctUntilChanged()
             .flatMapLatest { profileId ->
+                // flatMapLatest cancels the previous profile's surface flow on switch;
+                // projectionCache is process-wide and gets rebound to the new profile's
+                // active set on the next emission via retainOnly/retainOnlyRails. Stale
+                // entries from the previous profile are evicted then. itemKey is
+                // surface-scoped (homeDisplayItemKey of apiType+id), so cross-profile
+                // collisions only matter if two profiles surface the same content —
+                // in which case the cached projection is correct anyway.
                 resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
             }
             .combine(_uiState.map { it.catalogRows }.distinctUntilChanged()) { resolvedItems, catalogRows ->
