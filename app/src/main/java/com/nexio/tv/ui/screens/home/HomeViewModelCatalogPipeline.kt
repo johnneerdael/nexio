@@ -39,6 +39,7 @@ import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import com.nexio.tv.ui.screens.home.order.toHomeRailDefinitions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -3457,10 +3458,12 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
     homeSnapshotPersistJob?.cancel()
     homeSnapshotPersistJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS)
+        ensureActive()
         if (homeSnapshotPersistGeneration != persistGeneration) return@launch
         if (!isCurrentHomeProfileGeneration(profileGeneration)) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        ensureActive()
         integrationOwnershipService.syncRails(
             RailKeyFactory.homeCatalogNamespace(profileId),
             homeCatalogSnapshotStore.buildRailMemberships(
@@ -3469,7 +3472,9 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
                 profileId = profileId
             )
         )
+        ensureActive()
         homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
+        ensureActive()
         val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId) ?: latestSnapshot
         Log.d(
             HomeViewModel.TAG,
