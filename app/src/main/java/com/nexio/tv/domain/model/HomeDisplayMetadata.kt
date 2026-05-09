@@ -78,6 +78,10 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
     )
 }
 
+@Deprecated(
+    "Use HomeRailProjectionReducer for rail projection. This applyTo path is preserved only for hero-enrichment callers that have not yet migrated. Will be removed once Plan B (UI consumption migration) lands.",
+    level = DeprecationLevel.WARNING
+)
 fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
     val cleanOverlayRating = sanitizedTitleRating()
     val cleanBaseRating = base.imdbRating.sanitizedTitleRating()
@@ -137,6 +141,10 @@ private fun preferDurableArtworkRef(overlayValue: String?, baseValue: String?): 
     }
 }
 
+@Deprecated(
+    "Use HomeRailProjectionReducer.reduce(...) instead. mergeFallback predates the rank-aware reducer and treats inputs as primary/fallback rather than rank-ordered. Will be removed once all callers migrate.",
+    level = DeprecationLevel.WARNING
+)
 fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {
     if (fallback == null) return this
     val cleanPrimaryRating = sanitizedTitleRating()
