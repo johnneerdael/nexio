@@ -260,13 +260,25 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List<CatalogRow>) {
+    val resolvedByItemKey: Map<String, ResolvedDisplayItem> =
+        resolvedDisplaySurfaceRepository.snapshotNow(
+            profileManager.activeProfileSession.value.profileId
+        ).associateBy { it.itemKey }
+
     val activeKeys = mutableSetOf<String>()
     rows.asSequence()
         .flatMap { it.items.asSequence() }
         .forEach { item ->
             val key = homeTrailerAvailabilityKey(item.id, item.apiType)
             activeKeys += key
-            val selectedFallbackId = item.trailerYtIds.firstOrNull { id -> id.isNotBlank() }
+            // Prefer resolved trailer state; fall back to MetaPreview.trailerYtIds when
+            // the resolved surface has not produced an entry for this item yet.
+            val resolved = resolvedByItemKey[key]
+            val resolvedYtId =
+                (resolved?.trailer?.selectedPlaybackRef as? TrailerPlaybackRef.YouTubeId)?.videoId
+            val selectedFallbackId = resolvedYtId
+                ?: resolved?.trailer?.fallbackTrailerYtIds?.firstOrNull { it.isNotBlank() }
+                ?: item.trailerYtIds.firstOrNull { id -> id.isNotBlank() }
             val hasPublishedPreview = hasPublishedHomeTrailerPreview(
                 item.id,
                 trailerPreviewUrlsState,
