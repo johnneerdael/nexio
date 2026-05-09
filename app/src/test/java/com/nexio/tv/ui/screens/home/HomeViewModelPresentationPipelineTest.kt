@@ -180,12 +180,12 @@ class HomeViewModelPresentationPipelineTest {
             upcomingLabel = "Upcoming"
         )
 
-        assertEquals("nexio-artwork://asset/display-poster", carouselItem.heroPreview.poster)
-        assertEquals("nexio-artwork://asset/display-backdrop", carouselItem.heroPreview.backdrop)
-        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.logo)
-        assertEquals("nexio-artwork://asset/display-poster", carouselItem.metaPreview?.poster)
-        assertEquals("nexio-artwork://asset/display-backdrop", carouselItem.metaPreview?.background)
-        assertEquals("nexio-artwork://asset/display-logo", carouselItem.metaPreview?.logo)
+        assertEquals("nexio-artwork://decision/decision-poster", carouselItem.heroPreview.poster)
+        assertEquals("nexio-artwork://decision/decision-backdrop", carouselItem.heroPreview.backdrop)
+        assertEquals("nexio-artwork://decision/decision-logo", carouselItem.heroPreview.logo)
+        assertEquals("nexio-artwork://decision/decision-poster", carouselItem.metaPreview?.poster)
+        assertEquals("nexio-artwork://decision/decision-backdrop", carouselItem.metaPreview?.background)
+        assertEquals("nexio-artwork://decision/decision-logo", carouselItem.metaPreview?.logo)
     }
 
     @Test
@@ -217,9 +217,9 @@ class HomeViewModelPresentationPipelineTest {
 
         val preview = nextUpToMetaPreview(item)
 
-        assertEquals("nexio-artwork://asset/display-poster", preview.poster)
-        assertEquals("nexio-artwork://asset/display-backdrop", preview.background)
-        assertEquals("nexio-artwork://asset/display-logo", preview.logo)
+        assertEquals("nexio-artwork://decision/decision-poster", preview.poster)
+        assertEquals("nexio-artwork://decision/decision-backdrop", preview.background)
+        assertEquals("nexio-artwork://decision/decision-logo", preview.logo)
     }
 
     @Test
@@ -238,8 +238,8 @@ class HomeViewModelPresentationPipelineTest {
             occurrence = 0
         )
 
-        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.logo)
-        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.frozenLogoUrl)
+        assertEquals("nexio-artwork://decision/decision-logo", carouselItem.heroPreview.logo)
+        assertEquals("nexio-artwork://decision/decision-logo", carouselItem.heroPreview.frozenLogoUrl)
     }
 
     @Test
@@ -259,8 +259,8 @@ class HomeViewModelPresentationPipelineTest {
 
         val updated = metadata.applyToHeroItem(base, TmdbSettings(enabled = true, useArtwork = true))
 
-        assertEquals("nexio-artwork://asset/display-backdrop", updated.background)
-        assertEquals("nexio-artwork://asset/display-logo", updated.logo)
+        assertEquals("nexio-artwork://decision/decision-backdrop", updated.background)
+        assertEquals("nexio-artwork://decision/decision-logo", updated.logo)
     }
 
     @Test

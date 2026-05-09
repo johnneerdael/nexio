@@ -176,8 +176,11 @@ class HomeHydrationCoordinatorTest {
         )
 
         assertEquals(artwork, overlaySlot.captured.fields.artwork)
-        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.poster)
-        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.displayPoster)
+        // Legacy projection always emits decision URI for RuntimeAsset (asset URIs
+        // are read-only in NexioArtworkFetcher and would dangle if bytes were never
+        // fetched). The structured ArtworkBundle still carries the assetKey above.
+        assertEquals("nexio-artwork://decision/posterDecision", overlaySlot.captured.fields.poster)
+        assertEquals("nexio-artwork://decision/posterDecision", overlaySlot.captured.fields.displayPoster)
     }
 
     @Test
