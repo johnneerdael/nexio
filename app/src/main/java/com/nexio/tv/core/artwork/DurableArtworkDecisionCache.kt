@@ -124,7 +124,7 @@ class DurableArtworkDecisionCache(
                 }
             )
         )
-        persistAfterPutLocked(decision)
+        schedulePersistLocked()
     }
 
     override fun remove(key: ArtworkDecisionKey) = synchronized(lock) {
@@ -132,7 +132,7 @@ class DurableArtworkDecisionCache(
         decisions.remove(key)
         removeLinksForLocked(setOf(key))
         refreshLoadedStateAfterMutationLocked()
-        persistNowLocked()
+        schedulePersistLocked()
     }
 
     override fun linkPreviewToCanonical(
@@ -142,7 +142,7 @@ class DurableArtworkDecisionCache(
         ensureLoadedLocked()
         previewToCanonical[previewKey] = canonicalKey
         refreshLoadedStateAfterMutationLocked()
-        persistNowLocked()
+        schedulePersistLocked()
     }
 
     override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? = synchronized(lock) {
@@ -367,7 +367,7 @@ class DurableArtworkDecisionCache(
         deletedKeys.forEach(decisions::remove)
         removeLinksForLocked(deletedKeys)
         refreshLoadedStateAfterMutationLocked()
-        persistNowLocked()
+        schedulePersistLocked()
     }
 
     private fun removeLinksForLocked(keys: Set<ArtworkDecisionKey>) {
@@ -400,11 +400,24 @@ class DurableArtworkDecisionCache(
         flushPendingWritesLocked()
     }
 
-    private fun persistAfterPutLocked(decision: ArtworkDecision) {
+    /**
+     * Coalesces every mutation (`put`, `remove`, `linkPreviewToCanonical`,
+     * `invalidate*`) onto the same debounced flush path so multiple in-flight
+     * writes share a single `toStoreJson()` build and disk write per debounce
+     * window. When debounce is disabled (e.g. tests with
+     * `thumbnailWriteDebounceMs = 0L`) the executor is null and we fall back
+     * to a synchronous flush, preserving immediate-write semantics for tests.
+     */
+    private fun schedulePersistLocked() {
         if (thumbnailWriteDebounceMs > 0L) {
             scheduleThumbnailPersistLocked()
         } else {
-            persistNowLocked()
+            // Test/unconfigured path: no debounce, flush synchronously so callers
+            // (and tests using the default `thumbnailWriteDebounceMs = 0L` ctor)
+            // observe writes immediately. `flushPendingWritesLocked` is a no-op
+            // unless `dirty` is set, so mark dirty first.
+            dirty = true
+            flushPendingWritesLocked()
         }
     }
 
@@ -451,13 +464,6 @@ class DurableArtworkDecisionCache(
         pendingFlush?.cancel(false)
         pendingFlush = null
         if (!dirty) return
-        dirty = false
-        persistLocked()
-    }
-
-    private fun persistNowLocked() {
-        pendingFlush?.cancel(false)
-        pendingFlush = null
         dirty = false
         persistLocked()
     }
