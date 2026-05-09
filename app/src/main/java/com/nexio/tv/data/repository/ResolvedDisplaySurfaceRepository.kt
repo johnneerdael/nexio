@@ -159,9 +159,22 @@ private fun shouldSuppressSurfaceUpdate(
     surfaceKey: String,
     existing: List<ResolvedDisplayItem>,
     nextItems: List<ResolvedDisplayItem>
-): Boolean {
-    if (surfaceKey != ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY) return false
-    return existing.semanticallySameScreensaverSurface(nextItems)
+): Boolean = when (surfaceKey) {
+    ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY ->
+        existing.semanticallySameScreensaverSurface(nextItems)
+    // After HomeResolvedDisplayMapper memoization, identical-content (MetaPreview, overlay)
+    // tuples return the SAME ResolvedDisplayItem instance across emissions.
+    // mergeIncrementalItems still allocates a fresh outer list each publish, so a
+    // list-identity compare cannot work — but element-wise reference equality is
+    // both correct and O(n). Deep equals() would be slow and could incorrectly
+    // mask the ref-equality fast path.
+    // withPreservedTrailerState only allocates a copy() when restoring a trailer
+    // (rare); in the common no-op steady-state path it returns `this`, so element
+    // refs stay stable and this short-circuit fires.
+    ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY ->
+        existing.size == nextItems.size &&
+            existing.zip(nextItems).all { (a, b) -> a === b }
+    else -> false
 }
 
 private fun List<ResolvedDisplayItem>.semanticallySameScreensaverSurface(
