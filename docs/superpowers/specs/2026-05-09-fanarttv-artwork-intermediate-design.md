@@ -73,9 +73,10 @@ All new files under `app/src/main/java/com/nexio/tv/core/artwork/fanarttv/`.
 | `FanartTvAvailability` | Returns `Available(apiKey)` when `BuildConfig.FANARTTV_API_KEY` is non-blank, else `Disabled(reason)`. |
 | `FanartTvIdSelector` | Given `(mediaKind, ProviderIds)`, returns the call id: Movie → tmdb, Series → tvdb, anything else → null. |
 | `FanartTvApi` | Retrofit interface with two endpoints: `GET /v3.2/movies/{tmdbId}` and `GET /v3.2/tv/{tvdbId}`. Returns the full document DTO. |
-| `FanartTvLookupShape` | `IntegrationApiShapes` entry. Wires the API call through `IntegrationRuntime` for backoff, single-flight, audit, and redaction. The DTO is consumed transiently by the candidate generator and never persisted. |
-| `FanartTvImagePicker` | Pure function. Given the parsed document and `ArtworkType`, returns the chosen URL or null. Picks highest `likes`; requires `lang=en` for poster/logo; accepts any lang for backdrop; deterministic tie-break by ascending `id`. |
-| `FanartTvCandidateGenerator` | The seam into the existing artwork pipeline. Bails on Anime, missing key, or missing id. Checks decision-cache freshness for each requested type; if any is stale, single-flights one lookup and writes 3 decisions (URL or null). Emits `ArtworkCandidate(sourceRole = INTERMEDIATE, provider = FanartTv)` for each non-null URL. |
+| `FanartTvLookupShape` | Declares the `IntegrationApiShapes` entry. Wires the API call through `IntegrationRuntime` with `IntegrationCachePolicy.CacheFirst(ttlMs = 14d)`. The runtime persists the JSON response body in `integration_cache` and serves cache hits without a network call. Declares `api_key` as a redacted query parameter. |
+| `FanartTvLookup` (interface) + `RuntimeFanartTvLookup` (impl) | Thin adapter that calls `FanartTvLookupShape` and maps `HttpException` to a typed result (`Success` / `NotFound` / `AuthFailed` / `Transient`). The generator depends on the interface so tests can fake it without going through the runtime. |
+| `FanartTvImagePicker` | Pure function. Given the parsed document and `(callType, ArtworkType)`, returns the chosen URL or null. Picks highest `likes`; requires `lang=en` for poster/logo; accepts any lang for backdrop; deterministic tie-break by ascending `id`. |
+| `FanartTvCandidateGenerator` | The seam into the existing artwork pipeline. Bails on Anime, missing key, or missing id. Calls `FanartTvLookup.fetch(...)` (runtime cache short-circuits), runs the picker for each artwork type, and emits `ArtworkCandidate(sourceRole = INTERMEDIATE, provider = FanartTv)` for each non-null URL. No coalescing, no decision-store interaction. |
 
 One-line additions to existing files:
 
@@ -95,27 +96,31 @@ Existing candidate-gathering site
         ├─► Existing premium generators (RPDB/Top Posters)    → PREMIUM candidates (only if user-selected)
         └─► FanartTvCandidateGenerator
                 │
-                ├─ mediaKind == Anime?                         → emit nothing, exit
-                ├─ Availability.Disabled?                      → emit nothing, exit
-                ├─ FanartTvIdSelector returns null?            → emit nothing, exit
-                ├─ For each requested type, look up ArtworkDecisionCache(provider=FanartTv, titleId, type):
-                │     • fresh hit (URL or null) under 14d      → use it
-                │     • stale or missing                       → mark "needs lookup"
+                ├─ mediaKind == Anime?               → emit nothing, exit
+                ├─ Availability.Disabled?            → emit nothing, exit
+                ├─ FanartTvIdSelector returns null?  → emit nothing, exit
                 │
-                ├─ Any "needs lookup"?
-                │     YES ─► Single-flight one IntegrationRuntime call to fanarttv.lookup
-                │             → parse DTO in-memory only (never persisted)
-                │             → For each of {poster, logo, backdrop}:
-                │                  picker(dto, type) → URL or null
-                │                  write decision (URL or null) with 14d TTL
-                │             → drop DTO
-                │     NO  ─► skip the network call entirely
+                ├─ Call IntegrationRuntime via fanarttv.lookup shape
+                │   • Shape policy: CacheFirst(ttlMs = 14d)
+                │   • Runtime serves from integration_cache disk blob if fresh,
+                │     else makes one network call and caches the response
+                │   • Concurrent identical specs are coalesced by IntegrationSingleFlight
+                │
+                ├─ Pick URLs (in-memory, transient):
+                │     picker.pickFor(dto, callType, POSTER) → URL or null
+                │     picker.pickFor(dto, callType, LOGO)   → URL or null
+                │     picker.pickFor(dto, callType, BACKDROP) → URL or null
                 │
                 └─ Emit ArtworkCandidate for each non-null URL with sourceRole=INTERMEDIATE
+                  (No special per-type write; routing decision is recorded by the
+                   downstream MetadataArtworkDecisionResolver in ArtworkDecisionCache.)
         │
         ▼
 ArtworkRouter.select(candidates, policy)
    PREMIUM > INTERMEDIATE > PRIMARY > CURRENT_PREVIEW > …
+        │
+        ▼
+MetadataArtworkDecisionResolver writes ArtworkDecision (existing flow)
         │
         ▼
 ArtworkAssetRepository fetches bytes for selected URL
@@ -126,25 +131,25 @@ ArtworkAssetRepository fetches bytes for selected URL
 Coil renders bytes
 ```
 
-## Cache Contract
+## Cache Layers
 
-**Invariants (load-bearing):**
+This feature reuses the standard artwork chain and adds **no new persistence layer**. Three existing caches participate:
 
-1. **No JSON persistence.** The DTO lives only in the candidate generator's local scope. The decision cache stores the *picked URL* (or `null`), not the document.
-2. **Decision cache freshness short-circuits the API call.** A non-null URL still inside its 14d TTL → no fanart.tv hit, even if bytes have expired. Bytes refetch via the same URL.
-3. **Null decisions are first-class.** "Fanart.tv had nothing for this type" is cached as a null decision with the same 14d TTL — prevents re-querying for 14d when fanart has no en logo / no entry at all.
-4. **One call per title, not per type.** Coalesced via single-flight on `(provider=FanartTv, titleId)`. If poster, logo, and backdrop all need refresh in a burst, exactly one HTTP request goes out.
-5. **Bytes layer is unchanged.** Existing `ArtworkAssetRepository` + disk cache + Coil pipeline already enforces "no network if bytes are valid" — Fanart.tv URLs flow through it like any other URL.
+| Layer | What it stores | TTL | Where |
+|---|---|---|---|
+| Runtime response cache | The Fanart.tv JSON body for one (mediaKind, id) | 14d | `integration_cache` Room table (blob on disk), keyed by `IntegrationCallSpec` |
+| Routing decision cache | The chosen URL per (owner, artwork type) after routing | per existing `ArtworkDecisionPolicy` | `ArtworkDecisionCache` (existing) |
+| Asset bytes cache | The fetched image bytes | per existing `DurableArtworkAssetRecordStore` policy | Disk file + record store |
 
-**Decision cache key:**
+**Key invariants:**
 
-```
-fanarttv:decision:{policyVersion}:{titleIdType}:{titleIdValue}:{artworkType}
-```
+1. **No invented store.** The Fanart.tv path uses only the three existing caches above. There is no `FanartTvDecisionStore`, no parallel Room entity, no in-memory DTO cache.
+2. **JSON is cached as a runtime response body.** Like every other provider that goes through `IntegrationRuntime` (TMDB, TVDB, Trakt, RPDB, Top Posters), the response body is persisted in `integration_cache` as a disk blob. The 14d TTL is enforced by `IntegrationCachePolicy.CacheFirst(ttlMs = 14L * 24 * 3600 * 1000)` declared on `FanartTvLookupShape`.
+3. **Per-type URL pinning is the standard `ArtworkDecisionCache`.** When the router picks the Fanart-emitted candidate, `MetadataArtworkDecisionResolver` writes a routing decision exactly like it does for TMDB/TVDB/RPDB/Top Posters today. Fanart.tv is not special.
+4. **Bytes layer is unchanged.** Fanart URLs flow through `ArtworkAssetRepository` like any other URL.
+5. **Single-flight is runtime-provided.** Concurrent `MetadataArtworkDecisionResolver.resolveFields` calls for the same title produce one Fanart.tv HTTP call via `IntegrationSingleFlight`. The candidate generator does no coalescing of its own.
 
-**Bytes record key:** existing URL-derived hash, no special-casing.
-
-**TTLs:** 14 days for both decisions and bytes. The existing `ArtworkDecisionCache` and `DurableArtworkAssetRecordStore` TTL machinery is reused.
+**Negative caching.** A 404 ("title not in fanart.tv") is short-lived: the runtime backoff system (`IntegrationProviderBackoffEntity`) throttles repeated 4xx responses; in addition, Fanart.tv decisions get re-queried on the existing `ArtworkDecisionCache` TTL boundary, not on every resolver call. Stable absences naturally settle into a cheap "decision says PRIMARY won → no Fanart re-query until decision expires" steady state.
 
 ## Image Selection Rules
 
@@ -234,21 +239,19 @@ skip_reason={anime|no_build_key|no_id|null_decision|api_4xx|api_5xx|rate_limited
 
 Generator-level outcomes (each is a clean exit; never blanks artwork):
 
-| Condition | Outcome | Decision cache write? |
+| Condition | Generator outcome | Runtime cache effect |
 |---|---|---|
-| `mediaKind == Anime` | Emit nothing | No |
-| BuildConfig key blank | Emit nothing | No |
-| No usable id (movie has no TMDB / TV has no TVDB) | Emit nothing | No |
-| Decision cache fresh, URL non-null | Emit candidate from cache | No |
-| Decision cache fresh, URL null | Emit nothing for this type | No |
-| Decision cache stale → API call succeeds | Emit candidates for non-null URLs | Yes — 3 decisions written |
-| API 404 (title not in fanart.tv) | Emit nothing | Yes — 3 null decisions, 14d TTL |
-| API 401/403 (bad key) | Emit nothing | **No persistent decision** — transient `Disabled(auth_failure)` snapshot held in-memory for the runtime backoff window |
-| API 429 / rate limit | Emit nothing for this resolution | No — `Retry-After` honored by `IntegrationRuntime`; next resolution after backoff retries |
-| API network/5xx failure | Emit nothing for this resolution | No — keep last successful decision if any; existing `IntegrationRuntime` backoff applies |
-| Picker finds entries but no `lang=en` (poster/logo) | Emit nothing for that type | Yes — null decision for that type, 14d TTL |
+| `mediaKind == Anime` | Emit nothing — exit before runtime call | No call made |
+| BuildConfig key blank | Emit nothing — exit before runtime call | No call made |
+| No usable id (movie has no TMDB / TV has no TVDB) | Emit nothing — exit before runtime call | No call made |
+| Runtime serves cached JSON | Pick URLs and emit candidates for non-null URLs | Hit (no network) |
+| Runtime makes network call → 200 | Pick URLs and emit candidates for non-null URLs | Body cached for 14d |
+| Runtime makes network call → 404 | Emit nothing | Provider backoff applies; `ArtworkDecisionCache` TTL governs re-query cadence |
+| Runtime makes network call → 401/403 | Emit nothing | Provider backoff applies; key fix recovers immediately on next resolver pass |
+| Runtime makes network call → 429 / 5xx / network error | Emit nothing for this resolution | `Retry-After` honored by `IntegrationRuntime`; backoff applies |
+| Picker finds entries but no `lang=en` (poster/logo) | Emit nothing for that type | None — JSON is cached, picker just returned null for that type |
 
-The 401/403 vs 404 split is intentional: 404 is a stable absence (no point re-querying for 14d); 401/403 is a recoverable misconfiguration (must not be locked in for 14d).
+Re-query cadence in the steady state is governed by the longer of: (a) the runtime cache TTL on the JSON body (14d), and (b) the `ArtworkDecisionCache` TTL on the routing decision. Stable absences (404, no-en-variant) settle into "decision says PRIMARY → no Fanart re-query until decision expires" without any Fanart-specific negative-cache machinery.
 
 Router-level fallback (existing behavior, unchanged):
 
@@ -282,24 +285,22 @@ Router-level fallback (existing behavior, unchanged):
 - Series + no TVDB id → returns null.
 - Anime → returns null.
 
-**`FanartTvCandidateGenerator` (with fakes for runtime + decision cache):**
+**`FanartTvCandidateGenerator` (with a fake `FanartTvLookup`):**
 
-- Anime input emits zero candidates and makes zero API calls.
-- Missing BuildConfig key emits zero, zero API calls.
-- Missing usable id emits zero, zero API calls.
-- All 3 types stale → exactly one API call → 3 decisions written → candidates emitted for non-null URLs.
-- All 3 types fresh non-null → zero API calls → 3 candidates emitted from cache.
-- All 3 types fresh null → zero API calls → zero candidates emitted.
-- Mixed fresh/stale → exactly one API call (single-flight coalesces).
-- API 404 → 3 null decisions written with 14d TTL → zero candidates emitted.
-- API 401/403 → no decisions written → zero candidates emitted (recovery on next resolution after backoff).
-- Concurrent requests for the same title → exactly one API call (single-flight verified).
-- DTO is not persisted (assert decision cache only contains URLs/nulls).
+- Anime input emits zero candidates and makes zero `lookup.fetch` calls.
+- Missing BuildConfig key emits zero, zero `lookup.fetch` calls.
+- Missing usable id emits zero, zero `lookup.fetch` calls.
+- Lookup returns a populated document → emits candidates for each non-null picker output.
+- Lookup returns an empty document → emits zero candidates.
+- Lookup returns 404 / auth-failed / transient → emits zero candidates.
+- Per-call deterministic: same input + same `FanartTvLookup` answer produces the same candidate list.
 
-**`IntegrationApiShapes` registration:**
+**`FanartTvLookupShape`:**
 
-- `fanarttv.lookup` is registered with the redaction policy that strips `api_key` from URL/trace output.
-- A trace fixture with the real key produces no trace string containing the key.
+- Declares `IntegrationCachePolicy.CacheFirst(ttlMs = 14L * 24 * 3600 * 1000)`.
+- Declares `IntegrationProvider.FANART_TV` and `FanartTvApiShapes.LOOKUP` shape id.
+- Declares `api_key` as a redacted query parameter so any URL traced/audited replaces its value.
+- A trace fixture exercising the spec with the real key produces no trace string containing the raw key.
 
 **Router (extends existing `ArtworkRouterTest`):**
 
@@ -340,8 +341,8 @@ No end-to-end network test against real fanart.tv. The two captured Fight Club /
 ### Phase 4: Candidate generator + router rank
 
 - Add `ArtworkSourceRole.INTERMEDIATE` and `RoutingRank.INTERMEDIATE(1)` (shifts other ranks by +1).
-- Implement `FanartTvCandidateGenerator` with single-flight coalescing and decision-cache freshness checks.
-- Wire the generator into the existing candidate-gathering site.
+- Implement `FanartTvCandidateGenerator`: gates → call `FanartTvLookup` → run picker → emit candidates. No coalescer, no decision-store interaction.
+- Wire the generator into `MetadataArtworkDecisionResolver.resolveFields` so its candidates join the existing primary/premium candidates before routing.
 - Extend `ArtworkRouterTest` for INTERMEDIATE precedence and per-type mixing.
 - Generator unit tests cover all rows of the failure/fallback table.
 
