@@ -63,28 +63,25 @@ class ResolvedDisplayProjectionCacheTest {
     }
 
     @Test
-    fun `retainOnly evicts entries whose itemKey is no longer active`() {
+    fun `retainOnly evicts entries not in active set`() {
         val cache = ResolvedDisplayProjectionCache()
         val a = resolved("movie:tmdb:a", updatedAtMs = 1L)
         val b = resolved("movie:tmdb:b", updatedAtMs = 1L)
 
-        cache.projectItem(a)
-        cache.projectItem(b)
+        val firstA = cache.projectItem(a)
+        val firstB = cache.projectItem(b)
 
         // Only "a" remains active; "b" should be evicted.
         cache.retainOnly(setOf("movie:tmdb:a"))
 
-        val aAgain = cache.projectItem(a)
-        val bAgain = cache.projectItem(b)
-
-        // a is still cached → same instance back.
-        assertSame(cache.projectItem(a), aAgain)
-        // b was evicted → projectItem produces a fresh instance, then caches that one.
-        assertSame(cache.projectItem(b), bAgain)
+        // a survived → re-projection returns the original cached instance.
+        assertSame(firstA, cache.projectItem(a))
+        // b was evicted → re-projection yields a fresh instance.
+        assertNotSame(firstB, cache.projectItem(b))
     }
 
     @Test
-    fun `retainOnly bound retains b after re-projection`() {
+    fun `retainOnly with empty set evicts all entries`() {
         val cache = ResolvedDisplayProjectionCache()
         val a = resolved("movie:tmdb:a", updatedAtMs = 1L)
 

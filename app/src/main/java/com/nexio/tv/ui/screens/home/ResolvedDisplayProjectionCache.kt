@@ -31,10 +31,13 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
         return fresh
     }
 
+    // Cache key is catalogId alone — assumes catalog display titles are stable
+    // per catalogId (true in this codebase). If catalog titles ever become
+    // mutable, fold `title` into the version hash.
     @Synchronized
     fun projectRail(catalogId: String, title: String, items: List<ModernHomeRowItem>): ResolvedRailRow {
         val key = catalogId
-        val contentHash = items.map { it.itemKey to it.hashCode() }.hashCode()
+        val contentHash = items.hashCode()
         val cached = railCache[key]
         if (cached != null && cached.first == contentHash) return cached.second
         val fresh = ResolvedRailRow(catalogId = catalogId, title = title, items = items)
