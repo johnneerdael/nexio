@@ -174,7 +174,6 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
 
 @Immutable
 internal data class ModernHomeContentState(
-    val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
     val deterministicAutoplayEnabled: Boolean = false,
