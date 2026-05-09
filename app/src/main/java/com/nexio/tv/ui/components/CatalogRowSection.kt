@@ -53,65 +53,14 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nexio.tv.core.artwork.ArtworkBundle
-import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.artwork.emptyOrNull
-import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
-import com.nexio.tv.core.artwork.takeIfImageType
-import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.TitleRatingSource
-import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.ui.screens.home.ModernHomeRowItem
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import com.nexio.tv.ui.util.formatAddonTypeLabel
 import kotlinx.coroutines.launch
 
 internal fun catalogRowItemContentType(item: MetaPreview): String = item.apiType
-
-/**
- * Layers the resolved display authority ([ModernHomeRowItem]) onto a legacy [MetaPreview]
- * so the rendered card pulls poster/backdrop/logo, title, and rating from the resolved
- * surface while preserving identity, description, genres, runtime, and other fields the
- * resolved projection does not yet expose. Mirrors the Modern presentation pipeline's
- * `buildCatalogItem` overlay shape (Plan B Task 4) at the Classic/Grid call sites.
- *
- * Callers must still pass the original [MetaPreview] to `(MetaPreview) -> Unit`
- * callbacks — only display fields are layered here.
- */
-internal fun overlayResolvedDisplay(
-    item: MetaPreview,
-    resolved: ModernHomeRowItem?
-): MetaPreview {
-    if (resolved == null) return item
-    val posterRef = resolved.posterRef
-    val backdropRef = resolved.backdropRef
-    val logoRef = resolved.logoRef
-    val thumbnailRef = resolved.thumbnailRef
-    val resolvedRating = resolved.rating
-    val mergedArtwork = ArtworkBundle(
-        poster = posterRef.takeIfImageType(ArtworkType.POSTER) ?: item.artwork?.poster,
-        backdrop = backdropRef.takeIfImageType(ArtworkType.BACKDROP) ?: item.artwork?.backdrop,
-        logo = logoRef.takeIfImageType(ArtworkType.LOGO) ?: item.artwork?.logo,
-        thumbnail = thumbnailRef.takeIfImageType(ArtworkType.THUMBNAIL) ?: item.artwork?.thumbnail
-    ).enforceArtworkTypeBoundaries().emptyOrNull()
-    val resolvedRatingFloat = resolvedRating?.value?.toFloat()
-    val resolvedRatingSource: TitleRatingSource? = when {
-        resolvedRating != null -> resolvedRating.source
-        else -> item.ratingSource
-    }
-    return item.copy(
-        name = resolved.title ?: item.name,
-        poster = posterRef.toLegacyArtworkString() ?: item.poster,
-        background = backdropRef.toLegacyArtworkString() ?: item.background,
-        logo = logoRef.toLegacyArtworkString() ?: item.logo,
-        imdbRating = resolvedRatingFloat ?: item.imdbRating,
-        ratingSource = resolvedRatingSource,
-        artwork = mergedArtwork
-    )
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -135,7 +84,6 @@ fun CatalogRowSection(
     onItemFocus: (MetaPreview) -> Unit = {},
     isItemWatched: (MetaPreview) -> Boolean = { false },
     onItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
-    resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = emptyMap(),
     modifier: Modifier = Modifier,
     enableRowFocusRestorer: Boolean = true,
     initialScrollIndex: Int = 0,
@@ -299,14 +247,8 @@ fun CatalogRowSection(
                 },
                 contentType = { _, item -> catalogRowItemContentType(item) }
             ) { index, item ->
-                val resolvedItem = resolvedItemsByItemKey[
-                    homeDisplayItemKey(item.apiType, item.id)
-                ]
-                val effectiveItem = remember(item, resolvedItem) {
-                    overlayResolvedDisplay(item, resolvedItem)
-                }
                 ContentCard(
-                    item = effectiveItem,
+                    item = item,
                     posterCardStyle = posterCardStyle,
                     showLabels = showPosterLabels,
                     focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
@@ -317,10 +259,10 @@ fun CatalogRowSection(
                     trailerPreviewAudioUrl = trailerPreviewAudioUrls[item.id],
                     trailerPreviewUserAgent = trailerPreviewUserAgents[item.id],
                     trailerPreviewExternalUrl = trailerPreviewExternalUrls[item.id],
-                    onRequestTrailerPreview = { _ -> onRequestTrailerPreview(item) },
+                    onRequestTrailerPreview = onRequestTrailerPreview,
                     isWatched = isItemWatched(item),
-                    onFocus = { _ ->
-                        currentOnItemFocus(item)
+                    onFocus = { focusedItem ->
+                        currentOnItemFocus(focusedItem)
                         if (lastFocusedItemIndex != index) {
                             lastFocusedItemIndex = index
                             currentOnItemFocused(index)

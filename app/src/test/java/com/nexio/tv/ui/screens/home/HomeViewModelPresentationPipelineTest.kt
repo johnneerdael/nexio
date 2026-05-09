@@ -8,23 +8,16 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.model.ProviderIds
-import com.nexio.tv.domain.model.ResolvedDisplayFields
-import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TmdbSettings
-import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import org.junit.Assert.assertEquals
@@ -239,11 +232,7 @@ class HomeViewModelPresentationPipelineTest {
         )
 
         val carouselItem = buildCatalogItem(
-            resolved = testResolvedRowItem(
-                meta = item,
-                logoRef = testArtworkRef("logo", ArtworkType.LOGO)
-            ),
-            metaPreview = item,
+            item = item,
             row = testCatalogRow(item),
             useLandscapePosters = true,
             occurrence = 0
@@ -281,8 +270,7 @@ class HomeViewModelPresentationPipelineTest {
         )
 
         val carouselItem = buildCatalogItem(
-            resolved = testResolvedRowItem(meta = item),
-            metaPreview = item,
+            item = item,
             row = testCatalogRow(item),
             useLandscapePosters = true,
             occurrence = 0,
@@ -576,48 +564,6 @@ class HomeViewModelPresentationPipelineTest {
             catalogName = "Catalog",
             type = item.type,
             items = listOf(item)
-        )
-    }
-
-    private fun testResolvedRowItem(
-        meta: MetaPreview,
-        posterRef: ArtworkDisplayRef? = null,
-        backdropRef: ArtworkDisplayRef? = null,
-        logoRef: ArtworkDisplayRef? = null
-    ): ModernHomeRowItem {
-        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
-        return ModernHomeRowItem.from(
-            ResolvedDisplayItem(
-                itemKey = itemKey,
-                contentId = meta.id,
-                parentId = meta.id,
-                itemType = meta.type,
-                mediaKind = MetadataMediaKind.UNKNOWN,
-                canonicalProvider = null,
-                canonicalId = null,
-                imdbId = null,
-                stableIds = ProviderIds(),
-                display = ResolvedDisplayFields(
-                    title = meta.name,
-                    originalTitle = null,
-                    year = null,
-                    releaseDate = null,
-                    overview = meta.description,
-                    genres = meta.genres,
-                    runtimeText = null
-                ),
-                artwork = ArtworkBundle(
-                    poster = posterRef,
-                    backdrop = backdropRef,
-                    logo = logoRef
-                ),
-                rating = null,
-                trailer = TrailerDisplayState(),
-                hydrationState = HydrationState.PREVIEW_ONLY,
-                sourceTrace = emptyList(),
-                updatedAtMs = 0L,
-                slots = null
-            )
         )
     }
 }

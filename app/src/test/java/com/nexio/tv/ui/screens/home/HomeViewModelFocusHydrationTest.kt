@@ -1335,7 +1335,6 @@ class HomeViewModelFocusHydrationTest {
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
                 activeProfileSession = { profileSessionFlow.value }
             ),
-            projectionCache = ResolvedDisplayProjectionCache(),
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
             homeHydrationCoordinator = homeHydrationCoordinator,

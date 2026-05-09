@@ -7,7 +7,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -125,7 +124,6 @@ data class CarouselRowLookups(
 @Immutable
 internal data class ModernHomePresentationInput(
     val catalogRows: List<CatalogRow>,
-    val resolvedRailRows: List<ResolvedRailRow>,
     val continueWatchingItems: List<ContinueWatchingItem>,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
@@ -203,7 +201,6 @@ internal data class ModernHomeContentState(
 
 internal data class ModernCatalogRowBuildCacheEntry(
     val source: CatalogRow,
-    val resolvedRail: ResolvedRailRow,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
     val mappedRow: HeroCarouselRow
@@ -264,8 +261,7 @@ internal class ModernCarouselRowBuildCache {
 }
 
 internal data class CachedCarouselItem(
-    val resolvedSource: ModernHomeRowItem,
-    val metaSource: MetaPreview?,
+    val source: MetaPreview,
     val useLandscapePosters: Boolean,
     val carouselItem: ModernCarouselItem
 )
@@ -589,106 +585,57 @@ internal fun providerIdsFromContinueWatchingContentId(contentId: String): Provid
 }
 
 internal fun buildCatalogItem(
-    resolved: ModernHomeRowItem,
-    metaPreview: MetaPreview?,
+    item: MetaPreview,
     row: CatalogRow,
     useLandscapePosters: Boolean,
     occurrence: Int,
     previousCachedItem: ModernCarouselItem? = null,
     selectedTrailerFallbackYtId: String? = null
 ): ModernCarouselItem {
-    // Resolved authority drives artwork + title + year + rating. MetaPreview supplies
-    // description/genres/release info/etc. that the resolved projection does not yet
-    // expose, plus the legacy `metaPreview` callback payload on ModernCarouselItem.
-    val item: MetaPreview? = metaPreview
-    // Architecture pin (RailPreviewLifecycleArchitectureTest): the canonical Home tile
-    // boundary must emit first-paint tracing via item.toFirstPaintHomeDisplayMetadata().
-    // The if/else below keeps that exact substring in real executable code (not just a
-    // comment) so the architecture test is enforced by the call site, not documentation.
-    // When the parallel MetaPreview is missing (transient race during resolved/catalog
-    // skew), we fall back to an empty HomeDisplayMetadata so callbacks/legacy fields keep
-    // working while resolved data drives the visible rendering.
-    val displayMetadata: HomeDisplayMetadata = if (item != null) {
-        item.toFirstPaintHomeDisplayMetadata()
-    } else {
-        HomeDisplayMetadata()
-    }
-
-    val resolvedPosterUrl = resolved.posterRef?.toLegacyArtworkString()
-    val resolvedBackdropUrl = resolved.backdropRef?.toLegacyArtworkString()
-    val resolvedLogoUrl = resolved.logoRef?.toLegacyArtworkString()
-
+    val displayMetadata = item.toFirstPaintHomeDisplayMetadata()
     val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
-        ?: resolvedBackdropUrl
+        ?: displayMetadata.displayBackdrop
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
-        ?: resolvedLogoUrl
-
-    val resolvedTitle = resolved.title ?: item?.name ?: ""
-    val resolvedYearText = resolved.year?.toString() ?: extractYear(displayMetadata.releaseInfo ?: item?.releaseInfo)
-    val resolvedRatingValue = resolved.rating?.value
-    // Only surface a ratingSource when there is an actual rating value to show; otherwise
-    // the UI would render an IMDB chip without a number.
-    val resolvedRatingSource: TitleRatingSource? = if (resolvedRatingValue != null) {
-        resolved.rating?.source ?: TitleRatingSource.IMDB
-    } else {
-        null
-    }
-    val imdbText = resolvedRatingValue?.let { RatingDisplayFormatter.formatTitleRating(it) }
-
-    // Description / genres / tomatoes / contentTypeText still come from MetaPreview
-    // (Plan B Task 4 minimum scope: ResolvedDisplayItem does not yet expose these via
-    // ModernHomeRowItem). When MetaPreview is unavailable, fall back to the empty values.
-    val description = displayMetadata.description ?: item?.description
-    val contentTypeText = (item?.apiType ?: row.apiType).replaceFirstChar { ch -> ch.uppercase() }
-    val tomatoesText = (displayMetadata.tomatoesRating ?: item?.tomatoesRating)
-        ?.let(::formatPreviewTomatoesRating)
-    val genres = displayMetadata.genres.ifEmpty { item?.genres ?: emptyList() }.take(3)
-
-    val heroImageUrl = if (useLandscapePosters) {
-        firstNonBlank(resolvedBackdropUrl, resolvedPosterUrl)
-    } else {
-        // Portrait poster cards must NEVER fall back to backdrop/logo. The resolved
-        // authority guarantees the poster slot is the correct portrait artwork; if it's
-        // absent there's no valid replacement.
-        resolvedPosterUrl
-    }
-
+        ?: displayMetadata.displayLogo
     val heroPreview = HeroPreview(
-        title = resolvedTitle,
-        logo = resolvedLogoUrl,
-        description = description,
-        contentTypeText = contentTypeText,
-        yearText = resolvedYearText,
-        imdbText = imdbText,
-        ratingSource = resolvedRatingSource,
-        tomatoesText = tomatoesText,
-        genres = genres,
-        poster = resolvedPosterUrl,
-        backdrop = resolvedBackdropUrl,
-        imageUrl = heroImageUrl,
+        title = displayMetadata.title ?: item.name,
+        logo = displayMetadata.displayLogo,
+        description = displayMetadata.description ?: item.description,
+        contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
+        yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
+        imdbText = (displayMetadata.imdbRating ?: item.imdbRating)?.let { RatingDisplayFormatter.formatTitleRating(it) },
+        ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource.orDefault() else item.ratingSource.orDefault(),
+        tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
+        genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
+        poster = displayMetadata.displayPoster,
+        backdrop = displayMetadata.displayBackdrop,
+        imageUrl = if (useLandscapePosters) {
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster)
+        } else {
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop)
+        },
         frozenBackdropUrl = frozenBackdrop,
         frozenLogoUrl = frozenLogo
     )
 
-    val itemId = item?.id ?: resolved.contentId
-    val itemType = item?.apiType ?: row.apiType
-    val trailerTitle = resolvedTitle
-    val trailerReleaseInfo = displayMetadata.releaseInfo ?: item?.releaseInfo
-
     return ModernCarouselItem(
-        key = "catalog_${row.key()}_${itemId}_${occurrence}",
-        title = resolvedTitle,
-        subtitle = trailerReleaseInfo,
-        imageUrl = heroImageUrl,
+        key = "catalog_${row.key()}_${item.id}_${occurrence}",
+        title = displayMetadata.title ?: item.name,
+        subtitle = displayMetadata.releaseInfo ?: item.releaseInfo,
+        imageUrl = if (useLandscapePosters) {
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster)
+        } else {
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop)
+        },
         heroPreview = heroPreview,
         payload = ModernPayload.Catalog(
-            focusKey = "${row.key()}::${itemId}",
-            itemId = itemId,
-            itemType = itemType,
+            focusKey = "${row.key()}::${item.id}",
+            itemId = item.id,
+            itemType = item.apiType,
             addonBaseUrl = row.addonBaseUrl,
-            trailerTitle = trailerTitle,
-            trailerReleaseInfo = trailerReleaseInfo,
-            trailerApiType = itemType,
+            trailerTitle = displayMetadata.title ?: item.name,
+            trailerReleaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
+            trailerApiType = item.apiType,
             fallbackTrailerYtId = selectedTrailerFallbackYtId
         ),
         metaPreview = item

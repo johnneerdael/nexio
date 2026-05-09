@@ -1,22 +1,13 @@
 package com.nexio.tv.ui.screens.home
 
-import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
-import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.model.ProviderIds
-import com.nexio.tv.domain.model.ResolvedDisplayFields
-import com.nexio.tv.domain.model.ResolvedDisplayItem
-import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -29,11 +20,15 @@ class ModernHomePresentationTest {
     @Test
     fun `builds continue watching before catalog rows`() {
         val cache = ModernCarouselRowBuildCache()
-        val popularRow = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1")))
         val state = buildModernHomePresentation(
-            input = presentationInput(
-                catalogRows = listOf(popularRow),
-                continueWatchingItems = listOf(inProgress("tt-cw-1", "Resume Me"))
+            input = ModernHomePresentationInput(
+                catalogRows = listOf(catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1")))),
+                continueWatchingItems = listOf(inProgress("tt-cw-1", "Resume Me")),
+                useLandscapePosters = false,
+                showCatalogTypeSuffix = true,
+                continueWatchingTitle = "Continue watching",
+                airsDateTemplate = "Airs %s",
+                upcomingLabel = "Upcoming"
             ),
             cache = cache
         )
@@ -49,7 +44,15 @@ class ModernHomePresentationTest {
     fun `reuses cached row when catalog input is unchanged`() {
         val cache = ModernCarouselRowBuildCache()
         val row = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1")))
-        val input = presentationInput(catalogRows = listOf(row))
+        val input = ModernHomePresentationInput(
+            catalogRows = listOf(row),
+            continueWatchingItems = emptyList(),
+            useLandscapePosters = false,
+            showCatalogTypeSuffix = true,
+            continueWatchingTitle = "Continue watching",
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
 
         val first = buildModernHomePresentation(input, cache)
         val second = buildModernHomePresentation(input, cache)
@@ -62,13 +65,27 @@ class ModernHomePresentationTest {
     fun `removes stale catalog cache entries when row disappears`() {
         val cache = ModernCarouselRowBuildCache()
         buildModernHomePresentation(
-            input = presentationInput(
-                catalogRows = listOf(catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1"))))
+            input = ModernHomePresentationInput(
+                catalogRows = listOf(catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1")))),
+                continueWatchingItems = emptyList(),
+                useLandscapePosters = false,
+                showCatalogTypeSuffix = true,
+                continueWatchingTitle = "Continue watching",
+                airsDateTemplate = "Airs %s",
+                upcomingLabel = "Upcoming"
             ),
             cache = cache
         )
         buildModernHomePresentation(
-            input = presentationInput(catalogRows = emptyList()),
+            input = ModernHomePresentationInput(
+                catalogRows = emptyList(),
+                continueWatchingItems = emptyList(),
+                useLandscapePosters = false,
+                showCatalogTypeSuffix = true,
+                continueWatchingTitle = "Continue watching",
+                airsDateTemplate = "Airs %s",
+                upcomingLabel = "Upcoming"
+            ),
             cache = cache
         )
 
@@ -80,11 +97,17 @@ class ModernHomePresentationTest {
     fun `deduplicates visible catalog rows by stable row key`() {
         val cache = ModernCarouselRowBuildCache()
         val state = buildModernHomePresentation(
-            input = presentationInput(
+            input = ModernHomePresentationInput(
                 catalogRows = listOf(
                     catalogRow("trakt_trending_movies", "Trakt Trending Movies", ContentType.MOVIE, listOf(meta("movie-1"))),
                     catalogRow("trakt_trending_movies", "Trakt Trending Movies Duplicate", ContentType.MOVIE, listOf(meta("movie-2")))
-                )
+                ),
+                continueWatchingItems = emptyList(),
+                useLandscapePosters = false,
+                showCatalogTypeSuffix = true,
+                continueWatchingTitle = "Continue watching",
+                airsDateTemplate = "Airs %s",
+                upcomingLabel = "Upcoming"
             ),
             cache = cache
         )
@@ -252,85 +275,6 @@ class ModernHomePresentationTest {
         type = type,
         items = items
     )
-
-    /**
-     * Builds a [ModernHomePresentationInput] with synthetic resolved rails matching the
-     * provided catalog rows. The synthetic resolved items mirror MetaPreview titles so
-     * the rendered HeroCarouselRow keeps the same shape as the legacy MetaPreview-driven
-     * pipeline (Plan B Task 4 migration).
-     */
-    private fun presentationInput(
-        catalogRows: List<CatalogRow>,
-        continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
-        useLandscapePosters: Boolean = false,
-        showCatalogTypeSuffix: Boolean = true,
-        continueWatchingTitle: String = "Continue watching",
-        airsDateTemplate: String = "Airs %s",
-        upcomingLabel: String = "Upcoming"
-    ): ModernHomePresentationInput {
-        // Mirror catalog rows into resolved rails. Deduplicate on catalogId to match the
-        // visible-rows behavior that runs upstream of the resolved publisher in production.
-        val resolvedByCatalogId = LinkedHashMap<String, ResolvedRailRow>()
-        catalogRows.forEach { row ->
-            if (resolvedByCatalogId.containsKey(row.catalogId)) return@forEach
-            val resolvedItems = row.items.map { meta ->
-                ModernHomeRowItem.from(syntheticResolvedDisplayItem(meta))
-            }
-            resolvedByCatalogId[row.catalogId] = ResolvedRailRow(
-                catalogId = row.catalogId,
-                title = row.catalogName,
-                items = resolvedItems
-            )
-        }
-        return ModernHomePresentationInput(
-            catalogRows = catalogRows,
-            resolvedRailRows = resolvedByCatalogId.values.toList(),
-            continueWatchingItems = continueWatchingItems,
-            useLandscapePosters = useLandscapePosters,
-            showCatalogTypeSuffix = showCatalogTypeSuffix,
-            continueWatchingTitle = continueWatchingTitle,
-            airsDateTemplate = airsDateTemplate,
-            upcomingLabel = upcomingLabel
-        )
-    }
-
-    private fun syntheticResolvedDisplayItem(meta: MetaPreview): ResolvedDisplayItem {
-        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
-        return ResolvedDisplayItem(
-            itemKey = itemKey,
-            contentId = meta.id,
-            parentId = meta.id,
-            itemType = meta.type,
-            mediaKind = MetadataMediaKind.UNKNOWN,
-            canonicalProvider = null,
-            canonicalId = null,
-            imdbId = null,
-            stableIds = ProviderIds(),
-            display = ResolvedDisplayFields(
-                title = meta.name,
-                originalTitle = null,
-                year = null,
-                releaseDate = null,
-                overview = meta.description,
-                genres = meta.genres,
-                runtimeText = null
-            ),
-            artwork = ArtworkBundle(
-                poster = meta.poster?.takeIf { it.isNotBlank() }
-                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.POSTER, ArtworkTrace.empty()) },
-                backdrop = meta.background?.takeIf { it.isNotBlank() }
-                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.BACKDROP, ArtworkTrace.empty()) },
-                logo = meta.logo?.takeIf { it.isNotBlank() }
-                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.LOGO, ArtworkTrace.empty()) }
-            ),
-            rating = null,
-            trailer = TrailerDisplayState(),
-            hydrationState = HydrationState.PREVIEW_ONLY,
-            sourceTrace = emptyList(),
-            updatedAtMs = 0L,
-            slots = null
-        )
-    }
 
     private fun meta(id: String): MetaPreview = MetaPreview(
         id = id,
