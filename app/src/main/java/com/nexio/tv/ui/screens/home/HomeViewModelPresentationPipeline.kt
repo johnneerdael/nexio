@@ -892,47 +892,56 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     if (!isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
         return items
     }
-    return items
-        .distinctBy { it.homeOverlayItemKey() }
-        .associate { item ->
-            val hydrated = try {
-                val overlay = homeHydrationCoordinator.hydrate(
-                    item = item,
-                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                    priority = HomeHydrationPriority.HERO,
-                    languageTag = expectedLanguageTag,
-                    expectedGeneration = expectedGeneration,
-                    currentGeneration = { homeProfileGeneration },
-                    onOverlayApplied = { appliedOverlay ->
-                        if (profileSessionForPublish != null) {
-                            applyHydratedHomeOverlayFromCoordinator(
-                                overlay = appliedOverlay,
-                                expectedGeneration = expectedGeneration,
-                                expectedLanguageTag = expectedLanguageTag,
-                                expectedProfileSession = profileSessionForPublish,
-                                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
-                            )
-                        } else {
-                            isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)
-                        }
+    // Indexed-for + mutable map instead of `.associate { ... suspend ... }`. The
+    // associate lambda body suspends on homeHydrationCoordinator.hydrate(); its iterator
+    // is pinned across every suspension into the calling continuation (HARD RULE #4 in
+    // CLAUDE.md). Heap dump showed enrichHeroItemsPipeline$1.L$9 holding live iterators
+    // across hero hydration cycles.
+    val distinctItems = items.distinctBy { it.homeOverlayItemKey() }
+    val hydratedByItemKey = HashMap<String, MetaPreview>(distinctItems.size)
+    for (i in distinctItems.indices) {
+        val item = distinctItems[i]
+        val hydrated = try {
+            val overlay = homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.HERO,
+                languageTag = expectedLanguageTag,
+                expectedGeneration = expectedGeneration,
+                currentGeneration = { homeProfileGeneration },
+                onOverlayApplied = { appliedOverlay ->
+                    if (profileSessionForPublish != null) {
+                        applyHydratedHomeOverlayFromCoordinator(
+                            overlay = appliedOverlay,
+                            expectedGeneration = expectedGeneration,
+                            expectedLanguageTag = expectedLanguageTag,
+                            expectedProfileSession = profileSessionForPublish,
+                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
+                        )
+                    } else {
+                        isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)
                     }
-                )
-                if (isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
-                    overlay?.fields?.applyToHeroItem(item, settings) ?: item
-                } else {
-                    item
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
+            )
+            if (isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
+                overlay?.fields?.applyToHeroItem(item, settings) ?: item
+            } else {
                 item
             }
-            item.homeOverlayItemKey() to hydrated
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
+            item
         }
-        .let { hydratedByItemKey ->
-            items.map { item -> hydratedByItemKey[item.homeOverlayItemKey()] ?: item }
-        }
+        hydratedByItemKey[item.homeOverlayItemKey()] = hydrated
+    }
+    val out = ArrayList<MetaPreview>(items.size)
+    for (i in items.indices) {
+        val item = items[i]
+        out += hydratedByItemKey[item.homeOverlayItemKey()] ?: item
+    }
+    return out
 }
 
 internal fun isFocusEnrichmentBlocked(
