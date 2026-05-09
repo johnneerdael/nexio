@@ -64,6 +64,10 @@ internal fun buildModernHomePresentation(
         input.resolvedRailRows.forEach { resolvedRail ->
             val sourceRow = catalogRowByCatalogId[resolvedRail.catalogId] ?: return@forEach
             val rowKey = catalogRowKey(sourceRow)
+            // LazyColumn requires unique item keys; dedupe defensively when the
+            // upstream pipeline produces two rails with the same triple
+            // (e.g. synthetic group + raw rail with overlapping config).
+            if (rowKey in activeCatalogKeys) return@forEach
             activeCatalogKeys += rowKey
 
             val cached = cache.catalogRows[rowKey]

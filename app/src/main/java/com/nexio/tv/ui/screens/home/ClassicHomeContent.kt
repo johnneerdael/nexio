@@ -122,10 +122,19 @@ fun ClassicHomeContent(
         uiState.resolvedRailRows,
         catalogRowsByCatalogId
     ) {
+        // LazyColumn requires unique item keys. The key for each row is
+        // "${addonId}_${apiType}_${catalogId}" and Compose throws
+        // IllegalArgumentException on collision. Upstream pipelines occasionally
+        // produce two CatalogRow entries with the same triple (e.g. synthetic
+        // group + raw rail with overlapping config); dedupe defensively here so
+        // a transient pipeline race never crashes Home.
+        val seen = HashSet<String>()
         uiState.resolvedRailRows.mapNotNull { rail ->
             if (rail.items.isEmpty()) return@mapNotNull null
             val catalogRow = catalogRowsByCatalogId[rail.catalogId] ?: return@mapNotNull null
             if (catalogRow.items.isEmpty()) return@mapNotNull null
+            val railKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
+            if (!seen.add(railKey)) return@mapNotNull null
             rail to catalogRow
         }
     }
