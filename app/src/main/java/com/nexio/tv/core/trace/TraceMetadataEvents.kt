@@ -525,6 +525,29 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitHomeDisplayProjection(
+        itemKey: String,
+        sourceRail: String?,
+        firstPaintSummary: Map<String, Any?>,
+        overlaySummary: Map<String, Any?>?,
+        existingSummary: Map<String, Any?>?,
+        selectedSummary: Map<String, Any?>,
+        firstPaintSuppressedSummary: Map<String, Any?>
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.display_projection",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "sourceRail" to optionalTraceValue(sourceRail),
+                "firstPaint" to firstPaintSummary,
+                "overlay" to overlaySummary,
+                "existing" to existingSummary,
+                "selected" to selectedSummary,
+                "firstPaintSuppressed" to firstPaintSuppressedSummary
+            )
+        )
+    }
+
     fun emitHomeHydrationIgnored(
         itemKey: String,
         reason: String,

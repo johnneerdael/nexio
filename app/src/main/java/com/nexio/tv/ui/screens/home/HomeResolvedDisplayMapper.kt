@@ -10,9 +10,12 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.HydrationState
@@ -33,15 +36,17 @@ internal object HomeResolvedDisplayMapper {
         rows: List<CatalogRow>,
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         nowMs: Long = System.currentTimeMillis(),
-        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
+        traceEvents: TraceMetadataEvents? = null
     ): List<ResolvedDisplayItem> =
         rows.flatMap { row -> row.items }
-            .map { item -> item.toResolvedDisplayItem(overlaysByItemKey, nowMs, resolveTrailer) }
+            .map { item -> item.toResolvedDisplayItem(overlaysByItemKey, nowMs, resolveTrailer, traceEvents) }
 
     private fun MetaPreview.toResolvedDisplayItem(
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         nowMs: Long,
-        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
+        traceEvents: TraceMetadataEvents? = null
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
         val overlay = overlayFromMap(overlaysByItemKey)
@@ -54,6 +59,17 @@ internal object HomeResolvedDisplayMapper {
             existing = null,
             profile = null
         )
+
+        if (traceEvents != null) {
+            emitProjectionTrace(
+                traceEvents = traceEvents,
+                itemKey = itemKey,
+                sourceRail = null,
+                firstPaint = firstPaintSlots,
+                overlay = overlaySlots,
+                merged = mergedSlots
+            )
+        }
 
         val stableIds = firstPaintStableIds.withOverlayStableId(overlay)
         val title = mergedSlots.title.value ?: name
@@ -143,6 +159,47 @@ internal object HomeResolvedDisplayMapper {
             selectedPlaybackRef = selected,
             availabilityReason = resolution.availability.reason,
             surface = TrailerSurface.HOME.name.lowercase()
+        )
+    }
+
+    private fun emitProjectionTrace(
+        traceEvents: TraceMetadataEvents,
+        itemKey: String,
+        sourceRail: String?,
+        firstPaint: ResolvedDisplayFieldSlots,
+        overlay: ResolvedDisplayFieldSlots?,
+        merged: ResolvedDisplayFieldSlots
+    ) {
+        traceEvents.emitHomeDisplayProjection(
+            itemKey = itemKey,
+            sourceRail = sourceRail,
+            firstPaintSummary = mapOf(
+                "poster" to (firstPaint.poster.rank != DisplaySourceRank.EMPTY),
+                "backdrop" to (firstPaint.backdrop.rank != DisplaySourceRank.EMPTY),
+                "logo" to (firstPaint.logo.rank != DisplaySourceRank.EMPTY),
+                "rating" to firstPaint.rating.value?.value
+            ),
+            overlaySummary = overlay?.let {
+                mapOf(
+                    "found" to true,
+                    "poster" to it.poster.provider,
+                    "backdrop" to it.backdrop.provider,
+                    "logo" to it.logo.provider,
+                    "rating" to it.rating.provider
+                )
+            },
+            existingSummary = null,
+            selectedSummary = mapOf(
+                "poster" to mapOf("provider" to merged.poster.provider, "rank" to merged.poster.rank.name),
+                "backdrop" to mapOf("provider" to merged.backdrop.provider, "rank" to merged.backdrop.rank.name),
+                "logo" to mapOf("provider" to merged.logo.provider, "rank" to merged.logo.rank.name),
+                "rating" to mapOf("provider" to merged.rating.provider, "rank" to merged.rating.rank.name)
+            ),
+            firstPaintSuppressedSummary = mapOf(
+                "poster" to (merged.poster.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaint.poster.rank == DisplaySourceRank.FIRST_PAINT),
+                "backdrop" to (merged.backdrop.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaint.backdrop.rank == DisplaySourceRank.FIRST_PAINT),
+                "logo" to (merged.logo.rank.ordinal > DisplaySourceRank.FIRST_PAINT.ordinal && firstPaint.logo.rank == DisplaySourceRank.FIRST_PAINT)
+            )
         )
     }
 
