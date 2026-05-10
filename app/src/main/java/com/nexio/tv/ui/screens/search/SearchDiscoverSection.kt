@@ -61,7 +61,6 @@ import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.PosterCardStyle
-import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.util.formatAddonTypeLabel
 
@@ -498,8 +497,9 @@ internal fun DiscoverGrid(
                 focusResults && index == 0 -> firstItemFocusRequester
                 else -> null
             }
+            val cardData = remember(item) { SearchResultItem.fromMetaPreview(item) }
             GridContentCard(
-                item = item.toRailCardData(),
+                item = cardData,
                 onClick = { onItemClick(index, item) },
                 onLongPress = { onItemLongPress(index, item) },
                 posterCardStyle = adaptiveStyle,
