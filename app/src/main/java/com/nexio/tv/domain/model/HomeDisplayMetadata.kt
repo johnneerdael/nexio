@@ -113,6 +113,11 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         imdbRating = appliedRating,
         ratingSource = appliedRatingSource,
         tomatoesRating = tomatoesRating ?: base.tomatoesRating,
+        // Carry production language overlay from the metadata router onto the
+        // MetaPreview. Without this the value reaches HomeDisplayMetadata
+        // (after E4) but dies at this base.copy boundary, leaving CW items'
+        // displayMetadata.originalLanguage null at click time.
+        originalLanguage = originalLanguage ?: base.originalLanguage,
         poster = appliedPoster,
         // Pin posterProviderTag to whichever side actually owns the chosen poster ref so
         // a base-preserved durable RPDB ref doesn't get tagged with the overlay's
