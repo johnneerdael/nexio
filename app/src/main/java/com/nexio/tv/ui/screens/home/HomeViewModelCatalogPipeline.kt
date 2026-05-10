@@ -3068,9 +3068,13 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
         persistedTmdbGroups = persistedTmdbSyntheticGroups
     )
 ) {
-    val rows = rowsForResolvedDisplaySurface(sourceRows, overlaysByItemKey)
+    // Phase 3.5: drop the redundant rowsForResolvedDisplaySurface pre-application.
+    // HomeResolvedDisplayMapper.toResolvedDisplayItem already applies the overlay
+    // via HomeRailProjectionReducer.reduce(firstPaint, overlay, existing, profile) —
+    // pre-applying overlays at the row level (via deprecated HomeDisplayMetadata.applyTo)
+    // is dead work. The reducer is the single non-downgrade authority.
     val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
-        rows = rows,
+        rows = sourceRows,
         overlaysByItemKey = overlaysByItemKey,
         resolveTrailer = null
     )
