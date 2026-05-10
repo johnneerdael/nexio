@@ -86,9 +86,8 @@ fun CollectionSection(
                 }
 
                 Column {
-                    // TODO(Plan B): remove .source bridge when GridContentCard accepts DetailRailItem (or a shared rail interface)
                     GridContentCard(
-                        item = item.source,
+                        item = item,
                         onClick = { onItemClick(item) },
                         posterCardStyle = landscapeStyle,
                         showLabel = true,

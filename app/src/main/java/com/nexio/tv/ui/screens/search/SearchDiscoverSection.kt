@@ -61,6 +61,7 @@ import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.PosterCardStyle
+import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.util.formatAddonTypeLabel
 
@@ -498,7 +499,7 @@ internal fun DiscoverGrid(
                 else -> null
             }
             GridContentCard(
-                item = item,
+                item = item.toRailCardData(),
                 onClick = { onItemClick(index, item) },
                 onLongPress = { onItemLongPress(index, item) },
                 posterCardStyle = adaptiveStyle,

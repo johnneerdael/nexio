@@ -41,6 +41,7 @@ import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.PosterCardDefaults
+import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.min
 import androidx.compose.ui.res.stringResource
@@ -137,7 +138,7 @@ fun AndroidTvFeedBrowserScreen(
                         key = { index, item -> "${item.id}_${item.apiType}_$index" }
                     ) { index, item ->
                         GridContentCard(
-                            item = item,
+                            item = item.toRailCardData(),
                             posterCardStyle = PosterCardDefaults.Style,
                             focusRequester = if (index == focusedItemIndex) restoreFocusRequester else null,
                             onFocused = { focusedItemIndex = index },

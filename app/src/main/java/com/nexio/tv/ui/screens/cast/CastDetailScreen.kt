@@ -58,6 +58,7 @@ import com.nexio.tv.domain.model.PersonDetail
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.components.PosterCardDefaults
+import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -348,7 +349,7 @@ private fun FilmographyRow(
             key = { _, item -> item.id + item.name }
         ) { index, item ->
             GridContentCard(
-                item = item,
+                item = item.toRailCardData(),
                 onClick = { onItemClick(item) },
                 modifier = if (index == 0) {
                     Modifier.onGloballyPositioned {
