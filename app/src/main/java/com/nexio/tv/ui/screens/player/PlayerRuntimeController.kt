@@ -123,6 +123,7 @@ class PlayerRuntimeController(
     internal val contentType: String? = navigationArgs.contentType
     internal val contentName: String? = navigationArgs.contentName
     internal val originalLanguage: String? = navigationArgs.originalLanguage
+    internal val imdbId: String? = navigationArgs.imdbId
     internal val poster: String? = navigationArgs.poster
     internal val backdrop: String? = navigationArgs.backdrop
     internal val logo: String? = navigationArgs.logo

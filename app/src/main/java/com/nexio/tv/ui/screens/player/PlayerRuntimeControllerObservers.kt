@@ -30,7 +30,8 @@ import kotlinx.coroutines.yield
 internal data class SubtitleFetchRequest(
     val type: String,
     val id: String,
-    val videoId: String?
+    val videoId: String?,
+    val imdbId: String?
 )
 
 internal fun PlayerRuntimeController.buildSubtitleFetchRequest(): SubtitleFetchRequest? {
@@ -39,7 +40,8 @@ internal fun PlayerRuntimeController.buildSubtitleFetchRequest(): SubtitleFetchR
     return SubtitleFetchRequest(
         type = type.lowercase(),
         id = id,
-        videoId = currentVideoId
+        videoId = currentVideoId,
+        imdbId = imdbId
     )
 }
 
@@ -87,6 +89,7 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
         wyzieHints = hints,
         season = currentSeason,
         episode = currentEpisode,
+        imdbId = request.imdbId,
     )
     val preferredLanguage = preferredLanguageOverride ?: _uiState.value.subtitleStyle.preferredLanguage
     val secondaryLanguage = secondaryLanguageOverride ?: _uiState.value.subtitleStyle.secondaryPreferredLanguage

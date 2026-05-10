@@ -102,6 +102,7 @@ sealed class Screen(val route: String) {
             contentType: String? = null,
             contentName: String? = null,
             originalLanguage: String? = null,
+            imdbId: String? = null,
             poster: String? = null,
             backdrop: String? = null,
             logo: String? = null,
@@ -140,6 +141,7 @@ sealed class Screen(val route: String) {
             val encodedContentType = contentType?.let { encode(it) } ?: ""
             val encodedContentName = contentName?.let { encode(it) } ?: ""
             val encodedOriginalLanguage = originalLanguage?.let { encode(it) } ?: ""
+            val encodedImdbId = imdbId?.let { encode(it) } ?: ""
             val encodedPoster = poster?.let { encode(it) } ?: ""
             val encodedBackdrop = backdrop?.let { encode(it) } ?: ""
             val encodedLogo = logo?.let { encode(it) } ?: ""
@@ -154,7 +156,7 @@ sealed class Screen(val route: String) {
             val encodedLaunchSource = encode(launchSource.routeValue)
             val encodedResumeSource = resumeSource?.let { encode(it) } ?: ""
             val encodedAddonBaseUrl = addonBaseUrl?.let { encode(it) } ?: ""
-            return "player/$encodedUrl/$encodedTitle?streamName=$encodedStreamName&serviceKey=$encodedServiceKey&year=$encodedYear&headers=$encodedHeaders&contentId=$encodedContentId&contentType=$encodedContentType&contentName=$encodedContentName&originalLanguage=$encodedOriginalLanguage&poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&videoId=$encodedVideoId&season=${season ?: ""}&episode=${episode ?: ""}&episodeTitle=$encodedEpisodeTitle&bingeGroup=$encodedBingeGroup&rememberedAudioLanguage=$encodedRememberedAudioLanguage&rememberedAudioName=$encodedRememberedAudioName&playerBackend=$encodedPlayerBackend&autoPlayNav=$autoPlayNav&returnToDetailOnBack=$returnToDetailOnBack&deterministicAutoplay=$deterministicAutoplay&filename=$encodedFilename&videoHash=$encodedVideoHash&videoSize=${videoSize ?: ""}&startFromBeginning=$startFromBeginning&launchSource=$encodedLaunchSource&resumePositionMs=${resumePositionMs ?: ""}&resumeDurationMs=${resumeDurationMs ?: ""}&resumeProgressPercent=${resumeProgressPercent ?: ""}&resumeLastWatchedMs=${resumeLastWatchedMs ?: ""}&resumeSource=$encodedResumeSource&addonBaseUrl=$encodedAddonBaseUrl"
+            return "player/$encodedUrl/$encodedTitle?streamName=$encodedStreamName&serviceKey=$encodedServiceKey&year=$encodedYear&headers=$encodedHeaders&contentId=$encodedContentId&contentType=$encodedContentType&contentName=$encodedContentName&originalLanguage=$encodedOriginalLanguage&imdbId=$encodedImdbId&poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&videoId=$encodedVideoId&season=${season ?: ""}&episode=${episode ?: ""}&episodeTitle=$encodedEpisodeTitle&bingeGroup=$encodedBingeGroup&rememberedAudioLanguage=$encodedRememberedAudioLanguage&rememberedAudioName=$encodedRememberedAudioName&playerBackend=$encodedPlayerBackend&autoPlayNav=$autoPlayNav&returnToDetailOnBack=$returnToDetailOnBack&deterministicAutoplay=$deterministicAutoplay&filename=$encodedFilename&videoHash=$encodedVideoHash&videoSize=${videoSize ?: ""}&startFromBeginning=$startFromBeginning&launchSource=$encodedLaunchSource&resumePositionMs=${resumePositionMs ?: ""}&resumeDurationMs=${resumeDurationMs ?: ""}&resumeProgressPercent=${resumeProgressPercent ?: ""}&resumeLastWatchedMs=${resumeLastWatchedMs ?: ""}&resumeSource=$encodedResumeSource&addonBaseUrl=$encodedAddonBaseUrl"
         }
     }
     data object Search : Screen("search")
