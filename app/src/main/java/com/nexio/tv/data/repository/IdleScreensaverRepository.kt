@@ -77,9 +77,15 @@ class IdleScreensaverRepository(
      * its own [TrailerDisplayState] so consumers can pick image vs trailer mode
      * without consulting a parallel `_trailerCandidates` flow. Plan B Task 14.
      *
-     * This runs alongside the legacy [slides]/[trailerCandidates] flows during
-     * the overlay-consumer migration (Plan B Task 15); both are populated from
-     * the same [observeScreensaverSurface] tick so they stay coherent.
+     * **Coherence semantics:** [ResolvedDisplaySurfaceRepository.surfaces] is a
+     * hot `MutableStateFlow`, so both this projection and the legacy
+     * [slides]/[trailerCandidates] flows observe the same emission *value*. They
+     * are still populated by two independent collectors below, so brief
+     * intra-emission interleaving is possible (one StateFlow can update before
+     * the other within a single dispatcher tick). Consumers that need lockstep
+     * image+trailer state should treat them as eventually-coherent within an
+     * emission window. Plan B Task 15 retires the legacy flows so this
+     * coherence concern is structural-only and goes away with cleanup.
      */
     private val _screensaverDisplayItems = MutableStateFlow<List<IdleScreensaverDisplayItem>>(emptyList())
     val screensaverDisplayItems = _screensaverDisplayItems.asStateFlow()

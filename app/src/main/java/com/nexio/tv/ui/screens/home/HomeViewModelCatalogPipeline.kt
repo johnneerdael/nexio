@@ -2781,6 +2781,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         // be long when emissions overlap) would pin the 27.98 MiB inventory
         // list in its continuation. Reading at use-site limits the pin to
         // this withContext block's continuation only.
+        //
+        // NOTE: this is a snapshot-at-use-site read, not a function-entry
+        // read. If two pipeline emissions race for the mutex, the second one
+        // observes whatever the first one published. mergeCachedRowsWithLiveRows
+        // is designed to handle this — its job is to preserve cached rows
+        // through transitional refreshes — and sampling at the merge call
+        // site is generally more correct than function entry. Documented
+        // explicitly so a future reader does not "fix" it back.
         val cachedFullRows = _fullCatalogRows.value
         val effectiveOrderedRows = catalogRowMemo.intern(
             mergeCachedRowsWithLiveRows(
