@@ -24,29 +24,47 @@ internal object HomeRailProjectionReducer {
         existing: ResolvedDisplayFieldSlots?,
         profile: ResolvedDisplayFieldSlots?
     ): ResolvedDisplayFieldSlots = ResolvedDisplayFieldSlots(
-        title = chooseString(firstPaint.title, overlay?.title, existing?.title, profile?.title),
-        originalTitle = chooseString(firstPaint.originalTitle, overlay?.originalTitle, existing?.originalTitle, profile?.originalTitle),
-        overview = chooseString(firstPaint.overview, overlay?.overview, existing?.overview, profile?.overview),
-        genres = chooseList(firstPaint.genres, overlay?.genres, existing?.genres, profile?.genres),
-        releaseInfo = chooseString(firstPaint.releaseInfo, overlay?.releaseInfo, existing?.releaseInfo, profile?.releaseInfo),
-        runtime = chooseString(firstPaint.runtime, overlay?.runtime, existing?.runtime, profile?.runtime),
-        rating = chooseRating(firstPaint.rating, overlay?.rating, existing?.rating, profile?.rating),
-        poster = chooseArtwork(firstPaint.poster, overlay?.poster, existing?.poster, profile?.poster),
-        backdrop = chooseArtwork(firstPaint.backdrop, overlay?.backdrop, existing?.backdrop, profile?.backdrop),
-        logo = chooseArtwork(firstPaint.logo, overlay?.logo, existing?.logo, profile?.logo),
-        thumbnail = chooseArtwork(firstPaint.thumbnail, overlay?.thumbnail, existing?.thumbnail, profile?.thumbnail),
-        posterProviderTag = chooseString(firstPaint.posterProviderTag, overlay?.posterProviderTag, existing?.posterProviderTag, profile?.posterProviderTag)
+        title = pickHigherRanked(firstPaint.title, overlay?.title, existing?.title, profile?.title),
+        originalTitle = pickHigherRanked(firstPaint.originalTitle, overlay?.originalTitle, existing?.originalTitle, profile?.originalTitle),
+        overview = pickHigherRanked(firstPaint.overview, overlay?.overview, existing?.overview, profile?.overview),
+        genres = pickHigherRanked(firstPaint.genres, overlay?.genres, existing?.genres, profile?.genres),
+        releaseInfo = pickHigherRanked(firstPaint.releaseInfo, overlay?.releaseInfo, existing?.releaseInfo, profile?.releaseInfo),
+        runtime = pickHigherRanked(firstPaint.runtime, overlay?.runtime, existing?.runtime, profile?.runtime),
+        rating = pickHigherRanked(firstPaint.rating, overlay?.rating, existing?.rating, profile?.rating),
+        poster = pickHigherRanked(firstPaint.poster, overlay?.poster, existing?.poster, profile?.poster),
+        backdrop = pickHigherRanked(firstPaint.backdrop, overlay?.backdrop, existing?.backdrop, profile?.backdrop),
+        logo = pickHigherRanked(firstPaint.logo, overlay?.logo, existing?.logo, profile?.logo),
+        thumbnail = pickHigherRanked(firstPaint.thumbnail, overlay?.thumbnail, existing?.thumbnail, profile?.thumbnail),
+        posterProviderTag = pickHigherRanked(firstPaint.posterProviderTag, overlay?.posterProviderTag, existing?.posterProviderTag, profile?.posterProviderTag)
     )
 
-    private fun chooseString(vararg slots: ResolvedSlot<String>?): ResolvedSlot<String> =
-        slots.filterNotNull().reduce { a, b -> ResolvedSlot.chooseHigherRank(a, b) }
-
-    private fun chooseList(vararg slots: ResolvedSlot<List<String>>?): ResolvedSlot<List<String>> =
-        slots.filterNotNull().reduce { a, b -> ResolvedSlot.chooseHigherRank(a, b) }
-
-    private fun chooseRating(vararg slots: ResolvedSlot<TitleRating>?): ResolvedSlot<TitleRating> =
-        slots.filterNotNull().reduce { a, b -> ResolvedSlot.chooseHigherRank(a, b) }
-
-    private fun chooseArtwork(vararg slots: ResolvedSlot<ArtworkDisplayRef>?): ResolvedSlot<ArtworkDisplayRef> =
-        slots.filterNotNull().reduce { a, b -> ResolvedSlot.chooseHigherRank(a, b) }
+    /**
+     * Allocation-free 4-argument higher-ranked-slot picker.
+     *
+     * Replaces the previous `vararg + filterNotNull + reduce { chooseHigherRank }`
+     * pattern, which allocated per call: an Array<ResolvedSlot<T>?> for the vararg
+     * backing, an ArrayList from filterNotNull, and an ArrayList iterator for
+     * reduce (rule #4 — Iterable.forEach/reduce in a hot path; rule #5 — every
+     * reducer call produced a fresh-but-content-equal output bag because the slot
+     * lookups churned identity-stable inputs through reference-fresh wrappers).
+     *
+     * 2026-05-10 ANR investigation showed the reducer is invoked at ~2,860
+     * chooseX calls per home pipeline emission (22 rows × ~10 items × 13
+     * fields). Eliminating the vararg + ArrayList + iterator triplet drops
+     * ~8,580 allocations per emission to zero. Tie semantics preserved
+     * (first non-null with the highest rank wins on tie, matching
+     * Iterable.reduce's left-fold over chooseHigherRank).
+     */
+    private fun <T> pickHigherRanked(
+        s1: ResolvedSlot<T>?,
+        s2: ResolvedSlot<T>?,
+        s3: ResolvedSlot<T>?,
+        s4: ResolvedSlot<T>?
+    ): ResolvedSlot<T> {
+        var best: ResolvedSlot<T>? = s1
+        if (s2 != null && (best == null || s2.rank.ordinal > best.rank.ordinal)) best = s2
+        if (s3 != null && (best == null || s3.rank.ordinal > best.rank.ordinal)) best = s3
+        if (s4 != null && (best == null || s4.rank.ordinal > best.rank.ordinal)) best = s4
+        return best ?: error("HomeRailProjectionReducer.pickHigherRanked called with all slots null — firstPaint must always be non-null")
+    }
 }
