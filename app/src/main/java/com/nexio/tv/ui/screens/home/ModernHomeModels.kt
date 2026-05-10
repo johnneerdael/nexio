@@ -659,11 +659,11 @@ internal fun buildCatalogItem(
     // Description / genres / tomatoes / contentTypeText still come from MetaPreview
     // (Plan B Task 4 minimum scope: ResolvedDisplayItem does not yet expose these via
     // ModernHomeRowItem). When MetaPreview is unavailable, fall back to the empty values.
-    val description = displayMetadata.description ?: item?.description
+    val description = resolved.description ?: displayMetadata.description ?: item?.description
     val contentTypeText = (item?.apiType ?: row.apiType).replaceFirstChar { ch -> ch.uppercase() }
-    val tomatoesText = (displayMetadata.tomatoesRating ?: item?.tomatoesRating)
+    val tomatoesText = (resolved.tomatoesRating ?: displayMetadata.tomatoesRating ?: item?.tomatoesRating)
         ?.let(::formatPreviewTomatoesRating)
-    val genres = displayMetadata.genres.ifEmpty { item?.genres ?: emptyList() }.take(3)
+    val genres = resolved.genres.ifEmpty { displayMetadata.genres.ifEmpty { item?.genres ?: emptyList() } }.take(3)
 
     val heroImageUrl = if (useLandscapePosters) {
         firstNonBlank(resolvedBackdropUrl, resolvedPosterUrl)
@@ -694,7 +694,7 @@ internal fun buildCatalogItem(
     val itemId = item?.id ?: resolved.contentId
     val itemType = item?.apiType ?: row.apiType
     val trailerTitle = resolvedTitle
-    val trailerReleaseInfo = displayMetadata.releaseInfo ?: item?.releaseInfo
+    val trailerReleaseInfo = resolved.releaseInfo ?: displayMetadata.releaseInfo ?: item?.releaseInfo
 
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${itemId}_${occurrence}",
