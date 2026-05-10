@@ -1440,12 +1440,19 @@ internal suspend fun buildContinueWatchingStreamRouteWithHydration(
     val hydratedItem = item.withHydratedRuntimeMinutes(
         continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
     )
-    // Only call enrichment when displayMetadata.originalLanguage is missing —
-    // skip the API surface when the rail has already enriched this item. The
-    // value is plumbed to the player nav arg so the audio-track picker can
-    // target the show's production language.
-    val finalItem = if (hydratedItem.displayMetadata().originalLanguage.isNullOrBlank()) {
-        resolveOriginalLanguageEnrichment(hydratedItem)
+    val preEnrichmentLang = hydratedItem.displayMetadata().originalLanguage
+    val needsEnrichment = preEnrichmentLang.isNullOrBlank()
+    android.util.Log.w(
+        "LANG_TRACE",
+        "buildContinueWatchingStreamRouteWithHydration pre lang=$preEnrichmentLang needsEnrichment=$needsEnrichment"
+    )
+    val finalItem = if (needsEnrichment) {
+        val enriched = resolveOriginalLanguageEnrichment(hydratedItem)
+        android.util.Log.w(
+            "LANG_TRACE",
+            "buildContinueWatchingStreamRouteWithHydration post-enrichment lang=${enriched.displayMetadata().originalLanguage}"
+        )
+        enriched
     } else {
         hydratedItem
     }
