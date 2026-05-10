@@ -199,8 +199,6 @@ class HomeViewModel @Inject constructor(
 
     internal val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
-    internal val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
-    val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
     // Post-truncation/layout-adjusted catalog rows used for rendering. Held outside
     // [HomeUiState] (Plan B small Task 26) to avoid Compose SlotTable retention pinning
     // both legacy CatalogRow instances and resolved Plan B rails simultaneously. UI consumes
