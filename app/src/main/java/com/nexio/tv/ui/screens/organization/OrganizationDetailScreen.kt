@@ -50,7 +50,7 @@ import com.nexio.tv.domain.model.TmdbOrganizationDetail
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
-import com.nexio.tv.ui.components.toRailCardData
+import com.nexio.tv.ui.screens.detail.DetailRailItem
 import com.nexio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -127,8 +127,9 @@ private fun OrganizationDetailContent(
                     items = detail.titles,
                     key = { _, item -> item.id }
                 ) { _, item ->
+                    val cardData = remember(item) { DetailRailItem.fromMetaPreview(item) }
                     GridContentCard(
-                        item = item.toRailCardData(),
+                        item = cardData,
                         posterCardStyle = posterCardStyle,
                         onClick = { onNavigateToDetail(item.id, item.apiType, null) }
                     )
