@@ -19,7 +19,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.theme.NexioColors
@@ -27,13 +26,13 @@ import com.nexio.tv.ui.theme.NexioColors
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CollectionSection(
-    items: List<MetaPreview>,
+    items: List<DetailRailItem>,
     upFocusRequester: FocusRequester? = null,
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
-    onItemFocused: (MetaPreview) -> Unit = {},
-    onItemClick: (MetaPreview) -> Unit
+    onItemFocused: (DetailRailItem) -> Unit = {},
+    onItemClick: (DetailRailItem) -> Unit
 ) {
     if (items.isEmpty()) return
 
@@ -42,13 +41,13 @@ fun CollectionSection(
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
 
     LaunchedEffect(items) {
-        val validIds = items.mapTo(mutableSetOf()) { it.id }
+        val validIds = items.mapTo(mutableSetOf()) { it.contentId }
         itemFocusRequesters.keys.retainAll(validIds)
     }
 
     LaunchedEffect(restoreFocusToken, restoreItemId, items) {
         if (restoreFocusToken <= 0 || restoreItemId.isNullOrBlank()) return@LaunchedEffect
-        if (items.none { it.id == restoreItemId }) return@LaunchedEffect
+        if (items.none { it.contentId == restoreItemId }) return@LaunchedEffect
         restoreFocusRequester.requestFocusAfterFrames()
     }
 
@@ -76,19 +75,20 @@ fun CollectionSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { index, item -> item.id + "|" + item.name + "|" + index }
+                key = { index, item -> item.contentId + "|" + item.title + "|" + index }
             ) { index, item ->
-                val isRestoreTarget = item.id == restoreItemId
+                val isRestoreTarget = item.contentId == restoreItemId
                 val isFirstItem = index == 0
                 val focusRequester = when {
                     isRestoreTarget -> restoreFocusRequester
                     isFirstItem -> firstItemFocusRequester
-                    else -> remember(item.id) { itemFocusRequesters.getOrPut(item.id) { FocusRequester() } }
+                    else -> remember(item.contentId) { itemFocusRequesters.getOrPut(item.contentId) { FocusRequester() } }
                 }
 
                 Column {
+                    // TODO(Plan B): remove .source bridge when GridContentCard accepts DetailRailItem (or a shared rail interface)
                     GridContentCard(
-                        item = item,
+                        item = item.source,
                         onClick = { onItemClick(item) },
                         posterCardStyle = landscapeStyle,
                         showLabel = true,
@@ -96,14 +96,14 @@ fun CollectionSection(
                         focusRequester = focusRequester,
                         upFocusRequester = upFocusRequester,
                         onFocused = {
-                            detailFocusDebug("collectionFocused id=${item.id} name=${item.name}")
+                            detailFocusDebug("collectionFocused id=${item.contentId} name=${item.title}")
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
                                 onRestoreFocusHandled()
                             }
                         }
                     )
-                    val year = item.releaseInfo
+                    val year = item.source.releaseInfo
                     if (!year.isNullOrBlank()) {
                         Text(
                             text = year,

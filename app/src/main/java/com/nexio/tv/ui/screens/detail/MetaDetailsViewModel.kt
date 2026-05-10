@@ -874,8 +874,8 @@ class MetaDetailsViewModel @Inject constructor(
                 },
                 localizationFallbackReason = document.localization.fallbackReason,
                 reviews = document.reviews,
-                relatedItems = document.recommendations,
-                collection = document.collection
+                relatedItems = document.recommendations.map { DetailRailItem.fromMetaPreview(it) },
+                collection = document.collection.map { DetailRailItem.fromMetaPreview(it) }
             )
         }
     }
@@ -1006,7 +1006,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     isAnimeDetail = true,
-                    relatedItems = enrichment.animeRelated
+                    relatedItems = enrichment.animeRelated.map { DetailRailItem.fromMetaPreview(it) }
                 )
             }
             loadKitsuReviewsAsync(enrichment)
@@ -1108,7 +1108,7 @@ class MetaDetailsViewModel @Inject constructor(
             if (resolvedDetail?.recommendations?.isNotEmpty() == true) {
                 _uiState.update { state ->
                     if (state.meta == null || state.meta.id == meta.id) {
-                        state.copy(relatedItems = resolvedDetail.recommendations)
+                        state.copy(relatedItems = resolvedDetail.recommendations.map { DetailRailItem.fromMetaPreview(it) })
                     } else {
                         state
                     }
@@ -1147,7 +1147,7 @@ class MetaDetailsViewModel @Inject constructor(
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
-                    state.copy(relatedItems = recommendations)
+                    state.copy(relatedItems = recommendations.map { DetailRailItem.fromMetaPreview(it) })
                 } else {
                     state
                 }
@@ -1455,7 +1455,7 @@ class MetaDetailsViewModel @Inject constructor(
         collectionJob = viewModelScope.launch {
             _uiState.update { state ->
                 state.copy(
-                    collection = state.resolvedDetail?.collection.orEmpty(),
+                    collection = state.resolvedDetail?.collection.orEmpty().map { DetailRailItem.fromMetaPreview(it) },
                     collectionName = collectionName.takeIf { state.resolvedDetail?.collection?.isNotEmpty() == true }
                 )
             }

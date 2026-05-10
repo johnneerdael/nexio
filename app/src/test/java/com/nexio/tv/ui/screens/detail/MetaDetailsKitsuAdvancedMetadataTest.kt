@@ -147,7 +147,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals(null, meta.productionCompanies.single().tmdbId)
         assertEquals("10", meta.productionCompanies.single().providerId)
         assertEquals(1, viewModel.uiState.value.relatedItems.size)
-        assertEquals("Attack on Titan Picture Drama", viewModel.uiState.value.relatedItems.single().name)
+        assertEquals("Attack on Titan Picture Drama", viewModel.uiState.value.relatedItems.single().title)
         assertTrue(viewModel.uiState.value.reviews.isEmpty())
         assertEquals(false, viewModel.uiState.value.isReviewsLoading)
         coVerify(exactly = 0) { tmdbMetadataService.fetchMoreLikeThis(any(), any(), any(), any()) }

@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.detail
 import com.nexio.tv.domain.model.Meta
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
@@ -55,11 +54,11 @@ data class MetaDetailsUiState(
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
     val isAnimeDetail: Boolean = false,
-    val relatedItems: List<MetaPreview> = emptyList(),
+    val relatedItems: List<DetailRailItem> = emptyList(),
     val reviews: List<MetaReview> = emptyList(),
     val isReviewsLoading: Boolean = false,
     val reviewsError: String? = null,
-    val collection: List<MetaPreview> = emptyList(),
+    val collection: List<DetailRailItem> = emptyList(),
     val collectionName: String? = null,
     val episodeRatings: Map<Pair<Int, Int>, EpisodeRating> = emptyMap(),
     val isEpisodeRatingsLoading: Boolean = false,
