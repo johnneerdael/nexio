@@ -691,4 +691,100 @@ class PlayerStartupSelectionPolicyTest {
         assertEquals("en-addon", decision.subtitle.id)
         assertEquals(true, decision.enableAiTranslation)
     }
+
+    @Test
+    fun `aiTier picks English embedded when no secondary configured`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "French", language = "fr", mimeType = "text/vtt"),
+            TrackInfo(index = 1, name = "English", language = "en", mimeType = "text/vtt")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = tracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = null,
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 1, enableAiTranslation = true),
+            decision
+        )
+    }
+
+    @Test
+    fun `aiTier picks any embedded when no English no secondary`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Polish", language = "pl", mimeType = "text/vtt")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = tracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = null,
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 0, enableAiTranslation = true),
+            decision
+        )
+    }
+
+    @Test
+    fun `aiTier returns None when only bitmap embedded subtitles exist`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (PGS)", language = "en", mimeType = "application/pgs")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = tracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = null,
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(StartupSubtitleAutoSelectionDecision.None, decision)
+    }
+
+    @Test
+    fun `aiTier secondary hint wins over English when both available`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English", language = "en", mimeType = "text/vtt"),
+            TrackInfo(index = 1, name = "French", language = "fr", mimeType = "text/vtt"),
+            TrackInfo(index = 2, name = "German", language = "de", mimeType = "text/vtt")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = tracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = "fr",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 1, enableAiTranslation = true),
+            decision
+        )
+    }
 }
