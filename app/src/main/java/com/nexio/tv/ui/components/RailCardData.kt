@@ -59,19 +59,22 @@ interface RailCardData {
  */
 fun MetaPreview.toRailCardData(): RailCardData = MetaPreviewRailCardAdapter(this)
 
-private class MetaPreviewRailCardAdapter(private val meta: MetaPreview) : RailCardData {
-    override val id: String get() = meta.id
-    override val name: String get() = meta.name
+private class MetaPreviewRailCardAdapter(meta: MetaPreview) : RailCardData {
+    override val id: String = meta.id
+    override val name: String = meta.name
     override val posterRef: ArtworkDisplayRef? = computePosterRef(meta)
-    override val posterProviderTag: String? get() = meta.posterProviderTag
+    override val posterProviderTag: String? = meta.posterProviderTag
 }
 
+// Precedence: typed `meta.artwork?.poster` first; if null, wrap the legacy
+// `meta.poster` String as ArtworkDisplayRef.LegacyString of POSTER type.
+// `meta.displayPoster` is intentionally NOT a fallback here — its own
+// definition is `artwork?.poster.toLegacyArtworkString() ?: poster`, which is
+// already exhausted by the two checks above.
 private fun computePosterRef(meta: MetaPreview): ArtworkDisplayRef? {
     val typed = meta.artwork?.poster
     if (typed != null) return typed
-    val legacy = meta.poster?.takeIf { it.isNotBlank() }
-        ?: meta.displayPoster?.takeIf { it.isNotBlank() }
-        ?: return null
+    val legacy = meta.poster?.takeIf { it.isNotBlank() } ?: return null
     return ArtworkDisplayRef.LegacyString(
         value = legacy,
         imageType = ArtworkType.POSTER,
