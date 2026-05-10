@@ -378,7 +378,7 @@ class HomeViewModel @Inject constructor(
                 val wantedKeys = HashSet<String>(cwItems.size)
                 for (i in cwItems.indices) {
                     val item = cwItems[i]
-                    val key = continueWatchingItemKey(item) ?: continue
+                    val key = continueWatchingItemKey(item)
                     wantedKeys += key
                 }
                 val resolvedByWantedKey = HashMap<String, com.nexio.tv.domain.model.ResolvedDisplayItem>(cwItems.size)
@@ -393,7 +393,7 @@ class HomeViewModel @Inject constructor(
                 val out = ArrayList<ContinueWatchingResolvedDisplayItem>(cwItems.size)
                 for (i in cwItems.indices) {
                     val item = cwItems[i]
-                    val key = continueWatchingItemKey(item) ?: continue
+                    val key = continueWatchingItemKey(item)
                     val resolved = resolvedByWantedKey[key] ?: continue
                     activeKeys += key
                     val projected = when (item) {
@@ -409,9 +409,10 @@ class HomeViewModel @Inject constructor(
     /**
      * Derives the home `itemKey` (apiType + content id) for a [ContinueWatchingItem].
      * Used by [resolvedContinueWatchingItemsFlow] to join the CW list with the
-     * resolved home surface.
+     * resolved home surface. [homeDisplayItemKey] is total over non-null inputs and
+     * both variants carry non-null content id / type, so the result is non-null.
      */
-    private fun continueWatchingItemKey(item: ContinueWatchingItem): String? = when (item) {
+    private fun continueWatchingItemKey(item: ContinueWatchingItem): String = when (item) {
         is ContinueWatchingItem.InProgress -> homeDisplayItemKey(item.progress.contentType, item.progress.contentId)
         is ContinueWatchingItem.NextUp -> homeDisplayItemKey(item.info.contentType, item.info.contentId)
     }
