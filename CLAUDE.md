@@ -129,6 +129,20 @@ Also memoize the **outer list reference** when all elements are reference-stable
 
 For Compose-rendered helpers (e.g. an `overlayResolvedDisplay(item, resolved): MetaPreview` that allocates a new value per recomposition), wrap in `remember(item, resolved) { compute() }` at the call site. Reference-stable inputs → `remember` returns the cached value.
 
+### 6. Coroutines — don't pin large values as outer-fun locals across fan-out
+
+The Kotlin coroutine state machine saves **every captured outer-fun local** into the continuation at every suspension point, regardless of which branch suspended or which locals that branch actually touches. A `supervisorScope { launch { ... }; launch { ... } }` body with N suspensions produces N continuations *each* holding the entire local set of the enclosing suspend fun.
+
+`runSerializedPostStartupRefreshPipeline` pre-fetched four discovery snapshots (`beforeTraktSnapshot`, `beforeSimklSnapshot`, `beforeMdbSnapshot`, `beforeTmdbSnapshot`) at the top of the function, then ran a `supervisorScope` with 5 `launch(Dispatchers.IO)` branches. Every `ensureFresh()`, `observeSnapshot().first()`, `withContext(Main.immediate)` etc. inside any branch saved all four snapshots into that branch's continuation, even though each branch only used one. Heap dump showed a ~100k-element `ArrayList` pinned by `runSerializedPostStartupRefreshPipeline$1.L$24` and 8,955 `ArrayList$Itr` in flight at 170 MB AllocSpace freed per GC cycle (commit `522b60479` audit).
+
+**Rule:** at the top of any `suspend fun` that fans out via `supervisorScope`/`coroutineScope`, do not bind large values (lists, maps, `Discovery*Snapshot`, `*Catalog*` data classes) as named locals.
+
+- If the value is needed only for one nested branch, fetch it inside that branch.
+- If the value is needed for telemetry that runs after `joinAll`, capture only the small derived projection (`Set<String>` of keys) at the top — the full value is GC-eligible the moment the projection is computed.
+- If the value is needed only for a synchronous predicate at the top, wrap the fetch + predicate in `let { snap -> shouldRefresh(prefs, snap) }` — the snapshot has no named local, so it is GC-eligible the moment the predicate returns.
+
+This rule complements rule #4: rule #4 is about `Iterator` instances captured by `Iterable.forEach { suspend }`; rule #6 is about *any* value captured as a suspend-fun local across `launch` boundaries. Both pin data into continuations, but the mechanism and fix differ.
+
 ---
 
 ## When investigating performance issues
