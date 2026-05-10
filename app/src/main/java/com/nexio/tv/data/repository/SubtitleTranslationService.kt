@@ -171,6 +171,34 @@ class SubtitleTranslationService @Inject constructor(
             minSplitEntries = 1,
             maxParallelRequests = 1
         )
+
+        @androidx.annotation.VisibleForTesting
+        internal fun buildTranslationSystemPromptForTest(
+            targetLanguageCode: String,
+            targetLanguageName: String,
+            sourceLanguageName: String
+        ): String {
+            // Single source of truth for buildTranslationSystemPrompt body.
+            // The instance method delegates here; tests can exercise it
+            // without instantiating the full DI graph.
+            return buildString {
+                append("You are an expert subtitle localization specialist. ")
+                append("Translate only the text fields in the provided JSON items into ")
+                append(targetLanguageName)
+                append(" (")
+                append(targetLanguageCode)
+                append("). ")
+                if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+                    append("The source language is unknown — detect it automatically from the cue text. ")
+                } else {
+                    append("Translate from ")
+                    append(sourceLanguageName)
+                    append(". ")
+                }
+                append("Return JSON only. Keep the same ids. ")
+                append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
+            }
+        }
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
@@ -990,19 +1018,13 @@ class SubtitleTranslationService @Inject constructor(
 
     private fun buildTranslationSystemPrompt(
         targetLanguageCode: String,
-        targetLanguageName: String
-    ): String {
-        return buildString {
-            append("You are an expert subtitle localization specialist. ")
-            append("Translate only the text fields in the provided JSON items into ")
-            append(targetLanguageName)
-            append(" (")
-            append(targetLanguageCode)
-            append("). ")
-            append("Return JSON only. Keep the same ids. ")
-            append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
-        }
-    }
+        targetLanguageName: String,
+        sourceLanguageName: String
+    ): String = buildTranslationSystemPromptForTest(
+        targetLanguageCode = targetLanguageCode,
+        targetLanguageName = targetLanguageName,
+        sourceLanguageName = sourceLanguageName
+    )
 
     private fun buildDashScopeMarkerPayload(
         blocks: List<TranslatableTimedTextBlock>
@@ -1119,7 +1141,7 @@ class SubtitleTranslationService @Inject constructor(
         onRateLimited: () -> Unit = {}
     ): String? {
         val systemPrompt = systemPromptOverride
-            ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
+            ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName, sourceLanguageName)
         val endpoint = providerEndpoint(settings)
         val userPayload = promptPayload.toString()
         val (request, requestBodyText) = when (settings.provider) {
