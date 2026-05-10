@@ -199,6 +199,25 @@ class SubtitleTranslationService @Inject constructor(
                 append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
             }
         }
+
+        @androidx.annotation.VisibleForTesting
+        internal fun buildRawSubRipSystemPromptForTest(
+            targetLanguageName: String,
+            sourceLanguageName: String
+        ): String {
+            val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+                "The source language is unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+            } else {
+                "Translate from $sourceLanguageName to $targetLanguageName."
+            }
+            return """
+                You are SRT_TRANSLATION_ENGINE.
+
+                $sourceClause
+
+                Your task is to translate raw SRT subtitle content into $targetLanguageName while preserving valid SRT format exactly.
+            """.trimIndent()
+        }
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
@@ -842,7 +861,7 @@ class SubtitleTranslationService @Inject constructor(
         val source = renderRawSubRipCues(cues)
         val userPayload = buildRawSubRipUserPayload(source, targetLanguageName)
         val response = executeRawTranslationRequest(
-            systemPrompt = buildRawSubRipSystemPrompt(targetLanguageName),
+            systemPrompt = buildRawSubRipSystemPrompt(targetLanguageName, sourceLanguageName),
             userPayload = userPayload,
             sourceLanguageName = sourceLanguageName,
             targetLanguageName = targetLanguageName,
@@ -1740,9 +1759,19 @@ class SubtitleTranslationService @Inject constructor(
         """.trimIndent()
     }
 
-    private fun buildRawSubRipSystemPrompt(targetLanguageName: String): String {
+    private fun buildRawSubRipSystemPrompt(
+        targetLanguageName: String,
+        sourceLanguageName: String
+    ): String {
+        val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+            "The source language is unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+        } else {
+            "Translate from $sourceLanguageName to $targetLanguageName."
+        }
         return """
             You are SRT_TRANSLATION_ENGINE.
+
+            $sourceClause
 
             Your task is to translate raw SRT subtitle content into $targetLanguageName while preserving valid SRT format exactly.
 
