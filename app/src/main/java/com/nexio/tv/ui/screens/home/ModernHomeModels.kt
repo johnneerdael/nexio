@@ -382,17 +382,24 @@ internal fun buildContinueWatchingItem(
     airsDateTemplate: String,
     upcomingLabel: String
 ): ModernCarouselItem {
-    // The resolved projection drives the rendered CW row card via
-    // ContinueWatchingCard (typed posterRef/backdropRef/logoRef). This function
-    // builds the Modern carousel's HERO PREVIEW (the focused-trailer big-preview
-    // image at the top of Modern Home), which still derives display fields from
-    // the legacy displayMetadata chain. The card layer is rule #1 compliant; the
-    // hero-preview layer is not yet.
-    //
-    // TODO(Plan B Surface 4 follow-up): migrate hero-preview poster/backdrop/logo
-    // reads to resolved.posterRef/backdropRef/logoRef.toLegacyArtworkString() so
-    // the focused-CW preview also enforces typed display authority.
+    // The resolved projection drives both the rendered CW row card AND the
+    // Modern carousel's HERO PREVIEW (this function). poster/backdrop/logo/title
+    // read from the typed `resolved.posterRef` / `backdropRef` / `logoRef` /
+    // `title` slots — rule #1 compliant. Other display fields (description,
+    // releaseInfo, imdbRating, tomatoesRating, genres) still come from the
+    // legacy `displayMetadata` chain on the embedded ContinueWatchingItem;
+    // migrating those is Phase 3 (catalog pipeline restructure) of
+    // docs/superpowers/specs/2026-05-10-home-metapreview-elimination-design.md.
     val item = resolved.toContinueWatchingItem()
+    // Phase 2A migration: poster/backdrop/logo/title now read from the typed
+    // projection (rule #1) instead of the legacy displayMetadata chain. Other
+    // fields (description, releaseInfo, imdbRating, tomatoesRating, genres)
+    // stay on displayMetadata for now — those typed equivalents land in Phase 3
+    // (catalog pipeline restructure).
+    val resolvedPoster: String? = resolved.posterRef.toLegacyArtworkString()
+    val resolvedBackdrop: String? = resolved.backdropRef.toLegacyArtworkString()
+    val resolvedLogo: String? = resolved.logoRef.toLegacyArtworkString()
+    val resolvedTitle: String? = resolved.title
     val displayMetadata = item.displayMetadata()
     val heroPreview = when (item) {
         is ContinueWatchingItem.InProgress -> {
@@ -406,8 +413,8 @@ internal fun buildContinueWatchingItem(
                 else -> item.progress.contentType.replaceFirstChar { ch -> ch.uppercase() }
             }
             HeroPreview(
-                title = displayMetadata.title ?: item.progress.name,
-                logo = displayMetadata.displayLogo,
+                title = resolvedTitle ?: item.progress.name,
+                logo = resolvedLogo,
                 description = item.episodeDescription
                     ?: displayMetadata.description
                     ?: item.progress.episodeTitle,
@@ -418,17 +425,17 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.displayPoster,
-                backdrop = displayMetadata.displayBackdrop,
+                poster = resolvedPoster,
+                backdrop = resolvedBackdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
-                        displayMetadata.displayBackdrop,
-                        displayMetadata.displayPoster
+                        resolvedBackdrop,
+                        resolvedPoster
                     )
                 } else {
                     // Portrait poster cards must take their image only from poster sources
                     // (Task 3 step 5). Backdrop/logo are NOT valid fallbacks here.
-                    displayMetadata.displayPoster
+                    resolvedPoster
                 }
             )
         }
@@ -437,8 +444,8 @@ internal fun buildContinueWatchingItem(
             val episodeTitle = item.info.episodeTitle?.takeIf { it.isNotBlank() }
             val episodeLabel = if (episodeTitle != null) "$episodeCode · $episodeTitle" else episodeCode
             HeroPreview(
-                title = displayMetadata.title ?: item.info.name,
-                logo = displayMetadata.displayLogo,
+                title = resolvedTitle ?: item.info.name,
+                logo = resolvedLogo,
                 description = item.info.episodeDescription
                     ?: displayMetadata.description
                     ?: item.info.episodeTitle
@@ -450,12 +457,12 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.displayPoster,
-                backdrop = displayMetadata.displayBackdrop,
+                poster = resolvedPoster,
+                backdrop = resolvedBackdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
-                        displayMetadata.displayBackdrop,
-                        displayMetadata.displayPoster,
+                        resolvedBackdrop,
+                        resolvedPoster,
                         item.info.thumbnail
                     )
                 } else {
@@ -463,7 +470,7 @@ internal fun buildContinueWatchingItem(
                     // permitted because they are episode-specific portrait/landscape stills,
                     // but backdrop/logo are NOT valid fallbacks here.
                     firstNonBlank(
-                        displayMetadata.displayPoster,
+                        resolvedPoster,
                         item.info.thumbnail
                     )
                 }
@@ -476,13 +483,13 @@ internal fun buildContinueWatchingItem(
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
                     item.episodeThumbnail,
-                    displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop
+                    resolvedPoster,
+                    resolvedBackdrop
                 )
             } else {
                 firstNonBlank(
-                    displayMetadata.displayBackdrop,
-                    displayMetadata.displayPoster
+                    resolvedBackdrop,
+                    resolvedPoster
                 )
             }
         } else {
@@ -491,24 +498,24 @@ internal fun buildContinueWatchingItem(
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
                     heroPreview.poster,
-                    displayMetadata.displayPoster,
+                    resolvedPoster,
                     item.episodeThumbnail
                 )
             } else {
-                displayMetadata.displayPoster
+                resolvedPoster
             }
         }
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
             if (item.info.hasAired) {
                 firstNonBlank(
                     item.info.thumbnail,
-                    displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop
+                    resolvedPoster,
+                    resolvedBackdrop
                 )
             } else {
                 firstNonBlank(
-                    displayMetadata.displayBackdrop,
-                    displayMetadata.displayPoster,
+                    resolvedBackdrop,
+                    resolvedPoster,
                     item.info.thumbnail
                 )
             }
@@ -516,7 +523,7 @@ internal fun buildContinueWatchingItem(
             // Portrait poster card: poster sources only. Episode thumbnails are acceptable;
             // backdrop/logo are NOT valid fallbacks here.
             firstNonBlank(
-                displayMetadata.displayPoster,
+                resolvedPoster,
                 item.info.thumbnail
             )
         }
@@ -525,8 +532,8 @@ internal fun buildContinueWatchingItem(
     return ModernCarouselItem(
         key = continueWatchingItemKey(item),
         title = when (item) {
-            is ContinueWatchingItem.InProgress -> displayMetadata.title ?: item.progress.name
-            is ContinueWatchingItem.NextUp -> displayMetadata.title ?: item.info.name
+            is ContinueWatchingItem.InProgress -> resolvedTitle ?: item.progress.name
+            is ContinueWatchingItem.NextUp -> resolvedTitle ?: item.info.name
         },
         subtitle = when (item) {
             is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
