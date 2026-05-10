@@ -128,6 +128,7 @@ class StreamScreenViewModel @Inject constructor(
     private val episodeName: String? = savedStateHandle.getOptionalString("episodeName")
     private val runtime: Int? = savedStateHandle.get<String>("runtime")?.toIntOrNull()
     private val originalLanguage: String? = savedStateHandle.getOptionalString("originalLanguage")
+    private val imdbId: String? = savedStateHandle.getOptionalString("imdbId")
     private val genres: String? = savedStateHandle.getOptionalString("genres")
     private val year: String? = savedStateHandle.getOptionalString("year")
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
@@ -365,6 +366,7 @@ class StreamScreenViewModel @Inject constructor(
                                         contentType = contentType,
                                         contentName = contentName ?: title,
                                         originalLanguage = originalLanguage,
+                                        imdbId = imdbId,
                                         poster = poster,
                                         backdrop = backdrop,
                                         logo = logo,
@@ -1052,6 +1054,7 @@ class StreamScreenViewModel @Inject constructor(
             contentType = contentType,
             contentName = contentName ?: title,
             originalLanguage = originalLanguage,
+            imdbId = imdbId,
             poster = poster,
             backdrop = backdrop,
             logo = logo,
@@ -1318,6 +1321,7 @@ class StreamScreenViewModel @Inject constructor(
             contentType = contentType,
             contentName = contentName ?: title,
             originalLanguage = originalLanguage,
+            imdbId = imdbId,
             poster = poster,
             backdrop = backdrop,
             logo = logo,
@@ -2120,6 +2124,7 @@ data class StreamPlaybackInfo(
     val contentType: String?,
     val contentName: String?,
     val originalLanguage: String?,
+    val imdbId: String?,
     val poster: String?,
     val backdrop: String?,
     val logo: String?,

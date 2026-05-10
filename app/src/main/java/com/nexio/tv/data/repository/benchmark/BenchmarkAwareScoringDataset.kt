@@ -298,6 +298,7 @@ private fun StreamCardModel.toPlaybackInfo(
         contentType = request.contentType,
         contentName = request.title,
         originalLanguage = request.originalLanguage,
+        imdbId = null,
         poster = null,
         backdrop = null,
         logo = null,
