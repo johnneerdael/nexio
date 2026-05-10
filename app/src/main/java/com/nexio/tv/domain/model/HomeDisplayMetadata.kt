@@ -98,50 +98,9 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
     )
 }
 
-@Deprecated(
-    "Use HomeRailProjectionReducer for rail projection. This applyTo path is preserved only for hero-enrichment callers that have not yet migrated. Will be removed once Plan B (UI consumption migration) lands.",
-    level = DeprecationLevel.WARNING
-)
-fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
-    val cleanOverlayRating = sanitizedTitleRating()
-    val cleanBaseRating = base.imdbRating.sanitizedTitleRating()
-    val appliedRating = cleanOverlayRating ?: cleanBaseRating
-    val appliedRatingSource = when {
-        cleanOverlayRating != null -> ratingSource.orDefault()
-        cleanBaseRating != null -> base.ratingSource.orDefault()
-        else -> null
-    }
-    val appliedPoster = preferDurableArtworkRef(displayPoster, base.poster)
-    val appliedBackground = preferDurableArtworkRef(displayBackdrop, base.background)
-    val appliedLogo = preferDurableArtworkRef(displayLogo, base.logo)
-    return base.copy(
-        name = title ?: base.name,
-        logo = appliedLogo,
-        description = description ?: base.description,
-        genres = if (genres.isNotEmpty()) genres else base.genres,
-        releaseInfo = releaseInfo ?: base.releaseInfo,
-        runtime = runtime ?: base.runtime,
-        imdbRating = appliedRating,
-        ratingSource = appliedRatingSource,
-        tomatoesRating = tomatoesRating ?: base.tomatoesRating,
-        // Carry production language overlay from the metadata router onto the
-        // MetaPreview. Without this the value reaches HomeDisplayMetadata
-        // (after E4) but dies at this base.copy boundary, leaving CW items'
-        // displayMetadata.originalLanguage null at click time.
-        originalLanguage = originalLanguage ?: base.originalLanguage,
-        poster = appliedPoster,
-        // Pin posterProviderTag to whichever side actually owns the chosen poster ref so
-        // a base-preserved durable RPDB ref doesn't get tagged with the overlay's
-        // bare-URL provider.
-        posterProviderTag = when {
-            appliedPoster === base.poster && appliedPoster != null -> base.posterProviderTag
-            displayPoster != null -> posterProviderTag
-            else -> base.posterProviderTag
-        },
-        background = appliedBackground,
-        artwork = mergeAppliedArtwork(base)
-    )
-}
+// Phase 4 — `HomeDisplayMetadata.applyTo` deleted. It was the deprecated
+// alias of `applyToPreview`; commit `f5e73e74f` migrated the last live
+// caller (HomeHydrationOverlayApplier) to `applyToPreview`.
 
 /**
  * Prefers a durable `nexio-artwork://...` artwork reference on the base item over a
@@ -219,104 +178,17 @@ fun HomeDisplayMetadata.applyToPreview(base: MetaPreview): MetaPreview {
     )
 }
 
-@Deprecated(
-    "Use HomeRailProjectionReducer.reduce(...) instead. mergeFallback predates the rank-aware reducer and treats inputs as primary/fallback rather than rank-ordered. Will be removed once all callers migrate.",
-    level = DeprecationLevel.WARNING
-)
-fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {
-    if (fallback == null) return this
-    val cleanPrimaryRating = sanitizedTitleRating()
-    val cleanFallbackRating = fallback.imdbRating.sanitizedTitleRating()
-    val mergedRating = cleanPrimaryRating ?: cleanFallbackRating
-    val mergedRatingSource = when {
-        cleanPrimaryRating != null -> ratingSource.orDefault()
-        cleanFallbackRating != null -> fallback.ratingSource.orDefault()
-        else -> null
-    }
-    return copy(
-        title = title ?: fallback.title,
-        logo = logo ?: fallback.logo,
-        description = description ?: fallback.description,
-        genres = if (genres.isNotEmpty()) genres else fallback.genres,
-        releaseInfo = releaseInfo ?: fallback.releaseInfo,
-        runtime = runtime ?: fallback.runtime,
-        imdbRating = mergedRating,
-        ratingSource = mergedRatingSource,
-        tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
-        originalLanguage = originalLanguage ?: fallback.originalLanguage,
-        imdbId = imdbId ?: fallback.imdbId,
-        poster = poster ?: fallback.poster,
-        posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
-        backdrop = backdrop ?: fallback.backdrop,
-        thumbnail = thumbnail ?: fallback.thumbnail,
-        artwork = mergeFallbackArtwork(fallback)
-    )
-}
-
-/**
- * Per-field coalesce: each non-null field of `this` wins; null fields fall back to
- * [fallback]'s same field. Same body as the deprecated [mergeFallback] but
- * non-deprecated and intentionally scoped to legitimate per-field-coalesce use cases
- * (CW persistence boundary, localized-metadata enrichment) that don't fit the
- * rank-aware [HomeRailProjectionReducer.reduce] pattern.
- *
- * Plan B Phase 2B replacement. When [fallback] is null, returns `this` unchanged.
- *
- * Special handling matches [mergeFallback]:
- * - `imdbRating`/`ratingSource` are paired — both come from whichever input has a
- *   sanitized non-null rating.
- * - `genres` keeps `this.genres` only when non-empty; otherwise falls back.
- * - `posterProviderTag` is gated on `displayPoster` (only kept if `this` has a
- *   non-null displayPoster, otherwise falls back).
- * - `artwork` uses the same durable-ref preference as [mergeFallback].
- */
-fun HomeDisplayMetadata.coalesceWith(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {
-    if (fallback == null) return this
-    val cleanPrimaryRating = sanitizedTitleRating()
-    val cleanFallbackRating = fallback.imdbRating.sanitizedTitleRating()
-    val mergedRating = cleanPrimaryRating ?: cleanFallbackRating
-    val mergedRatingSource = when {
-        cleanPrimaryRating != null -> ratingSource.orDefault()
-        cleanFallbackRating != null -> fallback.ratingSource.orDefault()
-        else -> null
-    }
-    return copy(
-        title = title ?: fallback.title,
-        logo = logo ?: fallback.logo,
-        description = description ?: fallback.description,
-        genres = if (genres.isNotEmpty()) genres else fallback.genres,
-        releaseInfo = releaseInfo ?: fallback.releaseInfo,
-        runtime = runtime ?: fallback.runtime,
-        imdbRating = mergedRating,
-        ratingSource = mergedRatingSource,
-        tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
-        originalLanguage = originalLanguage ?: fallback.originalLanguage,
-        imdbId = imdbId ?: fallback.imdbId,
-        poster = poster ?: fallback.poster,
-        posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
-        backdrop = backdrop ?: fallback.backdrop,
-        thumbnail = thumbnail ?: fallback.thumbnail,
-        artwork = mergeFallbackArtwork(fallback)
-    )
-}
+// Phase 4 — `HomeDisplayMetadata.mergeFallback`, `coalesceWith`, and the
+// private `mergeFallbackArtwork` helper deleted. Commit `ab7a966c4`
+// (Phase 3.8 partial) migrated the last `coalesceWith` callers to the
+// rank-aware HomeRailProjectionReducer-based slot merge; `mergeFallback`
+// had been 0-caller since the Phase 2B migration shipped.
 
 private fun HomeDisplayMetadata.sanitizedTitleRating(): Float? =
     RatingValueValidator.sanitizeTitleRating(imdbRating)
 
 private fun Float?.sanitizedTitleRating(): Float? =
     RatingValueValidator.sanitizeTitleRating(this)
-
-private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
-    val primaryArtwork = artwork?.enforceArtworkTypeBoundaries()
-    val fallbackArtwork = fallback.artwork?.enforceArtworkTypeBoundaries()
-    val merged = ArtworkBundle(
-        poster = primaryArtwork?.poster ?: fallbackArtwork?.poster,
-        backdrop = primaryArtwork?.backdrop ?: fallbackArtwork?.backdrop,
-        logo = primaryArtwork?.logo ?: fallbackArtwork?.logo,
-        thumbnail = primaryArtwork?.thumbnail ?: fallbackArtwork?.thumbnail
-    )
-    return merged.enforceArtworkTypeBoundaries().emptyOrNull()
-}
 
 private fun HomeDisplayMetadata.mergeAppliedArtwork(base: MetaPreview): ArtworkBundle? {
     val primaryArtwork = artwork?.enforceArtworkTypeBoundaries()

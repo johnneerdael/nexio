@@ -55,21 +55,10 @@ class HomeDisplayMetadataApplyToPreviewTest {
         assertEquals(TitleRatingSource.IMDB, result.ratingSource)
     }
 
-    @Test
-    fun `applyToPreview produces same result as deprecated applyTo`() {
-        // Behavioral parity: applyToPreview must match the existing applyTo body.
-        val base = makePreview(name = "Base", description = "BD", imdbRating = 7.0f)
-        val overlay = HomeDisplayMetadata(
-            title = "Overlay",
-            description = "OD",
-            imdbRating = 8.5f,
-            ratingSource = TitleRatingSource.TMDB
-        )
-        @Suppress("DEPRECATION")
-        val deprecated = overlay.applyTo(base)
-        val replacement = overlay.applyToPreview(base)
-        assertEquals(deprecated, replacement)
-    }
+    // Phase 4 — `applyToPreview produces same result as deprecated applyTo`
+    // parity test deleted alongside the `applyTo` deprecated alias. The two
+    // functions had identical bodies; the parity test was meaningful only
+    // while both coexisted.
 
     private fun makePreview(
         name: String = "x",
