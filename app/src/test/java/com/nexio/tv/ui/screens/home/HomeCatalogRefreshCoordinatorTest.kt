@@ -400,6 +400,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
@@ -798,6 +799,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
@@ -930,6 +932,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
