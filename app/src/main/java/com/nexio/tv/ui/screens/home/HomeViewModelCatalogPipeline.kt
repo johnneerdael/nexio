@@ -3316,18 +3316,35 @@ private fun com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot.filterDisa
     disabledHomeCatalogKeys: Set<String>,
     isAddonRowDisabled: (CatalogRow) -> Boolean
 ): com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot {
+    // Pre-compute non-"custom" disabled slugs ONCE for the whole filter pass.
+    // Without this, slugifySyntheticHomeCatalogKey(disabledKey) was recomputed for every row × every
+    // disabled key, each call allocating 4-5 Strings (lowercase + replace(Regex) + trim + ifBlank).
+    // ANR trace on PID 2076 (2026-05-10) caught the main thread burning CPU here under sustained
+    // Modern Home soak — String.toLowerCase / CaseMapper at the top of the stack. CLAUDE.md hard
+    // rule #5: memoize at every reference-fresh boundary; this is the canonical case.
+    val disabledSlugs: Set<String> = if (disabledHomeCatalogKeys.isEmpty()) {
+        emptySet()
+    } else {
+        val out = HashSet<String>(disabledHomeCatalogKeys.size)
+        for (k in disabledHomeCatalogKeys) {
+            val slug = slugifySyntheticHomeCatalogKey(k)
+            if (slug != "custom") out += slug
+        }
+        out
+    }
+
     fun isDisabled(row: CatalogRow): Boolean {
         return when (row.addonId) {
             TRAKT_RAIL_ADDON_ID,
             SIMKL_RAIL_ADDON_ID,
             MDBLIST_RAIL_ADDON_ID,
             TMDB_RAIL_ADDON_ID -> {
-                isSyntheticHomeCatalogDisabled(row.catalogId, disabledHomeCatalogKeys) ||
-                    isSyntheticHomeCatalogDisabled(homeCatalogGlobalKey(row), disabledHomeCatalogKeys) ||
-                    disabledHomeCatalogKeys.any { disabledKey ->
-                        val disabledSlug = slugifySyntheticHomeCatalogKey(disabledKey)
-                        disabledSlug != "custom" && row.catalogId.lowercase().contains(disabledSlug)
-                    }
+                if (isSyntheticHomeCatalogDisabled(row.catalogId, disabledHomeCatalogKeys)) return true
+                if (isSyntheticHomeCatalogDisabled(homeCatalogGlobalKey(row), disabledHomeCatalogKeys)) return true
+                if (disabledSlugs.isEmpty()) return false
+                // Compute lowercase ONCE per row, not once per (row × disabled key).
+                val rowCatalogIdLower = row.catalogId.lowercase()
+                disabledSlugs.any { slug -> rowCatalogIdLower.contains(slug) }
             }
             else -> isAddonRowDisabled(row)
         }
