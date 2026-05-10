@@ -13,6 +13,7 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
+import com.nexio.tv.ui.screensaver.isScreensaverDisplayable
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -89,8 +90,9 @@ class ScreensaverCandidateRepository(
         mapNotNull { item -> item.toTrailerCandidate() }
 
     private fun ResolvedDisplayItem.toImageCandidate(): ScreensaverSlideCandidate? {
-        val preferredImage = preferredScreensaverArtwork() ?: return null
-        val title = display.title?.takeIf { it.isNotBlank() } ?: return null
+        if (!isScreensaverDisplayable()) return null
+        val preferredImage = preferredScreensaverArtwork()!!
+        val title = display.title!!
         return ScreensaverSlideCandidate(
             itemKey = itemKey,
             contentId = contentId,
@@ -109,8 +111,8 @@ class ScreensaverCandidateRepository(
     }
 
     private fun ResolvedDisplayItem.toTrailerCandidate(): ScreensaverTrailerCandidate? {
-        val title = display.title?.takeIf { it.isNotBlank() } ?: return null
-        preferredScreensaverArtwork() ?: return null
+        if (!isScreensaverDisplayable()) return null
+        val title = display.title!!
         return ScreensaverTrailerCandidate(
             itemKey = itemKey,
             contentId = contentId,

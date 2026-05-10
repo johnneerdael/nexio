@@ -63,6 +63,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 2 }
         )
 
@@ -104,6 +105,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 3 }
         )
 
@@ -136,6 +138,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 1 }
         )
 
@@ -161,6 +164,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 1 }
         )
 
@@ -204,6 +208,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 4 }
         )
 
@@ -250,6 +255,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 1 }
         )
 
@@ -279,6 +285,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 1 }
         )
 
@@ -306,6 +313,7 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = mockk(relaxed = true),
             surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
             activeProfileId = { 1 }
         )
 
