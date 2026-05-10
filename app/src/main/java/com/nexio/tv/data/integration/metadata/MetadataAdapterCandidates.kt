@@ -30,6 +30,8 @@ internal fun TmdbEnrichment?.toMetadataCandidate(provider: MetadataPrimaryProvid
             logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            language?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = buildMap<String, Set<String>> {
                 imdbId?.takeIf { it.isNotBlank() }?.let { put("imdb", setOf(it)) }
                 tvdbId?.let { put("tvdb", setOf(it.toString())) }
@@ -54,8 +56,10 @@ internal fun TvMetadataEnrichment?.toMetadataCandidate(provider: MetadataPrimary
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntimeMinutes?.let { putIfAbsent(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
-            language?.takeIf { it.isNotBlank() }
-                ?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            language?.takeIf { it.isNotBlank() }?.let {
+                put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+            }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
             }
@@ -73,8 +77,10 @@ internal fun TvdbSeriesExtendedRecord?.toMetadataCandidate(provider: MetadataPri
             image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
-            originalLanguage?.takeIf { it.isNotBlank() }
-                ?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalLanguage?.takeIf { it.isNotBlank() }?.let {
+                put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+            }
             originalCountry?.takeIf { it.isNotBlank() }
                 ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = remoteIds.toRemoteIdsMap(id)
@@ -294,7 +300,10 @@ internal fun buildTmdbLocalizedCandidate(
             source?.releaseInfo?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.ageRating?.let { put(ResolvedField.AGE_RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.countries?.takeIf { it.isNotEmpty() }?.let { put(ResolvedField.COUNTRIES, FieldValue(it, FieldOwner.PRIMARY)) }
-            source?.language?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.language?.takeIf { it.isNotBlank() }?.let {
+                put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+            }
             val people = buildList {
                 source?.directorMembers?.let(::addAll)
                 source?.writerMembers?.let(::addAll)
