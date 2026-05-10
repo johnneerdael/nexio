@@ -200,6 +200,53 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
     )
 }
 
+/**
+ * Per-field coalesce: each non-null field of `this` wins; null fields fall back to
+ * [fallback]'s same field. Same body as the deprecated [mergeFallback] but
+ * non-deprecated and intentionally scoped to legitimate per-field-coalesce use cases
+ * (CW persistence boundary, localized-metadata enrichment) that don't fit the
+ * rank-aware [HomeRailProjectionReducer.reduce] pattern.
+ *
+ * Plan B Phase 2B replacement. When [fallback] is null, returns `this` unchanged.
+ *
+ * Special handling matches [mergeFallback]:
+ * - `imdbRating`/`ratingSource` are paired — both come from whichever input has a
+ *   sanitized non-null rating.
+ * - `genres` keeps `this.genres` only when non-empty; otherwise falls back.
+ * - `posterProviderTag` is gated on `displayPoster` (only kept if `this` has a
+ *   non-null displayPoster, otherwise falls back).
+ * - `artwork` uses the same durable-ref preference as [mergeFallback].
+ */
+fun HomeDisplayMetadata.coalesceWith(fallback: HomeDisplayMetadata?): HomeDisplayMetadata {
+    if (fallback == null) return this
+    val cleanPrimaryRating = sanitizedTitleRating()
+    val cleanFallbackRating = fallback.imdbRating.sanitizedTitleRating()
+    val mergedRating = cleanPrimaryRating ?: cleanFallbackRating
+    val mergedRatingSource = when {
+        cleanPrimaryRating != null -> ratingSource.orDefault()
+        cleanFallbackRating != null -> fallback.ratingSource.orDefault()
+        else -> null
+    }
+    return copy(
+        title = title ?: fallback.title,
+        logo = logo ?: fallback.logo,
+        description = description ?: fallback.description,
+        genres = if (genres.isNotEmpty()) genres else fallback.genres,
+        releaseInfo = releaseInfo ?: fallback.releaseInfo,
+        runtime = runtime ?: fallback.runtime,
+        imdbRating = mergedRating,
+        ratingSource = mergedRatingSource,
+        tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
+        originalLanguage = originalLanguage ?: fallback.originalLanguage,
+        imdbId = imdbId ?: fallback.imdbId,
+        poster = poster ?: fallback.poster,
+        posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
+        backdrop = backdrop ?: fallback.backdrop,
+        thumbnail = thumbnail ?: fallback.thumbnail,
+        artwork = mergeFallbackArtwork(fallback)
+    )
+}
+
 private fun HomeDisplayMetadata.sanitizedTitleRating(): Float? =
     RatingValueValidator.sanitizeTitleRating(imdbRating)
 
