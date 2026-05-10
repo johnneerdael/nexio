@@ -13,14 +13,33 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
 ): CatalogRow {
     if (overlaysByItemKey.isEmpty()) return this
 
-    var changed = false
-    val updatedItems = items.map { item ->
-        val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
-        val updated = overlay.fields.applyTo(item)
-        if (updated != item) changed = true
-        updated
+    // Steady-state Modern Home has tens of overlays but thousands of inventory
+    // CatalogRows; most rows have no items with a matching overlay. The inner
+    // `items.map { ... }` allocates an N-item ArrayList per row regardless of
+    // whether any change happens — at 10k rows × 20 items that is 200k pointless
+    // backing allocations per pipeline emission. Pre-scan with an indexed-for
+    // loop and bail out without allocating when no item in this row has an
+    // overlay (the common case for background-catalog rails). Heap-dump impact
+    // shows up in the dominator tree as `_fullCatalogRows` retaining 17.47 MiB.
+    var anyOverlay = false
+    for (i in items.indices) {
+        if (items[i].overlayFromMap(overlaysByItemKey) != null) { anyOverlay = true; break }
     }
+    if (!anyOverlay) return this
 
+    var changed = false
+    val updatedItems = ArrayList<MetaPreview>(items.size)
+    for (i in items.indices) {
+        val item = items[i]
+        val overlay = item.overlayFromMap(overlaysByItemKey)
+        if (overlay == null) {
+            updatedItems += item
+        } else {
+            val updated = overlay.fields.applyTo(item)
+            if (updated !== item) changed = true
+            updatedItems += updated
+        }
+    }
     return if (changed) copy(items = updatedItems) else this
 }
 
@@ -57,14 +76,25 @@ internal fun List<CatalogRow>.applyHydratedHomeOverlays(
 ): List<CatalogRow> {
     if (overlaysByItemKey.isEmpty()) return this
 
-    var changed = false
-    val updatedRows = map { row ->
+    // Same allocation-skip pattern as the per-row variant. Indexed-for + lazy
+    // ArrayList allocation only when at least one row actually changes.
+    var firstChangedIndex = -1
+    val updatedAtChange = ArrayList<CatalogRow>(0)
+    for (i in indices) {
+        val row = this[i]
         val updated = row.applyHydratedHomeOverlays(overlaysByItemKey)
-        if (updated !== row) changed = true
-        updated
+        if (updated !== row) {
+            if (firstChangedIndex < 0) {
+                firstChangedIndex = i
+                updatedAtChange.ensureCapacity(size)
+                for (j in 0 until i) updatedAtChange += this[j]
+            }
+            updatedAtChange += updated
+        } else if (firstChangedIndex >= 0) {
+            updatedAtChange += updated
+        }
     }
-
-    return if (changed) updatedRows else this
+    return if (firstChangedIndex >= 0) updatedAtChange else this
 }
 
 internal fun rowsForResolvedDisplaySurface(
