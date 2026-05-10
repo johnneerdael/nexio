@@ -73,6 +73,10 @@ internal fun TvdbSeriesExtendedRecord?.toMetadataCandidate(provider: MetadataPri
             image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalLanguage?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalCountry?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = remoteIds.toRemoteIdsMap(id)
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))

@@ -61,4 +61,23 @@ class MetadataAdapterCandidatesLanguageTest {
         val candidate = (null as TvMetadataEnrichment?).toMetadataCandidate(MetadataPrimaryProvider.TVDB)
         assertNull(candidate.fields[ResolvedField.LANGUAGE])
     }
+
+    @Test
+    fun `TvdbSeriesExtendedRecord toMetadataCandidate forwards originalLanguage`() {
+        val record = com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord(
+            id = 393268,
+            name = "Citadel",
+            overview = null,
+            image = null,
+            score = null,
+            averageRuntime = null,
+            originalLanguage = "eng",
+            originalCountry = "usa",
+            remoteIds = emptyList()
+        )
+
+        val candidate = record.toMetadataCandidate(MetadataPrimaryProvider.TVDB)
+
+        assertEquals("eng", candidate.fields[ResolvedField.LANGUAGE]?.value)
+    }
 }
