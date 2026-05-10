@@ -39,7 +39,8 @@ data class ResolvedDisplayFields(
     val releaseDate: String?,
     val overview: String?,
     val genres: List<String>,
-    val runtimeText: String?
+    val runtimeText: String?,
+    val tomatoesRating: Double? = null
 )
 
 @Immutable

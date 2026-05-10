@@ -164,7 +164,8 @@ internal object HomeResolvedDisplayMapper {
                 releaseDate = mergedSlots.releaseInfo.value,
                 overview = mergedSlots.overview.value,
                 genres = mergedSlots.genres.value.orEmpty(),
-                runtimeText = mergedSlots.runtime.value
+                runtimeText = mergedSlots.runtime.value,
+                tomatoesRating = overlay?.fields?.tomatoesRating
             ),
             artwork = ArtworkBundle(
                 poster = mergedSlots.poster.value,
@@ -313,7 +314,8 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
             releaseDate = fields.releaseInfo,
             overview = fields.description,
             genres = fields.genres,
-            runtimeText = fields.runtime
+            runtimeText = fields.runtime,
+            tomatoesRating = fields.tomatoesRating
         ),
         artwork = fields.toResolvedArtworkBundle(),
         rating = fields.imdbRating
