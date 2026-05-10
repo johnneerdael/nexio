@@ -107,9 +107,10 @@ Each sub-project ships independently with its own commit, smoke test, and (for r
 - `applyToHeroItem` either becomes a typed-slot operation (rewrite) or dies (delete) depending on whether the resolved authority already absorbs the hero overlay. Investigate during plan-writing.
 - Heap-dump perf gate.
 
-**Sub-project 3.4 — `resolvedContinueWatchingItemsFlow` reads from authority directly.**
-- Same shape as 3.2 but for CW. CW already has a typed projection; the change is in HOW it derives the input source.
-- Heap-dump perf gate.
+**Sub-project 3.4 — `resolvedContinueWatchingItemsFlow` reads from authority directly. (SKIPPED 2026-05-10.)**
+- Investigation during execution found this is effectively a no-op. `_displayContinueWatchingItems` carries `ContinueWatchingItem` (a typed sealed class with `InProgress` / `NextUp` variants), not `MetaPreview`. The CW flow already escaped MetaPreview in Plan B Surface 4 (commit `782cc529d`). The resolved projection's `projectCwInProgress(resolved, item)` / `projectCwNextUp(resolved, item)` factories embed `source: ContinueWatchingItem.InProgress/NextUp` directly — they need the full sealed-class instance for variant-specific state (progress, episode info), not just a key.
+- The architectural change 3.4 was supposed to deliver (typed key-only consumption) doesn't apply: CW items carry variant-specific state that doesn't fit a key-only model. Rails/hero migrations (3.2/3.3) work because their per-item data is uniform (just artwork + title) and lives in the authority; CW's per-item data is heterogeneous (resume timing vs. up-next episode) and lives on the `ContinueWatchingItem` itself.
+- The genuine CW pipeline MetaPreview elimination lives in **Sub-project 3.8** (`ContinueWatchingMetadataSnapshot` persistence reshape — `HomeDisplayMetadata` → `ResolvedSlot<T>`). 3.8 carries 3.4's original intent.
 
 **Sub-project 3.5 — Screensaver bulk publication uses authority lookup.**
 - `publishTmdbTrendingScreensaverSurface` currently does `rowsForResolvedDisplaySurface(sourceRows, overlaysByItemKey)` on `List<CatalogRow>` of MetaPreview.
