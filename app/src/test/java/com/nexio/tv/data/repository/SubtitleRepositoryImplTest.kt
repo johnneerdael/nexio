@@ -421,7 +421,8 @@ class SubtitleRepositoryImplTest {
                 videoId: String?,
                 videoHash: String?,
                 videoSize: Long?,
-                filename: String?
+                filename: String?,
+                imdbHint: String?
             ): List<Subtitle> = emptyList()
         }
 }

@@ -330,7 +330,7 @@ fun NexioNavHost(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
-                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, originalLanguage, deterministicAutoplay, streamVideoId ->
+                onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, originalLanguage, imdbId, deterministicAutoplay, streamVideoId ->
                     navController.navigate(
                         Screen.Stream.createRoute(
                             videoId = videoId,
@@ -349,12 +349,13 @@ fun NexioNavHost(
                             contentName = title,
                             runtime = runtime,
                             originalLanguage = originalLanguage,
+                            imdbId = imdbId,
                             returnToDetailOnBack = deterministicAutoplay || contentType.equals("series", ignoreCase = true),
                             deterministicAutoplay = deterministicAutoplay
                         )
                     )
                 },
-                onPlayEpisodeWithManualStreamSelection = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, runtime, originalLanguage, streamVideoId ->
+                onPlayEpisodeWithManualStreamSelection = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, runtime, originalLanguage, imdbId, streamVideoId ->
                     navController.navigate(
                         buildManualSelectionStreamRoute(
                             videoId = videoId,
@@ -371,6 +372,7 @@ fun NexioNavHost(
                             contentName = title,
                             runtime = runtime,
                             originalLanguage = originalLanguage,
+                            imdbId = imdbId,
                             returnToDetailOnBack = true
                         )
                     )
@@ -1291,6 +1293,7 @@ internal fun buildManualSelectionStreamRoute(
     contentName: String? = null,
     runtime: Int? = null,
     originalLanguage: String? = null,
+    imdbId: String? = null,
     returnToDetailOnBack: Boolean,
     resumePositionMs: Long? = null,
     resumeDurationMs: Long? = null,
@@ -1316,6 +1319,7 @@ internal fun buildManualSelectionStreamRoute(
         contentName = contentName,
         runtime = runtime,
         originalLanguage = originalLanguage,
+        imdbId = imdbId,
         manualSelection = true,
         returnToDetailOnBack = returnToDetailOnBack,
         deterministicAutoplay = false,
@@ -1358,6 +1362,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = item.progress.name,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = item.displayMetadata().originalLanguage,
+                imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.progress.contentId),
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.progress.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1395,6 +1400,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = item.info.name,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = item.displayMetadata().originalLanguage,
+                imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.info.contentId),
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.info.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1402,6 +1408,26 @@ internal fun buildContinueWatchingStreamRoute(
             )
         }
     }
+}
+
+/**
+ * Resolve the IMDB id to pass to the player from a continue-watching item.
+ *
+ * Prefers the metadata-pipeline sidecar when present (HomeDisplayMetadata.imdbId).
+ * Falls back to the canonical contentId when it is itself an IMDB id (movies, where
+ * contentId is `tt…`). Returns null for series whose contentId uses a non-IMDB
+ * namespace (e.g. `tvdb:N`) and whose displayMetadata sidecar has not yet been
+ * populated — those paths still serve subtitles via the OpenSubtitles hash lane
+ * but cannot use Wyzie's IMDB-keyed search.
+ */
+private fun continueWatchingImdbHint(
+    fromDisplayMetadata: String?,
+    canonicalContentId: String,
+): String? {
+    val hint = fromDisplayMetadata?.trim()?.takeIf { it.isNotEmpty() }
+    if (hint != null) return hint
+    val canonical = canonicalContentId.trim()
+    return canonical.takeIf { it.startsWith("tt", ignoreCase = true) }
 }
 
 internal suspend fun buildContinueWatchingStreamRouteWithHydration(
@@ -1449,6 +1475,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             contentName = item.progress.name,
             runtime = continueWatchingRuntimeMinutes(item),
             originalLanguage = item.displayMetadata().originalLanguage,
+            imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.progress.contentId),
             returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
             resumePositionMs = item.progress.position,
             resumeDurationMs = item.progress.duration,
@@ -1473,6 +1500,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             contentName = item.info.name,
             runtime = continueWatchingRuntimeMinutes(item),
             originalLanguage = item.displayMetadata().originalLanguage,
+            imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.info.contentId),
             returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
         )
     }

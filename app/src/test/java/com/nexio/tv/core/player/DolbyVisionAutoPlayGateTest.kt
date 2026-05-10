@@ -396,6 +396,7 @@ class DolbyVisionAutoPlayGateTest {
             contentType = "movie",
             contentName = "Example",
             originalLanguage = "en",
+            imdbId = null,
             poster = null,
             backdrop = null,
             logo = null,

@@ -69,6 +69,7 @@ class ProbeProfilingDiagnosticTest {
             contentType = "movie",
             contentName = "Title",
             originalLanguage = null,
+            imdbId = null,
             poster = null,
             backdrop = null,
             logo = null,
