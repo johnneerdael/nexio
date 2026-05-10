@@ -6,15 +6,19 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.PlaceholderType
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.ui.screensaver.IdleScreensaverDisplayItem
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -47,14 +51,17 @@ private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
 @Singleton
 class IdleScreensaverRepository(
     private val screensaverCandidateRepository: ScreensaverCandidateRepository,
+    private val surfaceRepository: ResolvedDisplaySurfaceRepository,
     private val activeProfileId: () -> Int
 ) {
     @Inject
     constructor(
         screensaverCandidateRepository: ScreensaverCandidateRepository,
+        surfaceRepository: ResolvedDisplaySurfaceRepository,
         profileManager: ProfileManager
     ) : this(
         screensaverCandidateRepository = screensaverCandidateRepository,
+        surfaceRepository = surfaceRepository,
         activeProfileId = { profileManager.activeProfileId.value }
     )
 
@@ -64,6 +71,19 @@ class IdleScreensaverRepository(
     private val _trailerCandidates = MutableStateFlow<List<IdleTrailerScreensaverCandidate>>(emptyList())
     val trailerCandidates = _trailerCandidates.asStateFlow()
 
+    /**
+     * Per-item screensaver projection sourced directly from
+     * [ResolvedDisplaySurfaceRepository.observeScreensaverSurface]. Each item carries
+     * its own [TrailerDisplayState] so consumers can pick image vs trailer mode
+     * without consulting a parallel `_trailerCandidates` flow. Plan B Task 14.
+     *
+     * This runs alongside the legacy [slides]/[trailerCandidates] flows during
+     * the overlay-consumer migration (Plan B Task 15); both are populated from
+     * the same [observeScreensaverSurface] tick so they stay coherent.
+     */
+    private val _screensaverDisplayItems = MutableStateFlow<List<IdleScreensaverDisplayItem>>(emptyList())
+    val screensaverDisplayItems = _screensaverDisplayItems.asStateFlow()
+
     suspend fun warmFromCache() {
         refreshFromResolvedSurface("Warm cache prepared")
     }
@@ -72,21 +92,37 @@ class IdleScreensaverRepository(
         refreshFromResolvedSurface("Prepared")
     }
 
-    suspend fun observeResolvedSurface(profileId: Int = activeProfileId()) {
-        screensaverCandidateRepository.observeCandidates(profileId).collect { snapshot ->
-            publishSnapshot(snapshot, "Observed")
+    suspend fun observeResolvedSurface(profileId: Int = activeProfileId()) = coroutineScope {
+        // Observe both the projected candidates snapshot (legacy slides/trailerCandidates
+        // path) and the raw surface (new screensaverDisplayItems path) in parallel.
+        // Both paths read from ResolvedDisplaySurfaceRepository so they tick together.
+        launch {
+            screensaverCandidateRepository.observeCandidates(profileId).collect { snapshot ->
+                publishCandidatesSnapshot(snapshot, "Observed")
+            }
+        }
+        launch {
+            surfaceRepository.observeScreensaverSurface(profileId).collect { items ->
+                publishResolvedItems(items)
+            }
         }
     }
 
     private suspend fun refreshFromResolvedSurface(logPrefix: String) {
         val profileId = activeProfileId()
-        publishSnapshot(
+        publishCandidatesSnapshot(
             snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId),
             logPrefix = logPrefix
         )
+        publishResolvedItems(
+            items = surfaceRepository.getSnapshot(
+                ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
+                profileId
+            )
+        )
     }
 
-    private suspend fun publishSnapshot(
+    private suspend fun publishCandidatesSnapshot(
         snapshot: ScreensaverCandidatesSnapshot,
         logPrefix: String
     ) {
@@ -102,6 +138,21 @@ class IdleScreensaverRepository(
                 "$logPrefix ${_slides.value.size} idle screensaver slides and " +
                     "${_trailerCandidates.value.size} trailer candidates from resolved display surface"
             )
+        }
+    }
+
+    private suspend fun publishResolvedItems(items: List<ResolvedDisplayItem>) {
+        refreshMutex.withLock {
+            // Filter for items the screensaver can actually render: title + at least
+            // one displayable artwork (matches ScreensaverCandidateRepository's gate).
+            val out = ArrayList<IdleScreensaverDisplayItem>(items.size)
+            for (i in items.indices) {
+                val item = items[i]
+                if (item.display.title.isNullOrBlank()) continue
+                if (item.artwork.backdrop == null && item.artwork.poster == null) continue
+                out += IdleScreensaverDisplayItem.from(item)
+            }
+            _screensaverDisplayItems.value = out
         }
     }
 }
