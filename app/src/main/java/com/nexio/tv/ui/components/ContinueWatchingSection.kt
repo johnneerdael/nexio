@@ -655,19 +655,6 @@ private fun firstNonBlank(vararg candidates: String?): String? {
     return candidates.firstOrNull { !it.isNullOrBlank() }?.trim()
 }
 
-/**
- * Adapter from the per-surface resolved projection back to the legacy domain
- * [ContinueWatchingItem]. Composables consume the resolved projection for rendering,
- * but callbacks back to the ViewModel still take the legacy type — passing
- * `resolved.source` keeps the boundary backward-compatible without leaking the
- * resolved-display type into VM signatures.
- */
-internal fun ContinueWatchingResolvedDisplayItem.toContinueWatchingItem(): ContinueWatchingItem =
-    when (this) {
-        is ContinueWatchingResolvedDisplayItem.InProgress -> source
-        is ContinueWatchingResolvedDisplayItem.NextUp -> source
-    }
-
 internal fun formatRemainingTime(
     remainingMs: Long,
     strHoursMinLeft: String,

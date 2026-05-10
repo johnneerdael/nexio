@@ -68,6 +68,21 @@ sealed class ContinueWatchingResolvedDisplayItem {
         val info: NextUpInfo get() = source.info
     }
 
+    /**
+     * Adapter from the per-surface resolved projection back to the legacy domain
+     * [ContinueWatchingItem]. Composables consume the resolved projection for
+     * rendering, but ViewModel callbacks still take the legacy type — this returns
+     * `source` directly so the boundary stays backward-compatible without leaking
+     * the resolved type into VM signatures.
+     *
+     * TODO(Plan B Surface 4 cleanup): remove once VM callbacks accept
+     * [ContinueWatchingResolvedDisplayItem] directly.
+     */
+    fun toContinueWatchingItem(): ContinueWatchingItem = when (this) {
+        is InProgress -> source
+        is NextUp -> source
+    }
+
     companion object {
         fun fromInProgress(
             resolved: ResolvedDisplayItem,

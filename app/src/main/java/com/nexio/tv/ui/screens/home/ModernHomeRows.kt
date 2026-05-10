@@ -94,7 +94,6 @@ import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
 import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
-import com.nexio.tv.ui.components.toContinueWatchingItem
 import com.nexio.tv.ui.components.FallbackArtworkImage
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
 import com.nexio.tv.ui.components.TrailerPlayer
