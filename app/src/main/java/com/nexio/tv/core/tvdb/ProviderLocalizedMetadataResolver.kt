@@ -4,6 +4,7 @@ import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.SourceRole
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,7 +45,10 @@ class ProviderLocalizedMetadataResolver @Inject constructor(
                 backdrop = canonicalDocument.backdrop,
                 logo = canonicalDocument.logo,
                 rating = (canonicalDocument.rating as? Number)?.toDouble(),
-                runtimeMinutes = canonicalDocument.runtimeMinutes
+                runtimeMinutes = canonicalDocument.runtimeMinutes,
+                // Bug B fix (2026-05-10 dossier): canonical document already knows the
+                // production language; do not strip it on the short-circuit path.
+                language = canonicalDocument.language
             ),
             diagnostics = provider.canonicalDiagnostics(tvRequest, hasLocalizedPayload)
         )
@@ -152,3 +156,36 @@ class ProviderLocalizedMetadataResolver @Inject constructor(
             else -> emptyList()
         }
 }
+
+// ---------------------------------------------------------------------------
+// Test seam helpers — exposed internal so unit tests can construct instances
+// without going through the full DI graph. Production code does not call these.
+// ---------------------------------------------------------------------------
+
+internal fun stubCanonicalDocumentWithLanguage(language: String): ResolvedMetadataDocument =
+    ResolvedMetadataDocument(
+        canonicalId = "tvdb:393268",
+        title = "Citadel",
+        overview = null,
+        poster = null,
+        backdrop = null,
+        logo = null,
+        rating = null,
+        runtimeMinutes = null,
+        language = language,
+        fieldOwners = emptyMap(),
+        ignoredOverwrites = emptyList()
+    )
+
+internal fun ResolvedMetadataDocument.asTvMetadataEnrichmentForCanonicalRoute(): TvMetadataEnrichment =
+    TvMetadataEnrichment(
+        seriesTvdbId = canonicalId?.substringAfter("tvdb:")?.toIntOrNull(),
+        localizedTitle = title,
+        description = overview,
+        poster = poster,
+        backdrop = backdrop,
+        logo = logo,
+        rating = (rating as? Number)?.toDouble(),
+        runtimeMinutes = runtimeMinutes,
+        language = language
+    )
