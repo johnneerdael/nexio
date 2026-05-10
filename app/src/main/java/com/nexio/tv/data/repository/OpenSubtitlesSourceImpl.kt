@@ -27,12 +27,13 @@ class OpenSubtitlesSourceImpl @Inject constructor(
         videoId: String?,
         videoHash: String?,
         videoSize: Long?,
-        filename: String?
+        filename: String?,
+        imdbHint: String?
     ): List<Subtitle> = withContext(Dispatchers.IO) {
         val snapshot = preferences.snapshot()
         diag {
             "search entry type=$type id=$id videoId=$videoId hash=$videoHash size=$videoSize " +
-                "enabled=${snapshot.enabled} onlyTrusted=${snapshot.onlyTrusted} " +
+                "imdbHint=$imdbHint enabled=${snapshot.enabled} onlyTrusted=${snapshot.onlyTrusted} " +
                 "includeAi=${snapshot.includeAiTranslated}"
         }
         if (!snapshot.enabled) {
@@ -40,16 +41,21 @@ class OpenSubtitlesSourceImpl @Inject constructor(
             return@withContext emptyList()
         }
 
-        val target = parseTarget(type, id, videoId)
+        val target = resolveTarget(type, id, videoId, imdbHint)
         if (target == null) {
-            diag { "search short-circuit: parseTarget FAILED for type=$type id=$id videoId=$videoId" }
-            return@withContext emptyList()
+            diag {
+                "resolveTarget produced no IMDB target (type=$type id=$id videoId=$videoId imdbHint=$imdbHint); " +
+                    "imdb-search lane skipped, hash lane will still attempt"
+            }
+        } else {
+            diag { "resolveTarget ok imdb=${target.first} season=${target.second} episode=${target.third}" }
         }
-        val (imdbId, season, episode) = target
-        diag { "parseTarget ok imdb=$imdbId season=$season episode=$episode" }
 
         val rows = coroutineScope {
-            val imdbDeferred = async { runImdbSearch(imdbId, season, episode) }
+            val imdbDeferred = async {
+                if (target != null) runImdbSearch(target.first, target.second, target.third)
+                else emptyList()
+            }
             val hashDeferred = async { runHashSearch(videoHash, videoSize) }
             (imdbDeferred.await() + hashDeferred.await())
         }
@@ -68,19 +74,34 @@ class OpenSubtitlesSourceImpl @Inject constructor(
         rows.map { it.toDomain() }
     }
 
-    private fun parseTarget(type: String, id: String, videoId: String?): Triple<String, Int?, Int?>? {
+    private fun resolveTarget(
+        type: String,
+        id: String,
+        videoId: String?,
+        imdbHint: String?,
+    ): Triple<String, Int?, Int?>? {
         val canonicalType = type.trim().lowercase()
+        val isSeries = canonicalType == "series" || canonicalType == "tv" || canonicalType == "episode"
         val parts = (videoId ?: id).split(':')
-        val imdb = parts.firstOrNull()?.takeIf { it.startsWith("tt", ignoreCase = true) }
-            ?: return null
-        return when (canonicalType) {
-            "series", "tv", "episode" -> {
-                val season = parts.getOrNull(1)?.toIntOrNull()
-                val episode = parts.getOrNull(2)?.toIntOrNull()
-                Triple(imdb, season, episode)
-            }
-            else -> Triple(imdb, null, null)
-        }
+        val canonicalImdb = parts.firstOrNull()?.takeIf { it.startsWith("tt", ignoreCase = true) }
+        val imdb = canonicalImdb ?: normalizeImdbHint(imdbHint) ?: return null
+
+        if (!isSeries) return Triple(imdb, null, null)
+
+        // Episode/season position depends on whether parts[0] is the IMDB id itself
+        // (tt…:S:E → S at [1], E at [2]) or a different namespace prefix
+        // (tvdb:N:S:E → S at [2], E at [3]).
+        val seasonIndex = if (canonicalImdb != null) 1 else 2
+        val episodeIndex = seasonIndex + 1
+        val season = parts.getOrNull(seasonIndex)?.toIntOrNull()
+        val episode = parts.getOrNull(episodeIndex)?.toIntOrNull()
+        return Triple(imdb, season, episode)
+    }
+
+    private fun normalizeImdbHint(hint: String?): String? {
+        val trimmed = hint?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        return if (trimmed.startsWith("tt", ignoreCase = true)) trimmed else "tt$trimmed"
     }
 
     private suspend fun runImdbSearch(

@@ -9,6 +9,7 @@ interface OpenSubtitlesSource {
         videoId: String? = null,
         videoHash: String? = null,
         videoSize: Long? = null,
-        filename: String? = null
+        filename: String? = null,
+        imdbHint: String? = null
     ): List<Subtitle>
 }

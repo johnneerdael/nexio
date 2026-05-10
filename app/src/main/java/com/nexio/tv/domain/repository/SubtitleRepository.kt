@@ -18,6 +18,9 @@ interface SubtitleRepository {
      *                   the Wyzie lane entirely (addons still run).
      * @param season Episode season number (paired with [episode]) for TV searches.
      * @param episode Episode number (paired with [season]) for TV searches.
+     * @param imdbId Optional IMDB id sidecar (e.g. "tt1234567"). Used by providers that
+     *               only key on IMDB (OpenSubtitles, Wyzie) when the canonical content id
+     *               uses a non-IMDB namespace such as `tvdb:N` for series.
      * @return Merged list of subtitles from addons + Wyzie.
      */
     suspend fun getSubtitles(
@@ -30,5 +33,6 @@ interface SubtitleRepository {
         wyzieHints: WyzieIdHints = WyzieIdHints.EMPTY,
         season: Int? = null,
         episode: Int? = null,
+        imdbId: String? = null,
     ): List<Subtitle>
 }
