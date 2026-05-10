@@ -15,7 +15,7 @@ import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TitleRatingSource
-import com.nexio.tv.domain.model.applyTo
+import com.nexio.tv.domain.model.applyToPreview
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.CancellationException
 
@@ -119,4 +119,4 @@ private fun TvMetadataEnrichment.toHomeCompatibilityDisplayMetadata(): HomeDispl
     )
 
 private fun HomeDisplayMetadata.applyToProviderLocalizedHomeItem(item: MetaPreview): MetaPreview =
-    applyTo(item)
+    applyToPreview(item)

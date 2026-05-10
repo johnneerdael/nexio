@@ -31,7 +31,6 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.ResolvedSlot
-import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.model.toHomeDisplayMetadata

@@ -29,7 +29,6 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
-import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.contentEquals
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.skipStep
