@@ -4,7 +4,7 @@ import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.coalesceWith
 
 data class ContinueWatchingMetadataSnapshot(
     val routingVersion: Int,
@@ -39,9 +39,9 @@ data class ContinueWatchingMetadataSnapshot(
             persistedFallback: HomeDisplayMetadata?
         ): HomeDisplayMetadata {
             return canonical
-                ?.mergeFallback(clickTime)
-                ?.mergeFallback(persistedFallback)
-                ?: clickTime?.mergeFallback(persistedFallback)
+                ?.coalesceWith(clickTime)
+                ?.coalesceWith(persistedFallback)
+                ?: clickTime?.coalesceWith(persistedFallback)
                 ?: persistedFallback
                 ?: HomeDisplayMetadata()
         }
