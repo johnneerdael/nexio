@@ -228,6 +228,15 @@ private fun HeroCarouselSlide(
     val effectiveRatingSource: TitleRatingSource? = remember(item, resolved) {
         resolved?.rating?.source ?: item.ratingSource
     }
+    val effectiveDescription: String? = remember(item, resolved) {
+        resolved?.overview ?: item.description
+    }
+    val effectiveGenres: List<String> = remember(item, resolved) {
+        resolved?.genres?.takeIf { it.isNotEmpty() } ?: item.genres
+    }
+    val effectiveReleaseInfo: String? = remember(item, resolved) {
+        resolved?.releaseInfo ?: item.releaseInfo
+    }
 
     val backgroundModel = remember(context, effectiveBackground, requestWidthPx, requestHeightPx) {
         ImageRequest.Builder(context)
@@ -372,8 +381,8 @@ private fun HeroCarouselSlide(
                     }
                 }
 
-                val releaseYear = remember(item.releaseInfo) {
-                    item.releaseInfo?.let { releaseInfo ->
+                val releaseYear = remember(effectiveReleaseInfo) {
+                    effectiveReleaseInfo?.let { releaseInfo ->
                         YEAR_REGEX.find(releaseInfo)?.value ?: releaseInfo.split("-").firstOrNull()
                     }?.trim()?.takeIf { it.isNotEmpty() }
                 }
@@ -386,12 +395,12 @@ private fun HeroCarouselSlide(
                 }
             }
 
-            if (item.genres.isNotEmpty()) {
+            if (effectiveGenres.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item.genres.take(3).forEach { genre ->
+                    effectiveGenres.take(3).forEach { genre ->
                         Text(
                             text = genre,
                             style = MaterialTheme.typography.labelMedium,
@@ -405,7 +414,7 @@ private fun HeroCarouselSlide(
                 }
             }
 
-            item.description?.let { desc ->
+            effectiveDescription?.let { desc ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = desc,
