@@ -23,6 +23,10 @@ data class ModernHomeRowItem(
     val logoRef: ArtworkDisplayRef?,
     val thumbnailRef: ArtworkDisplayRef?,
     val rating: TitleRating?,
+    val description: String?,
+    val genres: List<String>,
+    val releaseInfo: String?,
+    val tomatoesRating: Double?,
     val hydrationState: HydrationState,
     override val posterProviderTag: String?
 ) : RailCardData {
@@ -42,6 +46,10 @@ data class ModernHomeRowItem(
                 logoRef = resolved.artwork.logo,
                 thumbnailRef = resolved.artwork.thumbnail,
                 rating = resolved.rating,
+                description = resolved.display.overview,
+                genres = resolved.display.genres,
+                releaseInfo = resolved.display.releaseDate,
+                tomatoesRating = resolved.display.tomatoesRating,
                 hydrationState = resolved.hydrationState,
                 posterProviderTag = resolved.artwork.poster.deriveProviderTag()
             )
@@ -68,6 +76,10 @@ data class ModernHomeRowItem(
             logoRef = meta.logo.toLegacyHomeRailRefOrNull(ArtworkType.LOGO),
             thumbnailRef = null,
             rating = null,
+            description = meta.description,
+            genres = meta.genres,
+            releaseInfo = meta.releaseInfo,
+            tomatoesRating = meta.tomatoesRating,
             hydrationState = HydrationState.PREVIEW_ONLY,
             posterProviderTag = meta.posterProviderTag
         )
