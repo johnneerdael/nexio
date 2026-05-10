@@ -1547,7 +1547,18 @@ class MetaDetailsViewModel @Inject constructor(
                 releaseInfo = document.fields.releaseDate ?: document.fields.year?.toString() ?: updated.releaseInfo,
                 ageRating = document.advanced.ageRating ?: updated.ageRating,
                 country = countries?.joinToString(", ") ?: updated.country,
-                language = document.advanced.language ?: document.localization.selectedLanguage ?: updated.language
+                language = run {
+                    val production = document.advanced.language
+                    if (production == null) {
+                        Log.w(
+                            TAG,
+                            "META_LANG_FALLBACK: production language null for contentId=" +
+                                "${updated.id} provider=${document.identity.canonicalProvider} " +
+                                "fellBackTo=${document.localization.selectedLanguage}"
+                        )
+                    }
+                    production ?: document.localization.selectedLanguage ?: updated.language
+                }
             )
         }
         if (settings.useCredits) {
