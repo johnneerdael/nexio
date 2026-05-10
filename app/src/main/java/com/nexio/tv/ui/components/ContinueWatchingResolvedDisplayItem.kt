@@ -39,7 +39,7 @@ data class ContinueWatchingResolvedDisplayItem(
     val durationMs: Long
         get() = record.durationMs
 
-    /** Last-played timestamp (epoch ms). Reads from [record]. */
+    /** Last-played timestamp (epoch ms), backed by [ContinueWatchingRecord.updatedAt]. */
     val lastPlayedAtMs: Long
         get() = record.updatedAt
 
