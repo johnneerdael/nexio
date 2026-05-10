@@ -394,11 +394,26 @@ class HomeViewModel @Inject constructor(
                 for (i in cwItems.indices) {
                     val item = cwItems[i]
                     val key = continueWatchingItemKey(item)
-                    val resolved = resolvedByWantedKey[key] ?: continue
                     activeKeys += key
-                    val projected = when (item) {
-                        is ContinueWatchingItem.InProgress -> projectionCache.projectCwInProgress(resolved, item)
-                        is ContinueWatchingItem.NextUp -> projectionCache.projectCwNextUp(resolved, item)
+                    val resolved = resolvedByWantedKey[key]
+                    val projected = if (resolved != null) {
+                        when (item) {
+                            is ContinueWatchingItem.InProgress -> projectionCache.projectCwInProgress(resolved, item)
+                            is ContinueWatchingItem.NextUp -> projectionCache.projectCwNextUp(resolved, item)
+                        }
+                    } else {
+                        // No home-surface match (e.g. a Trakt-sourced resume entry
+                        // whose content isn't on any visible rail). Fall back to a
+                        // best-effort projection from the legacy item's display
+                        // fields so the row still renders. Plan B Surface 4 spec
+                        // explicitly required this fallback to avoid silently
+                        // dropping CW rows.
+                        when (item) {
+                            is ContinueWatchingItem.InProgress ->
+                                ContinueWatchingResolvedDisplayItem.fromInProgressLegacy(item)
+                            is ContinueWatchingItem.NextUp ->
+                                ContinueWatchingResolvedDisplayItem.fromNextUpLegacy(item)
+                        }
                     }
                     out += projected
                 }
