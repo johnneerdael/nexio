@@ -166,6 +166,59 @@ private fun preferDurableArtworkRef(overlayValue: String?, baseValue: String?): 
     }
 }
 
+/**
+ * Per-field overlay onto a base [MetaPreview]. Same body as the deprecated
+ * [applyTo] but non-deprecated and intentionally scoped to legitimate
+ * MetaPreview-shape internal pipeline use cases (provider-localized
+ * metadata overlay, etc.) that don't fit the rank-aware
+ * [com.nexio.tv.ui.screens.home.HomeRailProjectionReducer.reduce]
+ * pattern.
+ *
+ * Plan B Phase 2C replacement. Will retire alongside the deprecated
+ * [applyTo] in Phase 4 once Phase 3 (catalog pipeline restructure)
+ * eliminates the remaining HomeHydrationOverlayApplier caller.
+ */
+fun HomeDisplayMetadata.applyToPreview(base: MetaPreview): MetaPreview {
+    val cleanOverlayRating = sanitizedTitleRating()
+    val cleanBaseRating = base.imdbRating.sanitizedTitleRating()
+    val appliedRating = cleanOverlayRating ?: cleanBaseRating
+    val appliedRatingSource = when {
+        cleanOverlayRating != null -> ratingSource.orDefault()
+        cleanBaseRating != null -> base.ratingSource.orDefault()
+        else -> null
+    }
+    val appliedPoster = preferDurableArtworkRef(displayPoster, base.poster)
+    val appliedBackground = preferDurableArtworkRef(displayBackdrop, base.background)
+    val appliedLogo = preferDurableArtworkRef(displayLogo, base.logo)
+    return base.copy(
+        name = title ?: base.name,
+        logo = appliedLogo,
+        description = description ?: base.description,
+        genres = if (genres.isNotEmpty()) genres else base.genres,
+        releaseInfo = releaseInfo ?: base.releaseInfo,
+        runtime = runtime ?: base.runtime,
+        imdbRating = appliedRating,
+        ratingSource = appliedRatingSource,
+        tomatoesRating = tomatoesRating ?: base.tomatoesRating,
+        // Carry production language overlay from the metadata router onto the
+        // MetaPreview. Without this the value reaches HomeDisplayMetadata
+        // (after E4) but dies at this base.copy boundary, leaving CW items'
+        // displayMetadata.originalLanguage null at click time.
+        originalLanguage = originalLanguage ?: base.originalLanguage,
+        poster = appliedPoster,
+        // Pin posterProviderTag to whichever side actually owns the chosen poster ref so
+        // a base-preserved durable RPDB ref doesn't get tagged with the overlay's
+        // bare-URL provider.
+        posterProviderTag = when {
+            appliedPoster === base.poster && appliedPoster != null -> base.posterProviderTag
+            displayPoster != null -> posterProviderTag
+            else -> base.posterProviderTag
+        },
+        background = appliedBackground,
+        artwork = mergeAppliedArtwork(base)
+    )
+}
+
 @Deprecated(
     "Use HomeRailProjectionReducer.reduce(...) instead. mergeFallback predates the rank-aware reducer and treats inputs as primary/fallback rather than rank-ordered. Will be removed once all callers migrate.",
     level = DeprecationLevel.WARNING
