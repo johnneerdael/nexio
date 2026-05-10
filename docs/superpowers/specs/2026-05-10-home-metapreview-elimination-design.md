@@ -187,11 +187,19 @@ Phase 0 (foundation) ◄── blocks all
 The following are NOT part of this spec, even though they relate:
 
 - **Migrating `MetadataDisplayRouter`'s output type.** Router still returns its current types; Phase 3 wraps router output into typed shapes at the consumer (catalog pipeline), not at the router.
-- **Reshaping persistence schemas.** `SavedLibraryItem`, `ContinueWatchingMetadataSnapshot`, `HomeCatalogSnapshotStore.Snapshot` keep their current on-disk MetaPreview-derived shape. Conversion happens at the read boundary. A separate "schema v2" project can re-shape persistence later.
 - **Search-as-a-surface in `ResolvedDisplaySurfaceRepository`.** Phase 1A wraps search results in `SearchResultItem`; the search backend still calls addons directly. Routing search through the resolved authority as a `SEARCH_SURFACE_KEY` is a separate project.
 - **Detail-screen `Meta` round-trip elimination.** Plan B Task 23's TODO (the `resolvedDetail.toMeta(...)` call at `MetaDetailsViewModel.kt:3386`) stays. Detail HeroSection already reads from `resolvedDetail` first; the `Meta` round-trip is for non-display logic. Separate cleanup.
-- **`MetaPreview` deletion entirely.** The class survives — addon-API parsing keeps producing it; persistence keeps consuming it. The architectural goal is "no `MetaPreview` through the home rendering pipeline," not "no `MetaPreview` anywhere."
+- **`MetaPreview` deletion entirely.** The class survives — addon-API parsing keeps producing it. The architectural goal is "no `MetaPreview` through the home pipeline (runtime OR persistence)," not "no `MetaPreview` anywhere in the codebase."
 - **CW Loading-branch soft-clear** (already saved as separate post-Plan-B follow-up project memory; defer to that).
+
+### Revision (2026-05-10): persistence reshaping IS in scope
+
+This section originally deferred persistence reshaping (`SavedLibraryItem`, `ContinueWatchingMetadataSnapshot`, `HomeCatalogSnapshotStore.Snapshot`) to a separate "schema v2" project. **That deferral was scope management, not architectural preference, and it has been retired.** The desired final outcome is rule #1 enforcement end-to-end, including persistence. Phase 3 now covers persistence reshape; see `docs/superpowers/specs/2026-05-10-phase-3-catalog-pipeline-restructure-design.md` for the Phase 3 design. The reasons:
+
+1. **Rule #1 covers persistence too.** Each read-boundary conversion from legacy MetaPreview-shape persistence into the runtime pipeline is a constant attack surface for rule #1 violations.
+2. **`HomeCatalogSnapshotStore.Snapshot` is structurally redundant with the authority.** Its MetaPreview fields (poster URLs, names, etc.) are upstream data already persisted by `DurableArtworkDecisionCache`, `MetadataDiskCacheStore`, etc. Reshaping to store just rail structure eliminates duplication and the MetaPreview dependency simultaneously.
+3. **`ContinueWatchingMetadataSnapshot.clickTimeDisplayMetadata` should use Plan A's typed-slot vocabulary.** `ResolvedSlot<T>` with rank + provider provenance captures the click-time-display intent more faithfully than the current `HomeDisplayMetadata` bag.
+4. **Migration cost is bounded.** Both stores are on-device caches, not user-data sources of truth. Read-time legacy-schema compat for one release cycle handles upgrades without data loss.
 
 ## Tech stack
 
