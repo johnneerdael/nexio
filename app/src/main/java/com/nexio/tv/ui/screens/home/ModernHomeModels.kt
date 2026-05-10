@@ -19,6 +19,8 @@ import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
+import com.nexio.tv.ui.components.toContinueWatchingItem
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -56,7 +58,7 @@ data class HeroPreview(
 
 @Immutable
 sealed class ModernPayload {
-    data class ContinueWatching(val item: ContinueWatchingItem) : ModernPayload()
+    data class ContinueWatching(val item: ContinueWatchingResolvedDisplayItem) : ModernPayload()
     data class Catalog(
         val focusKey: String,
         val itemId: String,
@@ -126,7 +128,7 @@ data class CarouselRowLookups(
 internal data class ModernHomePresentationInput(
     val catalogRows: List<CatalogRow>,
     val resolvedRailRows: List<ResolvedRailRow>,
-    val continueWatchingItems: List<ContinueWatchingItem>,
+    val continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
     val continueWatchingTitle: String,
@@ -174,7 +176,7 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
 
 @Immutable
 internal data class ModernHomeContentState(
-    val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
+    val continueWatchingItems: List<ContinueWatchingResolvedDisplayItem> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
     val deterministicAutoplayEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
@@ -252,7 +254,7 @@ internal class ModernHomeUiCaches {
 
 @Stable
 internal class ModernCarouselRowBuildCache {
-    var continueWatchingItems: List<ContinueWatchingItem> = emptyList()
+    var continueWatchingItems: List<ContinueWatchingResolvedDisplayItem> = emptyList()
     var continueWatchingTitle: String = ""
     var continueWatchingAirsDateTemplate: String = ""
     var continueWatchingUpcomingLabel: String = ""
@@ -338,16 +340,19 @@ internal fun resolveFocusedTrailerSelection(
             fallbackTrailerYtId = payload.fallbackTrailerYtId
         )
 
-        is ModernPayload.ContinueWatching -> FocusedTrailerSelection(
-            rowKey = resolvedRowKey,
-            focusKey = resolvedItem.key,
-            itemId = payload.item.contentId(),
-            itemType = payload.item.contentType(),
-            trailerTitle = resolvedItem.heroPreview.title.ifBlank { resolvedItem.title },
-            trailerReleaseInfo = resolvedItem.subtitle,
-            trailerApiType = payload.item.contentType(),
-            fallbackTrailerYtId = null
-        )
+        is ModernPayload.ContinueWatching -> {
+            val legacy = payload.item.toContinueWatchingItem()
+            FocusedTrailerSelection(
+                rowKey = resolvedRowKey,
+                focusKey = resolvedItem.key,
+                itemId = legacy.contentId(),
+                itemType = legacy.contentType(),
+                trailerTitle = resolvedItem.heroPreview.title.ifBlank { resolvedItem.title },
+                trailerReleaseInfo = resolvedItem.subtitle,
+                trailerApiType = legacy.contentType(),
+                fallbackTrailerYtId = null
+            )
+        }
     }
 }
 
@@ -373,11 +378,19 @@ internal fun applyTomatoesToContinueWatchingItem(
 
 
 internal fun buildContinueWatchingItem(
-    item: ContinueWatchingItem,
+    resolved: ContinueWatchingResolvedDisplayItem,
     useLandscapePosters: Boolean,
     airsDateTemplate: String,
     upcomingLabel: String
 ): ModernCarouselItem {
+    // The resolved projection drives surface-rendered display fields (title/poster/
+    // backdrop/logo/rating). The underlying ContinueWatchingItem still carries
+    // CW-specific fields the projection doesn't expose: episode thumbnail/description,
+    // genres, releaseInfo, episode-level imdb rating, has-aired/airDateLabel etc. So
+    // we alias `item = resolved.source` to keep this function's existing displayMetadata-
+    // driven branches intact while the [payload] carries the resolved type for downstream
+    // consumers.
+    val item = resolved.toContinueWatchingItem()
     val displayMetadata = item.displayMetadata()
     val heroPreview = when (item) {
         is ContinueWatchingItem.InProgress -> {
@@ -526,7 +539,7 @@ internal fun buildContinueWatchingItem(
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(item),
+        payload = ModernPayload.ContinueWatching(resolved),
         metaPreview = when (item) {
             is ContinueWatchingItem.InProgress -> continueWatchingInProgressToMetaPreview(item)
             is ContinueWatchingItem.NextUp -> nextUpToMetaPreview(item)

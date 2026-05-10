@@ -18,6 +18,7 @@ import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -58,7 +59,7 @@ class ModernHomeModelsTest {
         )
 
         val built = buildContinueWatchingItem(
-            item = item,
+            resolved = resolvedCwInProgress(item),
             useLandscapePosters = true,
             airsDateTemplate = "Airs %s",
             upcomingLabel = "Upcoming"
@@ -208,6 +209,86 @@ class ModernHomeModelsTest {
         assertEquals("original-logo", rebuilt.heroPreview.frozenLogoUrl)
         assertEquals("enriched-backdrop", rebuilt.heroPreview.backdrop)
         assertEquals("enriched-logo", rebuilt.heroPreview.logo)
+    }
+
+    private fun resolvedCwInProgress(item: ContinueWatchingItem.InProgress): ContinueWatchingResolvedDisplayItem.InProgress {
+        val display = item.displayMetadata()
+        return ContinueWatchingResolvedDisplayItem.fromInProgress(
+            resolved = resolvedDisplayItemForCw(
+                contentId = item.progress.contentId,
+                contentType = item.progress.contentType,
+                title = display.title ?: item.progress.name,
+                posterUrl = display.displayPoster,
+                backdropUrl = display.displayBackdrop,
+                logoUrl = display.displayLogo
+            ),
+            source = item
+        )
+    }
+
+    private fun resolvedCwNextUp(item: ContinueWatchingItem.NextUp): ContinueWatchingResolvedDisplayItem.NextUp {
+        val display = item.displayMetadata()
+        return ContinueWatchingResolvedDisplayItem.fromNextUp(
+            resolved = resolvedDisplayItemForCw(
+                contentId = item.info.contentId,
+                contentType = item.info.contentType,
+                title = display.title ?: item.info.name,
+                posterUrl = display.displayPoster,
+                backdropUrl = display.displayBackdrop,
+                logoUrl = display.displayLogo
+            ),
+            source = item
+        )
+    }
+
+    private fun resolvedDisplayItemForCw(
+        contentId: String,
+        contentType: String,
+        title: String,
+        posterUrl: String?,
+        backdropUrl: String?,
+        logoUrl: String?
+    ): ResolvedDisplayItem {
+        val itemKey = homeDisplayItemKey(contentType, contentId)
+        val resolvedType = if (contentType.equals("series", ignoreCase = true)) {
+            ContentType.SERIES
+        } else {
+            ContentType.MOVIE
+        }
+        return ResolvedDisplayItem(
+            itemKey = itemKey,
+            contentId = contentId,
+            parentId = contentId,
+            itemType = resolvedType,
+            mediaKind = MetadataMediaKind.UNKNOWN,
+            canonicalProvider = null,
+            canonicalId = null,
+            imdbId = null,
+            stableIds = ProviderIds(),
+            display = ResolvedDisplayFields(
+                title = title,
+                originalTitle = null,
+                year = null,
+                releaseDate = null,
+                overview = null,
+                genres = emptyList(),
+                runtimeText = null
+            ),
+            artwork = ArtworkBundle(
+                poster = posterUrl?.takeIf { it.isNotBlank() }
+                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.POSTER, ArtworkTrace.empty()) },
+                backdrop = backdropUrl?.takeIf { it.isNotBlank() }
+                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.BACKDROP, ArtworkTrace.empty()) },
+                logo = logoUrl?.takeIf { it.isNotBlank() }
+                    ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.LOGO, ArtworkTrace.empty()) }
+            ),
+            rating = null,
+            trailer = TrailerDisplayState(),
+            hydrationState = HydrationState.PREVIEW_ONLY,
+            sourceTrace = emptyList(),
+            updatedAtMs = 0L,
+            slots = null
+        )
     }
 
     private fun resolvedRowItem(
@@ -371,7 +452,7 @@ class ModernHomeModelsTest {
         )
 
         val builtItem = buildContinueWatchingItem(
-            item = item,
+            resolved = resolvedCwInProgress(item),
             useLandscapePosters = true,
             airsDateTemplate = "Airs %s",
             upcomingLabel = "Upcoming"

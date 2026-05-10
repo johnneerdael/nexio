@@ -57,9 +57,8 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
-import com.nexio.tv.ui.screens.home.contentId
-import com.nexio.tv.ui.screens.home.displayMetadata
 import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.ui.theme.NexioColors
@@ -79,7 +78,7 @@ private val BadgeShape = RoundedCornerShape(4.dp)
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ContinueWatchingSection(
-    items: List<ContinueWatchingItem>,
+    items: List<ContinueWatchingResolvedDisplayItem>,
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
@@ -100,8 +99,8 @@ fun ContinueWatchingSection(
     var lastFocusedIndex by remember { mutableIntStateOf(-1) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
-    var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
-    
+    var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
+
     val listState = rememberLazyListState()
 
     // Restore focus to specific item if requested
@@ -156,24 +155,17 @@ fun ContinueWatchingSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { _, progress ->
-                    when (progress) {
-                        is ContinueWatchingItem.InProgress ->
-                            "cw_${progress.progress.contentId}_${progress.progress.videoId}_${progress.progress.season ?: -1}_${progress.progress.episode ?: -1}"
-                        is ContinueWatchingItem.NextUp ->
-                            "nextup_${progress.info.contentId}_${progress.info.videoId}_${progress.info.season}_${progress.info.episode}"
-                    }
-                }
-            ) { index, progress ->
+                key = { _, resolved -> resolved.itemKey }
+            ) { index, resolved ->
                 val focusModifier = when {
                     index < focusRequesters.size -> Modifier.focusRequester(focusRequesters[index])
                     else -> Modifier
                 }
 
                 ContinueWatchingCard(
-                    item = progress,
-                    onClick = { onItemClick(progress) },
-                    onLongPress = { optionsItem = progress },
+                    item = resolved,
+                    onClick = { onItemClick(resolved.toContinueWatchingItem()) },
+                    onLongPress = { optionsItem = resolved },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused && lastFocusedIndex != index) {
@@ -189,43 +181,44 @@ fun ContinueWatchingSection(
 
     val menuItem = optionsItem
     if (menuItem != null) {
+        val menuLegacy = menuItem.toContinueWatchingItem()
         ContinueWatchingOptionsDialog(
             item = menuItem,
             onDismiss = { optionsItem = null },
             onRemove = {
                 val targetIndex = if (items.size <= 1) null else minOf(lastFocusedIndex, items.size - 2)
                 pendingFocusIndex = targetIndex
-                onRemoveItem(menuItem)
+                onRemoveItem(menuLegacy)
                 optionsItem = null
             },
             onMarkAsWatched = {
-                onMarkAsWatched(menuItem)
+                onMarkAsWatched(menuLegacy)
                 optionsItem = null
             },
-            showManualStreamSelection = showManualStreamSelection(menuItem),
+            showManualStreamSelection = showManualStreamSelection(menuLegacy),
             onPlayWithManualStreamSelection = {
-                onPlayWithManualStreamSelection(menuItem)
+                onPlayWithManualStreamSelection(menuLegacy)
                 optionsItem = null
             },
             onDetails = {
-                onDetailsClick(menuItem)
+                onDetailsClick(menuLegacy)
                 optionsItem = null
             },
             onCheckIn = onCheckIn?.let { callback ->
                 {
-                    callback(menuItem)
+                    callback(menuLegacy)
                     optionsItem = null
                 }
             },
-            isInWatchlist = cwWatchlistMembership[menuItem.contentId()] == true,
+            isInWatchlist = cwWatchlistMembership[menuItem.contentId] == true,
             onToggleLibrary = onToggleLibrary?.let { callback ->
                 {
-                    callback(menuItem)
+                    callback(menuLegacy)
                     optionsItem = null
                 }
             },
             onStartFromBeginning = {
-                onStartFromBeginning(menuItem)
+                onStartFromBeginning(menuLegacy)
                 optionsItem = null
             }
         )
@@ -251,7 +244,7 @@ fun ContinueWatchingSection(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ContinueWatchingCard(
-    item: ContinueWatchingItem,
+    item: ContinueWatchingResolvedDisplayItem,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean = false,
@@ -263,10 +256,8 @@ fun ContinueWatchingCard(
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
 
-    val progress = remember(item) { (item as? ContinueWatchingItem.InProgress)?.progress }
-    val nextUp = remember(item) { (item as? ContinueWatchingItem.NextUp)?.info }
-    val progressDisplay = remember(item) { (item as? ContinueWatchingItem.InProgress)?.displayMetadata() }
-    val nextUpDisplay = remember(item) { (item as? ContinueWatchingItem.NextUp)?.displayMetadata() }
+    val progress = remember(item) { (item as? ContinueWatchingResolvedDisplayItem.InProgress)?.progress }
+    val nextUp = remember(item) { (item as? ContinueWatchingResolvedDisplayItem.NextUp)?.info }
     val episodeStr = remember(progress, nextUp) {
         progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
     }
@@ -297,25 +288,31 @@ fun ContinueWatchingCard(
         remainingText ?: nextUpBadgeText ?: strNextUp
     }
     val progressFraction = remember(progress) { progress?.progressPercentage ?: 0f }
-    val imageModel = remember(nextUp, progress, nextUpDisplay, progressDisplay) {
+    // Display fields come from the typed projection (resolved authority). For NextUp we
+    // additionally allow the episode-specific thumbnail (carried on the legacy source) to
+    // back-fill landscape contexts where no resolved backdrop exists yet — the thumbnail is
+    // an episode portrait/landscape still, not a logo, so this preserves the rule #1
+    // contract that portrait poster slots never fall back to non-poster art.
+    val resolvedPosterUrl = remember(item) { item.posterRef.toLegacyArtworkString() }
+    val resolvedBackdropUrl = remember(item) { item.backdropRef.toLegacyArtworkString() }
+    val nextUpThumbnail = nextUp?.displayThumbnail
+    val imageModel = remember(nextUp, resolvedPosterUrl, resolvedBackdropUrl, nextUpThumbnail) {
         when {
             nextUp != null && !nextUp.hasAired -> firstNonBlank(
-                nextUpDisplay?.displayBackdrop,
-                nextUpDisplay?.displayPoster,
-                nextUp.displayThumbnail,
-                progressDisplay?.displayBackdrop,
-                progressDisplay?.displayPoster
+                resolvedBackdropUrl,
+                resolvedPosterUrl,
+                nextUpThumbnail
             )
             else -> firstNonBlank(
-                nextUp?.displayThumbnail,
-                progressDisplay?.displayBackdrop,
-                progressDisplay?.displayPoster,
-                nextUpDisplay?.displayBackdrop,
-                nextUpDisplay?.displayPoster
+                nextUpThumbnail,
+                resolvedBackdropUrl,
+                resolvedPosterUrl
             )
         }
     }
-    val titleText = remember(progress, nextUp) { progress?.name ?: nextUp?.name.orEmpty() }
+    val titleText = remember(item, progress, nextUp) {
+        item.title ?: progress?.name ?: nextUp?.name.orEmpty()
+    }
     val strAirsDateForEpisode = nextUp?.airDateLabel?.let { stringResource(R.string.cw_airs_date, it) }
     val episodeTitle = remember(progress, nextUp, strAirsDateForEpisode) {
         when {
@@ -332,12 +329,13 @@ fun ContinueWatchingCard(
     val requestHeightPx = remember(imageHeight, density) {
         with(density) { imageHeight.roundToPx() }
     }
-    val imageRequest = remember(imageModel, requestWidthPx, requestHeightPx) {
+    val cacheContentId = item.contentId
+    val imageRequest = remember(imageModel, requestWidthPx, requestHeightPx, cacheContentId) {
         ImageRequest.Builder(context)
             .data(imageModel)
             .crossfade(false)
             .memoryCacheKey("${imageModel}_${requestWidthPx}x${requestHeightPx}")
-            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(item.contentId()))
+            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(cacheContentId))
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }
@@ -517,7 +515,7 @@ fun ContinueWatchingCard(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ContinueWatchingOptionsDialog(
-    item: ContinueWatchingItem,
+    item: ContinueWatchingResolvedDisplayItem,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onMarkAsWatched: () -> Unit,
@@ -530,8 +528,8 @@ fun ContinueWatchingOptionsDialog(
     onStartFromBeginning: () -> Unit = {}
 ) {
     val title = when (item) {
-        is ContinueWatchingItem.InProgress -> item.progress.name
-        is ContinueWatchingItem.NextUp -> item.info.name
+        is ContinueWatchingResolvedDisplayItem.InProgress -> item.title ?: item.source.progress.name
+        is ContinueWatchingResolvedDisplayItem.NextUp -> item.title ?: item.source.info.name
     }
 
     val primaryFocusRequester = remember { FocusRequester() }
@@ -577,7 +575,7 @@ fun ContinueWatchingOptionsDialog(
             Text(stringResource(R.string.cw_action_go_to_details))
         }
 
-        if (item is ContinueWatchingItem.InProgress) {
+        if (item is ContinueWatchingResolvedDisplayItem.InProgress) {
             Button(
                 onClick = onStartFromBeginning,
                 colors = ButtonDefaults.colors(
@@ -656,6 +654,19 @@ private fun isSelectKey(keyCode: Int): Boolean {
 private fun firstNonBlank(vararg candidates: String?): String? {
     return candidates.firstOrNull { !it.isNullOrBlank() }?.trim()
 }
+
+/**
+ * Adapter from the per-surface resolved projection back to the legacy domain
+ * [ContinueWatchingItem]. Composables consume the resolved projection for rendering,
+ * but callbacks back to the ViewModel still take the legacy type — passing
+ * `resolved.source` keeps the boundary backward-compatible without leaking the
+ * resolved-display type into VM signatures.
+ */
+internal fun ContinueWatchingResolvedDisplayItem.toContinueWatchingItem(): ContinueWatchingItem =
+    when (this) {
+        is ContinueWatchingResolvedDisplayItem.InProgress -> source
+        is ContinueWatchingResolvedDisplayItem.NextUp -> source
+    }
 
 internal fun formatRemainingTime(
     remainingMs: Long,

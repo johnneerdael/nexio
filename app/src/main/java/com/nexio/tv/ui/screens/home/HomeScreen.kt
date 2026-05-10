@@ -50,6 +50,7 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.data.repository.TraktRecommendationRef
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.NexioDialog
@@ -164,6 +165,7 @@ fun HomeScreen(
     val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
     val displayHeroItems by viewModel.displayHeroItems.collectAsStateWithLifecycle()
     val displayContinueWatchingItems by viewModel.displayContinueWatchingItems.collectAsStateWithLifecycle()
+    val resolvedContinueWatchingItems by viewModel.resolvedContinueWatchingItems.collectAsStateWithLifecycle()
     val resolvedHeroItems by viewModel.resolvedHeroItems.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -367,7 +369,7 @@ fun HomeScreen(
                             uiState = uiState,
                             displayCatalogRows = displayCatalogRows,
                             displayHeroItems = displayHeroItems,
-                            displayContinueWatchingItems = displayContinueWatchingItems,
+                            resolvedContinueWatchingItems = resolvedContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
@@ -382,7 +384,7 @@ fun HomeScreen(
                         HomeLayout.GRID -> GridHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
-                            displayContinueWatchingItems = displayContinueWatchingItems,
+                            resolvedContinueWatchingItems = resolvedContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
@@ -397,7 +399,7 @@ fun HomeScreen(
                         HomeLayout.MODERN -> ModernHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
-                            displayContinueWatchingItems = displayContinueWatchingItems,
+                            resolvedContinueWatchingItems = resolvedContinueWatchingItems,
                             idleScreensaverVisible = idleScreensaverVisible,
                             startupSplashVisible = startupSplashVisible,
                             externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
@@ -669,7 +671,7 @@ private fun ClassicHomeRoute(
     uiState: HomeUiState,
     displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     displayHeroItems: List<MetaPreview>,
-    displayContinueWatchingItems: List<ContinueWatchingItem>,
+    resolvedContinueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -688,7 +690,7 @@ private fun ClassicHomeRoute(
         uiState = uiState,
         catalogRows = displayCatalogRows,
         heroItems = displayHeroItems,
-        continueWatchingItems = displayContinueWatchingItems,
+        continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
@@ -730,7 +732,7 @@ private fun ClassicHomeRoute(
 private fun GridHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
-    displayContinueWatchingItems: List<ContinueWatchingItem>,
+    resolvedContinueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -744,7 +746,7 @@ private fun GridHomeRoute(
     val gridFocusState by viewModel.gridFocusState.collectAsStateWithLifecycle()
     GridHomeContent(
         uiState = uiState,
-        continueWatchingItems = displayContinueWatchingItems,
+        continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,
         gridFocusState = gridFocusState,
@@ -781,7 +783,7 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
-    displayContinueWatchingItems: List<ContinueWatchingItem>,
+    resolvedContinueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     idleScreensaverVisible: Boolean,
     startupSplashVisible: Boolean,
     externalTrailerTakeoverActive: Boolean,
@@ -797,7 +799,7 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val modernContentState = remember(
-        displayContinueWatchingItems,
+        resolvedContinueWatchingItems,
         uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
@@ -822,7 +824,7 @@ private fun ModernHomeRoute(
         viewModel.trailerMetadataAvailableKeys
     ) {
         ModernHomeContentState(
-            continueWatchingItems = displayContinueWatchingItems,
+            continueWatchingItems = resolvedContinueWatchingItems,
             modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,

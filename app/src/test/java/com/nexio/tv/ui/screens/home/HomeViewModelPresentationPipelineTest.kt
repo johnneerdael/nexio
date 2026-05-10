@@ -27,6 +27,7 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -181,7 +182,7 @@ class HomeViewModelPresentationPipelineTest {
         )
 
         val carouselItem = buildContinueWatchingItem(
-            item = item,
+            resolved = resolvedCwInProgress(item),
             useLandscapePosters = false,
             airsDateTemplate = "Airs %s",
             upcomingLabel = "Upcoming"
@@ -576,6 +577,60 @@ class HomeViewModelPresentationPipelineTest {
             catalogName = "Catalog",
             type = item.type,
             items = listOf(item)
+        )
+    }
+
+    private fun resolvedCwInProgress(item: ContinueWatchingItem.InProgress): ContinueWatchingResolvedDisplayItem.InProgress {
+        val display = item.displayMetadata()
+        return ContinueWatchingResolvedDisplayItem.fromInProgress(
+            resolved = resolvedDisplayItemForCw(
+                contentId = item.progress.contentId,
+                contentType = item.progress.contentType,
+                title = display.title ?: item.progress.name,
+                artwork = display.artwork ?: ArtworkBundle()
+            ),
+            source = item
+        )
+    }
+
+    private fun resolvedDisplayItemForCw(
+        contentId: String,
+        contentType: String,
+        title: String,
+        artwork: ArtworkBundle
+    ): ResolvedDisplayItem {
+        val itemKey = homeDisplayItemKey(contentType, contentId)
+        val resolvedType = if (contentType.equals("series", ignoreCase = true)) {
+            ContentType.SERIES
+        } else {
+            ContentType.MOVIE
+        }
+        return ResolvedDisplayItem(
+            itemKey = itemKey,
+            contentId = contentId,
+            parentId = contentId,
+            itemType = resolvedType,
+            mediaKind = MetadataMediaKind.UNKNOWN,
+            canonicalProvider = null,
+            canonicalId = null,
+            imdbId = null,
+            stableIds = ProviderIds(),
+            display = ResolvedDisplayFields(
+                title = title,
+                originalTitle = null,
+                year = null,
+                releaseDate = null,
+                overview = null,
+                genres = emptyList(),
+                runtimeText = null
+            ),
+            artwork = artwork,
+            rating = null,
+            trailer = TrailerDisplayState(),
+            hydrationState = HydrationState.PREVIEW_ONLY,
+            sourceTrace = emptyList(),
+            updatedAtMs = 0L,
+            slots = null
         )
     }
 

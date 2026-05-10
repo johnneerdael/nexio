@@ -33,9 +33,9 @@ internal fun buildModernHomePresentation(
                     key = "continue_watching",
                     title = input.continueWatchingTitle,
                     globalRowIndex = -1,
-                    items = input.continueWatchingItems.map { item ->
+                    items = input.continueWatchingItems.map { resolved ->
                         buildContinueWatchingItem(
-                            item = item,
+                            resolved = resolved,
                             useLandscapePosters = input.useLandscapePosters,
                             airsDateTemplate = input.airsDateTemplate,
                             upcomingLabel = input.upcomingLabel

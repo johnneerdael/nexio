@@ -51,6 +51,7 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.GridContinueWatchingSection
 import com.nexio.tv.ui.components.HeroCarousel
@@ -66,7 +67,7 @@ private const val KEY_REPEAT_THROTTLE_MS = 80L
 @Composable
 fun GridHomeContent(
     uiState: HomeUiState,
-    continueWatchingItems: List<ContinueWatchingItem>,
+    continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
