@@ -71,6 +71,7 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -238,6 +239,17 @@ class HomeViewModel @Inject constructor(
     // memoized via [ResolvedDisplayProjectionCache.internHeroList].
     internal val _resolvedHeroItems = MutableStateFlow<List<HeroDisplayItem>>(emptyList())
     val resolvedHeroItems: StateFlow<List<HeroDisplayItem>> = _resolvedHeroItems.asStateFlow()
+    // Resolved CW projection (Plan B Surface 4 Phase 2). Held outside [HomeUiState]
+    // for the same reason as [_displayHeroItems] / [_displayCatalogRows] — Compose's
+    // SnapshotStateRecord chain pins prior versions of every observed list field
+    // (CLAUDE.md hard rule #2). Composable consumers collect this StateFlow
+    // directly. Derived from observeHomeSurface(profileId) joined with
+    // [_displayContinueWatchingItems] by itemKey; per-item projections are
+    // memoized via [ResolvedDisplayProjectionCache.projectCwInProgress] /
+    // [ResolvedDisplayProjectionCache.projectCwNextUp] and the outer list is
+    // memoized via [ResolvedDisplayProjectionCache.internContinueWatchingList].
+    internal val _resolvedContinueWatchingItems = MutableStateFlow<List<ContinueWatchingResolvedDisplayItem>>(emptyList())
+    val resolvedContinueWatchingItems: StateFlow<List<ContinueWatchingResolvedDisplayItem>> = _resolvedContinueWatchingItems.asStateFlow()
     internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
     // Not a feedback loop: the consumer at observeResolvedRailRows() writes only
@@ -337,6 +349,72 @@ class HomeViewModel @Inject constructor(
                 projectionCache.retainOnlyHeroItems(activeKeys)
                 projectionCache.internHeroList(out)
             }
+
+    // Plan B Surface 4 Phase 2 — resolved-CW counterpart to [resolvedHeroItemsFlow].
+    // Joins observeHomeSurface(profileId) with [_displayContinueWatchingItems] by
+    // homeDisplayItemKey, projects per variant via [projectionCache.projectCwInProgress]
+    // / [projectCwNextUp], memoizes per-item, and stabilises the outer list reference
+    // via [internContinueWatchingList]. Profile switches are handled via flatMapLatest
+    // on the active profile session — same pattern as resolvedRailRowsFlow /
+    // resolvedHeroItemsFlow; the cache rebinds on the next emission via
+    // retainOnlyContinueWatchingItems.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val resolvedContinueWatchingItemsFlow: Flow<List<ContinueWatchingResolvedDisplayItem>> =
+        profileManager.activeProfileSession
+            .map { it.profileId }
+            .distinctUntilChanged()
+            .flatMapLatest { profileId ->
+                resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
+            }
+            .combine(_displayContinueWatchingItems) { resolvedItems, cwItems ->
+                // Same allocation discipline as resolvedHeroItemsFlow: avoid an
+                // associateBy() over the full home surface (~1900 entries) when the
+                // CW list is small (typically <30 items). Build a lookup keyed by
+                // wanted itemKeys only.
+                if (cwItems.isEmpty()) {
+                    projectionCache.retainOnlyContinueWatchingItems(emptySet())
+                    return@combine projectionCache.internContinueWatchingList(emptyList())
+                }
+                val wantedKeys = HashSet<String>(cwItems.size)
+                for (i in cwItems.indices) {
+                    val item = cwItems[i]
+                    val key = continueWatchingItemKey(item) ?: continue
+                    wantedKeys += key
+                }
+                val resolvedByWantedKey = HashMap<String, com.nexio.tv.domain.model.ResolvedDisplayItem>(cwItems.size)
+                for (i in resolvedItems.indices) {
+                    val ri = resolvedItems[i]
+                    if (ri.itemKey in wantedKeys) {
+                        resolvedByWantedKey[ri.itemKey] = ri
+                        if (resolvedByWantedKey.size == wantedKeys.size) break
+                    }
+                }
+                val activeKeys = HashSet<String>(cwItems.size)
+                val out = ArrayList<ContinueWatchingResolvedDisplayItem>(cwItems.size)
+                for (i in cwItems.indices) {
+                    val item = cwItems[i]
+                    val key = continueWatchingItemKey(item) ?: continue
+                    val resolved = resolvedByWantedKey[key] ?: continue
+                    activeKeys += key
+                    val projected = when (item) {
+                        is ContinueWatchingItem.InProgress -> projectionCache.projectCwInProgress(resolved, item)
+                        is ContinueWatchingItem.NextUp -> projectionCache.projectCwNextUp(resolved, item)
+                    }
+                    out += projected
+                }
+                projectionCache.retainOnlyContinueWatchingItems(activeKeys)
+                projectionCache.internContinueWatchingList(out)
+            }
+
+    /**
+     * Derives the home `itemKey` (apiType + content id) for a [ContinueWatchingItem].
+     * Used by [resolvedContinueWatchingItemsFlow] to join the CW list with the
+     * resolved home surface.
+     */
+    private fun continueWatchingItemKey(item: ContinueWatchingItem): String? = when (item) {
+        is ContinueWatchingItem.InProgress -> homeDisplayItemKey(item.progress.contentType, item.progress.contentId)
+        is ContinueWatchingItem.NextUp -> homeDisplayItemKey(item.info.contentType, item.info.contentId)
+    }
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
@@ -573,6 +651,7 @@ class HomeViewModel @Inject constructor(
         observeInstalledAddons()
         observeResolvedRailRows()
         observeResolvedHeroItems()
+        observeResolvedContinueWatchingItems()
     }
 
     private fun observeResolvedRailRows() {
@@ -595,6 +674,20 @@ class HomeViewModel @Inject constructor(
             .onEach { items ->
                 if (_resolvedHeroItems.value !== items) {
                     _resolvedHeroItems.value = items
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    // Plan B Surface 4 Phase 2 — collects [resolvedContinueWatchingItemsFlow]
+    // into [_resolvedContinueWatchingItems], short-circuiting redundant pushes
+    // via the `===` guard so unchanged content does not retrigger Compose.
+    // Mirrors observeResolvedHeroItems().
+    private fun observeResolvedContinueWatchingItems() {
+        resolvedContinueWatchingItemsFlow
+            .onEach { items ->
+                if (_resolvedContinueWatchingItems.value !== items) {
+                    _resolvedContinueWatchingItems.value = items
                 }
             }
             .launchIn(viewModelScope)
