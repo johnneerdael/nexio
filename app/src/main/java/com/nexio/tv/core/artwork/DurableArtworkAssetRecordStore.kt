@@ -5,13 +5,17 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.integration.IntegrationProvider
+import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -70,23 +74,30 @@ class DurableArtworkAssetRecordStore(
             return
         }
 
-        val raw = try {
-            file.readText()
-        } catch (exception: Exception) {
-            loadFailure = "Unable to read ${file.path}: ${exception.message}"
-            loaded = true
-            return
-        }
-        if (raw.isBlank()) {
-            loaded = true
-            return
-        }
-
+        // CLAUDE.md hard rule #3: streaming read. The previous implementation
+        // used `file.readText()` + `JsonParser.parseString(raw).asJsonObject`
+        // which materialised the entire artwork-asset-record file as a String
+        // (and pinned it through the parse via StringReader). With many tens of
+        // thousands of artwork records this was a multi-MB cold-start spike.
         val recordElements = try {
-            val storeJson = JsonParser.parseString(raw).asJsonObject
-            val schemaVersion = requireNotNull(storeJson.intOrNull("schemaVersion"))
-            require(schemaVersion == SCHEMA_VERSION) { "Unsupported artwork asset record schema $schemaVersion" }
-            storeJson.requiredArray("records")
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            loaded = true
+                            return
+                        }
+                        val storeJson = gson.fromJson<JsonObject>(reader, JsonObject::class.java)
+                            ?: run { loaded = true; return }
+                        val schemaVersion = requireNotNull(storeJson.intOrNull("schemaVersion"))
+                        require(schemaVersion == SCHEMA_VERSION) {
+                            "Unsupported artwork asset record schema $schemaVersion"
+                        }
+                        storeJson.requiredArray("records")
+                    }
+                }
+            }
         } catch (exception: Exception) {
             recordsByAsset.clear()
             latestByDecision.clear()
