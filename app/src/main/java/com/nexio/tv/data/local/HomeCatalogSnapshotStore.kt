@@ -105,6 +105,15 @@ class HomeCatalogSnapshotStore private constructor(
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 4
+        // Persisted-snapshot bounds. The on-disk JSON is restored at startup as a
+        // first-paint cache; the network refresh that follows replaces it. The
+        // cache only needs enough rows/items to seed an initial paint, not the
+        // entire pagination history. Without bounds, the file grew unbounded
+        // across sessions (observed: 145.97 MB on disk after a few sessions,
+        // 9,260 CatalogRow + 184,907 MetaPreview live after load, 134 MB/GC churn).
+        private const val MAX_PERSISTED_CATALOG_ROWS = 200
+        private const val MAX_PERSISTED_ITEMS_PER_ROW = 100
+        private const val MAX_HERO_ITEMS = 50
         private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
         private const val ARTWORK_ASSET_PREFIX = "nexio-artwork://asset/"
         private const val ARTWORK_REF_SCHEME = "nexio-artwork:"
@@ -964,17 +973,65 @@ class HomeCatalogSnapshotStore private constructor(
                     "catalogRows=$droppedCatalogRows fullCatalogRows=$droppedFullCatalogRows heroItems=$droppedHeroItems"
             )
         }
+        // Hard caps to keep the persisted snapshot bounded. Without them the file
+        // grows monotonically across sessions: each run inflates whatever was
+        // written last time and re-persists at least that much (often more, after
+        // pagination loads / discovery refreshes), and the next read inflates the
+        // bigger file. Heap dump on PID 29380 caught the file at 145.97 MB on disk
+        // — 9,260 CatalogRow + 184,907 MetaPreview live instances after load,
+        // driving 134 MB/GC AllocSpace churn. The user-facing rails normally show
+        // tens of items per rail; the durable cache only needs enough to seed a
+        // first paint while the network refresh runs.
+        val cappedCatalogRows = sanitizedCatalogRows.capRowsAndItems()
+        val cappedFullCatalogRows = sanitizedFullCatalogRows.capRowsAndItems()
+        val cappedHeroItems = if (sanitizedHeroItems.size > MAX_HERO_ITEMS) {
+            sanitizedHeroItems.subList(0, MAX_HERO_ITEMS)
+        } else {
+            sanitizedHeroItems
+        }
+        if (sanitizedCatalogRows.size != cappedCatalogRows.size ||
+            sanitizedFullCatalogRows.size != cappedFullCatalogRows.size ||
+            sanitizedHeroItems.size != cappedHeroItems.size
+        ) {
+            Log.w(
+                TAG,
+                "Capped persisted home snapshot: " +
+                    "catalogRows ${sanitizedCatalogRows.size} -> ${cappedCatalogRows.size}, " +
+                    "fullCatalogRows ${sanitizedFullCatalogRows.size} -> ${cappedFullCatalogRows.size}, " +
+                    "heroItems ${sanitizedHeroItems.size} -> ${cappedHeroItems.size}"
+            )
+        }
         traceState.emitIfNeeded()
 
         return SnapshotSanitizeResult(
             snapshot = Snapshot(
-                catalogRows = sanitizedCatalogRows,
-                fullCatalogRows = sanitizedFullCatalogRows,
-                heroItems = sanitizedHeroItems,
+                catalogRows = cappedCatalogRows,
+                fullCatalogRows = cappedFullCatalogRows,
+                heroItems = cappedHeroItems,
                 orderedGroupKeys = orderedGroupKeys.distinct()
             ),
             providerTagMismatchExemptPosterRefs = traceState.providerTagMismatchExemptPosterRefs.toSet()
         )
+    }
+
+    private fun List<CatalogRow>.capRowsAndItems(): List<CatalogRow> {
+        val capped = if (size > MAX_PERSISTED_CATALOG_ROWS) subList(0, MAX_PERSISTED_CATALOG_ROWS) else this
+        // Avoid allocating a new list / new CatalogRow if no row exceeds the item cap.
+        var anyItemCapped = false
+        for (i in capped.indices) {
+            if (capped[i].items.size > MAX_PERSISTED_ITEMS_PER_ROW) { anyItemCapped = true; break }
+        }
+        if (!anyItemCapped) return capped
+        val out = ArrayList<CatalogRow>(capped.size)
+        for (i in capped.indices) {
+            val row = capped[i]
+            out += if (row.items.size > MAX_PERSISTED_ITEMS_PER_ROW) {
+                row.copy(items = row.items.subList(0, MAX_PERSISTED_ITEMS_PER_ROW))
+            } else {
+                row
+            }
+        }
+        return out
     }
 
     private fun sanitizeCatalogRows(
