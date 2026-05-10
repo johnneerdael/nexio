@@ -1551,6 +1551,10 @@ class MetaDetailsViewModel @Inject constructor(
                     advancedLanguage = document.advanced.language,
                     selectedLanguage = document.localization.selectedLanguage,
                     existing = updated.language
+                ),
+                originalLanguage = mergeOriginalLanguageForTest(
+                    advancedOriginalLanguage = document.advanced.originalLanguage,
+                    existing = updated.originalLanguage
                 )
             )
         }
@@ -1623,6 +1627,7 @@ class MetaDetailsViewModel @Inject constructor(
                 selectedLanguage = localization.selectedLanguage,
                 existing = null
             ),
+            originalLanguage = advanced.originalLanguage,
             ageRating = advanced.ageRating,
             countries = advanced.countries.takeIf { it.isNotEmpty() },
             castMembers = people?.cast.orEmpty(),
@@ -3408,6 +3413,7 @@ private fun ResolvedDetailDisplayDocument.toMeta(contentId: String, contentType:
             selectedLanguage = localization.selectedLanguage,
             existing = null
         ),
+        originalLanguage = advanced.originalLanguage,
         links = emptyList(),
         trailerYtIds = trailer.fallbackTrailerYtIds,
         artwork = artwork.takeUnless { it.poster == null && it.backdrop == null && it.logo == null && it.thumbnail == null }
@@ -3481,3 +3487,17 @@ internal fun mergeProductionLanguageForTest(
     @Suppress("UNUSED_PARAMETER") selectedLanguage: String?,
     existing: String?
 ): String? = advancedLanguage ?: existing
+
+/**
+ * Merge helper for [Meta.originalLanguage] / [TvMetadataEnrichment.originalLanguage].
+ *
+ * Intentionally does NOT consult any UI-locale source — originalLanguage is a
+ * content property (the language the show was originally produced in), not a
+ * user-preference field. Falling back to selectedLanguage here would reproduce
+ * the same class of bug that Bug A (mergeProductionLanguageForTest) fixed for
+ * the production-language slot.
+ */
+internal fun mergeOriginalLanguageForTest(
+    advancedOriginalLanguage: String?,
+    existing: String?
+): String? = advancedOriginalLanguage ?: existing
