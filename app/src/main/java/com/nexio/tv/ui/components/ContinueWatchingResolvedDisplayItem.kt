@@ -2,61 +2,99 @@ package com.nexio.tv.ui.components
 
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
-import com.nexio.tv.data.repository.ContinueWatchingRecord
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.NextUpInfo
 
 /**
- * Continue-Watching-row-specific projection of [ResolvedDisplayItem].
+ * Per-surface projection for Continue Watching rows. Two variants mirror
+ * [ContinueWatchingItem]:
  *
- * Combines [ContinueWatchingRecord] (resume identity, progress, last-played
- * timing) with [ResolvedDisplayItem] (display fields, artwork) so CW cards
- * display authoritative artwork and metadata while preserving CW-specific
- * progress UI.
+ *  - [InProgress]: a resume row backed by [WatchProgress] (positionMs,
+ *    durationMs, episode info), display fields drawn from
+ *    [ResolvedDisplayItem].
+ *  - [NextUp]: a Next-Up row backed by [NextUpInfo] (season/episode
+ *    metadata, last-watched timestamp), display fields drawn from
+ *    [ResolvedDisplayItem].
  *
- * Per project rule #1, surfaces consume [ResolvedDisplayItem] (or an approved
- * per-surface projection) rather than raw `MetaPreview`. CW is a per-surface
- * projection: typed `posterRef` / `backdropRef` / `logoRef` are kept strict
- * (no cross-type fallback) — see the sibling `ModernHomeRowItem` for the same
- * convention.
+ * Per CLAUDE.md rule #1, surfaces consume [ResolvedDisplayItem] (or an
+ * approved per-surface projection) rather than raw `MetaPreview`. Typed
+ * `posterRef` / `backdropRef` / `logoRef` slots are kept strict (no
+ * cross-type fallback).
  */
 @Immutable
-data class ContinueWatchingResolvedDisplayItem(
-    val itemKey: String,
-    val contentId: String,
-    val title: String?,
-    val posterRef: ArtworkDisplayRef?,
-    val backdropRef: ArtworkDisplayRef?,
-    val logoRef: ArtworkDisplayRef?,
-    val rating: TitleRating?,
-    val record: ContinueWatchingRecord
-) {
-    /** Last-played playback position, in milliseconds. Reads from [record]. */
-    val positionMs: Long
-        get() = record.positionMs
+sealed class ContinueWatchingResolvedDisplayItem {
+    abstract val itemKey: String
+    abstract val contentId: String
+    abstract val title: String?
+    abstract val posterRef: ArtworkDisplayRef?
+    abstract val backdropRef: ArtworkDisplayRef?
+    abstract val logoRef: ArtworkDisplayRef?
+    abstract val rating: TitleRating?
 
-    /** Total content duration, in milliseconds. Reads from [record]. */
-    val durationMs: Long
-        get() = record.durationMs
+    /**
+     * Resume row. [source] carries CW-specific fields not on [ResolvedDisplayItem]
+     * (episode thumbnail/description, genres, releaseInfo, canonicalKey,
+     * streamFetchVideoId).
+     */
+    @Immutable
+    data class InProgress(
+        override val itemKey: String,
+        override val contentId: String,
+        override val title: String?,
+        override val posterRef: ArtworkDisplayRef?,
+        override val backdropRef: ArtworkDisplayRef?,
+        override val logoRef: ArtworkDisplayRef?,
+        override val rating: TitleRating?,
+        val source: ContinueWatchingItem.InProgress
+    ) : ContinueWatchingResolvedDisplayItem() {
+        val progress: WatchProgress get() = source.progress
+    }
 
-    /** Last-played timestamp (epoch ms), backed by [ContinueWatchingRecord.updatedAt]. */
-    val lastPlayedAtMs: Long
-        get() = record.updatedAt
+    /** Next-Up row. [source] carries the original [NextUpInfo]. */
+    @Immutable
+    data class NextUp(
+        override val itemKey: String,
+        override val contentId: String,
+        override val title: String?,
+        override val posterRef: ArtworkDisplayRef?,
+        override val backdropRef: ArtworkDisplayRef?,
+        override val logoRef: ArtworkDisplayRef?,
+        override val rating: TitleRating?,
+        val source: ContinueWatchingItem.NextUp
+    ) : ContinueWatchingResolvedDisplayItem() {
+        val info: NextUpInfo get() = source.info
+    }
 
     companion object {
-        fun from(
+        fun fromInProgress(
             resolved: ResolvedDisplayItem,
-            record: ContinueWatchingRecord
-        ): ContinueWatchingResolvedDisplayItem =
-            ContinueWatchingResolvedDisplayItem(
-                itemKey = resolved.itemKey,
-                contentId = resolved.contentId,
-                title = resolved.display.title,
-                posterRef = resolved.artwork.poster,
-                backdropRef = resolved.artwork.backdrop,
-                logoRef = resolved.artwork.logo,
-                rating = resolved.rating,
-                record = record
-            )
+            source: ContinueWatchingItem.InProgress
+        ): InProgress = InProgress(
+            itemKey = resolved.itemKey,
+            contentId = resolved.contentId,
+            title = resolved.display.title,
+            posterRef = resolved.artwork.poster,
+            backdropRef = resolved.artwork.backdrop,
+            logoRef = resolved.artwork.logo,
+            rating = resolved.rating,
+            source = source
+        )
+
+        fun fromNextUp(
+            resolved: ResolvedDisplayItem,
+            source: ContinueWatchingItem.NextUp
+        ): NextUp = NextUp(
+            itemKey = resolved.itemKey,
+            contentId = resolved.contentId,
+            title = resolved.display.title,
+            posterRef = resolved.artwork.poster,
+            backdropRef = resolved.artwork.backdrop,
+            logoRef = resolved.artwork.logo,
+            rating = resolved.rating,
+            source = source
+        )
     }
 }

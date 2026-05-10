@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +40,18 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
     // observeResolvedHeroItems' `===` guard relies on this so identical content
     // does not get pushed into the hero StateFlow on every upstream tick.
     private var lastHeroList: List<HeroDisplayItem>? = null
+    // Continue Watching projection cache (Plan B Surface 4 Phase 2). Two-key
+    // strategy keyed by itemKey; the cached triple records the source
+    // ContinueWatchingItem reference (since upstream HomeResolvedDisplayMapper
+    // memoizes ResolvedDisplayItem already, reference equality on
+    // `(resolved, source)` is sufficient).
+    private val cwInProgressItemCache =
+        mutableMapOf<String, Triple<ResolvedDisplayItem, ContinueWatchingItem.InProgress, ContinueWatchingResolvedDisplayItem.InProgress>>()
+    private val cwNextUpItemCache =
+        mutableMapOf<String, Triple<ResolvedDisplayItem, ContinueWatchingItem.NextUp, ContinueWatchingResolvedDisplayItem.NextUp>>()
+    // Single-slot cache of the most recently emitted Continue Watching list.
+    // Same rationale as [lastRailsList] / [lastHeroList].
+    private var lastContinueWatchingList: List<ContinueWatchingResolvedDisplayItem>? = null
 
     @Synchronized
     fun projectItem(resolved: ResolvedDisplayItem): ModernHomeRowItem {
@@ -137,6 +150,72 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
             if (allSame) return prior
         }
         lastHeroList = items
+        return items
+    }
+
+    /**
+     * Returns a [ContinueWatchingResolvedDisplayItem.InProgress] for [resolved] paired with
+     * [source], reusing the prior projection when both the source [ResolvedDisplayItem] and
+     * [ContinueWatchingItem.InProgress] references are unchanged. Mirrors [projectHero] but
+     * for the CW resume surface — see
+     * [ContinueWatchingResolvedDisplayItem.fromInProgress] for projection rules.
+     */
+    @Synchronized
+    fun projectCwInProgress(
+        resolved: ResolvedDisplayItem,
+        source: ContinueWatchingItem.InProgress
+    ): ContinueWatchingResolvedDisplayItem.InProgress {
+        val cached = cwInProgressItemCache[resolved.itemKey]
+        if (cached != null && cached.first === resolved && cached.second === source) return cached.third
+        val fresh = ContinueWatchingResolvedDisplayItem.fromInProgress(resolved, source)
+        cwInProgressItemCache[resolved.itemKey] = Triple(resolved, source, fresh)
+        return fresh
+    }
+
+    /**
+     * Returns a [ContinueWatchingResolvedDisplayItem.NextUp] for [resolved] paired with
+     * [source], reusing the prior projection when both source references are unchanged.
+     */
+    @Synchronized
+    fun projectCwNextUp(
+        resolved: ResolvedDisplayItem,
+        source: ContinueWatchingItem.NextUp
+    ): ContinueWatchingResolvedDisplayItem.NextUp {
+        val cached = cwNextUpItemCache[resolved.itemKey]
+        if (cached != null && cached.first === resolved && cached.second === source) return cached.third
+        val fresh = ContinueWatchingResolvedDisplayItem.fromNextUp(resolved, source)
+        cwNextUpItemCache[resolved.itemKey] = Triple(resolved, source, fresh)
+        return fresh
+    }
+
+    @Synchronized
+    fun retainOnlyContinueWatchingItems(activeItemKeys: Set<String>) {
+        cwInProgressItemCache.keys.retainAll(activeItemKeys)
+        cwNextUpItemCache.keys.retainAll(activeItemKeys)
+    }
+
+    /**
+     * Continue Watching list counterpart to [internHeroList] / [internRailsList].
+     * Reuses the prior emission's outer list reference when every element is
+     * reference-identical, so the consumer's `===` guard against
+     * `_resolvedContinueWatchingItems.value` short-circuits when content is unchanged.
+     */
+    @Synchronized
+    fun internContinueWatchingList(
+        items: List<ContinueWatchingResolvedDisplayItem>
+    ): List<ContinueWatchingResolvedDisplayItem> {
+        val prior = lastContinueWatchingList
+        if (prior != null && prior.size == items.size) {
+            var allSame = true
+            for (i in items.indices) {
+                if (prior[i] !== items[i]) {
+                    allSame = false
+                    break
+                }
+            }
+            if (allSame) return prior
+        }
+        lastContinueWatchingList = items
         return items
     }
 }

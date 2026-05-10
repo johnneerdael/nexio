@@ -10,7 +10,6 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
-import com.nexio.tv.data.repository.ContinueWatchingRecord
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.ProviderIds
@@ -18,18 +17,21 @@ import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
-import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TrailerDisplayState
+import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.NextUpInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ContinueWatchingResolvedDisplayItemTest {
 
     @Test
-    fun `from maps display fields, artwork, and rating from resolved`() {
+    fun `fromInProgress maps display fields, artwork, and rating from resolved`() {
         val poster = artworkRef("poster:1", ArtworkType.POSTER)
         val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
         val logo = artworkRef("logo:1", ArtworkType.LOGO)
@@ -38,9 +40,9 @@ class ContinueWatchingResolvedDisplayItemTest {
             artwork = ArtworkBundle(poster = poster, backdrop = backdrop, logo = logo),
             rating = rating
         )
-        val record = continueWatchingRecord()
+        val source = inProgressItem()
 
-        val item = ContinueWatchingResolvedDisplayItem.from(resolved, record)
+        val item = ContinueWatchingResolvedDisplayItem.fromInProgress(resolved, source)
 
         assertEquals("movie:tmdb:550", item.itemKey)
         assertEquals("tmdb:550", item.contentId)
@@ -49,25 +51,26 @@ class ContinueWatchingResolvedDisplayItemTest {
         assertSame(backdrop, item.backdropRef)
         assertSame(logo, item.logoRef)
         assertSame(rating, item.rating)
-        assertSame(record, item.record)
+        assertSame(source, item.source)
     }
 
     @Test
-    fun `from threads record through unchanged`() {
-        val record = continueWatchingRecord()
-        val item = ContinueWatchingResolvedDisplayItem.from(
+    fun `fromInProgress threads source through unchanged and exposes progress getter`() {
+        val source = inProgressItem()
+        val item = ContinueWatchingResolvedDisplayItem.fromInProgress(
             resolvedItem(artwork = ArtworkBundle(), rating = null),
-            record
+            source
         )
 
-        assertSame(record, item.record)
+        assertSame(source, item.source)
+        assertSame(source.progress, item.progress)
     }
 
     @Test
-    fun `null artwork and rating from resolved propagate as null`() {
-        val item = ContinueWatchingResolvedDisplayItem.from(
+    fun `fromInProgress with null artwork and rating from resolved propagates as null`() {
+        val item = ContinueWatchingResolvedDisplayItem.fromInProgress(
             resolvedItem(artwork = ArtworkBundle(), rating = null),
-            continueWatchingRecord()
+            inProgressItem()
         )
 
         assertNull(item.posterRef)
@@ -77,24 +80,56 @@ class ContinueWatchingResolvedDisplayItemTest {
     }
 
     @Test
-    fun `getters read from underlying record`() {
-        val record = continueWatchingRecord(
-            positionMs = 1_234L,
-            durationMs = 5_678L,
-            updatedAt = 9_999L
+    fun `fromNextUp maps display fields, artwork, and rating from resolved`() {
+        val poster = artworkRef("poster:1", ArtworkType.POSTER)
+        val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
+        val logo = artworkRef("logo:1", ArtworkType.LOGO)
+        val rating = TitleRating(7.2, TitleRatingSource.TMDB)
+        val resolved = resolvedItem(
+            artwork = ArtworkBundle(poster = poster, backdrop = backdrop, logo = logo),
+            rating = rating
         )
-        val item = ContinueWatchingResolvedDisplayItem.from(
-            resolvedItem(artwork = ArtworkBundle(), rating = null),
-            record
-        )
+        val source = nextUpItem()
 
-        assertEquals(1_234L, item.positionMs)
-        assertEquals(5_678L, item.durationMs)
-        assertEquals(9_999L, item.lastPlayedAtMs)
+        val item = ContinueWatchingResolvedDisplayItem.fromNextUp(resolved, source)
+
+        assertEquals("movie:tmdb:550", item.itemKey)
+        assertEquals("tmdb:550", item.contentId)
+        assertEquals("Fight Club", item.title)
+        assertSame(poster, item.posterRef)
+        assertSame(backdrop, item.backdropRef)
+        assertSame(logo, item.logoRef)
+        assertSame(rating, item.rating)
+        assertSame(source, item.source)
     }
 
     @Test
-    fun `content-equal inputs produce equal projections via data-class equality`() {
+    fun `fromNextUp threads source through unchanged and exposes info getter`() {
+        val source = nextUpItem()
+        val item = ContinueWatchingResolvedDisplayItem.fromNextUp(
+            resolvedItem(artwork = ArtworkBundle(), rating = null),
+            source
+        )
+
+        assertSame(source, item.source)
+        assertSame(source.info, item.info)
+    }
+
+    @Test
+    fun `fromInProgress and fromNextUp produce sealed class instances`() {
+        val resolved = resolvedItem(artwork = ArtworkBundle(), rating = null)
+        val ip = ContinueWatchingResolvedDisplayItem.fromInProgress(resolved, inProgressItem())
+        val nu = ContinueWatchingResolvedDisplayItem.fromNextUp(resolved, nextUpItem())
+
+        val ipBase: ContinueWatchingResolvedDisplayItem = ip
+        val nuBase: ContinueWatchingResolvedDisplayItem = nu
+
+        assertTrue(ipBase is ContinueWatchingResolvedDisplayItem.InProgress)
+        assertTrue(nuBase is ContinueWatchingResolvedDisplayItem.NextUp)
+    }
+
+    @Test
+    fun `content-equal InProgress inputs produce equal projections via data-class equality`() {
         val poster = artworkRef("poster:1", ArtworkType.POSTER)
         val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
         val logo = artworkRef("logo:1", ArtworkType.LOGO)
@@ -103,11 +138,32 @@ class ContinueWatchingResolvedDisplayItemTest {
 
         val resolvedA = resolvedItem(artwork = artwork, rating = rating)
         val resolvedB = resolvedItem(artwork = artwork, rating = rating)
-        val recordA = continueWatchingRecord()
-        val recordB = continueWatchingRecord()
+        val sourceA = inProgressItem()
+        val sourceB = inProgressItem()
 
-        val a = ContinueWatchingResolvedDisplayItem.from(resolvedA, recordA)
-        val b = ContinueWatchingResolvedDisplayItem.from(resolvedB, recordB)
+        val a = ContinueWatchingResolvedDisplayItem.fromInProgress(resolvedA, sourceA)
+        val b = ContinueWatchingResolvedDisplayItem.fromInProgress(resolvedB, sourceB)
+
+        assertNotSame(a, b)
+        assertEquals(a, b)
+        assertEquals(a.hashCode(), b.hashCode())
+    }
+
+    @Test
+    fun `content-equal NextUp inputs produce equal projections via data-class equality`() {
+        val poster = artworkRef("poster:1", ArtworkType.POSTER)
+        val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
+        val logo = artworkRef("logo:1", ArtworkType.LOGO)
+        val rating = TitleRating(7.2, TitleRatingSource.TMDB)
+        val artwork = ArtworkBundle(poster = poster, backdrop = backdrop, logo = logo)
+
+        val resolvedA = resolvedItem(artwork = artwork, rating = rating)
+        val resolvedB = resolvedItem(artwork = artwork, rating = rating)
+        val sourceA = nextUpItem()
+        val sourceB = nextUpItem()
+
+        val a = ContinueWatchingResolvedDisplayItem.fromNextUp(resolvedA, sourceA)
+        val b = ContinueWatchingResolvedDisplayItem.fromNextUp(resolvedB, sourceB)
 
         assertNotSame(a, b)
         assertEquals(a, b)
@@ -155,21 +211,48 @@ class ContinueWatchingResolvedDisplayItemTest {
         updatedAtMs = 1_000L
     )
 
-    private fun continueWatchingRecord(
+    private fun inProgressItem(
+        contentId: String = "tmdb:550",
         positionMs: Long = 1_000L,
         durationMs: Long = 5_000L,
-        updatedAt: Long = 1_700_000_000_000L
-    ): ContinueWatchingRecord = ContinueWatchingRecord(
-        profileId = 1,
-        parentId = "tmdb:550",
-        contentId = "tmdb:550",
-        provider = TrackingProvider.TRAKT,
-        routingVersion = 4,
-        positionMs = positionMs,
-        durationMs = durationMs,
-        episodeContext = null,
-        clickTimeDisplayMetadata = null,
-        source = ContinueWatchingRecord.Source.LOCAL,
-        updatedAt = updatedAt
+        lastWatched: Long = 1_700_000_000_000L
+    ): ContinueWatchingItem.InProgress = ContinueWatchingItem.InProgress(
+        progress = WatchProgress(
+            contentId = contentId,
+            contentType = "movie",
+            name = "Fight Club",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = contentId,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = positionMs,
+            duration = durationMs,
+            lastWatched = lastWatched
+        )
+    )
+
+    private fun nextUpItem(
+        contentId: String = "tmdb:550",
+        season: Int = 1,
+        episode: Int = 2,
+        lastWatched: Long = 1_700_000_000_000L
+    ): ContinueWatchingItem.NextUp = ContinueWatchingItem.NextUp(
+        info = NextUpInfo(
+            contentId = contentId,
+            contentType = "series",
+            name = "Fight Club",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "$contentId:$season:$episode",
+            season = season,
+            episode = episode,
+            episodeTitle = "Episode $episode",
+            thumbnail = null,
+            lastWatched = lastWatched
+        )
     )
 }
