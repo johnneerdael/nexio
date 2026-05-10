@@ -85,82 +85,19 @@ class HomeDisplayMetadataTest {
             )
         )
 
-        val applied = metadata.applyTo(base)
+        val applied = metadata.applyToPreview(base)
 
         assertEquals("nexio-artwork://asset/posterAsset", applied.poster)
         assertEquals("nexio-artwork://asset/backdropAsset", applied.background)
         assertEquals("nexio-artwork://asset/logoAsset", applied.logo)
     }
 
-    @Test
-    fun `mergeFallback preserves primary artwork bundle`() {
-        val artwork = ArtworkBundle(
-            poster = ArtworkDisplayRef.RuntimeAsset(
-                decisionKey = ArtworkDecisionKey("decision"),
-                assetKey = ArtworkAssetKey("asset"),
-                imageType = ArtworkType.POSTER,
-                selectedProvider = null,
-                sourceRole = ArtworkSourceRole.PRIMARY,
-                trace = ArtworkTrace.empty()
-            )
-        )
-
-        val merged = HomeDisplayMetadata(artwork = artwork).mergeFallback(
-            HomeDisplayMetadata(poster = "fallbackPoster")
-        )
-
-        assertEquals(artwork, merged.artwork)
-        assertEquals("nexio-artwork://asset/asset", merged.displayPoster)
-    }
-
-    @Test
-    fun `mergeFallback preserves fallback typed artwork when legacy display strings exist`() {
-        val fallbackArtwork = ArtworkBundle(
-            poster = ArtworkDisplayRef.RuntimeAsset(
-                decisionKey = ArtworkDecisionKey("fallbackDecision"),
-                assetKey = ArtworkAssetKey("fallbackAsset"),
-                imageType = ArtworkType.POSTER,
-                selectedProvider = null,
-                sourceRole = ArtworkSourceRole.PRIMARY,
-                trace = ArtworkTrace.empty()
-            )
-        )
-        val fallback = HomeDisplayMetadata(
-            poster = "fallbackPoster",
-            artwork = ArtworkBundle(
-                poster = fallbackArtwork.poster
-            )
-        )
-
-        val merged = HomeDisplayMetadata(poster = "primaryPoster").mergeFallback(fallback)
-
-        assertEquals(fallbackArtwork.poster, merged.artwork?.poster)
-        assertEquals("nexio-artwork://asset/fallbackAsset", merged.displayPoster)
-    }
-
-    @Test
-    fun `mergeFallback does not attach fallback poster provider tag to primary raw poster`() {
-        val merged = HomeDisplayMetadata(
-            poster = "primaryPoster",
-            posterProviderTag = null
-        ).mergeFallback(
-            HomeDisplayMetadata(
-                poster = "premiumPoster",
-                posterProviderTag = "rpdb"
-            )
-        )
-        val applied = merged.applyTo(
-            metaPreview().copy(
-                poster = "oldPremiumPoster",
-                posterProviderTag = "rpdb"
-            )
-        )
-
-        assertEquals("primaryPoster", merged.displayPoster)
-        assertNull(merged.posterProviderTag)
-        assertEquals("primaryPoster", applied.poster)
-        assertNull(applied.posterProviderTag)
-    }
+    // Phase 4 — 3 mergeFallback tests deleted alongside the mergeFallback
+    // extension function. Behavior covered (artwork bundle preservation in
+    // null-fallback merge, fallback poster provider tag gating, etc.) is
+    // now exercised through the rank-aware
+    // HomeRailProjectionReducer-based merge inside
+    // ContinueWatchingMetadataSnapshot.renderDisplayMetadata.
 
     @Test
     fun `toHomeDisplayMetadata and applyTo preserve tomatoes rating`() {
@@ -181,7 +118,7 @@ class HomeDisplayMetadataTest {
         )
 
         val displayMetadata = preview.toHomeDisplayMetadata()
-        val roundTripped = displayMetadata.applyTo(
+        val roundTripped = displayMetadata.applyToPreview(
             preview.copy(tomatoesRating = null)
         )
 
@@ -209,7 +146,7 @@ class HomeDisplayMetadataTest {
         )
 
         val displayMetadata = preview.toHomeDisplayMetadata()
-        val roundTripped = displayMetadata.applyTo(
+        val roundTripped = displayMetadata.applyToPreview(
             preview.copy(posterProviderTag = null)
         )
 
@@ -238,7 +175,7 @@ class HomeDisplayMetadataTest {
         val updated = HomeDisplayMetadata(
             poster = "primaryPoster",
             posterProviderTag = null
-        ).applyTo(preview)
+        ).applyToPreview(preview)
 
         assertEquals("primaryPoster", updated.poster)
         assertNull(updated.posterProviderTag)
@@ -264,7 +201,7 @@ class HomeDisplayMetadataTest {
         val updated = HomeDisplayMetadata(
             title = "Updated title",
             posterProviderTag = null
-        ).applyTo(preview)
+        ).applyToPreview(preview)
 
         assertEquals("premiumPoster", updated.poster)
         assertEquals("rpdb", updated.posterProviderTag)
@@ -288,7 +225,7 @@ class HomeDisplayMetadataTest {
         )
 
         val displayMetadata = preview.toHomeDisplayMetadata()
-        val roundTripped = displayMetadata.applyTo(
+        val roundTripped = displayMetadata.applyToPreview(
             preview.copy(imdbRating = null, ratingSource = TitleRatingSource.IMDB)
         )
 
@@ -345,7 +282,7 @@ class HomeDisplayMetadataTest {
             backdrop = "rawBackdrop",
             logo = "rawLogo",
             artwork = artwork
-        ).applyTo(base)
+        ).applyToPreview(base)
 
         assertEquals(artwork, applied.artwork)
         assertEquals("nexio-artwork://asset/applyPosterAsset", applied.poster)
@@ -363,7 +300,7 @@ class HomeDisplayMetadataTest {
 
         val applied = HomeDisplayMetadata(
             poster = "primaryRawPoster"
-        ).applyTo(base)
+        ).applyToPreview(base)
 
         assertEquals(fallbackArtwork.poster, applied.artwork?.poster)
         assertEquals("primaryRawPoster", applied.poster)
