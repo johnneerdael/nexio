@@ -62,27 +62,11 @@ import com.nexio.tv.domain.model.MetaPreview
  * which Phase A removed. After Phase C lands, `language` should never be
  * production-meaningful in any new write path.
  */
-fun chooseNavOriginalLanguage(item: MetaPreview): String? {
-    val result = item.originalLanguage ?: item.language
-    android.util.Log.w(
-        "LANG_TRACE",
-        "chooseNavOriginalLanguage(MetaPreview) id=${item.id} " +
-            "item.originalLanguage=${item.originalLanguage} " +
-            "item.language=${item.language} → result=$result"
-    )
-    return result
-}
+fun chooseNavOriginalLanguage(item: MetaPreview): String? =
+    item.originalLanguage ?: item.language
 
-fun chooseNavOriginalLanguage(meta: Meta): String? {
-    val result = meta.originalLanguage ?: meta.language
-    android.util.Log.w(
-        "LANG_TRACE",
-        "chooseNavOriginalLanguage(Meta) id=${meta.id} " +
-            "meta.originalLanguage=${meta.originalLanguage} " +
-            "meta.language=${meta.language} → result=$result"
-    )
-    return result
-}
+fun chooseNavOriginalLanguage(meta: Meta): String? =
+    meta.originalLanguage ?: meta.language
 
 @Composable
 fun NexioNavHost(
@@ -1339,12 +1323,6 @@ internal fun buildContinueWatchingStreamRoute(
 ): String {
     return when (item) {
         is ContinueWatchingItem.InProgress -> {
-            android.util.Log.w(
-                "LANG_TRACE",
-                "buildContinueWatchingStreamRoute InProgress " +
-                    "contentId=${item.progress.contentId} " +
-                    "displayMetadata.originalLanguage=${item.displayMetadata().originalLanguage}"
-            )
             Screen.Stream.createRoute(
                 videoId = item.progress.videoId,
                 streamVideoId = item.streamFetchVideoId,
@@ -1377,12 +1355,6 @@ internal fun buildContinueWatchingStreamRoute(
         }
 
         is ContinueWatchingItem.NextUp -> {
-            android.util.Log.w(
-                "LANG_TRACE",
-                "buildContinueWatchingStreamRoute NextUp " +
-                    "contentId=${item.info.contentId} " +
-                    "displayMetadata.originalLanguage=${item.displayMetadata().originalLanguage}"
-            )
             Screen.Stream.createRoute(
                 videoId = item.info.videoId,
                 streamVideoId = item.info.streamFetchVideoId,
@@ -1440,19 +1412,8 @@ internal suspend fun buildContinueWatchingStreamRouteWithHydration(
     val hydratedItem = item.withHydratedRuntimeMinutes(
         continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
     )
-    val preEnrichmentLang = hydratedItem.displayMetadata().originalLanguage
-    val needsEnrichment = preEnrichmentLang.isNullOrBlank()
-    android.util.Log.w(
-        "LANG_TRACE",
-        "buildContinueWatchingStreamRouteWithHydration pre lang=$preEnrichmentLang needsEnrichment=$needsEnrichment"
-    )
-    val finalItem = if (needsEnrichment) {
-        val enriched = resolveOriginalLanguageEnrichment(hydratedItem)
-        android.util.Log.w(
-            "LANG_TRACE",
-            "buildContinueWatchingStreamRouteWithHydration post-enrichment lang=${enriched.displayMetadata().originalLanguage}"
-        )
-        enriched
+    val finalItem = if (hydratedItem.displayMetadata().originalLanguage.isNullOrBlank()) {
+        resolveOriginalLanguageEnrichment(hydratedItem)
     } else {
         hydratedItem
     }
