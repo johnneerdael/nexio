@@ -26,6 +26,7 @@ import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
@@ -1335,7 +1336,7 @@ class HomeViewModelFocusHydrationTest {
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
                 activeProfileSession = { profileSessionFlow.value }
             ),
-            catalogInventoryRepository = com.nexio.tv.data.repository.CatalogInventoryRepository(),
+            catalogInventoryRepository = CatalogInventoryRepository(),
             projectionCache = ResolvedDisplayProjectionCache(),
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
