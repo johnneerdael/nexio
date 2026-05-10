@@ -31,6 +31,15 @@ data class Meta(
     val ageRating: String? = null,
     val country: String?,
     val awards: String?,
+    @Deprecated(
+        message = "Reading `language` for production-language decisions (audio targeting, " +
+            "stream filtering, original-language matching) is unsafe. This field has " +
+            "historically been overloaded with the user's UI-locale fetch language. " +
+            "Use `originalLanguage` instead. The field remains for cosmetic display " +
+            "in the detail-screen language badge (HeroSection); see " +
+            "docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md.",
+        replaceWith = ReplaceWith("originalLanguage")
+    )
     val language: String?,
     /**
      * Production language of the title. Distinct from [language] which has
