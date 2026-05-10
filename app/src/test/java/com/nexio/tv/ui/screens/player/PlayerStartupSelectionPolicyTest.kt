@@ -787,4 +787,61 @@ class PlayerStartupSelectionPolicyTest {
             decision
         )
     }
+
+    @Test
+    fun `findBestInternal SDH detection matches dash-CC suffix`() {
+        // "English-CC" lowercased is "english-cc". The current " cc " marker
+        // (space-cc-space) does not match this because the leading char is
+        // a hyphen, not a space. After the regex tightening, \bcc\b matches
+        // "cc" with word boundaries on both sides (start-of-string is a
+        // boundary; hyphen is a non-word char and therefore a boundary).
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English-CC", language = "en", isForced = false),
+            TrackInfo(index = 1, name = "English", language = "en", isForced = false)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `findBestInternal SDH detection matches CC-leading name`() {
+        // "CC English" lowercased is "cc english". The current " cc " marker
+        // does not match (no leading space). After regex tightening,
+        // \bcc\b matches at the start of the string.
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "CC English", language = "en", isForced = false),
+            TrackInfo(index = 1, name = "English", language = "en", isForced = false)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `findBestInternal SDH detection does not match cc inside another word`() {
+        // "Soccer commentary" lowercased contains "ccer commen…" — "cc" only
+        // appears as a substring of "soccer". \bcc\b requires word
+        // boundaries on both sides, so this track must NOT be classified
+        // as SDH. Track 0 stays the better pick over a forced fallback.
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Soccer commentary", language = "en", isForced = false),
+            TrackInfo(index = 1, name = "English (Forced)", language = "en", isForced = true)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(0, index)
+    }
 }

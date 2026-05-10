@@ -781,18 +781,22 @@ private fun isLikelyOriginalLanguageTrack(track: TrackInfo): Boolean {
 
 private val SDH_SUBTITLE_MARKERS: List<String> = listOf(
     "sdh",
-    "[cc]",
-    " cc ",
     "closed caption",
     "hearing impaired"
 )
+
+// Standalone "cc" token (Closed Captions). Word-boundary anchored so
+// "Soccer" / "accordion" do not match, but "[CC]", "(CC)", "English-CC",
+// "CC English", and "English CC" all match correctly.
+private val SDH_CC_TOKEN_REGEX: Regex = Regex("""\bcc\b""")
 
 private fun TrackInfo.isSdhSubtitle(): Boolean {
     val haystack = listOfNotNull(name, trackId)
         .joinToString(" ")
         .lowercase(Locale.ROOT)
     if (haystack.isBlank()) return false
-    return SDH_SUBTITLE_MARKERS.any { marker -> haystack.contains(marker) }
+    return SDH_SUBTITLE_MARKERS.any { marker -> haystack.contains(marker) } ||
+        SDH_CC_TOKEN_REGEX.containsMatchIn(haystack)
 }
 
 /**
