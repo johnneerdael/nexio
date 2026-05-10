@@ -222,6 +222,12 @@ class HomeViewModel @Inject constructor(
     // heroItems field on HomeUiState.
     internal val _displayHeroItems = MutableStateFlow<List<MetaPreview>>(emptyList())
     val displayHeroItems: StateFlow<List<MetaPreview>> = _displayHeroItems.asStateFlow()
+    // Continue watching items held outside [HomeUiState] (mirrors small Task 26 catalogRows
+    // pattern + cb59c1a5e heroItems pattern) so Compose's SnapshotStateRecord history does not
+    // pin prior `ContinueWatchingItem` lists alongside the current set. UI consumes this
+    // StateFlow directly; do not re-introduce a continueWatchingItems field on HomeUiState.
+    internal val _displayContinueWatchingItems = MutableStateFlow<List<ContinueWatchingItem>>(emptyList())
+    val displayContinueWatchingItems: StateFlow<List<ContinueWatchingItem>> = _displayContinueWatchingItems.asStateFlow()
     // Resolved hero projection (Plan B Task 9). Held outside [HomeUiState] for the
     // same reason as [_displayHeroItems] and [_displayCatalogRows] — Compose's
     // SnapshotStateRecord chain pins prior versions of every observed list field

@@ -279,9 +279,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         state = "loading",
                         reason = "snapshot_observe_started"
                     )
+                    _displayContinueWatchingItems.value = emptyList()
                     _uiState.update { state ->
                         state.copy(
-                            continueWatchingItems = emptyList(),
                             traktUpNextItems = emptyList(),
                             homeReadiness = HomeInitialReadiness
                                 .started(sessionId = session.sessionId, profileId = session.profileId)
@@ -301,9 +301,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         state = "failed_nonblocking",
                         reason = "snapshot_error"
                     )
+                    _displayContinueWatchingItems.value = emptyList()
                     _uiState.update { state ->
                         state.copy(
-                            continueWatchingItems = emptyList(),
                             traktUpNextItems = emptyList(),
                             homeReadiness = state.homeReadiness
                                 .forHomeSession(session)
@@ -429,10 +429,15 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         "first_snapshot"
     }
     val readinessBeforePublish = _uiState.value.homeReadiness
+    if (snapshotVersion == continueWatchingSnapshotVersion) {
+        if (_displayContinueWatchingItems.value != items) {
+            _displayContinueWatchingItems.value = items
+        }
+    }
     _uiState.update { state ->
         if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
         if (
-            state.continueWatchingItems == items &&
+            _displayContinueWatchingItems.value == items &&
             state.traktUpNextItems == traktUpNextItems &&
             state.initialContinueWatchingResolved &&
             state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
@@ -440,7 +445,6 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
             state
         } else {
             state.copy(
-                continueWatchingItems = items,
                 traktUpNextItems = traktUpNextItems,
                 homeReadiness = state.homeReadiness.markContinueWatchingGateResolved(
                     session = session,
@@ -495,10 +499,15 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 val readinessBeforeEnrichedPublish = _uiState.value.homeReadiness
+                if (snapshotVersion == continueWatchingSnapshotVersion) {
+                    if (_displayContinueWatchingItems.value != enrichedItems) {
+                        _displayContinueWatchingItems.value = enrichedItems
+                    }
+                }
                 _uiState.update { state ->
                     if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
                     if (
-                        state.continueWatchingItems == enrichedItems &&
+                        _displayContinueWatchingItems.value == enrichedItems &&
                         state.traktUpNextItems == enrichedTraktItems &&
                         state.initialContinueWatchingResolved &&
                         state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
@@ -506,7 +515,6 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                         state
                     } else {
                         state.copy(
-                            continueWatchingItems = enrichedItems,
                             traktUpNextItems = enrichedTraktItems,
                             homeReadiness = state.homeReadiness.markContinueWatchingGateResolved(
                                 session = session,
@@ -811,15 +819,18 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
 ) {
     if (isNextUp) {
         val targetId = nextUpDismissKey(contentId)
+        val filteredContinueWatching = _displayContinueWatchingItems.value.filterNot { item ->
+            when (item) {
+                is ContinueWatchingItem.NextUp ->
+                    nextUpDismissKey(item.info.contentId) == targetId
+                is ContinueWatchingItem.InProgress -> false
+            }
+        }
+        if (_displayContinueWatchingItems.value != filteredContinueWatching) {
+            _displayContinueWatchingItems.value = filteredContinueWatching
+        }
         _uiState.update { state ->
             state.copy(
-                continueWatchingItems = state.continueWatchingItems.filterNot { item ->
-                    when (item) {
-                        is ContinueWatchingItem.NextUp ->
-                            nextUpDismissKey(item.info.contentId) == targetId
-                        is ContinueWatchingItem.InProgress -> false
-                    }
-                },
                 traktUpNextItems = state.traktUpNextItems.filterNot { item ->
                     nextUpDismissKey(item.info.contentId) == targetId
                 }
@@ -838,7 +849,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
         return
     }
     // For InProgress items: find the matching resume entry for optimistic removal + rollback.
-    val capturedProgress = _uiState.value.continueWatchingItems
+    val capturedProgress = _displayContinueWatchingItems.value
         .filterIsInstance<ContinueWatchingItem.InProgress>()
         .firstOrNull { item ->
             item.progress.contentId == contentId &&
@@ -878,12 +889,15 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
 internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueWatchingItem) {
     val nextUpTargetId: String? = if (item is ContinueWatchingItem.NextUp) {
         val targetId = nextUpDismissKey(item.info.contentId)
+        val filteredContinueWatching = _displayContinueWatchingItems.value.filterNot { current ->
+            current is ContinueWatchingItem.NextUp &&
+                nextUpDismissKey(current.info.contentId) == targetId
+        }
+        if (_displayContinueWatchingItems.value != filteredContinueWatching) {
+            _displayContinueWatchingItems.value = filteredContinueWatching
+        }
         _uiState.update { state ->
             state.copy(
-                continueWatchingItems = state.continueWatchingItems.filterNot { current ->
-                    current is ContinueWatchingItem.NextUp &&
-                        nextUpDismissKey(current.info.contentId) == targetId
-                },
                 traktUpNextItems = state.traktUpNextItems.filterNot { current ->
                     nextUpDismissKey(current.info.contentId) == targetId
                 }
@@ -1235,7 +1249,7 @@ private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toContinueWatchingN
 
 internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
     val settings = currentTmdbSettings
-    val currentItems = _uiState.value.continueWatchingItems
+    val currentItems = _displayContinueWatchingItems.value
     val currentTraktItems = _uiState.value.traktUpNextItems
     if (!isNonPlaybackHomeWorkAllowed()) return
     if (!shouldEnrichContinueWatchingProviderMetadata(currentItems, currentTraktItems, settings)) return
@@ -1248,9 +1262,11 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
             val enrichedItems = enrichContinueWatchingItems(currentItems, settings)
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
             val enrichedTraktItems = enrichContinueWatchingNextUpItems(currentTraktItems, settings)
+            if (_displayContinueWatchingItems.value != enrichedItems) {
+                _displayContinueWatchingItems.value = enrichedItems
+            }
             _uiState.update { state ->
                 state.copy(
-                    continueWatchingItems = enrichedItems,
                     traktUpNextItems = enrichedTraktItems
                 )
             }

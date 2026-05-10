@@ -106,14 +106,15 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
 internal fun hasRenderableHomeContent(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
-    heroItems: List<MetaPreview>
+    heroItems: List<MetaPreview>,
+    continueWatchingItems: List<ContinueWatchingItem>
 ): Boolean {
     val hasCatalogContent = catalogRows.any { row ->
         row.items.isNotEmpty() ||
             (uiState.homeLayout == HomeLayout.MODERN && row.isLoading)
     }
     return hasCatalogContent ||
-        uiState.continueWatchingItems.isNotEmpty() ||
+        continueWatchingItems.isNotEmpty() ||
         heroItems.isNotEmpty()
 }
 
@@ -121,11 +122,12 @@ internal fun shouldShowHomeEmptyState(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     heroItems: List<MetaPreview>,
+    continueWatchingItems: List<ContinueWatchingItem>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     return !startupContentGateTimedOut &&
-        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItems, startupContentGateTimedOut) &&
-        !hasRenderableHomeContent(uiState, catalogRows, heroItems) &&
+        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItems, continueWatchingItems, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState, catalogRows, heroItems, continueWatchingItems) &&
         !uiState.isLoading &&
         uiState.error == null
 }
@@ -161,11 +163,12 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
     val displayHeroItems by viewModel.displayHeroItems.collectAsStateWithLifecycle()
+    val displayContinueWatchingItems by viewModel.displayContinueWatchingItems.collectAsStateWithLifecycle()
     val resolvedHeroItems by viewModel.resolvedHeroItems.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, displayHeroItems)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
         mutableStateOf(false)
@@ -173,11 +176,12 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, displayHeroItems, startupContentGateTimedOut)
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems, startupContentGateTimedOut)
     val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
         uiState = uiState,
         catalogRows = displayCatalogRows,
         heroItems = displayHeroItems,
+        continueWatchingItems = displayContinueWatchingItems,
         startupContentGateTimedOut = false
     )
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
@@ -328,7 +332,7 @@ fun HomeScreen(
                 }
             }
 
-            shouldShowHomeEmptyState(uiState, displayCatalogRows, displayHeroItems, startupContentGateTimedOut) -> {
+            shouldShowHomeEmptyState(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems, startupContentGateTimedOut) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -363,6 +367,7 @@ fun HomeScreen(
                             uiState = uiState,
                             displayCatalogRows = displayCatalogRows,
                             displayHeroItems = displayHeroItems,
+                            displayContinueWatchingItems = displayContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
@@ -377,6 +382,7 @@ fun HomeScreen(
                         HomeLayout.GRID -> GridHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
+                            displayContinueWatchingItems = displayContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
                             posterCardStyle = posterCardStyle,
                             onNavigateToDetail = onNavigateToDetail,
@@ -391,6 +397,7 @@ fun HomeScreen(
                         HomeLayout.MODERN -> ModernHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
+                            displayContinueWatchingItems = displayContinueWatchingItems,
                             idleScreensaverVisible = idleScreensaverVisible,
                             startupSplashVisible = startupSplashVisible,
                             externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
@@ -662,6 +669,7 @@ private fun ClassicHomeRoute(
     uiState: HomeUiState,
     displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     displayHeroItems: List<MetaPreview>,
+    displayContinueWatchingItems: List<ContinueWatchingItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -680,6 +688,7 @@ private fun ClassicHomeRoute(
         uiState = uiState,
         catalogRows = displayCatalogRows,
         heroItems = displayHeroItems,
+        continueWatchingItems = displayContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
@@ -721,6 +730,7 @@ private fun ClassicHomeRoute(
 private fun GridHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    displayContinueWatchingItems: List<ContinueWatchingItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
     posterCardStyle: PosterCardStyle,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -734,6 +744,7 @@ private fun GridHomeRoute(
     val gridFocusState by viewModel.gridFocusState.collectAsStateWithLifecycle()
     GridHomeContent(
         uiState = uiState,
+        continueWatchingItems = displayContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,
         gridFocusState = gridFocusState,
@@ -770,6 +781,7 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    displayContinueWatchingItems: List<ContinueWatchingItem>,
     idleScreensaverVisible: Boolean,
     startupSplashVisible: Boolean,
     externalTrailerTakeoverActive: Boolean,
@@ -785,7 +797,7 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val modernContentState = remember(
-        uiState.continueWatchingItems,
+        displayContinueWatchingItems,
         uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
@@ -810,7 +822,7 @@ private fun ModernHomeRoute(
         viewModel.trailerMetadataAvailableKeys
     ) {
         ModernHomeContentState(
-            continueWatchingItems = uiState.continueWatchingItems,
+            continueWatchingItems = displayContinueWatchingItems,
             modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,

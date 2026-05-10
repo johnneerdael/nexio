@@ -55,10 +55,11 @@ fun shouldShowFullHomeLoadingGate(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     heroItems: List<com.nexio.tv.domain.model.MetaPreview>,
+    continueWatchingItems: List<ContinueWatchingItem>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     if (uiState.error != null || startupContentGateTimedOut) return false
-    val hasRenderableContent = hasRenderableHomeContent(uiState, catalogRows, heroItems)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, catalogRows, heroItems, continueWatchingItems)
     if (!hasRenderableContent) {
         return uiState.isLoading ||
             (

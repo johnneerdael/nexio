@@ -214,11 +214,15 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 @OptIn(FlowPreview::class)
 internal fun HomeViewModel.observeModernHomePresentationPipeline() {
     viewModelScope.launch {
-        combine(_uiState, _displayCatalogRows) { state, catalogRows ->
+        combine(
+            _uiState,
+            _displayCatalogRows,
+            _displayContinueWatchingItems
+        ) { state, catalogRows, continueWatchingItems ->
             ModernHomePresentationInput(
                 catalogRows = catalogRows,
                 resolvedRailRows = state.resolvedRailRows,
-                continueWatchingItems = state.continueWatchingItems,
+                continueWatchingItems = continueWatchingItems,
                 useLandscapePosters = state.modernLandscapePostersEnabled,
                 showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                 continueWatchingTitle = appContext.getString(R.string.continue_watching),

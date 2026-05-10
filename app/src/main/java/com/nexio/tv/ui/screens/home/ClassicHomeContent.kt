@@ -46,6 +46,7 @@ fun ClassicHomeContent(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     heroItems: List<MetaPreview>,
+    continueWatchingItems: List<ContinueWatchingItem>,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
     trailerPreviewUrls: Map<String, String>,
@@ -220,10 +221,10 @@ fun ClassicHomeContent(
             }
         }
 
-        if (uiState.continueWatchingItems.isNotEmpty()) {
+        if (continueWatchingItems.isNotEmpty()) {
             item(key = "continue_watching", contentType = "continue_watching") {
                 ContinueWatchingSection(
-                    items = uiState.continueWatchingItems,
+                    items = continueWatchingItems,
                     onItemClick = { item ->
                         onContinueWatchingClick(item)
                     },
@@ -292,7 +293,7 @@ fun ClassicHomeContent(
             val shouldInitialFocusFirstCatalogRow =
                 shouldRequestInitialFocus &&
                     !heroVisible &&
-                    uiState.continueWatchingItems.isEmpty() &&
+                    continueWatchingItems.isEmpty() &&
                     index == 0
             val focusedItemIndex = when {
                 shouldRestoreFocus -> focusState.focusedItemIndex
