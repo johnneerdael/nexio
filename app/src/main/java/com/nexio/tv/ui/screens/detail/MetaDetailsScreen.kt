@@ -102,7 +102,6 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.NextToWatch
@@ -1008,11 +1007,11 @@ private fun MetaDetailsContent(
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
     isAnimeDetail: Boolean,
-    relatedItems: List<MetaPreview>,
+    relatedItems: List<DetailRailItem>,
     reviews: List<MetaReview>,
     isReviewsLoading: Boolean,
     reviewsError: String?,
-    collection: List<MetaPreview>,
+    collection: List<DetailRailItem>,
     collectionName: String?,
     episodeRatings: Map<Pair<Int, Int>, EpisodeRating>,
     isEpisodeRatingsLoading: Boolean,
@@ -2064,8 +2063,8 @@ private fun MetaDetailsContent(
                                         clearPendingRestore()
                                     },
                                     onItemClick = { item ->
-                                        markMoreLikeThisRestore(item.id)
-                                        onNavigateToDetail(item.id, item.apiType, null)
+                                        markMoreLikeThisRestore(item.contentId)
+                                        onNavigateToDetail(item.contentId, item.source.apiType, null)
                                     }
                                 )
                             }
@@ -2095,8 +2094,8 @@ private fun MetaDetailsContent(
                                         clearPendingRestore()
                                     },
                                     onItemClick = { item ->
-                                        markCollectionRestore(item.id)
-                                        onNavigateToDetail(item.id, item.apiType, null)
+                                        markCollectionRestore(item.contentId)
+                                        onNavigateToDetail(item.contentId, item.source.apiType, null)
                                     }
                                 )
                             }
