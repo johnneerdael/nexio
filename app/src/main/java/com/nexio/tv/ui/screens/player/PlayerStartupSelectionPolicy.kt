@@ -624,21 +624,17 @@ internal fun pickTranslatableInternalSubtitle(
         }
     if (textTracks.isEmpty()) return -1
 
-    fun bestByAccessibility(candidates: List<Int>): Int? {
-        return candidates.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
-    }
-
     if (!secondaryLanguage.isNullOrBlank()) {
         val secondaryMatches = textTracks.filter { index ->
             PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, secondaryLanguage)
         }
-        bestByAccessibility(secondaryMatches)?.let { return it }
+        bestSubtitleByAccessibility(subtitleTracks, secondaryMatches)?.let { return it }
     }
     val englishMatches = textTracks.filter { index ->
         PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, "en")
     }
-    bestByAccessibility(englishMatches)?.let { return it }
-    return bestByAccessibility(textTracks) ?: textTracks.first()
+    bestSubtitleByAccessibility(subtitleTracks, englishMatches)?.let { return it }
+    return bestSubtitleByAccessibility(subtitleTracks, textTracks) ?: textTracks.first()
 }
 
 /**
@@ -695,7 +691,7 @@ internal fun findBestInternalSubtitleTrackIndexForStartup(
             )
             if (tieBroken >= 0) return tieBroken
         }
-        return candidateIndexes.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
+        return bestSubtitleByAccessibility(subtitleTracks, candidateIndexes)
             ?: candidateIndexes.first()
     }
     return -1
@@ -731,18 +727,14 @@ private fun breakPortugueseSubtitleTieForStartup(
         return subtitleHasAnyTagForStartup(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_EUROPEAN_TAGS)
     }
 
-    fun bestByAccessibility(filtered: List<Int>): Int? {
-        return filtered.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
-    }
-
     return if (normalizedTarget == "pt-br") {
-        bestByAccessibility(candidateIndexes.filter { hasBrazilianTags(it) && !hasEuropeanTags(it) })
-            ?: bestByAccessibility(candidateIndexes.filter { hasBrazilianTags(it) })
+        bestSubtitleByAccessibility(subtitleTracks, candidateIndexes.filter { hasBrazilianTags(it) && !hasEuropeanTags(it) })
+            ?: bestSubtitleByAccessibility(subtitleTracks, candidateIndexes.filter { hasBrazilianTags(it) })
             ?: candidateIndexes.first()
     } else {
-        bestByAccessibility(candidateIndexes.filter { hasEuropeanTags(it) && !hasBrazilianTags(it) })
-            ?: bestByAccessibility(candidateIndexes.filter { hasEuropeanTags(it) })
-            ?: bestByAccessibility(candidateIndexes.filter { !hasBrazilianTags(it) })
+        bestSubtitleByAccessibility(subtitleTracks, candidateIndexes.filter { hasEuropeanTags(it) && !hasBrazilianTags(it) })
+            ?: bestSubtitleByAccessibility(subtitleTracks, candidateIndexes.filter { hasEuropeanTags(it) })
+            ?: bestSubtitleByAccessibility(subtitleTracks, candidateIndexes.filter { !hasBrazilianTags(it) })
             ?: candidateIndexes.first()
     }
 }
@@ -815,4 +807,11 @@ private fun TrackInfo.subtitleAccessibilityRank(): Int = when {
     isForced -> 2
     isSdhSubtitle() -> 1
     else -> 0
+}
+
+private fun bestSubtitleByAccessibility(
+    subtitleTracks: List<TrackInfo>,
+    candidates: List<Int>
+): Int? {
+    return candidates.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
 }
