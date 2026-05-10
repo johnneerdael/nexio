@@ -700,7 +700,8 @@ internal fun findBestInternalSubtitleTrackIndexForStartup(
             )
             if (tieBroken >= 0) return tieBroken
         }
-        return candidateIndexes.first()
+        return candidateIndexes.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
+            ?: candidateIndexes.first()
     }
     return -1
 }
@@ -735,14 +736,18 @@ private fun breakPortugueseSubtitleTieForStartup(
         return subtitleHasAnyTagForStartup(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_EUROPEAN_TAGS)
     }
 
+    fun bestByAccessibility(filtered: List<Int>): Int? {
+        return filtered.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
+    }
+
     return if (normalizedTarget == "pt-br") {
-        candidateIndexes.firstOrNull { hasBrazilianTags(it) && !hasEuropeanTags(it) }
-            ?: candidateIndexes.firstOrNull { hasBrazilianTags(it) }
+        bestByAccessibility(candidateIndexes.filter { hasBrazilianTags(it) && !hasEuropeanTags(it) })
+            ?: bestByAccessibility(candidateIndexes.filter { hasBrazilianTags(it) })
             ?: candidateIndexes.first()
     } else {
-        candidateIndexes.firstOrNull { hasEuropeanTags(it) && !hasBrazilianTags(it) }
-            ?: candidateIndexes.firstOrNull { hasEuropeanTags(it) }
-            ?: candidateIndexes.firstOrNull { !hasBrazilianTags(it) }
+        bestByAccessibility(candidateIndexes.filter { hasEuropeanTags(it) && !hasBrazilianTags(it) })
+            ?: bestByAccessibility(candidateIndexes.filter { hasEuropeanTags(it) })
+            ?: bestByAccessibility(candidateIndexes.filter { !hasBrazilianTags(it) })
             ?: candidateIndexes.first()
     }
 }
@@ -785,4 +790,34 @@ private fun isLikelyOriginalLanguageTrack(track: TrackInfo): Boolean {
         .joinToString(" ")
         .lowercase(Locale.ROOT)
     return Regex("""\b(main|default)\b""").containsMatchIn(haystack)
+}
+
+private val SDH_SUBTITLE_MARKERS: List<String> = listOf(
+    "sdh",
+    "[cc]",
+    " cc ",
+    "closed caption",
+    "hearing impaired"
+)
+
+private fun TrackInfo.isSdhSubtitle(): Boolean {
+    val haystack = listOfNotNull(name, trackId)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+    if (haystack.isBlank()) return false
+    return SDH_SUBTITLE_MARKERS.any { marker -> haystack.contains(marker) }
+}
+
+/**
+ * Lower rank wins. Normal dialogue tracks (rank 0) are preferred over SDH
+ * (rank 1) and forced (rank 2). Forced tracks contain only signs/inserts —
+ * never the full dialogue — so they should only be picked when no other
+ * same-language track exists. The explicit `preferredLanguage == "forced"`
+ * branch in [decideStartupSubtitleAutoSelection] short-circuits before this
+ * ranking is consulted, so users who actively choose forced still get it.
+ */
+private fun TrackInfo.subtitleAccessibilityRank(): Int = when {
+    isForced -> 2
+    isSdhSubtitle() -> 1
+    else -> 0
 }

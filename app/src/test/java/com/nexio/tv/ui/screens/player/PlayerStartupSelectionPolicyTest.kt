@@ -527,4 +527,79 @@ class PlayerStartupSelectionPolicyTest {
 
         assertNull(best)
     }
+
+    @Test
+    fun `findBestInternal picks normal English over forced English`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (Forced)", language = "en", isForced = true),
+            TrackInfo(index = 1, name = "English", language = "en", isForced = false)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `findBestInternal picks normal English over SDH and forced`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (Forced)", language = "en", isForced = true),
+            TrackInfo(index = 1, name = "English SDH", language = "en", isForced = false),
+            TrackInfo(index = 2, name = "English", language = "en", isForced = false)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(2, index)
+    }
+
+    @Test
+    fun `findBestInternal picks SDH over forced when no normal track exists`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (Forced)", language = "en", isForced = true),
+            TrackInfo(index = 1, name = "English SDH", language = "en", isForced = false)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `findBestInternal falls back to forced as last resort`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (Forced)", language = "en", isForced = true)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("en")
+        )
+
+        assertEquals(0, index)
+    }
+
+    @Test
+    fun `findBestInternal pt-br tag preference outranks accessibility`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Portugues (PT)", language = "pt", isForced = false),
+            TrackInfo(index = 1, name = "Portugues (BR) Forced", language = "pt", isForced = true)
+        )
+
+        val index = findBestInternalSubtitleTrackIndexForStartup(
+            subtitleTracks = tracks,
+            targets = listOf("pt-br")
+        )
+
+        assertEquals(1, index)
+    }
 }
