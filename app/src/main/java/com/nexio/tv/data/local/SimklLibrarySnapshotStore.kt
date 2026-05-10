@@ -6,6 +6,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
@@ -18,6 +21,15 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TraktListPrivacy
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,6 +71,7 @@ class SimklLibrarySnapshotStore private constructor(
         internal const val BASE_PREFS_NAME = "simkl_library_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 1
+        private const val SNAPSHOT_DIR = "simkl-library-snapshot-v1"
     }
 
     data class PersistedLibraryMetadata(
@@ -100,9 +113,15 @@ class SimklLibrarySnapshotStore private constructor(
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decodeSnapshot(raw)
+            // CLAUDE.md hard rule #3: file-backed streaming. Same shape as
+            // TraktLibrarySnapshotStore (commit 78bac391f) — Simkl users with
+            // multiple lists trivially exceed the 50 KB SharedPreferences ban.
+            val file = snapshotFileFor(profileId)
+            if (file.exists()) {
+                streamReadSnapshot(file)
+            } else {
+                migrateLegacySnapshotToFile(profileId, file)
+            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore SIMKL library snapshot", error)
             clear(profileId)
@@ -111,22 +130,9 @@ class SimklLibrarySnapshotStore private constructor(
 
     fun write(snapshot: Snapshot, profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val payload = JsonObject().apply {
-                addProperty("schemaVersion", SCHEMA_VERSION)
-                addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
-                add("listTabs", encodeListTabs(snapshot.listTabs))
-                add("entriesByList", encodeEntriesByList(snapshot.entriesByList))
-                add("metadataByContentKey", encodeMetadata(snapshot.metadataByContentKey))
-                addProperty("updatedAtMs", snapshot.updatedAtMs)
-                snapshot.lastTvShowsAllAt?.let { addProperty("lastTvShowsAllAt", it) }
-                snapshot.lastMoviesAllAt?.let { addProperty("lastMoviesAllAt", it) }
-                snapshot.lastAnimeAllAt?.let { addProperty("lastAnimeAllAt", it) }
-                snapshot.lastTvShowsRemovedFromListAt?.let { addProperty("lastTvShowsRemovedFromListAt", it) }
-                snapshot.lastMoviesRemovedFromListAt?.let { addProperty("lastMoviesRemovedFromListAt", it) }
-                snapshot.lastAnimeRemovedFromListAt?.let { addProperty("lastAnimeRemovedFromListAt", it) }
-            }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+            val target = snapshotFileFor(profileId)
+            target.parentFile?.mkdirs()
+            writeSnapshotToFile(snapshot, target)
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist SIMKL library snapshot", error)
         }
@@ -134,10 +140,142 @@ class SimklLibrarySnapshotStore private constructor(
 
     fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
+            snapshotFileFor(profileId).takeIf { it.exists() }?.delete()
+            context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+                .edit().remove(SNAPSHOT_KEY).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear SIMKL library snapshot", error)
         }
+    }
+
+    private fun snapshotFileFor(profileId: Int): File {
+        val parent = File(context.filesDir, SNAPSHOT_DIR)
+        if (!parent.exists()) parent.mkdirs()
+        return File(parent, "p${profileId}.json")
+    }
+
+    private fun streamReadSnapshot(file: File): Snapshot? {
+        var schemaVersion = -1
+        var listTabs: List<LibraryListTab> = emptyList()
+        var entriesByList: Map<String, List<LibraryEntry>> = emptyMap()
+        var metadataByContentKey: Map<String, PersistedLibraryMetadata> = emptyMap()
+        var updatedAtMs: Long = 0L
+        var lastTvShowsAllAt: String? = null
+        var lastMoviesAllAt: String? = null
+        var lastAnimeAllAt: String? = null
+        var lastTvShowsRemovedFromListAt: String? = null
+        var lastMoviesRemovedFromListAt: String? = null
+        var lastAnimeRemovedFromListAt: String? = null
+
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            return@runCatching null
+                        }
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "schemaVersion" -> {
+                                    schemaVersion = reader.nextInt()
+                                    if (schemaVersion > SCHEMA_VERSION) return@runCatching null
+                                }
+                                "listTabs" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    listTabs = decodeListTabs(element)
+                                }
+                                "entriesByList" -> {
+                                    val element: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
+                                    entriesByList = decodeEntriesByList(element)
+                                }
+                                "metadataByContentKey" -> {
+                                    val element: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
+                                    metadataByContentKey = decodeMetadata(element)
+                                }
+                                "updatedAtMs" -> updatedAtMs = reader.nextLong()
+                                "lastTvShowsAllAt" -> lastTvShowsAllAt = nextStringOrNull(reader)
+                                "lastMoviesAllAt" -> lastMoviesAllAt = nextStringOrNull(reader)
+                                "lastAnimeAllAt" -> lastAnimeAllAt = nextStringOrNull(reader)
+                                "lastTvShowsRemovedFromListAt" -> lastTvShowsRemovedFromListAt = nextStringOrNull(reader)
+                                "lastMoviesRemovedFromListAt" -> lastMoviesRemovedFromListAt = nextStringOrNull(reader)
+                                "lastAnimeRemovedFromListAt" -> lastAnimeRemovedFromListAt = nextStringOrNull(reader)
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
+                }
+            }
+            Snapshot(
+                listTabs = listTabs,
+                entriesByList = entriesByList,
+                metadataByContentKey = metadataByContentKey,
+                updatedAtMs = updatedAtMs,
+                lastTvShowsAllAt = lastTvShowsAllAt,
+                lastMoviesAllAt = lastMoviesAllAt,
+                lastAnimeAllAt = lastAnimeAllAt,
+                lastTvShowsRemovedFromListAt = lastTvShowsRemovedFromListAt,
+                lastMoviesRemovedFromListAt = lastMoviesRemovedFromListAt,
+                lastAnimeRemovedFromListAt = lastAnimeRemovedFromListAt
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read SIMKL library snapshot", error)
+        }.getOrNull()
+    }
+
+    private fun nextStringOrNull(reader: JsonReader): String? {
+        return if (reader.peek() == JsonToken.NULL) {
+            reader.nextNull(); null
+        } else reader.nextString()
+    }
+
+    private fun writeSnapshotToFile(snapshot: Snapshot, target: File) {
+        val tempFile = File(target.parentFile, "${target.name}.tmp")
+        FileOutputStream(tempFile).use { fos ->
+            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                JsonWriter(bw).use { writer ->
+                    writer.beginObject()
+                    writer.name("schemaVersion").value(SCHEMA_VERSION)
+                    writer.name("languageEpoch").value(metadataDiskCacheStore.currentLanguageEpoch())
+
+                    writer.name("listTabs")
+                    gson.toJson(encodeListTabs(snapshot.listTabs), JsonArray::class.java, writer)
+
+                    writer.name("entriesByList")
+                    gson.toJson(encodeEntriesByList(snapshot.entriesByList), JsonObject::class.java, writer)
+
+                    writer.name("metadataByContentKey")
+                    gson.toJson(encodeMetadata(snapshot.metadataByContentKey), JsonObject::class.java, writer)
+
+                    writer.name("updatedAtMs").value(snapshot.updatedAtMs)
+                    snapshot.lastTvShowsAllAt?.let { writer.name("lastTvShowsAllAt").value(it) }
+                    snapshot.lastMoviesAllAt?.let { writer.name("lastMoviesAllAt").value(it) }
+                    snapshot.lastAnimeAllAt?.let { writer.name("lastAnimeAllAt").value(it) }
+                    snapshot.lastTvShowsRemovedFromListAt?.let { writer.name("lastTvShowsRemovedFromListAt").value(it) }
+                    snapshot.lastMoviesRemovedFromListAt?.let { writer.name("lastMoviesRemovedFromListAt").value(it) }
+                    snapshot.lastAnimeRemovedFromListAt?.let { writer.name("lastAnimeRemovedFromListAt").value(it) }
+                    writer.endObject()
+                }
+            }
+        }
+        Files.move(
+            tempFile.toPath(),
+            target.toPath(),
+            StandardCopyOption.ATOMIC_MOVE,
+            StandardCopyOption.REPLACE_EXISTING
+        )
+    }
+
+    private fun migrateLegacySnapshotToFile(profileId: Int, target: File): Snapshot? {
+        val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+        val legacy = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+        val decoded = decodeSnapshot(legacy) ?: return null
+        runCatching { writeSnapshotToFile(decoded, target) }
+            .onFailure { error -> Log.w(TAG, "Failed to migrate legacy SIMKL snapshot to file", error) }
+        runCatching { prefs.edit().remove(SNAPSHOT_KEY).apply() }
+        return decoded
     }
 
     internal fun buildRailMemberships(snapshot: Snapshot, profileId: Int): List<RailMembership> {
