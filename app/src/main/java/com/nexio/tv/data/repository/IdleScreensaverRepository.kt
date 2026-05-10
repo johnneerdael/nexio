@@ -14,6 +14,8 @@ import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
+import com.nexio.tv.ui.screensaver.isDisplayable
+import com.nexio.tv.ui.screensaver.isScreensaverDisplayable
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,16 +55,19 @@ class IdleScreensaverRepository(
     @Suppress("unused")
     private val screensaverCandidateRepository: ScreensaverCandidateRepository,
     private val surfaceRepository: ResolvedDisplaySurfaceRepository,
+    private val adapterMemo: ScreensaverAdapterMemo,
     private val activeProfileId: () -> Int
 ) {
     @Inject
     constructor(
         screensaverCandidateRepository: ScreensaverCandidateRepository,
         surfaceRepository: ResolvedDisplaySurfaceRepository,
+        adapterMemo: ScreensaverAdapterMemo,
         profileManager: ProfileManager
     ) : this(
         screensaverCandidateRepository = screensaverCandidateRepository,
         surfaceRepository = surfaceRepository,
+        adapterMemo = adapterMemo,
         activeProfileId = { profileManager.activeProfileId.value }
     )
 
@@ -123,28 +128,39 @@ class IdleScreensaverRepository(
         logPrefix: String = "Observed"
     ) {
         refreshMutex.withLock {
-            // Filter for items the screensaver can actually render: title + at least
-            // one displayable artwork (matches ScreensaverCandidateRepository's gate).
-            // Indexed-for to avoid suspending Iterable allocations (CLAUDE.md rule #4).
+            // Filter for items the screensaver can actually render via the shared
+            // [isScreensaverDisplayable] gate (single source of truth — see
+            // IdleScreensaverDisplayItem.kt). Indexed-for to avoid suspending
+            // Iterable allocations (CLAUDE.md rule #4).
             val displayItems = ArrayList<IdleScreensaverDisplayItem>(items.size)
             for (i in items.indices) {
                 val item = items[i]
-                if (item.display.title.isNullOrBlank()) continue
-                if (item.artwork.backdrop == null && item.artwork.poster == null) continue
+                if (!item.isScreensaverDisplayable()) continue
                 displayItems += IdleScreensaverDisplayItem.from(item)
             }
 
+            // Memoize per-item adapter projections. With reference-stable upstream
+            // input, [internSlide] / [internTrailerCandidate] return the SAME
+            // instance from the prior emission — Compose's `===` skip in the
+            // overlays then short-circuits recomposition. CLAUDE.md rule #5.
+            val activeKeys = HashSet<String>(displayItems.size)
             val imageSlides = ArrayList<IdleScreensaverSlide>(displayItems.size)
             val trailerCandidates = ArrayList<IdleTrailerScreensaverCandidate>(displayItems.size)
             for (i in displayItems.indices) {
                 val displayItem = displayItems[i]
-                displayItem.toIdleScreensaverSlide()?.let(imageSlides::add)
-                displayItem.toIdleTrailerScreensaverCandidate()?.let(trailerCandidates::add)
+                activeKeys += displayItem.itemKey
+                adapterMemo.internSlide(displayItem)?.let(imageSlides::add)
+                adapterMemo.internTrailerCandidate(displayItem)?.let(trailerCandidates::add)
             }
+            adapterMemo.retainOnly(activeKeys)
 
             _screensaverDisplayItems.value = displayItems
-            _slides.value = imageSlides.ifEmpty { listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE) }
-            _trailerCandidates.value = trailerCandidates
+            _slides.value = if (imageSlides.isEmpty()) {
+                listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE)
+            } else {
+                adapterMemo.internSlidesList(imageSlides)
+            }
+            _trailerCandidates.value = adapterMemo.internTrailerCandidatesList(trailerCandidates)
             Log.d(
                 TAG,
                 "$logPrefix ${_slides.value.size} idle screensaver slides and " +
@@ -156,16 +172,24 @@ class IdleScreensaverRepository(
 
 /**
  * Adapt a [IdleScreensaverDisplayItem] to the legacy [IdleScreensaverSlide] shape
- * consumed by `IdleScreensaverOverlay`. Returns null when the item lacks a non-blank
- * title or any displayable background artwork.
+ * consumed by `IdleScreensaverOverlay`. Returns null when the item is not
+ * screensaver-displayable (see [isDisplayable] — single source of truth).
  *
  * `backgroundRef` already enforces `backdrop ?: poster` (see [IdleScreensaverDisplayItem.from]),
  * so a single-element fallback list is content-equivalent to the previous
  * `listOfNotNull(preferredImage, artwork.backdrop, artwork.poster).distinct()` pipeline.
+ *
+ * Contract: callers in the publish path gate via the
+ * [com.nexio.tv.domain.model.ResolvedDisplayItem]-side
+ * [isScreensaverDisplayable] before calling [IdleScreensaverDisplayItem.from],
+ * so this defensive `isDisplayable()` check is redundant for repository use.
+ * The adapter retains the check so direct callers (tests, future consumers)
+ * cannot crash on under-specified inputs.
  */
 internal fun IdleScreensaverDisplayItem.toIdleScreensaverSlide(): IdleScreensaverSlide? {
-    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: return null
-    val background = backgroundRef ?: return null
+    if (!isDisplayable()) return null
+    val resolvedTitle = title!!
+    val background = backgroundRef!!
     val fallbackArtwork = listOf(background)
     return IdleScreensaverSlide(
         itemId = contentId,
@@ -191,15 +215,16 @@ internal fun IdleScreensaverDisplayItem.toIdleScreensaverSlide(): IdleScreensave
 /**
  * Adapt a [IdleScreensaverDisplayItem] to the legacy [IdleTrailerScreensaverCandidate]
  * shape consumed by `IdleTrailerScreensaverOverlay` /
- * `IdleTrailerScreensaverSession`. Returns null when the item lacks a non-blank title
- * or any displayable background artwork (same gate as the slide adapter).
+ * `IdleTrailerScreensaverSession`. Returns null when the item is not
+ * screensaver-displayable (see [isDisplayable] — same gate as the slide adapter).
  *
  * `stableIds` is intentionally [ProviderIds] empty — the prior
  * `ScreensaverCandidateRepository` pipeline left these blank as well.
  */
 internal fun IdleScreensaverDisplayItem.toIdleTrailerScreensaverCandidate(): IdleTrailerScreensaverCandidate? {
-    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: return null
-    val background = backgroundRef ?: return null
+    if (!isDisplayable()) return null
+    val resolvedTitle = title!!
+    val background = backgroundRef!!
     val fallbackArtwork = listOf(background)
     return IdleTrailerScreensaverCandidate(
         itemId = contentId,

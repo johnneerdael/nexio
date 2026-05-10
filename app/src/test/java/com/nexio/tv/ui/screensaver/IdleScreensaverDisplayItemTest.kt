@@ -20,9 +20,11 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IdleScreensaverDisplayItemTest {
@@ -67,6 +69,82 @@ class IdleScreensaverDisplayItemTest {
     }
 
     @Test
+    fun `isScreensaverDisplayable true when title and at least one of backdrop or poster present`() {
+        val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
+        val poster = artworkRef("poster:1", ArtworkType.POSTER)
+        // backdrop + title
+        assertTrue(
+            resolvedItem(
+                artwork = ArtworkBundle(backdrop = backdrop),
+                rating = null,
+                trailer = TrailerDisplayState()
+            ).isScreensaverDisplayable()
+        )
+        // poster only + title
+        assertTrue(
+            resolvedItem(
+                artwork = ArtworkBundle(poster = poster),
+                rating = null,
+                trailer = TrailerDisplayState()
+            ).isScreensaverDisplayable()
+        )
+    }
+
+    @Test
+    fun `isScreensaverDisplayable false when title is blank or artwork missing`() {
+        val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
+        // empty title -> not displayable
+        assertFalse(
+            resolvedItem(
+                artwork = ArtworkBundle(backdrop = backdrop),
+                rating = null,
+                trailer = TrailerDisplayState(),
+                title = ""
+            ).isScreensaverDisplayable()
+        )
+        // no backdrop and no poster -> not displayable
+        assertFalse(
+            resolvedItem(
+                artwork = ArtworkBundle(),
+                rating = null,
+                trailer = TrailerDisplayState()
+            ).isScreensaverDisplayable()
+        )
+    }
+
+    @Test
+    fun `isDisplayable on projection mirrors the resolved-side gate`() {
+        val backdrop = artworkRef("backdrop:1", ArtworkType.BACKDROP)
+        val displayable = IdleScreensaverDisplayItem.from(
+            resolvedItem(
+                artwork = ArtworkBundle(backdrop = backdrop),
+                rating = null,
+                trailer = TrailerDisplayState()
+            )
+        )
+        assertTrue(displayable.isDisplayable())
+
+        val blankTitle = IdleScreensaverDisplayItem.from(
+            resolvedItem(
+                artwork = ArtworkBundle(backdrop = backdrop),
+                rating = null,
+                trailer = TrailerDisplayState(),
+                title = "  "
+            )
+        )
+        assertFalse(blankTitle.isDisplayable())
+
+        val noArtwork = IdleScreensaverDisplayItem.from(
+            resolvedItem(
+                artwork = ArtworkBundle(),
+                rating = null,
+                trailer = TrailerDisplayState()
+            )
+        )
+        assertFalse(noArtwork.isDisplayable())
+    }
+
+    @Test
     fun `from ResolvedDisplayItem with empty artwork yields null background and logo`() {
         val resolved = resolvedItem(
             artwork = ArtworkBundle(),
@@ -95,7 +173,8 @@ class IdleScreensaverDisplayItemTest {
     private fun resolvedItem(
         artwork: ArtworkBundle,
         rating: TitleRating?,
-        trailer: TrailerDisplayState
+        trailer: TrailerDisplayState,
+        title: String = "Fight Club"
     ): ResolvedDisplayItem = ResolvedDisplayItem(
         itemKey = "movie:tmdb:550",
         contentId = "tmdb:550",
@@ -107,7 +186,7 @@ class IdleScreensaverDisplayItemTest {
         imdbId = "tt0137523",
         stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"),
         display = ResolvedDisplayFields(
-            title = "Fight Club",
+            title = title,
             originalTitle = null,
             year = 1999,
             releaseDate = "1999",
