@@ -248,7 +248,8 @@ class TmdbDiscoveryService @Inject constructor(
             imdbRating = result.voteAverage?.toFloat(),
             ratingSource = TitleRatingSource.TMDB,
             genres = emptyList(),
-            language = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() }
+            language = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() },
+            originalLanguage = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() }
         )
     }
 
