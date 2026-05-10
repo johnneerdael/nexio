@@ -1158,7 +1158,7 @@ class HomeViewModelFocusHydrationTest {
         )
 
         assertTrue(viewModel.displayCatalogRows.value.isEmpty())
-        assertTrue(viewModel._fullCatalogRows.value.isEmpty())
+        assertTrue(viewModel.catalogInventoryRepository.isEmpty())
     }
 
     // -------------------------------------------------------------------------

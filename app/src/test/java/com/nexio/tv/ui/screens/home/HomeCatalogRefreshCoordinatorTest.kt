@@ -21,6 +21,7 @@ import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
@@ -360,7 +361,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
-        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val renderedRows = mutableListOf<List<CatalogRow>>()
         val catalogPreview = preview(id = "tt-viewmodel-first-paint", poster = null).copy(
             description = "ViewModel catalog payload",
@@ -399,7 +399,6 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
-        every { viewModel._fullCatalogRows } returns fullCatalogRows
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
@@ -425,8 +424,7 @@ class HomeCatalogRefreshCoordinatorTest {
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
         coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
-            fullCatalogRows.value = catalogsMap.values.toList()
-            renderedRows += fullCatalogRows.value
+            renderedRows += catalogsMap.values.toList()
         }
         coEvery {
             coordinator.refreshSerially(
@@ -511,7 +509,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
-        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val oldPreview = preview(id = "tt-old-profile-row", poster = null).copy(name = "Old Profile Row")
         val oldRow = CatalogRow(
             addonId = "addon",
@@ -534,7 +531,6 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
-        every { viewModel._fullCatalogRows } returns fullCatalogRows
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
@@ -558,9 +554,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
-        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
-            fullCatalogRows.value = catalogsMap.values.toList()
-        }
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {}
         coEvery {
             coordinator.refreshSerially(
                 addons = any(),
@@ -621,7 +615,6 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns linkedMapOf()
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
-        every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
@@ -765,7 +758,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
-        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
         val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
@@ -798,7 +790,6 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
-        every { viewModel._fullCatalogRows } returns fullCatalogRows
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
@@ -828,7 +819,6 @@ class HomeCatalogRefreshCoordinatorTest {
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
         coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
-            fullCatalogRows.value = listOf(fullRow)
             displayCatalogRows.value = listOf(displayRow)
         }
         coEvery {
@@ -901,7 +891,6 @@ class HomeCatalogRefreshCoordinatorTest {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
-        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
         val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
@@ -931,7 +920,6 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
-        every { viewModel._fullCatalogRows } returns fullCatalogRows
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
@@ -961,7 +949,6 @@ class HomeCatalogRefreshCoordinatorTest {
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
         coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
-            fullCatalogRows.value = listOf(displayRow)
             displayCatalogRows.value = listOf(displayRow)
         }
         coEvery {
@@ -1050,9 +1037,9 @@ class HomeCatalogRefreshCoordinatorTest {
             hasMore = false
         )
         catalogsMap["addon_movie_popular"] = fullRow
-        val fullCatalogRows = MutableStateFlow(
-            listOf(fullRow)
-        )
+        val catalogInventoryRepository = CatalogInventoryRepository().apply {
+            publish(listOf(fullRow))
+        }
         val uiState = MutableStateFlow(HomeUiState())
         val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
 
@@ -1065,7 +1052,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
-        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.catalogInventoryRepository } returns catalogInventoryRepository
         every { viewModel._displayCatalogRows } returns displayCatalogRows
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())

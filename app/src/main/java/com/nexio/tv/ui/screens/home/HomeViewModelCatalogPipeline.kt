@@ -279,7 +279,6 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
     catalogInventoryRepository.clear()
-    _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
     _displayCatalogRows.value = emptyList()
     _displayHeroItems.value = emptyList()
     _uiState.update { state ->
@@ -2204,7 +2203,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
             catalogInventoryRepository.clear()
-            _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
             homeSnapshotPersistJob?.cancel()
             pendingHomeSnapshotPersist = null
             inMemoryHomeSnapshot = null
@@ -3133,14 +3131,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
         heroTmdbSettings = currentTmdbSettings
     )
-    // Dual-write transition (spec docs/superpowers/specs/2026-05-10-catalog-inventory-repository-design.md,
-    // plan Task 3): publish to the new repository FIRST, then the legacy
-    // _fullCatalogRows StateFlow. Order matters during the migration window —
-    // any reader added accidentally is more likely to be a legacy reader, so
-    // the repo is already coherent when legacy emits. Reads migrate in
-    // Task 4; legacy field is deleted in Task 6.
     catalogInventoryRepository.publish(composedSnapshot.fullRows)
-    _fullCatalogRows.value = composedSnapshot.fullRows
     _displayCatalogRows.value = composedSnapshot.displayRows
     _displayHeroItems.value = composedSnapshot.heroItems
     _uiState.update { state ->
