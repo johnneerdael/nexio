@@ -54,4 +54,22 @@ class MetaDetailsViewModelLanguageMappingTest {
         )
         assertEquals("eng", merged)
     }
+
+    @Test
+    fun `Meta originalLanguage populated from advanced originalLanguage`() {
+        val populated = mergeOriginalLanguageForTest(
+            advancedOriginalLanguage = "eng",
+            existing = null
+        )
+        assertEquals("eng", populated)
+    }
+
+    @Test
+    fun `Meta originalLanguage stays null when advanced originalLanguage is null`() {
+        val populated = mergeOriginalLanguageForTest(
+            advancedOriginalLanguage = null,
+            existing = null
+        )
+        assertNull(populated)
+    }
 }
