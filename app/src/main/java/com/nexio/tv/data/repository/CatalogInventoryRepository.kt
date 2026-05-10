@@ -73,6 +73,19 @@ class CatalogInventoryRepository @Inject constructor() {
      * `@Synchronized` atomicizes build + StateFlow assignment from the writer
      * side; `_inventory.value`'s volatile semantics guarantee readers never
      * see a torn map.
+     *
+     * Stores rows by reference; callers MUST NOT mutate `CatalogRow`
+     * instances after handing them off (CatalogRow is a data class, so
+     * this is convention rather than enforcement).
+     *
+     * **Reference stability deferral:** every publish allocates a fresh
+     * `LinkedHashMap` and fresh String keys (`addonId_apiType_catalogId`).
+     * The inventory `StateFlow` does not achieve `===` skip on content-equal
+     * emissions; `observeRail` mitigates for downstream consumers via
+     * `distinctUntilChanged` on the rail value. A future
+     * `CatalogInventoryMemo` (analogous to `CatalogRowMemo`) could intern
+     * the LinkedHashMap and the keyed entries when content is unchanged —
+     * deferred to a follow-up; see spec §Reference stability.
      */
     @Synchronized
     fun publish(rows: List<CatalogRow>) {
