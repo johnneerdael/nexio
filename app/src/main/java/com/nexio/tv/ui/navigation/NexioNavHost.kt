@@ -23,6 +23,7 @@ import com.nexio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nexio.tv.ui.screens.home.HomeScreen
 import com.nexio.tv.ui.screens.home.HomeViewModel
 import com.nexio.tv.ui.screens.home.displayMetadata
+import com.nexio.tv.ui.screens.home.enrichContinueWatchingItemWithProvider
 import com.nexio.tv.ui.screens.home.recordContinueWatchingRouteContextForPlayback
 import com.nexio.tv.ui.screens.home.resolveContinueWatchingRuntimeMinutes
 import com.nexio.tv.ui.screens.home.withHydratedRuntimeMinutes
@@ -216,6 +217,9 @@ fun NexioNavHost(
                             deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
                             resolveRuntimeMinutes = { candidate ->
                                 homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            },
+                            resolveOriginalLanguageEnrichment = { candidate ->
+                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
                             }
                         )
                         navController.navigate(route)
@@ -230,6 +234,9 @@ fun NexioNavHost(
                             startFromBeginning = true,
                             resolveRuntimeMinutes = { candidate ->
                                 homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            },
+                            resolveOriginalLanguageEnrichment = { candidate ->
+                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
                             }
                         )
                         navController.navigate(route)
@@ -242,6 +249,9 @@ fun NexioNavHost(
                             item = item,
                             resolveRuntimeMinutes = { candidate ->
                                 homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            },
+                            resolveOriginalLanguageEnrichment = { candidate ->
+                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
                             }
                         )
                         navController.navigate(route)
@@ -430,6 +440,11 @@ fun NexioNavHost(
                     defaultValue = null
                 },
                 navArgument("originalLanguage") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("imdbId") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
