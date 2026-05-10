@@ -590,9 +590,17 @@ class PlayerStartupSelectionPolicyTest {
 
     @Test
     fun `findBestInternal pt-br tag preference outranks accessibility`() {
+        // Track 0 is pt-eu normal (European tag "europeu"), track 1 is pt-br
+        // forced (Brazilian tag "brasil"). With target=pt-br and language="pt"
+        // for both, candidateIndexes is empty and the picker delegates to
+        // findBrazilianPortugueseInGenericPtTracksForStartup, which prefers
+        // tracks with Brazilian tags AND no European tags. Track 1 wins
+        // even though it's forced — the pt-br locale-preference outranks the
+        // normal/forced accessibility ranking. This pins the contract that
+        // the (unmodified) Brazilian-from-generic-pt picker still leads.
         val tracks = listOf(
-            TrackInfo(index = 0, name = "Portugues (PT)", language = "pt", isForced = false),
-            TrackInfo(index = 1, name = "Portugues (BR) Forced", language = "pt", isForced = true)
+            TrackInfo(index = 0, name = "Portugues (Europeu)", language = "pt", isForced = false),
+            TrackInfo(index = 1, name = "Portugues (Brasil) Forced", language = "pt", isForced = true)
         )
 
         val index = findBestInternalSubtitleTrackIndexForStartup(
