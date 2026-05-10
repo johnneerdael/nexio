@@ -209,6 +209,16 @@ internal fun buildTvdbCoreLocalizedCandidate(
             putAll(artworkFields)
             extended?.score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            // E3 fix: TVDB's SERIES_EXTENDED canonical builder used to drop
+            // production language. See dossier
+            // docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md.
+            extended?.originalLanguage?.takeIf { it.isNotBlank() }?.let {
+                put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                android.util.Log.w("LANG_TRACE", "buildTvdbCoreLocalizedCandidate emit lang=$it provider=$provider")
+            }
+            extended?.originalCountry?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = extended?.remoteIds.toRemoteIdsMap(extended?.id)
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
