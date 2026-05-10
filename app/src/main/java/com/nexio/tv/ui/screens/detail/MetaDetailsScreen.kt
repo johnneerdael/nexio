@@ -274,9 +274,10 @@ fun MetaDetailsScreen(
         year: String?,
         runtime: Int?,
         originalLanguage: String?,
+        imdbId: String?,
         deterministicAutoplay: Boolean,
         streamVideoId: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onPlayEpisodeWithManualStreamSelection: (
         videoId: String,
         contentType: String,
@@ -290,8 +291,9 @@ fun MetaDetailsScreen(
         episodeName: String?,
         runtime: Int?,
         originalLanguage: String?,
+        imdbId: String?,
         streamVideoId: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -668,6 +670,7 @@ fun MetaDetailsScreen(
                                     null,
                                     playbackRuntime,
                                     chooseNavOriginalLanguage(meta),
+                                    uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                     uiState.deterministicAutoplayEnabled,
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
@@ -696,6 +699,7 @@ fun MetaDetailsScreen(
                                     yearString,
                                     parseRuntimeMinutes(meta.runtime),
                                     chooseNavOriginalLanguage(meta),
+                                    uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                     uiState.deterministicAutoplayEnabled,
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
@@ -726,6 +730,7 @@ fun MetaDetailsScreen(
                                     video.title,
                                     playbackRuntime,
                                     chooseNavOriginalLanguage(meta),
+                                    uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                         season = video.season,

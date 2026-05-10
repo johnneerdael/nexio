@@ -27,6 +27,14 @@ data class HomeDisplayMetadata(
      * See `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`.
      */
     val originalLanguage: String? = null,
+    /**
+     * IMDB id sidecar for the title (e.g. `"tt0903747"`). Carried through
+     * `buildContinueWatchingStreamRoute` so subtitle providers (OpenSubtitles,
+     * Wyzie) that key on IMDB can still serve content whose canonical id uses
+     * a non-IMDB namespace (e.g. `tvdb:N` for series). Null when the metadata
+     * pipeline has no IMDB sidecar for the title.
+     */
+    val imdbId: String? = null,
     val poster: String? = null,
     val posterProviderTag: String? = null,
     val backdrop: String? = null,
