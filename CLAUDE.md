@@ -174,6 +174,28 @@ Both have caused real incidents in this repo (2026-05-10).
 
 **If your changes appear in a commit you didn't make:** another agent's `git add -A` / `git commit -a` swept them up. Don't try to re-attribute via history rewrite if the commit is already pushed; instead, document the actual scope in a follow-up commit message.
 
+### 8. Smoke tests — profile picker is NOT the home screen
+
+**Hard rule.**
+
+After `adb shell monkey -p com.nexiodebug.tv 1` launches the app, it lands on the **profile-picker screen**. The home screen, catalog pipeline, Modern Home rails, hero, CW row, and every other production surface DO NOT LOAD until a profile is selected. A logcat scan or heap dump taken before profile selection only validates the profile-picker UI — it is NOT a smoke test of the home pipeline.
+
+**Every smoke test that touches home-pipeline code MUST select a profile before scanning.**
+
+```bash
+adb -s 192.168.50.98:5555 shell am force-stop com.nexiodebug.tv
+adb -s 192.168.50.98:5555 logcat -c
+adb -s 192.168.50.98:5555 shell monkey -p com.nexiodebug.tv 1
+sleep 5                                                              # profile picker renders
+adb -s 192.168.50.98:5555 shell input keyevent KEYCODE_DPAD_CENTER  # tap focused profile
+sleep 30                                                             # home loads + rails populate
+adb -s 192.168.50.98:5555 logcat -d -t 600 | grep -E "FATAL|AndroidRuntime|ANR|ClassCast|NoSuchMethod" | tail -10
+```
+
+**Heap dumps follow the same rule.** `am dumpheap` against the profile-picker process state shows zero home-pipeline retention because home hasn't loaded. Capture heap dumps only AFTER profile selection AND a Modern Home soak of at least 30s.
+
+If a subagent prompt for a smoke test omits the profile-selection step, reject and re-prompt with the correct sequence. Stale smoke tests that confirm "no crashes" against the profile picker are false-positives — they validated nothing.
+
 ---
 
 ## When investigating performance issues
