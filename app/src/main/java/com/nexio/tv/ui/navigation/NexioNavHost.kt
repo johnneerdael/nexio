@@ -48,6 +48,7 @@ import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
 import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 
 /**
@@ -62,6 +63,9 @@ import com.nexio.tv.domain.model.MetaPreview
  */
 fun chooseNavOriginalLanguage(item: MetaPreview): String? =
     item.originalLanguage ?: item.language
+
+fun chooseNavOriginalLanguage(meta: Meta): String? =
+    meta.originalLanguage ?: meta.language
 
 @Composable
 fun NexioNavHost(
