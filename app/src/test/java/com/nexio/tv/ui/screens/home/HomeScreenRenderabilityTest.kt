@@ -19,7 +19,7 @@ class HomeScreenRenderabilityTest {
         )
         val rows = listOf(loadingRow())
 
-        assertTrue(hasRenderableHomeContent(state, rows, emptyList()))
+        assertTrue(hasRenderableHomeContent(state, rows, emptyList(), emptyList()))
     }
 
     @Test
@@ -32,8 +32,8 @@ class HomeScreenRenderabilityTest {
         )
         val rows = listOf(loadingRow())
 
-        assertFalse(hasRenderableHomeContent(classic, rows, emptyList()))
-        assertFalse(hasRenderableHomeContent(grid, rows, emptyList()))
+        assertFalse(hasRenderableHomeContent(classic, rows, emptyList(), emptyList()))
+        assertFalse(hasRenderableHomeContent(grid, rows, emptyList(), emptyList()))
     }
 
     @Test
@@ -50,8 +50,8 @@ class HomeScreenRenderabilityTest {
         )
         val rows = listOf(contentRow())
 
-        assertTrue(hasRenderableHomeContent(state, rows, emptyList()))
-        assertFalse(shouldShowFullHomeLoadingGate(state, rows, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(hasRenderableHomeContent(state, rows, emptyList(), emptyList()))
+        assertFalse(shouldShowFullHomeLoadingGate(state, rows, emptyList(), emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -67,7 +67,7 @@ class HomeScreenRenderabilityTest {
             ).markLoading(HomeInitialGate.CONTINUE_WATCHING)
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -83,8 +83,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), startupContentGateTimedOut = false))
-        assertFalse(shouldShowHomeEmptyState(state, emptyList(), emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), emptyList(), startupContentGateTimedOut = false))
+        assertFalse(shouldShowHomeEmptyState(state, emptyList(), emptyList(), emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -100,8 +100,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertFalse(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), startupContentGateTimedOut = false))
-        assertTrue(shouldShowHomeEmptyState(state, emptyList(), emptyList(), startupContentGateTimedOut = false))
+        assertFalse(shouldShowFullHomeLoadingGate(state, emptyList(), emptyList(), emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowHomeEmptyState(state, emptyList(), emptyList(), emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test

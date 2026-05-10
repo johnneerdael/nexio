@@ -106,7 +106,7 @@ internal fun ContinueWatchingItem.withHydratedRuntimeMinutes(runtimeMinutes: Int
 internal suspend fun HomeViewModel.warmContinueWatchingRuntimeIfNeededPipeline() {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
-    val candidates = continueWatchingItemsMissingRuntime(_uiState.value.continueWatchingItems)
+    val candidates = continueWatchingItemsMissingRuntime(_displayContinueWatchingItems.value)
     if (candidates.isEmpty()) return
 
     // Indexed iteration to avoid ArrayList$Itr capture in continuation.
@@ -139,17 +139,21 @@ internal fun continueWatchingItemsMissingRuntime(
 }
 
 private fun HomeViewModel.updateContinueWatchingRuntime(item: ContinueWatchingItem, runtimeMinutes: Int) {
-    _uiState.update { state ->
-        val updatedContinueWatching = state.continueWatchingItems.map { current ->
-            if (current.contentId() == item.contentId() &&
-                current.season() == item.season() &&
-                current.episode() == item.episode()
-            ) {
-                current.withHydratedRuntimeMinutes(runtimeMinutes)
-            } else {
-                current
-            }
+    val currentContinueWatching = _displayContinueWatchingItems.value
+    val updatedContinueWatching = currentContinueWatching.map { current ->
+        if (current.contentId() == item.contentId() &&
+            current.season() == item.season() &&
+            current.episode() == item.episode()
+        ) {
+            current.withHydratedRuntimeMinutes(runtimeMinutes)
+        } else {
+            current
         }
+    }
+    if (updatedContinueWatching != currentContinueWatching) {
+        _displayContinueWatchingItems.value = updatedContinueWatching
+    }
+    _uiState.update { state ->
         val updatedTraktUpNext = state.traktUpNextItems.map { current ->
             if (current.contentId() == item.contentId() &&
                 current.season() == item.season() &&
@@ -160,13 +164,10 @@ private fun HomeViewModel.updateContinueWatchingRuntime(item: ContinueWatchingIt
                 current
             }
         }
-        if (updatedContinueWatching == state.continueWatchingItems &&
-            updatedTraktUpNext == state.traktUpNextItems
-        ) {
+        if (updatedTraktUpNext == state.traktUpNextItems) {
             state
         } else {
             state.copy(
-                continueWatchingItems = updatedContinueWatching,
                 traktUpNextItems = updatedTraktUpNext
             )
         }

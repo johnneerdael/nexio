@@ -66,6 +66,7 @@ private const val KEY_REPEAT_THROTTLE_MS = 80L
 @Composable
 fun GridHomeContent(
     uiState: HomeUiState,
+    continueWatchingItems: List<ContinueWatchingItem>,
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
@@ -101,7 +102,6 @@ fun GridHomeContent(
 
     // Offset for section indices when continue watching is present
     val gridItems = uiState.gridItems
-    val continueWatchingItems = uiState.continueWatchingItems
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
 
     val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = remember(uiState.resolvedRailRows) {

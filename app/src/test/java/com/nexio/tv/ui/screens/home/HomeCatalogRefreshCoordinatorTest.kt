@@ -401,6 +401,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -532,6 +533,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -616,6 +618,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns linkedMapOf()
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
         every { viewModel._displayCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -792,6 +795,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel._uiState } returns uiState
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
         every { viewModel.homeProfileGeneration } returns 1L
@@ -922,6 +926,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel._uiState } returns uiState
         every { viewModel.catalogInventoryRepository.isEmpty() } returns true
         every { viewModel._displayCatalogRows } returns displayCatalogRows
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
         every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
         every { viewModel.homeProfileGeneration } returns 1L
@@ -1054,6 +1059,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel._uiState } returns uiState
         every { viewModel.catalogInventoryRepository } returns catalogInventoryRepository
         every { viewModel._displayCatalogRows } returns displayCatalogRows
+        every { viewModel._displayContinueWatchingItems } returns MutableStateFlow(emptyList())
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())

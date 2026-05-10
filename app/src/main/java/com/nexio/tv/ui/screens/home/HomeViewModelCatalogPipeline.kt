@@ -281,10 +281,10 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     catalogInventoryRepository.clear()
     _displayCatalogRows.value = emptyList()
     _displayHeroItems.value = emptyList()
+    _displayContinueWatchingItems.value = emptyList()
     _uiState.update { state ->
         state.copy(
             heroCatalogKeys = emptyList(),
-            continueWatchingItems = emptyList(),
             traktUpNextItems = emptyList(),
             modernHomePresentation = ModernHomePresentationState(),
             homeReadiness = HomeInitialReadiness.started(
@@ -1649,7 +1649,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             onLog = { event, details -> logStartupPerf(event, details) }
         )
     }
-    val activeContinueWatchingItemKeys = _uiState.value.continueWatchingItems
+    val activeContinueWatchingItemKeys = _displayContinueWatchingItems.value
         .map { item -> "${item.contentType()}:${item.contentId()}" }
         .toSet()
     if (activeCatalogItemKeys.isEmpty() && activeContinueWatchingItemKeys.isEmpty()) {
@@ -2467,7 +2467,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val currentState = _uiState.value
     val currentLayout = currentState.homeLayout
     val currentGridItems = currentState.gridItems
-    val continueWatchingItems = currentState.continueWatchingItems
     val heroSectionEnabled = currentState.heroSectionEnabled
     val traktSnapshot = if (activeProfileTraktAuthenticated) {
         traktDiscoverySnapshot
@@ -2571,6 +2570,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val currentPreferencePersistedTmdbSyntheticGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbPrefs)
     val currentPreferencePersistedKitsuSyntheticGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
     val computationSignature = withContext(Dispatchers.Default) {
+        // Read continue-watching snapshot inside withContext so the value is not pinned
+        // as an outer-fun local across the catalogRowsComputationMutex.withLock + suspend
+        // surface (CLAUDE.md hard rule #6).
+        val continueWatchingItems = _displayContinueWatchingItems.value
         buildCatalogComputationSignature(
             orderedKeys = orderedKeys,
             catalogSnapshot = catalogSnapshot,
@@ -2925,7 +2928,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val hasCurrentRenderedContent = hasRenderableHomeContent(
         currentState,
         _displayCatalogRows.value,
-        _displayHeroItems.value
+        _displayHeroItems.value,
+        _displayContinueWatchingItems.value
     )
     val shouldKeepVisibleContent =
         hasCurrentRenderedContent &&
