@@ -41,4 +41,29 @@ class SubtitleTranslationServicePromptTest {
         assertTrue("expected source name in: $prompt", prompt.contains("Polish"))
         assertTrue("expected target name in: $prompt", prompt.contains("Dutch"))
     }
+
+    @Test
+    fun `buildRawSubRipSystemPrompt instructs auto-detection when source is auto`() {
+        val prompt = SubtitleTranslationService.buildRawSubRipSystemPromptForTest(
+            targetLanguageName = "Dutch",
+            sourceLanguageName = "auto"
+        )
+
+        val lower = prompt.lowercase()
+        assertTrue("expected detect/automatically in: $prompt",
+            lower.contains("detect") && lower.contains("automatically")
+        )
+        assertTrue("expected target name in: $prompt", prompt.contains("Dutch"))
+    }
+
+    @Test
+    fun `buildRawSubRipSystemPrompt names source explicitly when known`() {
+        val prompt = SubtitleTranslationService.buildRawSubRipSystemPromptForTest(
+            targetLanguageName = "Dutch",
+            sourceLanguageName = "Polish"
+        )
+
+        assertTrue("expected source name in: $prompt", prompt.contains("Polish"))
+        assertTrue("expected target name in: $prompt", prompt.contains("Dutch"))
+    }
 }
