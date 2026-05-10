@@ -110,6 +110,10 @@ private fun TvMetadataEnrichment.toHomeCompatibilityDisplayMetadata(): HomeDispl
         description = description,
         imdbRating = rating?.toFloat(),
         ratingSource = ratingSource ?: TitleRatingSource.IMDB,
+        // Carry production language through to the CW item's displayMetadata so
+        // buildContinueWatchingStreamRoute can plumb it to the player nav arg.
+        // See docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md.
+        originalLanguage = originalLanguage,
         poster = poster,
         backdrop = backdrop
     )
