@@ -50,6 +50,18 @@ private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
     )
 )
 
+/**
+ * Stable single-element list wrapping [EMPTY_SURFACE_PLACEHOLDER_SLIDE]. Hoisted
+ * so successive empty emissions (cold boot, profile switch, all-items-undisplayable)
+ * reuse the SAME list reference instead of allocating `listOf(...)` per emission.
+ * Without this, downstream `===` guards against `_slides.value` mis-fire and
+ * Compose re-invalidates the screensaver overlay on every empty tick. CLAUDE.md
+ * hard rule #5 — memoize at every reference-fresh boundary, including the
+ * empty-state degenerate case.
+ */
+private val EMPTY_PLACEHOLDER_SLIDES: List<IdleScreensaverSlide> =
+    listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE)
+
 @Singleton
 class IdleScreensaverRepository(
     @Suppress("unused")
@@ -156,7 +168,7 @@ class IdleScreensaverRepository(
 
             _screensaverDisplayItems.value = displayItems
             _slides.value = if (imageSlides.isEmpty()) {
-                listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE)
+                EMPTY_PLACEHOLDER_SLIDES
             } else {
                 adapterMemo.internSlidesList(imageSlides)
             }
