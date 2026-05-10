@@ -20,6 +20,13 @@ data class HomeDisplayMetadata(
     val imdbRating: Float? = null,
     val ratingSource: TitleRatingSource? = TitleRatingSource.IMDB,
     val tomatoesRating: Double? = null,
+    /**
+     * Production language of the title (e.g. `"eng"` for Citadel). Plumbed
+     * through to the player's nav arg via `buildContinueWatchingStreamRoute`,
+     * so continue-watching playback can target the show's original audio.
+     * See `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`.
+     */
+    val originalLanguage: String? = null,
     val poster: String? = null,
     val posterProviderTag: String? = null,
     val backdrop: String? = null,
@@ -51,6 +58,7 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         imdbRating = imdbRating,
         ratingSource = ratingSource.orDefault(),
         tomatoesRating = tomatoesRating,
+        originalLanguage = originalLanguage,
         poster = poster,
         posterProviderTag = posterProviderTag,
         backdrop = background,
@@ -70,6 +78,7 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
         imdbRating = imdbRating,
         ratingSource = ratingSource.orDefault(),
         tomatoesRating = null,
+        originalLanguage = originalLanguage,
         poster = poster,
         posterProviderTag = posterProviderTag,
         backdrop = background,
@@ -165,6 +174,7 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         imdbRating = mergedRating,
         ratingSource = mergedRatingSource,
         tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
+        originalLanguage = originalLanguage ?: fallback.originalLanguage,
         poster = poster ?: fallback.poster,
         posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
         backdrop = backdrop ?: fallback.backdrop,
