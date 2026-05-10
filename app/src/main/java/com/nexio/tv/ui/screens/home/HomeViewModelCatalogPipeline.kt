@@ -3123,7 +3123,11 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
         heroTmdbSettings = currentTmdbSettings
     )
+    // Plan-C migration (spec 2026-05-10-catalog-inventory-repository-design):
+    // Dual-write while consumers migrate. _fullCatalogRows stays in place
+    // until Task 6 deletes it; reads switch to inventoryRepository in Task 4.
     _fullCatalogRows.value = composedSnapshot.fullRows
+    catalogInventoryRepository.publish(composedSnapshot.fullRows)
     _displayCatalogRows.value = composedSnapshot.displayRows
     _displayHeroItems.value = composedSnapshot.heroItems
     _uiState.update { state ->
