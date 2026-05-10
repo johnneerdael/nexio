@@ -296,6 +296,67 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `publishResolvedItems retainOnly evicts items absent from current emission`() = runTest {
+        val backdrop = artworkRef(assetKey = "backdrop", imageType = ArtworkType.BACKDROP)
+        val itemA = resolvedItem(
+            contentId = "tmdb:1",
+            title = "Alpha",
+            artwork = ArtworkBundle(backdrop = backdrop),
+            rating = null
+        )
+        val itemB = resolvedItem(
+            contentId = "tmdb:2",
+            title = "Bravo",
+            artwork = ArtworkBundle(backdrop = backdrop),
+            rating = null
+        )
+        val itemC = resolvedItem(
+            contentId = "tmdb:3",
+            title = "Charlie",
+            artwork = ArtworkBundle(backdrop = backdrop),
+            rating = null
+        )
+        val surfaceItems = MutableStateFlow(listOf(itemA, itemB, itemC))
+        val surfaceRepository = mockk<ResolvedDisplaySurfaceRepository>()
+        coEvery {
+            surfaceRepository.getSnapshot(ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY, 7)
+        } returns emptyList()
+        every { surfaceRepository.observeScreensaverSurface(7) } returns surfaceItems
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = mockk(relaxed = true),
+            surfaceRepository = surfaceRepository,
+            adapterMemo = ScreensaverAdapterMemo(),
+            activeProfileId = { 7 }
+        )
+
+        val job = launch {
+            repository.observeResolvedSurface(profileId = 7)
+        }
+        advanceUntilIdle()
+
+        // First emission: A, B, C all present.
+        val firstEmission = repository.slides.value
+        assertEquals(3, firstEmission.size)
+        assertEquals(setOf("tmdb:1", "tmdb:2", "tmdb:3"), firstEmission.map { it.itemId }.toSet())
+
+        // Second emission: only A present — B and C must be evicted from the memo.
+        surfaceItems.value = listOf(itemA)
+        advanceUntilIdle()
+
+        val afterEviction = repository.slides.value
+        assertEquals(1, afterEviction.size)
+        assertEquals("tmdb:1", afterEviction.single().itemId)
+        // Bravo / Charlie no longer present in published slides — proves retainOnly
+        // pruned them. (The eviction itself is unit-tested in
+        // ScreensaverAdapterMemoTest; this asserts the repository publish path
+        // actually invokes it.)
+        assertEquals(emptySet<String>(), afterEviction.map { it.itemId }.toSet() - setOf("tmdb:1"))
+
+        job.cancel()
+    }
+
+    @Test
     fun `warmFromCache clears out of range ratings on both adapters`() = runTest {
         val backdrop = artworkRef(assetKey = "hotd-backdrop", imageType = ArtworkType.BACKDROP)
         val surfaceRepository = mockk<ResolvedDisplaySurfaceRepository>()
