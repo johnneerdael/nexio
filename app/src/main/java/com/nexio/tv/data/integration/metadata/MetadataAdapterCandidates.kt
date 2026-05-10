@@ -54,6 +54,8 @@ internal fun TvMetadataEnrichment?.toMetadataCandidate(provider: MetadataPrimary
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntimeMinutes?.let { putIfAbsent(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            language?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
             }
