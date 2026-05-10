@@ -656,4 +656,39 @@ class PlayerStartupSelectionPolicyTest {
 
         assertEquals(1, index)
     }
+
+    @Test
+    fun `aiTier addon branch removed - tier 5 serves english addon with ai flag`() {
+        // No embedded text tracks; addon list contains an English subtitle.
+        // Preferred is Dutch, secondary is English, AI is configured. The
+        // outcome (Addon(en, ai=true)) is identical to the pre-change
+        // behavior; this test pins the consolidation so future refactors
+        // don't regress.
+        val addonSubs = listOf(
+            Subtitle(
+                id = "en-addon",
+                url = "file:///tmp/en.srt",
+                lang = "en",
+                addonName = "OpenSubtitles",
+                addonLogo = null
+            )
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = emptyList(),
+            addonSubtitles = addonSubs,
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertTrue(decision is StartupSubtitleAutoSelectionDecision.Addon)
+        decision as StartupSubtitleAutoSelectionDecision.Addon
+        assertEquals("en-addon", decision.subtitle.id)
+        assertEquals(true, decision.enableAiTranslation)
+    }
 }

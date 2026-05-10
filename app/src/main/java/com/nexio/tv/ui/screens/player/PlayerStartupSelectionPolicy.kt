@@ -291,18 +291,16 @@ internal fun decideStartupSubtitleAutoSelection(
     }
 
     // AI-translation tier (the "third primary tier"):
-    // No primary-language subtitle exists anywhere, so use Gemini to bridge
-    // a different-language source into the user's primary language. The
-    // translation source is chosen by this rule:
-    //   1. If the stream has any text-based internal subtitle, translate
-    //      that one (no extra network fetch). Prefer the user's secondary
-    //      language, then English, then any other text-based track.
-    //   2. Otherwise (only bitmap internal subs, or no internal subs at
-    //      all — bitmap subs cannot be translated), fall back to the best-
-    //      match addon subtitle in the secondary language and translate it.
-    // This tier only fires when the user has both a primary preference and
-    // an AI translation backend configured. If either is missing we drop
-    // through to the pre-existing untranslated secondary fallback below.
+    // No primary-language subtitle exists anywhere, so use AI to bridge a
+    // different-language embedded source into the user's primary language.
+    // The translation source is chosen by pickTranslatableInternalSubtitle:
+    //   1. Secondary language (when set) — user's source-language hint.
+    //   2. English — highest-quality NMT corpus.
+    //   3. Any other text-based embedded track.
+    // We do NOT fall back to addon subtitles here. Addon fetching is keyed
+    // on primary+secondary languages only, so any matching addon would be
+    // covered by the existing untranslated-secondary tier below (tier 5)
+    // with the same enableAiTranslation flag.
     val aiTranslationAllowed =
         startupPhase && aiTranslationConfigured && normalizedPreferred != null
     if (aiTranslationAllowed) {
@@ -313,13 +311,6 @@ internal fun decideStartupSubtitleAutoSelection(
         if (translatableInternalIndex >= 0) {
             return StartupSubtitleAutoSelectionDecision.Internal(
                 index = translatableInternalIndex,
-                enableAiTranslation = true
-            )
-        }
-        val addonForTranslation = findAddon(normalizedSecondary)
-        if (addonForTranslation != null) {
-            return StartupSubtitleAutoSelectionDecision.Addon(
-                subtitle = addonForTranslation,
                 enableAiTranslation = true
             )
         }
