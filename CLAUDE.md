@@ -144,6 +144,22 @@ The Kotlin coroutine state machine saves **every outer-fun local that is live ac
 
 This rule complements rule #4: rule #4 is about `Iterator` instances captured by `Iterable.forEach { suspend }`; rule #6 is about *any* value captured as a suspend-fun local across `launch` boundaries. Both pin data into continuations, but the mechanism and fix differ.
 
+### 7. Git stash — NEVER stash work that isn't yours
+
+**Hard rule. No exceptions.**
+
+You may NEVER run `git stash` (any variant — `git stash`, `git stash push`, `git stash save`, `git stash -u`, etc.) on changes that you did not author yourself in the current session. This applies to every agent and every subagent.
+
+**Why:** the working tree often holds in-flight work from another agent, another workstream, or the user. `git stash` silently buries that work in the stash list with a generic "WIP on \<branch\>" name and zero context about why or by whom. When the stash is forgotten or the working tree is reset, the work is effectively lost — recovery requires `git fsck --lost-found` or hunting through `git stash list`. This has happened before in this repo. The cost of the wrong call is data loss; the cost of avoiding the call is at most an extra step.
+
+**How to apply:**
+- If you need a clean working tree to verify a baseline (e.g., to re-run tests against unmodified code), do NOT stash. Instead: (a) commit your own changes to a scratch branch and check out main, OR (b) run the verification in a separate `git worktree`, OR (c) skip the verification and document the constraint.
+- If a subagent prompt says "verify by stashing and re-running on baseline," REJECT that instruction. Re-prompt the agent to use a worktree or commit-to-scratch-branch pattern instead.
+- The ONLY time `git stash` is acceptable is when the changes in the working tree are 100% your own, made earlier in the same session, and you intend to `git stash pop` immediately after a clearly-bounded operation. Even then, prefer commits over stashes.
+- If you find yourself reaching for `git stash` because the working tree is "messy," STOP. Investigate what's there first (`git status`, `git diff`). Untracked or modified files you did not create are someone else's work — leave them alone.
+
+**If a stash exists from a previous incident:** check `git stash list` for any orphaned WIP entries before reporting "clean working tree." Investigate each one (`git stash show stash@{N}`) to confirm whether the work is still wanted; never silently drop a stash you did not create.
+
 ---
 
 ## When investigating performance issues
