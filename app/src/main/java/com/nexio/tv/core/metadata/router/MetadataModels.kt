@@ -167,6 +167,14 @@ data class ResolvedMetadataDocument(
     val ageRating: String? = null,
     val countries: List<String> = emptyList(),
     val language: String? = null,
+    /**
+     * Production language of the title (e.g. `"eng"` for Citadel). Sourced from
+     * TMDB `original_language`, TVDB `originalLanguage`, or hardcoded inference
+     * for Kitsu's typed shapes (`anime`→`"ja"`). Distinct from [language] which
+     * historically conflated this concept with the UI-locale fetch language.
+     * See `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`.
+     */
+    val originalLanguage: String? = null,
     val castMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
     val crewMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
     val productionCompanies: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
