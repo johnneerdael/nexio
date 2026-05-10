@@ -145,7 +145,7 @@ class HomeViewModel @Inject constructor(
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
-    private val catalogInventoryRepository: CatalogInventoryRepository,
+    internal val catalogInventoryRepository: CatalogInventoryRepository,
     internal val projectionCache: ResolvedDisplayProjectionCache,
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
     internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
