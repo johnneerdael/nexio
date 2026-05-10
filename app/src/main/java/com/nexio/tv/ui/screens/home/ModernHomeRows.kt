@@ -93,6 +93,8 @@ import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
+import com.nexio.tv.ui.components.toContinueWatchingItem
 import com.nexio.tv.ui.components.FallbackArtworkImage
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
 import com.nexio.tv.ui.components.TrailerPlayer
@@ -185,14 +187,14 @@ private fun ModernContinueWatchingRowItem(
     imageHeight: Dp,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
-    onShowOptions: (ContinueWatchingItem) -> Unit,
+    onShowOptions: (ContinueWatchingResolvedDisplayItem) -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean,
     fullscreenTrailerActive: Boolean,
     onPromoteHeroTrailerToFullscreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val item = payload.item
-    val onClick = remember(item) { { onContinueWatchingClick(item) } }
+    val onClick = remember(item) { { onContinueWatchingClick(item.toContinueWatchingItem()) } }
     val onLongPress = remember(item) { { onShowOptions(item) } }
     var focusEventId by remember { mutableStateOf(0) }
     var isCardFocused by remember { mutableStateOf(false) }
@@ -351,7 +353,7 @@ internal fun ModernRowSection(
     continueWatchingCardWidth: Dp,
     continueWatchingCardHeight: Dp,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
-    onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingOptions: (ContinueWatchingResolvedDisplayItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit,
     onItemFocus: (MetaPreview) -> Unit,

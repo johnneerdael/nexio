@@ -26,6 +26,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.CatalogRowSection
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 import com.nexio.tv.ui.components.ContinueWatchingSection
 import com.nexio.tv.ui.components.HeroCarousel
 import com.nexio.tv.ui.components.PosterCardStyle
@@ -46,7 +47,7 @@ fun ClassicHomeContent(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     heroItems: List<MetaPreview>,
-    continueWatchingItems: List<ContinueWatchingItem>,
+    continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
     trailerPreviewUrls: Map<String, String>,

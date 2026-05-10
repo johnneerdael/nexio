@@ -103,6 +103,8 @@ import coil.request.ImageRequest
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
+import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
+import com.nexio.tv.ui.components.toContinueWatchingItem
 import com.nexio.tv.ui.components.ContinueWatchingOptionsDialog
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
 import com.nexio.tv.ui.theme.NexioColors
@@ -440,7 +442,7 @@ internal fun ModernHomeContent(
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
     var displayedHeroItemKey by remember { mutableStateOf<String?>(null) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
-    var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
+    var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
     val lastFocusedContinueWatchingIndexRef = remember { AtomicInteger(-1) }
     val lastKeyRepeatDispatchRef = remember { AtomicLong(0L) }
     val lastHeroNavigationAtMsRef = remember { AtomicLong(0L) }
@@ -1339,7 +1341,7 @@ internal fun ModernHomeContent(
             }
         }
         val onContinueWatchingOptions = remember {
-            { item: ContinueWatchingItem ->
+            { item: ContinueWatchingResolvedDisplayItem ->
                 optionsItem = item
             }
         }
@@ -1449,6 +1451,7 @@ internal fun ModernHomeContent(
 
     val selectedOptionsItem = optionsItem
     if (selectedOptionsItem != null) {
+        val selectedLegacy = selectedOptionsItem.toContinueWatchingItem()
         ContinueWatchingOptionsDialog(
             item = selectedOptionsItem,
             onDismiss = { optionsItem = null },
@@ -1463,48 +1466,48 @@ internal fun ModernHomeContent(
                 pendingRowFocusIndex = targetIndex
                 pendingRowFocusNonce++
                 onRemoveContinueWatching(
-                    selectedOptionsItem.contentId(),
-                    selectedOptionsItem.season(),
-                    selectedOptionsItem.episode(),
-                    selectedOptionsItem is ContinueWatchingItem.NextUp
+                    selectedLegacy.contentId(),
+                    selectedLegacy.season(),
+                    selectedLegacy.episode(),
+                    selectedOptionsItem is ContinueWatchingResolvedDisplayItem.NextUp
                 )
                 optionsItem = null
             },
             onMarkAsWatched = {
-                onMarkContinueWatchingWatched(selectedOptionsItem)
+                onMarkContinueWatchingWatched(selectedLegacy)
                 optionsItem = null
             },
             showManualStreamSelection = shouldShowContinueWatchingManualStreamSelection(
                 deterministicAutoplayEnabled = contentState.deterministicAutoplayEnabled,
-                item = selectedOptionsItem
+                item = selectedLegacy
             ),
             onPlayWithManualStreamSelection = {
-                onContinueWatchingManualStreamSelection(selectedOptionsItem)
+                onContinueWatchingManualStreamSelection(selectedLegacy)
                 optionsItem = null
             },
             onDetails = {
                 onNavigateToDetail(
-                    selectedOptionsItem.contentId(),
-                    selectedOptionsItem.contentType(),
+                    selectedLegacy.contentId(),
+                    selectedLegacy.contentType(),
                     ""
                 )
                 optionsItem = null
             },
             onCheckIn = onCheckInContinueWatching?.let { callback ->
                 {
-                    callback(selectedOptionsItem)
+                    callback(selectedLegacy)
                     optionsItem = null
                 }
             },
-            isInWatchlist = cwWatchlistMembership[selectedOptionsItem.contentId()] == true,
+            isInWatchlist = cwWatchlistMembership[selectedOptionsItem.contentId] == true,
             onToggleLibrary = onToggleContinueWatchingLibrary?.let { callback ->
                 {
-                    callback(selectedOptionsItem)
+                    callback(selectedLegacy)
                     optionsItem = null
                 }
             },
             onStartFromBeginning = {
-                onContinueWatchingStartFromBeginning(selectedOptionsItem)
+                onContinueWatchingStartFromBeginning(selectedLegacy)
                 optionsItem = null
             }
         )

@@ -29,13 +29,12 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
-import com.nexio.tv.ui.screens.home.contentId
 import com.nexio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun GridContinueWatchingSection(
-    items: List<ContinueWatchingItem>,
+    items: List<ContinueWatchingResolvedDisplayItem>,
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
@@ -50,7 +49,7 @@ fun GridContinueWatchingSection(
     focusedItemIndex: Int = -1
 ) {
     if (items.isEmpty()) return
-    var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
+    var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
     val focusRequesters = remember(items.size) { List(items.size) { FocusRequester() } }
     var lastFocusedIndex by remember { mutableIntStateOf(-1) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
@@ -106,15 +105,8 @@ fun GridContinueWatchingSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { _, item ->
-                    when (item) {
-                        is ContinueWatchingItem.InProgress ->
-                            "cw_${item.progress.contentId}_${item.progress.videoId}_${item.progress.season ?: -1}_${item.progress.episode ?: -1}"
-                        is ContinueWatchingItem.NextUp ->
-                            "nextup_${item.info.contentId}_${item.info.videoId}_${item.info.season}_${item.info.episode}"
-                    }
-                }
-            ) { index, progress ->
+                key = { _, resolved -> resolved.itemKey }
+            ) { index, resolved ->
                 val focusModifier = if (index < focusRequesters.size) {
                     Modifier.focusRequester(focusRequesters[index])
                 } else {
@@ -122,9 +114,9 @@ fun GridContinueWatchingSection(
                 }
 
                 ContinueWatchingCard(
-                    item = progress,
-                    onClick = { onItemClick(progress) },
-                    onLongPress = { optionsItem = progress },
+                    item = resolved,
+                    onClick = { onItemClick(resolved.toContinueWatchingItem()) },
+                    onLongPress = { optionsItem = resolved },
                     modifier = focusModifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused && lastFocusedIndex != index) {
@@ -140,43 +132,44 @@ fun GridContinueWatchingSection(
 
     val menuItem = optionsItem
     if (menuItem != null) {
+        val menuLegacy = menuItem.toContinueWatchingItem()
         ContinueWatchingOptionsDialog(
             item = menuItem,
             onDismiss = { optionsItem = null },
             onRemove = {
                 val targetIndex = if (items.size <= 1) null else minOf(lastFocusedIndex, items.size - 2)
                 pendingFocusIndex = targetIndex
-                onRemoveItem(menuItem)
+                onRemoveItem(menuLegacy)
                 optionsItem = null
             },
             onMarkAsWatched = {
-                onMarkAsWatched(menuItem)
+                onMarkAsWatched(menuLegacy)
                 optionsItem = null
             },
-            showManualStreamSelection = showManualStreamSelection(menuItem),
+            showManualStreamSelection = showManualStreamSelection(menuLegacy),
             onPlayWithManualStreamSelection = {
-                onPlayWithManualStreamSelection(menuItem)
+                onPlayWithManualStreamSelection(menuLegacy)
                 optionsItem = null
             },
             onDetails = {
-                onDetailsClick(menuItem)
+                onDetailsClick(menuLegacy)
                 optionsItem = null
             },
             onCheckIn = onCheckIn?.let { callback ->
                 {
-                    callback(menuItem)
+                    callback(menuLegacy)
                     optionsItem = null
                 }
             },
-            isInWatchlist = cwWatchlistMembership[menuItem.contentId()] == true,
+            isInWatchlist = cwWatchlistMembership[menuItem.contentId] == true,
             onToggleLibrary = onToggleLibrary?.let { callback ->
                 {
-                    callback(menuItem)
+                    callback(menuLegacy)
                     optionsItem = null
                 }
             },
             onStartFromBeginning = {
-                onStartFromBeginning(menuItem)
+                onStartFromBeginning(menuLegacy)
                 optionsItem = null
             }
         )

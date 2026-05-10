@@ -217,7 +217,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
         combine(
             _uiState,
             _displayCatalogRows,
-            _displayContinueWatchingItems
+            _resolvedContinueWatchingItems
         ) { state, catalogRows, continueWatchingItems ->
             ModernHomePresentationInput(
                 catalogRows = catalogRows,
