@@ -787,7 +787,10 @@ private val SDH_SUBTITLE_MARKERS: List<String> = listOf(
 
 // Standalone "cc" token (Closed Captions). Word-boundary anchored so
 // "Soccer" / "accordion" do not match, but "[CC]", "(CC)", "English-CC",
-// "CC English", and "English CC" all match correctly.
+// "CC English", and "English CC" all match correctly. The pattern is
+// lowercase because [isSdhSubtitle] lowercases the haystack before
+// matching; if a future caller passes a non-lowercased input, prefer
+// adding a lowercase step there over mutating this regex.
 private val SDH_CC_TOKEN_REGEX: Regex = Regex("""\bcc\b""")
 
 private fun TrackInfo.isSdhSubtitle(): Boolean {

@@ -188,6 +188,10 @@ class SubtitleTranslationService @Inject constructor(
                 append(" (")
                 append(targetLanguageCode)
                 append("). ")
+                // JSON-prompt source clause stays inline because this builder
+                // uses StringBuilder; see [rawSubRipSourceClause] /
+                // [rawAssSsaSourceClause] at the end of the file for the
+                // string-returning equivalents the triple-quoted prompts use.
                 if (sourceLanguageName.equals("auto", ignoreCase = true)) {
                     append("The source language is unknown — detect it automatically from the cue text and translate to ")
                     append(targetLanguageName)
