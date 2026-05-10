@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.ui.components.RailCardData
 
 /**
  * Per-surface projection for detail-screen rails (MoreLikeThis, Collection).
@@ -24,6 +25,10 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
  *
  * Plan B Surface 5 Task 24. Mirrors
  * [com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem.fromInProgressLegacy].
+ *
+ * Implements [RailCardData] (Phase 0 Task 4 of the home-MetaPreview-elimination
+ * spec) so rail composables can consume this projection through the typed
+ * [RailCardData] contract instead of reading the legacy [source] MetaPreview.
  */
 @Immutable
 data class DetailRailItem(
@@ -31,12 +36,16 @@ data class DetailRailItem(
     val contentId: String,
     val title: String,
     val year: Int?,
-    val posterRef: ArtworkDisplayRef?,
+    override val posterRef: ArtworkDisplayRef?,
     val backdropRef: ArtworkDisplayRef?,
     val logoRef: ArtworkDisplayRef?,
     val rating: TitleRating?,
-    val source: MetaPreview
-) {
+    val source: MetaPreview,
+    override val posterProviderTag: String?
+) : RailCardData {
+    override val id: String get() = contentId
+    override val name: String? get() = title
+
     companion object {
         fun fromMetaPreview(meta: MetaPreview): DetailRailItem = DetailRailItem(
             itemKey = homeDisplayItemKey(meta.apiType, meta.id),
@@ -49,7 +58,8 @@ data class DetailRailItem(
             rating = meta.imdbRating?.let { value ->
                 TitleRating(value = value.toDouble(), source = meta.ratingSource ?: TitleRatingSource.IMDB)
             },
-            source = meta
+            source = meta,
+            posterProviderTag = meta.posterProviderTag
         )
     }
 }
