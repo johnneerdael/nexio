@@ -157,9 +157,11 @@ internal fun PlaybackSettingsSections(
     firstPaintLogcatEnabled: Boolean,
     metaRouteLogcatEnabled: Boolean,
     intRuntimeLogcatEnabled: Boolean,
+    subtitleDiagnosticsLogcatEnabled: Boolean,
     onSetFirstPaintLogcatEnabled: (Boolean) -> Unit,
     onSetMetaRouteLogcatEnabled: (Boolean) -> Unit,
     onSetIntRuntimeLogcatEnabled: (Boolean) -> Unit,
+    onSetSubtitleDiagnosticsLogcatEnabled: (Boolean) -> Unit,
     autoTranslateUnsafeBodyLoggingEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
@@ -694,6 +696,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.troubleshooting_logcat_int_runtime_subtitle),
                     isChecked = intRuntimeLogcatEnabled,
                     onCheckedChange = onSetIntRuntimeLogcatEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "troubleshooting_logcat_subtitles") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.ClosedCaption,
+                    title = stringResource(R.string.troubleshooting_logcat_subtitles_title),
+                    subtitle = stringResource(R.string.troubleshooting_logcat_subtitles_subtitle),
+                    isChecked = subtitleDiagnosticsLogcatEnabled,
+                    onCheckedChange = onSetSubtitleDiagnosticsLogcatEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

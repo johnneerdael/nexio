@@ -93,6 +93,9 @@ class PlaybackSettingsViewModel @Inject constructor(
     val intRuntimeLogcatEnabled: Flow<Boolean> =
         traceSettingsDataStore.intRuntimeLogcatEnabled
 
+    val subtitleDiagnosticsLogcatEnabled: Flow<Boolean> =
+        traceSettingsDataStore.subtitleDiagnosticsLogcatEnabled
+
     fun setFirstPaintLogcatEnabled(enabled: Boolean) {
         viewModelScope.launch { traceSettingsDataStore.setFirstPaintLogcatEnabled(enabled) }
     }
@@ -103,6 +106,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     fun setIntRuntimeLogcatEnabled(enabled: Boolean) {
         viewModelScope.launch { traceSettingsDataStore.setIntRuntimeLogcatEnabled(enabled) }
+    }
+
+    fun setSubtitleDiagnosticsLogcatEnabled(enabled: Boolean) {
+        viewModelScope.launch { traceSettingsDataStore.setSubtitleDiagnosticsLogcatEnabled(enabled) }
     }
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
     fun androidFrameRateStatus(): AndroidFrameRateSettings.Status {

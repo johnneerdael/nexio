@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.subtitles.opensubtitles
 
+import android.util.Log
 import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -10,6 +11,7 @@ import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.SubtitleApiShapes
 import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.valueOrNull
+import com.nexio.tv.core.trace.SubtitleDiagnosticsGate
 import com.nexio.tv.data.remote.api.OpenSubtitlesApiClient
 import com.nexio.tv.data.remote.model.OpenSubtitlesSearchResult
 import javax.inject.Inject
@@ -19,7 +21,8 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 class OpenSubtitlesIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
-    private val apiClient: OpenSubtitlesApiClient
+    private val apiClient: OpenSubtitlesApiClient,
+    private val diagnosticsGate: SubtitleDiagnosticsGate,
 ) {
     suspend fun searchByImdb(imdbId: String): List<OpenSubtitlesSearchResult> =
         execute("imdb:${normalize(imdbId)}") {
@@ -69,7 +72,15 @@ class OpenSubtitlesIntegrationProvider @Inject constructor(
                 }
             }
         )
-        return runtime.get(spec).valueOrNull().orEmpty()
+        val fetchResult = runtime.get(spec)
+        val value = fetchResult.valueOrNull().orEmpty()
+        if (diagnosticsGate.isEnabled()) {
+            Log.d(
+                SubtitleDiagnosticsGate.TAG,
+                "OpenSubtitlesProvider: execute key=$keySuffix outcome=${fetchResult::class.simpleName} count=${value.size}"
+            )
+        }
+        return value
     }
 
     private fun normalize(id: String): String =

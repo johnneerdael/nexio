@@ -11,9 +11,11 @@ import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationStreamHandle
 import com.nexio.tv.core.integration.IntegrationStreamSpec
 import com.nexio.tv.core.integration.SubtitleApiShapes
+import com.nexio.tv.core.trace.SubtitleDiagnosticsGate
 import com.nexio.tv.data.remote.api.OpenSubtitlesApiClient
 import com.nexio.tv.data.remote.model.OpenSubtitlesSearchResult
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -27,7 +29,7 @@ class OpenSubtitlesIntegrationProviderTest {
         val client = mockk<OpenSubtitlesApiClient>()
         coEvery { client.searchByImdb("tt0137523") } returns listOf(row("1"))
 
-        val provider = OpenSubtitlesIntegrationProvider(runtime, client)
+        val provider = OpenSubtitlesIntegrationProvider(runtime, client, disabledGate())
         val results = provider.searchByImdb("tt0137523")
 
         assertEquals(listOf("1"), results.map { it.subtitleId })
@@ -46,7 +48,7 @@ class OpenSubtitlesIntegrationProviderTest {
         val client = mockk<OpenSubtitlesApiClient>()
         coEvery { client.searchSeriesEpisode("tt0903747", 5, 10) } returns emptyList()
 
-        OpenSubtitlesIntegrationProvider(runtime, client)
+        OpenSubtitlesIntegrationProvider(runtime, client, disabledGate())
             .searchSeriesEpisode("tt0903747", 5, 10)
 
         assertEquals("opensubtitles:search:series:903747:s5:e10", runtime.specs.single().cacheKey)
@@ -78,6 +80,9 @@ class OpenSubtitlesIntegrationProviderTest {
         override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
             error("not used")
     }
+
+    private fun disabledGate(): SubtitleDiagnosticsGate =
+        mockk(relaxed = true) { every { isEnabled() } returns false }
 
     private fun row(id: String): OpenSubtitlesSearchResult = OpenSubtitlesSearchResult(
         subtitleId = id,

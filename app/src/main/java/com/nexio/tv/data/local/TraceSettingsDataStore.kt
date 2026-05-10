@@ -25,6 +25,7 @@ class TraceSettingsDataStore @Inject constructor(
     private val firstPaintLogcatKey = booleanPreferencesKey("logcat_first_paint_enabled")
     private val metaRouteLogcatKey = booleanPreferencesKey("logcat_meta_route_enabled")
     private val intRuntimeLogcatKey = booleanPreferencesKey("logcat_int_runtime_enabled")
+    private val subtitleDiagnosticsLogcatKey = booleanPreferencesKey("logcat_subtitle_diagnostics_enabled")
 
     val mode: Flow<TraceMode> = dataStore.data.map { prefs -> TraceMode.parse(prefs[modeKey]) }
 
@@ -38,6 +39,10 @@ class TraceSettingsDataStore @Inject constructor(
 
     val intRuntimeLogcatEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[intRuntimeLogcatKey] ?: false
+    }
+
+    val subtitleDiagnosticsLogcatEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[subtitleDiagnosticsLogcatKey] ?: false
     }
 
     suspend fun setMode(mode: TraceMode) {
@@ -61,6 +66,12 @@ class TraceSettingsDataStore @Inject constructor(
     suspend fun setIntRuntimeLogcatEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[intRuntimeLogcatKey] = enabled
+        }
+    }
+
+    suspend fun setSubtitleDiagnosticsLogcatEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[subtitleDiagnosticsLogcatKey] = enabled
         }
     }
 }

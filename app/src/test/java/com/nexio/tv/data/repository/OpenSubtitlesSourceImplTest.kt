@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.trace.SubtitleDiagnosticsGate
 import com.nexio.tv.data.integration.subtitles.opensubtitles.OpenSubtitlesIntegrationProvider
 import com.nexio.tv.data.local.OpenSubtitlesPreferences
 import com.nexio.tv.data.remote.model.OpenSubtitlesSearchResult
@@ -24,7 +25,7 @@ class OpenSubtitlesSourceImplTest {
             row(id = "hash", hash = "0123456789abcdef", trusted = false, downloads = 1)
         )
 
-        val source = OpenSubtitlesSourceImpl(provider, preferences)
+        val source = OpenSubtitlesSourceImpl(provider, preferences, disabledGate())
         val subtitles = source.search(
             type = "movie",
             id = "tt0137523",
@@ -44,7 +45,7 @@ class OpenSubtitlesSourceImplTest {
         coEvery { provider.searchSeriesEpisode("tt0903747", 5, 10) } returns listOf(row(id = "episode"))
         coEvery { provider.searchByHash(any(), any()) } returns emptyList()
 
-        val source = OpenSubtitlesSourceImpl(provider, preferences)
+        val source = OpenSubtitlesSourceImpl(provider, preferences, disabledGate())
         val subtitles = source.search(
             type = "series",
             id = "tt0903747",
@@ -66,7 +67,7 @@ class OpenSubtitlesSourceImplTest {
         )
         coEvery { provider.searchByHash(any(), any()) } returns emptyList()
 
-        val source = OpenSubtitlesSourceImpl(provider, preferences)
+        val source = OpenSubtitlesSourceImpl(provider, preferences, disabledGate())
         val subtitles = source.search(type = "movie", id = "tt0137523")
 
         assertEquals(listOf("opensubtitles:trusted"), subtitles.map { it.id })
@@ -75,7 +76,7 @@ class OpenSubtitlesSourceImplTest {
     @Test
     fun `disabled source returns empty without provider calls`() = runTest {
         val provider = mockk<OpenSubtitlesIntegrationProvider>()
-        val source = OpenSubtitlesSourceImpl(provider, mockPreferences(enabled = false))
+        val source = OpenSubtitlesSourceImpl(provider, mockPreferences(enabled = false), disabledGate())
 
         val subtitles = source.search(type = "movie", id = "tt0137523")
 
@@ -96,6 +97,9 @@ class OpenSubtitlesSourceImplTest {
         )
         return preferences
     }
+
+    private fun disabledGate(): SubtitleDiagnosticsGate =
+        mockk(relaxed = true) { every { isEnabled() } returns false }
 
     private fun row(
         id: String,
