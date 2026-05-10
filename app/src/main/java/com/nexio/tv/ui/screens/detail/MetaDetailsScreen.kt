@@ -106,6 +106,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.NextToWatch
+import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.OrganizationDiscoverType
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -613,6 +614,7 @@ fun MetaDetailsScreen(
 
                     MetaDetailsContent(
                         meta = meta,
+                        resolvedDetail = uiState.resolvedDetail,
                         detailReturnEpisodeFocusRequest = detailReturnFocusResolution.request,
                         seasons = uiState.seasons,
                         selectedSeason = uiState.selectedSeason,
@@ -992,6 +994,7 @@ private fun ImmediateDetailTrailerTakeoverOverlay(
 @Composable
 private fun MetaDetailsContent(
     meta: Meta,
+    resolvedDetail: ResolvedDetailDisplayDocument?,
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
     selectedSeason: Int,
@@ -1793,6 +1796,7 @@ private fun MetaDetailsContent(
         Box {
             HeroContentSection(
                 meta = displayMeta,
+                resolvedDetail = resolvedDetail,
                 nextEpisode = nextEpisode,
                 nextToWatch = nextToWatch,
                 onPlayClick = heroPlayClick,

@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MDBListRatings
+import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.RatingDisplayFormatter
@@ -76,6 +77,7 @@ private const val HERO_DESCRIPTION_MAX_LINES = 6
 @Composable
 internal fun HeroContentSection(
     meta: Meta,
+    resolvedDetail: ResolvedDetailDisplayDocument?,
     nextEpisode: Video?,
     nextToWatch: NextToWatch?,
     onPlayClick: () -> Unit,
@@ -101,8 +103,23 @@ internal fun HeroContentSection(
     val isSeriesApi = remember(meta.apiType) {
         meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true)
     }
-    val logoModel = remember(context, meta.artwork, meta.logo) {
-        (meta.artwork?.logo.toCoilModelOrNull()
+    // Display-field projection: prefer resolvedDetail (the authoritative display
+    // document) when present; fall back to meta on the legacy route. Per-field
+    // derivation is memoized so reference-fresh resolvedDetail emissions don't
+    // re-allocate downstream values when the content is unchanged.
+    val displayTitle = remember(resolvedDetail?.fields?.title, meta.name) {
+        resolvedDetail?.fields?.title?.takeIf { it.isNotBlank() } ?: meta.name
+    }
+    val displayDescription = remember(resolvedDetail?.fields?.overview, meta.description) {
+        resolvedDetail?.fields?.overview?.takeIf { it.isNotBlank() } ?: meta.description
+    }
+    // Logo selection: typed-only first (resolvedDetail then meta.artwork), with
+    // the legacy meta.logo String fallback only when both typed refs are null.
+    // Preserves rule #1 strict-no-fallback for the typed `logo` slot — it never
+    // demotes to backdrop or poster.
+    val typedLogoRef = resolvedDetail?.artwork?.logo ?: meta.artwork?.logo
+    val logoModel = remember(context, typedLogoRef, meta.logo, meta.id) {
+        (typedLogoRef.toCoilModelOrNull()
             ?: meta.logo.toLegacyArtworkCoilModelOrNull("${meta.id}:logo", ArtworkType.LOGO))?.let { logo ->
             ImageRequest.Builder(context)
                 .data(logo)
@@ -110,7 +127,7 @@ internal fun HeroContentSection(
                 .build()
         }
     }
-    var logoLoadFailed by remember(meta.logo) { mutableStateOf(false) }
+    var logoLoadFailed by remember(typedLogoRef, meta.logo) { mutableStateOf(false) }
     val shouldShowLogo =
         logoModel != null &&
             !logoLoadFailed
@@ -174,7 +191,7 @@ internal fun HeroContentSection(
             if (shouldShowLogo) {
                 AsyncImage(
                     model = logoModel,
-                    contentDescription = meta.name,
+                    contentDescription = displayTitle,
                     onError = { logoLoadFailed = true },
                     modifier = Modifier
                         .height(logoHeight)
@@ -185,7 +202,7 @@ internal fun HeroContentSection(
                 )
             } else {
                 Text(
-                    text = meta.name,
+                    text = displayTitle,
                     style = MaterialTheme.typography.displayMedium,
                     color = NexioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -269,8 +286,8 @@ internal fun HeroContentSection(
                     Spacer(modifier = Modifier.height(14.dp))
                 }
 
-                if (meta.description != null) {
-                    val fullDescription = meta.description
+                if (displayDescription != null) {
+                    val fullDescription = displayDescription
                     var displayedDescription by remember(fullDescription) { mutableStateOf(fullDescription) }
                     Text(
                         text = displayedDescription,
@@ -290,7 +307,7 @@ internal fun HeroContentSection(
                     )
                 }
 
-                MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)
+                MetaInfoRow(meta = meta, resolvedDetail = resolvedDetail, hideImdbRating = hideMetaInfoImdb)
             }
         }
     }
@@ -654,32 +671,76 @@ private fun ActionIconButton(
 @Composable
 private fun MetaInfoRow(
     meta: Meta,
+    resolvedDetail: ResolvedDetailDisplayDocument?,
     hideImdbRating: Boolean
 ) {
     val context = LocalContext.current
-    val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
-    val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
-    val releaseText = remember(meta.localReleaseInfo, meta.releaseInfo) {
-        meta.localReleaseInfo ?: meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+    // Genres, runtime, release, rating, age/country/language all flow from
+    // resolvedDetail when present, falling back to meta on the legacy route.
+    // resolvedDetail.toMeta() drops country (and director/writer/etc.), so
+    // reading from resolvedDetail directly avoids the round-trip data loss.
+    val resolvedFields = resolvedDetail?.fields
+    val resolvedAdvanced = resolvedDetail?.advanced
+    val resolvedRating = resolvedDetail?.rating
+
+    val genres = resolvedFields?.genres?.takeIf { it.isNotEmpty() } ?: meta.genres
+    val genresText = remember(genres) { genres.joinToString(" • ") }
+
+    // runtimeText on the doc is already a human-formatted string ("127 min" etc.).
+    // Prefer it when present; fall back to formatting meta.runtime (Int? minutes).
+    val runtimeText = remember(resolvedFields?.runtimeText, meta.runtime) {
+        resolvedFields?.runtimeText?.takeIf { it.isNotBlank() }
+            ?: meta.runtime?.let { formatRuntime(it) }
     }
-    val imdbRating = if (hideImdbRating) null else meta.imdbRating
+
+    // localReleaseInfo isn't on the doc — keep it as primary so locale-specific
+    // release strings still win. Otherwise prefer doc's releaseDate / year.
+    val releaseText = remember(
+        meta.localReleaseInfo,
+        resolvedFields?.releaseDate,
+        resolvedFields?.year,
+        meta.releaseInfo
+    ) {
+        meta.localReleaseInfo
+            ?: resolvedFields?.releaseDate?.split("-")?.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: resolvedFields?.year?.toString()
+            ?: meta.releaseInfo?.split("-")?.firstOrNull()
+            ?: meta.releaseInfo
+    }
+
+    // Rating: prefer the resolved doc's TitleRating (Double); fall back to
+    // meta.imdbRating (Float) tagged with meta.ratingSource. Convert to Float
+    // for the existing formatter call site.
+    val (effectiveRating, effectiveRatingSource) = remember(resolvedRating, meta.imdbRating, meta.ratingSource) {
+        if (resolvedRating != null) {
+            resolvedRating.value.toFloat() to resolvedRating.source
+        } else {
+            meta.imdbRating to meta.ratingSource.orDefault()
+        }
+    }
+    val imdbRating = if (hideImdbRating) null else effectiveRating
     val shouldShowImdbRating = imdbRating != null
-    val ratingBadge = remember(meta.ratingSource) { titleRatingBadge(meta.ratingSource.orDefault()) }
+    val ratingBadge = remember(effectiveRatingSource) { titleRatingBadge(effectiveRatingSource) }
     val ratingModel = remember(context, ratingBadge.logoRes) {
         ImageRequest.Builder(context)
             .data(ratingBadge.logoRes)
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
-    val secondaryItems = remember(meta.ageRating, meta.country, meta.originalLanguage, meta.language) {
+
+    val ageRating = resolvedAdvanced?.ageRating ?: meta.ageRating
+    val country = resolvedAdvanced?.countries?.firstOrNull() ?: meta.country
+    val originalLanguage = resolvedAdvanced?.originalLanguage ?: meta.originalLanguage
+    val language = resolvedAdvanced?.language ?: meta.language
+    val secondaryItems = remember(ageRating, country, originalLanguage, language) {
         buildList<String> {
-            meta.ageRating?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-            meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            ageRating?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
             // Prefer the production-language field; fall back to the legacy field
             // for cosmetic display only. The badge is purely informational, so the
             // fallback is acceptable here even though it is forbidden for the
             // player's audio targeting (Task C9).
-            (meta.originalLanguage ?: meta.language)
+            (originalLanguage ?: language)
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add(it.uppercase()) }
@@ -693,7 +754,7 @@ private fun MetaInfoRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Show all genres
-            if (meta.genres.isNotEmpty()) {
+            if (genres.isNotEmpty()) {
                 Text(
                     text = genresText,
                     style = MaterialTheme.typography.labelLarge,
