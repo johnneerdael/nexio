@@ -2481,15 +2481,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val mdbListPrefs = mdbListCatalogPreferences
     val tmdbSnapshot = tmdbDiscoverySnapshot
     val tmdbPrefs = tmdbCatalogPreferences
-    // currentVisibleFullRows used to live here as `val currentVisibleFullRows =
-    // _fullCatalogRows.value`, capturing the full inventory (27.98 MiB on the
-    // failing-state heap dump) into the outer-fun continuation across the
-    // catalogRowsComputationMutex.withLock wait + the entire withContext block.
-    // Heaptrail dominator-tree showed
+    // Inventory read used to live here as a function-head local capturing
+    // the full inventory (27.98 MiB on the failing-state heap dump) into the
+    // outer-fun continuation across the catalogRowsComputationMutex.withLock
+    // wait + the entire withContext block. Heaptrail dominator-tree showed
     // updateCatalogRowsPipeline$2$updateResult$1.$currentVisibleFullRows
     // retaining 27.98 MiB across overlapping pipeline emissions (six such
-    // ArrayLists live simultaneously = 168 MiB duplicate state). Moved the
-    // read to its single use-site inside withContext (CLAUDE.md hard rule #6).
+    // ArrayLists live simultaneously = 168 MiB duplicate state). The read
+    // is now inside withContext (CLAUDE.md hard rule #6) and goes through
+    // catalogInventoryRepository.snapshot() since the legacy
+    // _fullCatalogRows MutableStateFlow was deleted in this plan's Task 6.
     val currentHydratedHomeOverlays = hydratedHomeOverlaysByItemKey.value
     val previousTruncatedRowCache = truncatedRowCache.toMap()
     val startupHydrationPending = !installedAddonsObserved ||
@@ -2778,25 +2779,23 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             ),
             retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )
-        // Read _fullCatalogRows.value INSIDE the withContext block instead of
-        // capturing it as an outer-fun local. The outer fun is suspend; if the
-        // local were declared at function-head scope, every suspension above
-        // (including the catalogRowsComputationMutex.withLock wait, which can
-        // be long when emissions overlap) would pin the 27.98 MiB inventory
-        // list in its continuation. Reading at use-site limits the pin to
-        // this withContext block's continuation only.
+        // Read catalogInventoryRepository.snapshot() INSIDE the withContext
+        // block instead of capturing it as an outer-fun local. The outer fun
+        // is suspend; if the local were declared at function-head scope,
+        // every suspension above (including the catalogRowsComputationMutex
+        // .withLock wait, which can be long when emissions overlap) would
+        // pin the 27.98 MiB inventory in its continuation. Reading at
+        // use-site limits the pin to this withContext block's continuation
+        // only (CLAUDE.md hard rule #6).
         //
         // NOTE: this is a snapshot-at-use-site read, not a function-entry
         // read. If two pipeline emissions race for the mutex, the second one
         // observes whatever the first one published. mergeCachedRowsWithLiveRows
         // is designed to handle this — its job is to preserve cached rows
         // through transitional refreshes — and sampling at the merge call
-        // site is generally more correct than function entry. Documented
-        // explicitly so a future reader does not "fix" it back.
-        // Snapshot.values is a view backed by the underlying LinkedHashMap;
-        // .toList() materializes it once into the list shape that
-        // mergeCachedRowsWithLiveRows expects. The snapshot-at-use-site
-        // semantics described in the KDoc above are preserved.
+        // site is generally more correct than function entry. .values is a
+        // view over the LinkedHashMap; .toList() materializes once into the
+        // list shape mergeCachedRowsWithLiveRows expects.
         val cachedFullRows = catalogInventoryRepository.snapshot().values.toList()
         val effectiveOrderedRows = catalogRowMemo.intern(
             mergeCachedRowsWithLiveRows(

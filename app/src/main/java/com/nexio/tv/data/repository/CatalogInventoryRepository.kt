@@ -40,8 +40,9 @@ class CatalogInventoryRepository @Inject constructor() {
     fun observeRail(key: String): Flow<CatalogRow?> =
         _inventory.map { it[key] }.distinctUntilChanged()
 
-    /** Used in place of `_fullCatalogRows.value.isEmpty()` for the
-     *  `rawFirstPaintBatchActive` flag in `runSerializedPostStartupRefreshPipeline`. */
+    /** Empty-inventory check for the `rawFirstPaintBatchActive` flag in
+     *  `runSerializedPostStartupRefreshPipeline` (replaces the legacy
+     *  `_fullCatalogRows.value.isEmpty()` call deleted in plan Task 6). */
     fun isEmpty(): Boolean = _inventory.value.isEmpty()
 
     /**
