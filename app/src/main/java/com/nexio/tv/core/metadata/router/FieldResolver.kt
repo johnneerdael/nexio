@@ -281,12 +281,6 @@ class FieldResolver @Inject constructor(
             logo = logoRef
         )
 
-        android.util.Log.w(
-            "LANG_TRACE",
-            "FieldResolver.buildDocument contentId=$traceContentId " +
-                "fields[LANGUAGE]=${fields[ResolvedField.LANGUAGE]} " +
-                "fields[ORIGINAL_LANGUAGE]=${fields[ResolvedField.ORIGINAL_LANGUAGE]}"
-        )
         return ResolvedMetadataDocument(
             canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
             title = fields[ResolvedField.TITLE] as? String,
