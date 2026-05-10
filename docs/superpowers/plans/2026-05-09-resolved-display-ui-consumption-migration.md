@@ -12,6 +12,8 @@
 
 A first-pass implementation of Tasks 1.5 → 6 was attempted in one session. The work was **partially reverted on device** because the UI consumption changes (Tasks 3–6) caused a sustained GC death-spiral (~3M allocations/sec, 30–65 MB LOS per cycle, app unresponsive within ~60s). A perf prerequisite has since landed; **re-attempt Tasks 3+ on the post-revert main, NOT against the original plan as written**.
 
+**2026-05-10 update:** `CatalogInventoryRepository` extracted from `HomeViewModel` between Surface 3 and Surface 4 — the inventory's 17–28 MiB at peak Modern Home use no longer lives on `HomeViewModel`'s dominator subtree. `CatalogSeeAllScreen` observes a single rail by key instead of the full inventory list, so it no longer recomposes on every Modern Home pipeline tick. Plan: `docs/superpowers/plans/2026-05-10-catalog-inventory-repository.md` (7 tasks, all shipped). Surface 4 (Continue Watching) starts on top of this shape — no further `_fullCatalogRows` reader exists to migrate.
+
 ### What is on `main` right now (verified 2026-05-09 ~20:00)
 
 | Commit | Description | Status |
