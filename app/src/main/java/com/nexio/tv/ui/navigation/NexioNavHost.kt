@@ -1311,6 +1311,7 @@ internal fun buildContinueWatchingStreamRoute(
             contentId = item.progress.contentId,
             contentName = item.progress.name,
             runtime = continueWatchingRuntimeMinutes(item),
+            originalLanguage = item.displayMetadata().originalLanguage,
             returnToDetailOnBack = deterministicAutoplayEnabled ||
                 item.progress.contentType.equals("series", ignoreCase = true),
             startFromBeginning = startFromBeginning,
@@ -1339,6 +1340,7 @@ internal fun buildContinueWatchingStreamRoute(
             contentId = item.info.contentId,
             contentName = item.info.name,
             runtime = continueWatchingRuntimeMinutes(item),
+            originalLanguage = item.displayMetadata().originalLanguage,
             returnToDetailOnBack = deterministicAutoplayEnabled ||
                 item.info.contentType.equals("series", ignoreCase = true),
             startFromBeginning = startFromBeginning,
@@ -1381,6 +1383,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             contentId = item.progress.contentId,
             contentName = item.progress.name,
             runtime = continueWatchingRuntimeMinutes(item),
+            originalLanguage = item.displayMetadata().originalLanguage,
             returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
             resumePositionMs = item.progress.position,
             resumeDurationMs = item.progress.duration,
@@ -1404,6 +1407,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             contentId = item.info.contentId,
             contentName = item.info.name,
             runtime = continueWatchingRuntimeMinutes(item),
+            originalLanguage = item.displayMetadata().originalLanguage,
             returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
         )
     }
