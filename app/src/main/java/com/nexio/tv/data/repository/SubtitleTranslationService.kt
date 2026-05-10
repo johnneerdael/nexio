@@ -189,7 +189,9 @@ class SubtitleTranslationService @Inject constructor(
                 append(targetLanguageCode)
                 append("). ")
                 if (sourceLanguageName.equals("auto", ignoreCase = true)) {
-                    append("The source language is unknown — detect it automatically from the cue text. ")
+                    append("The source language is unknown — detect it automatically from the cue text and translate to ")
+                    append(targetLanguageName)
+                    append(". ")
                 } else {
                     append("Translate from ")
                     append(sourceLanguageName)
