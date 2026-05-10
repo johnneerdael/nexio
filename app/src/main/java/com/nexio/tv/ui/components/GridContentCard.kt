@@ -42,10 +42,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
-import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +52,7 @@ import coil.request.ImageRequest
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun GridContentCard(
-    item: MetaPreview,
+    item: RailCardData,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -146,9 +143,7 @@ fun GridContentCard(
                     .clip(cardShape)
             ) {
                 val context = LocalContext.current
-                val displayPoster = item.displayPoster
-                val coilModel = item.artwork?.poster.toCoilModelOrNull()
-                    ?: displayPoster.toLegacyArtworkCoilModelOrNull("${item.id}:poster", ArtworkType.POSTER)
+                val coilModel = item.posterRef.toCoilModelOrNull()
                 val imageModel = remember(coilModel, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
                     val modelKey = coilModel?.toString()
                     ImageRequest.Builder(context)
@@ -193,7 +188,7 @@ fun GridContentCard(
 
         if (showLabel) {
             Text(
-                text = item.name,
+                text = item.name.orEmpty(),
                 style = MaterialTheme.typography.titleMedium,
                 color = NexioColors.TextPrimary,
                 maxLines = 1,

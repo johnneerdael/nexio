@@ -58,6 +58,7 @@ import com.nexio.tv.ui.components.HeroCarousel
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.components.overlayResolvedDisplay
+import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 
 /** Minimum interval between processed key repeat events to prevent HWUI overload. */
@@ -341,7 +342,7 @@ fun GridHomeContent(
                                 overlayResolvedDisplay(originalItem, resolvedItem)
                             }
                             GridContentCard(
-                                item = effectiveItem,
+                                item = effectiveItem.toRailCardData(),
                                 focusRequester = focusRequester,
                                 posterCardStyle = posterCardStyle,
                                 showLabel = uiState.posterLabelsEnabled,
