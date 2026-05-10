@@ -178,6 +178,14 @@ class HomeViewModel @Inject constructor(
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
+        // Breathing room between back-to-back serialized home refresh
+        // iterations. 2026-05-10 ANR investigation showed that multiple
+        // discovery sources (trakt/simkl/tmdb/mdblist/account_sync) fire
+        // refresh triggers within seconds of each other; the chain ran
+        // back-to-back at full pipe and the typed-slot bag + Compose snapshot
+        // history allocations pushed the GC into a death-spiral
+        // (~36 MB/s sustained churn, GCs every ~600 ms).
+        internal const val SERIALIZED_REFRESH_INTER_ITERATION_DELAY_MS = 250L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
         private val PROFILE_SWITCH_DISK_SNAPSHOT_ALLOWED_REFRESH_REASONS = setOf(
             "account_sync",
@@ -1085,6 +1093,7 @@ class HomeViewModel @Inject constructor(
         val capturedProfileSession = profileManager.activeProfileSession.value
         deferredStartupRefreshJob = viewModelScope.launch {
             var nextReason: String? = reason
+            var iterationsRun = 0
             while (
                 nextReason != null &&
                 isCurrentHomeProfileGeneration(capturedGeneration) &&
@@ -1097,6 +1106,30 @@ class HomeViewModel @Inject constructor(
                     Log.d(TAG, "Stopping serialized home refresh during active playback reason=$currentReason")
                     return@launch
                 }
+                // Inter-iteration breathing room: after the first iteration,
+                // pause briefly so the prior emission's typed-slot bag, hydrated
+                // overlay, and Compose snapshot history can drain to GC before
+                // the next refresh allocates fresh state. Without this, multiple
+                // queued discovery triggers (trakt/simkl/tmdb/mdblist/account_sync)
+                // ran back-to-back and caused a sustained ~36 MB/s allocation
+                // rate that exceeded GC throughput, contributing to the
+                // 2026-05-10 ANR (Input dispatching timed out, system load 4.72).
+                // Also coalesces re-entrant triggers fired during the breathing
+                // window into the same next iteration via the single-slot
+                // pendingSerializedHomeRefreshReason queue.
+                if (iterationsRun > 0) {
+                    kotlinx.coroutines.delay(SERIALIZED_REFRESH_INTER_ITERATION_DELAY_MS)
+                    if (!isCurrentHomeProfileGeneration(capturedGeneration) ||
+                        profileManager.activeProfileSession.value != capturedProfileSession
+                    ) {
+                        return@launch
+                    }
+                    if (!isNonPlaybackHomeWorkAllowed()) {
+                        startupRefreshPending = false
+                        pendingSerializedHomeRefreshReason = null
+                        return@launch
+                    }
+                }
                 pendingSerializedHomeRefreshReason = null
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
@@ -1108,6 +1141,7 @@ class HomeViewModel @Inject constructor(
                 )
                 logStartupPerf("catalog_refresh_end", "reason=$currentReason")
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
+                iterationsRun += 1
                 nextReason = if (
                     isCurrentHomeProfileGeneration(capturedGeneration) &&
                     profileManager.activeProfileSession.value == capturedProfileSession
