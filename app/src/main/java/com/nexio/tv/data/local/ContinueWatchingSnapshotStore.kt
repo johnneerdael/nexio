@@ -6,6 +6,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
@@ -30,6 +33,15 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TrackingProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -67,6 +79,7 @@ class ContinueWatchingSnapshotStore private constructor(
         internal const val BASE_PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 5
+        private const val SNAPSHOT_DIR = "continue-watching-snapshot-v1"
     }
 
     private val gson = Gson()
@@ -83,9 +96,19 @@ class ContinueWatchingSnapshotStore private constructor(
 
     fun read(profileId: Int = activeProfileId()): ContinueWatchingSnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decode(raw)
+            // CLAUDE.md hard rule #3: file-backed streaming. The legacy
+            // SharedPreferences-stored payload (heap-confirmed 47.55 KiB
+            // 2026-05-10 ANR investigation, char[] 2105597968 ->
+            // SharedPreferencesImpl.mMap) was read via prefs.getString +
+            // gson.fromJson(rawString, JsonObject::class) which pinned the
+            // entire payload as a String during parse. Migrated to
+            // file-backed JSON + streaming JsonReader.
+            val file = snapshotFileFor(profileId)
+            if (file.exists()) {
+                streamReadSnapshot(file)
+            } else {
+                migrateLegacySnapshotToFile(profileId, file)
+            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore continue watching snapshot", error)
             clear()
@@ -97,21 +120,9 @@ class ContinueWatchingSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val payload = JsonObject().apply {
-                addProperty("schemaVersion", SCHEMA_VERSION)
-                addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
-                addProperty("languageTag", currentLanguageTag())
-                add("resumeItems", gson.toJsonTree(snapshot.resumeItems))
-                add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
-                add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
-                add("scheduledReemit", encodeNextUpItems(snapshot.scheduledReemit))
-                add("records", encodeRecords(snapshot.records))
-                add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
-                add("metadataSnapshotsByItemKey", gson.toJsonTree(snapshot.metadataSnapshotsByItemKey))
-                addProperty("updatedAtMs", snapshot.updatedAtMs)
-            }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
+            val target = snapshotFileFor(profileId)
+            target.parentFile?.mkdirs()
+            writeSnapshotToFile(snapshot, target)
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist continue watching snapshot", error)
         }
@@ -119,11 +130,213 @@ class ContinueWatchingSnapshotStore private constructor(
 
     fun clear(profileId: Int = activeProfileId()) {
         runCatching {
+            snapshotFileFor(profileId).takeIf { it.exists() }?.delete()
+            // Also clear any lingering legacy prefs entry.
             val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear continue watching snapshot", error)
         }
+    }
+
+    private fun snapshotFileFor(profileId: Int): File {
+        val parent = File(context.filesDir, SNAPSHOT_DIR)
+        if (!parent.exists()) parent.mkdirs()
+        return File(parent, "p${profileId}.json")
+    }
+
+    private fun streamReadSnapshot(file: File): ContinueWatchingSnapshot? {
+        val expectedLanguageTag = currentLanguageTag()
+        var schemaVersion = -1
+        var languageTag: String? = null
+        var resumeItems: List<WatchProgress> = emptyList()
+        var nextUpItems: List<TrackingNextUpEntry> = emptyList()
+        var traktUpNextItems: List<TrackingNextUpEntry> = emptyList()
+        var scheduledReemit: List<TrackingNextUpEntry> = emptyList()
+        var records: List<ContinueWatchingRecord> = emptyList()
+        var displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap()
+        var metadataSnapshotsByItemKey: Map<String, ContinueWatchingMetadataSnapshot> = emptyMap()
+        var updatedAtMs: Long = 0L
+
+        // Hold a transient root JsonObject only when the resumeItems-as-array
+        // legacy decode has to fall back to ContinueWatchingSnapshot.fromJson
+        // (the legacy "movieProgressItems" alias path). For the common path
+        // each top-level field decodes directly into its domain shape and the
+        // intermediate JsonObject/JsonArray becomes GC-eligible immediately.
+
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            return@runCatching null
+                        }
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "schemaVersion" -> {
+                                    schemaVersion = reader.nextInt()
+                                    if (schemaVersion != SCHEMA_VERSION) return@runCatching null
+                                }
+                                "languageTag" -> {
+                                    languageTag = reader.nextString().trim()
+                                    if (languageTag.isNullOrBlank() || languageTag != expectedLanguageTag) {
+                                        return@runCatching null
+                                    }
+                                }
+                                "resumeItems", "movieProgressItems" -> {
+                                    val type = object : TypeToken<List<WatchProgress>>() {}.type
+                                    val parsed: List<WatchProgress>? = gson.fromJson(reader, type)
+                                    if (resumeItems.isEmpty() && !parsed.isNullOrEmpty()) {
+                                        resumeItems = parsed
+                                    }
+                                }
+                                "nextUpItems" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    nextUpItems = element?.let { decodeNextUpItemArray(it) } ?: emptyList()
+                                    if (traktUpNextItems.isEmpty()) {
+                                        traktUpNextItems = nextUpItems
+                                    }
+                                }
+                                "traktUpNextItems" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    val decoded = element?.let { decodeNextUpItemArray(it) } ?: emptyList()
+                                    if (decoded.isNotEmpty()) traktUpNextItems = decoded
+                                }
+                                "scheduledReemit" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    scheduledReemit = element?.let { decodeNextUpItemArray(it) } ?: emptyList()
+                                }
+                                "records" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    records = element?.mapNotNull { e ->
+                                        val obj = runCatching { e.asJsonObject }.getOrNull() ?: return@mapNotNull null
+                                        decodeRecordObject(obj)
+                                    }.orEmpty()
+                                }
+                                "displayMetadataByItemKey" -> {
+                                    val obj: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
+                                    displayMetadataByItemKey = if (obj != null) {
+                                        val type = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
+                                        gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type)
+                                            ?.mapValues { (_, metadata) -> metadata.sanitizedForCache() }
+                                            ?: emptyMap()
+                                    } else emptyMap()
+                                }
+                                "metadataSnapshotsByItemKey" -> {
+                                    val obj: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
+                                    metadataSnapshotsByItemKey = if (obj != null) {
+                                        val type = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
+                                        gson.fromJson<Map<String, ContinueWatchingMetadataSnapshot>>(obj, type)
+                                            ?.mapValues { (_, s) ->
+                                                s.copy(clickTimeDisplayMetadata = s.clickTimeDisplayMetadata.sanitizedForCache())
+                                            }
+                                            ?: emptyMap()
+                                    } else emptyMap()
+                                }
+                                "updatedAtMs" -> updatedAtMs = reader.nextLong()
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
+                }
+            }
+            ContinueWatchingSnapshot(
+                resumeItems = resumeItems,
+                nextUpItems = nextUpItems,
+                traktUpNextItems = traktUpNextItems,
+                scheduledReemit = scheduledReemit,
+                records = records,
+                displayMetadataByItemKey = displayMetadataByItemKey,
+                metadataSnapshotsByItemKey = metadataSnapshotsByItemKey,
+                updatedAtMs = updatedAtMs
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read continue watching snapshot", error)
+        }.getOrNull()
+    }
+
+    private fun decodeNextUpItemArray(array: JsonArray): List<TrackingNextUpEntry> {
+        if (array.size() == 0) return emptyList()
+        val canonical = array.mapNotNull { element ->
+            val obj = runCatching { element.asJsonObject }.getOrNull() ?: return@mapNotNull null
+            decodeNextUpItemObject(obj)
+        }
+        if (canonical.isNotEmpty()) return canonical
+
+        val legacyType = object : TypeToken<List<TrackingNextUpEntry>>() {}.type
+        val legacy = runCatching {
+            gson.fromJson<List<TrackingNextUpEntry>>(array, legacyType).orEmpty()
+        }.getOrDefault(emptyList())
+        return legacy.mapNotNull(::normalizeNextUpEntry)
+    }
+
+    private fun writeSnapshotToFile(snapshot: ContinueWatchingSnapshot, target: File) {
+        val tempFile = File(target.parentFile, "${target.name}.tmp")
+        FileOutputStream(tempFile).use { fos ->
+            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                JsonWriter(bw).use { writer ->
+                    writer.beginObject()
+                    writer.name("schemaVersion").value(SCHEMA_VERSION)
+                    writer.name("languageEpoch").value(metadataDiskCacheStore.currentLanguageEpoch())
+                    writer.name("languageTag").value(currentLanguageTag())
+
+                    writer.name("resumeItems")
+                    val resumeItemsType = object : TypeToken<List<WatchProgress>>() {}.type
+                    gson.toJson(snapshot.resumeItems, resumeItemsType, writer)
+
+                    writer.name("nextUpItems")
+                    gson.toJson(encodeNextUpItems(snapshot.nextUpItems), JsonArray::class.java, writer)
+
+                    writer.name("traktUpNextItems")
+                    gson.toJson(encodeNextUpItems(snapshot.traktUpNextItems), JsonArray::class.java, writer)
+
+                    writer.name("scheduledReemit")
+                    gson.toJson(encodeNextUpItems(snapshot.scheduledReemit), JsonArray::class.java, writer)
+
+                    writer.name("records")
+                    gson.toJson(encodeRecords(snapshot.records), JsonArray::class.java, writer)
+
+                    writer.name("displayMetadataByItemKey")
+                    val dmType = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
+                    gson.toJson(snapshot.displayMetadataByItemKey, dmType, writer)
+
+                    writer.name("metadataSnapshotsByItemKey")
+                    val msType = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
+                    gson.toJson(snapshot.metadataSnapshotsByItemKey, msType, writer)
+
+                    writer.name("updatedAtMs").value(snapshot.updatedAtMs)
+                    writer.endObject()
+                }
+            }
+        }
+        Files.move(
+            tempFile.toPath(),
+            target.toPath(),
+            StandardCopyOption.ATOMIC_MOVE,
+            StandardCopyOption.REPLACE_EXISTING
+        )
+    }
+
+    /**
+     * One-time legacy migration: when the file does not yet exist but the
+     * SharedPreferences-stored payload is present, decode the legacy String
+     * once via the existing decode() path, write it to file, then remove the
+     * prefs entry. Future reads use the streaming file path.
+     */
+    private fun migrateLegacySnapshotToFile(
+        profileId: Int,
+        target: File
+    ): ContinueWatchingSnapshot? {
+        val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+        val legacy = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+        val decoded = decode(legacy) ?: return null
+        runCatching { writeSnapshotToFile(decoded, target) }
+            .onFailure { error -> Log.w(TAG, "Failed to migrate legacy CW snapshot to file", error) }
+        runCatching { prefs.edit().remove(SNAPSHOT_KEY).apply() }
+        return decoded
     }
 
     private fun decode(raw: String): ContinueWatchingSnapshot? {
