@@ -218,6 +218,24 @@ class SubtitleTranslationService @Inject constructor(
                 Your task is to translate raw SRT subtitle content into $targetLanguageName while preserving valid SRT format exactly.
             """.trimIndent()
         }
+
+        @androidx.annotation.VisibleForTesting
+        internal fun buildRawAssSsaSystemPromptForTest(
+            targetLanguageName: String,
+            sourceLanguageName: String
+        ): String {
+            val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+                "source_language = unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+            } else {
+                "source_language = $sourceLanguageName — translate to $targetLanguageName."
+            }
+            return """
+                You are ASS_SSA_SUBTITLE_TRANSLATOR.
+
+                target_language = $targetLanguageName
+                $sourceClause
+            """.trimIndent()
+        }
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
@@ -520,7 +538,8 @@ class SubtitleTranslationService @Inject constructor(
 
             val response = executeRawTranslationRequest(
                 systemPrompt = buildRawAssSsaSystemPrompt(
-                    targetLanguageName = displayLanguage(normalizedTarget)
+                    targetLanguageName = displayLanguage(normalizedTarget),
+                    sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
                 ),
                 userPayload = text,
                 sourceLanguageName = displaySourceLanguage(sourceLanguageCode),
@@ -1664,11 +1683,20 @@ class SubtitleTranslationService @Inject constructor(
         """.trimIndent()
     }
 
-    private fun buildRawAssSsaSystemPrompt(targetLanguageName: String): String {
+    private fun buildRawAssSsaSystemPrompt(
+        targetLanguageName: String,
+        sourceLanguageName: String
+    ): String {
+        val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+            "source_language = unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+        } else {
+            "source_language = $sourceLanguageName — translate to $targetLanguageName."
+        }
         return """
             You are ASS_SSA_SUBTITLE_TRANSLATOR.
 
             target_language = $targetLanguageName
+            $sourceClause
 
             TASK
             Translate only visible natural-language subtitle text into target_language. Preserve all ASS/SSA syntax byte-exact. Output only the translated result in the same container/shape as the input. No explanations, notes, Markdown, or extra text.
