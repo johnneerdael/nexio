@@ -1547,18 +1547,11 @@ class MetaDetailsViewModel @Inject constructor(
                 releaseInfo = document.fields.releaseDate ?: document.fields.year?.toString() ?: updated.releaseInfo,
                 ageRating = document.advanced.ageRating ?: updated.ageRating,
                 country = countries?.joinToString(", ") ?: updated.country,
-                language = run {
-                    val production = document.advanced.language
-                    if (production == null) {
-                        Log.w(
-                            TAG,
-                            "META_LANG_FALLBACK: production language null for contentId=" +
-                                "${updated.id} provider=${document.identity.canonicalProvider} " +
-                                "fellBackTo=${document.localization.selectedLanguage}"
-                        )
-                    }
-                    production ?: document.localization.selectedLanguage ?: updated.language
-                }
+                language = mergeProductionLanguageForTest(
+                    advancedLanguage = document.advanced.language,
+                    selectedLanguage = document.localization.selectedLanguage,
+                    existing = updated.language
+                )
             )
         }
         if (settings.useCredits) {
@@ -1625,7 +1618,11 @@ class MetaDetailsViewModel @Inject constructor(
             rating = rating?.value,
             ratingSource = rating?.source,
             runtimeMinutes = fields.runtimeText?.parseRuntimeMinutesText()?.toIntOrNull(),
-            language = localization.selectedLanguage,
+            language = mergeProductionLanguageForTest(
+                advancedLanguage = advanced.language,
+                selectedLanguage = localization.selectedLanguage,
+                existing = null
+            ),
             ageRating = advanced.ageRating,
             countries = advanced.countries.takeIf { it.isNotEmpty() },
             castMembers = people?.cast.orEmpty(),
@@ -3406,7 +3403,11 @@ private fun ResolvedDetailDisplayDocument.toMeta(contentId: String, contentType:
         videos = emptyList(),
         country = null,
         awards = null,
-        language = localization.selectedLanguage,
+        language = mergeProductionLanguageForTest(
+            advancedLanguage = advanced.language,
+            selectedLanguage = localization.selectedLanguage,
+            existing = null
+        ),
         links = emptyList(),
         trailerYtIds = trailer.fallbackTrailerYtIds,
         artwork = artwork.takeUnless { it.poster == null && it.backdrop == null && it.logo == null && it.thumbnail == null }
@@ -3457,3 +3458,26 @@ internal fun buildKitsuEpisodeVideos(
             )
         }
 }
+
+/**
+ * Merge rule for `Meta.language` (production language). Pure function — exposed
+ * `internal` so the unit test can pin the behavior.
+ *
+ * Bug A regression guard: this function MUST NOT consult any UI-locale source
+ * (e.g. `LocalizationDisplayState.selectedLanguage`). Production language is a
+ * property of the content; the user's UI locale is a property of the user.
+ * Substituting one for the other is the bug we shipped from 2024 through
+ * 2026-05-10. The dossier at
+ * `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`
+ * documents the failure mode end-to-end.
+ *
+ * Returns null when no source supplies a production language. Downstream
+ * consumers (`PlayerRuntimeController.originalLanguage`,
+ * `StreamScreenViewModel.applyDeterministicOriginalLanguageGuard`) handle
+ * null correctly via naming-convention fallbacks.
+ */
+internal fun mergeProductionLanguageForTest(
+    advancedLanguage: String?,
+    @Suppress("UNUSED_PARAMETER") selectedLanguage: String?,
+    existing: String?
+): String? = advancedLanguage ?: existing
