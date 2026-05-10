@@ -48,6 +48,20 @@ import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
 import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nexio.tv.domain.model.MetaPreview
+
+/**
+ * Choose the value to pass as the player's `originalLanguage` nav arg.
+ *
+ * Bug A regression guard: prefer the production-language field, fall back to
+ * the legacy `language` field only when the new field is null. The legacy
+ * field is itself sometimes the user's UI locale (Bug A) — but the only path
+ * that produces such leakage is `MetaDetailsViewModel`'s pre-Phase-A code,
+ * which Phase A removed. After Phase C lands, `language` should never be
+ * production-meaningful in any new write path.
+ */
+fun chooseNavOriginalLanguage(item: MetaPreview): String? =
+    item.originalLanguage ?: item.language
 
 @Composable
 fun NexioNavHost(
@@ -169,7 +183,7 @@ fun NexioNavHost(
                             contentName = item.name,
                             genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
                             runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = item.language,
+                            originalLanguage = chooseNavOriginalLanguage(item),
                             returnToDetailOnBack = false
                         )
                     )
@@ -955,7 +969,7 @@ fun NexioNavHost(
                             contentName = item.name,
                             genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
                             runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = item.language,
+                            originalLanguage = chooseNavOriginalLanguage(item),
                             returnToDetailOnBack = false
                         )
                     )
@@ -995,7 +1009,7 @@ fun NexioNavHost(
                             contentName = item.name,
                             genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
                             runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = item.language,
+                            originalLanguage = chooseNavOriginalLanguage(item),
                             returnToDetailOnBack = false
                         )
                     )
