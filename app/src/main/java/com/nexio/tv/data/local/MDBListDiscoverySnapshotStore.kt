@@ -3,9 +3,13 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.MDBListCustomCatalog
@@ -17,6 +21,15 @@ import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.toLegacyRailItemPreview
 import com.nexio.tv.domain.model.toMetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +56,7 @@ class MDBListDiscoverySnapshotStore private constructor(
         private const val TAG = "MDBListDiscoveryStore"
         private const val PREFS_NAME = "mdblist_discovery_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
+        private const val SNAPSHOT_DIR = "mdblist-discovery-snapshot-v1"
     }
 
     private val gson = Gson()
@@ -52,9 +66,16 @@ class MDBListDiscoverySnapshotStore private constructor(
 
     fun read(profileId: Int = activeProfileId()): MDBListDiscoverySnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decode(raw)
+            // CLAUDE.md hard rule #3: file-backed streaming. The 114 KiB
+            // {"personalLists":...} char[] observed in heap dump 2026-05-10
+            // ANR investigation lives in this store. Migrated to file-backed
+            // JSON + streaming JsonReader.
+            val file = snapshotFileFor(profileId)
+            if (file.exists()) {
+                streamReadSnapshot(file)
+            } else {
+                migrateLegacySnapshotToFile(profileId, file)
+            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore MDBList discovery snapshot", error)
             clear(profileId)
@@ -66,14 +87,9 @@ class MDBListDiscoverySnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val payload = JsonObject().apply {
-                add("personalLists", gson.toJsonTree(snapshot.personalLists))
-                add("topLists", gson.toJsonTree(snapshot.topLists))
-                add("customListCatalogs", gson.toJsonTree(snapshot.customListCatalogs))
-                addProperty("updatedAtMs", snapshot.updatedAtMs)
-            }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+            val target = snapshotFileFor(profileId)
+            target.parentFile?.mkdirs()
+            writeSnapshotToFile(snapshot, target)
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist MDBList discovery snapshot", error)
         }
@@ -81,11 +97,125 @@ class MDBListDiscoverySnapshotStore private constructor(
 
     fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).commit()
+            snapshotFileFor(profileId).takeIf { it.exists() }?.delete()
+            context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+                .edit().remove(SNAPSHOT_KEY).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear MDBList discovery snapshot", error)
         }
+    }
+
+    private fun snapshotFileFor(profileId: Int): File {
+        val parent = File(context.filesDir, SNAPSHOT_DIR)
+        if (!parent.exists()) parent.mkdirs()
+        return File(parent, "p${profileId}.json")
+    }
+
+    private fun streamReadSnapshot(file: File): MDBListDiscoverySnapshot? {
+        var personalLists: List<MDBListListOption> = emptyList()
+        var topLists: List<MDBListListOption> = emptyList()
+        var customListCatalogs: List<MDBListCustomCatalog> = emptyList()
+        var updatedAtMs: Long = 0L
+
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            return@runCatching null
+                        }
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "personalLists" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    personalLists = decodeListOptionsArray(element, isPersonal = true)
+                                }
+                                "topLists" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    topLists = decodeListOptionsArray(element, isPersonal = false)
+                                }
+                                "customListCatalogs" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    customListCatalogs = decodeCustomCatalogsArray(element)
+                                }
+                                "updatedAtMs" -> updatedAtMs = reader.nextLong()
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
+                }
+            }
+            MDBListDiscoverySnapshot(
+                personalLists = personalLists,
+                topLists = topLists,
+                customListCatalogs = customListCatalogs,
+                updatedAtMs = updatedAtMs
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read MDBList discovery snapshot", error)
+        }.getOrNull()
+    }
+
+    private fun decodeListOptionsArray(
+        array: JsonArray?,
+        isPersonal: Boolean
+    ): List<MDBListListOption> {
+        if (array == null) return emptyList()
+        // Reuses the existing decodeListOptions(root, key, isPersonal) helper by
+        // wrapping the array in a transient JsonObject under the expected key.
+        val root = JsonObject().apply {
+            add(if (isPersonal) "personalLists" else "topLists", array)
+        }
+        return decodeListOptions(root, if (isPersonal) "personalLists" else "topLists", isPersonal)
+    }
+
+    private fun decodeCustomCatalogsArray(array: JsonArray?): List<MDBListCustomCatalog> {
+        if (array == null) return emptyList()
+        val root = JsonObject().apply { add("customListCatalogs", array) }
+        return decodeCustomCatalogs(root)
+    }
+
+    private fun writeSnapshotToFile(snapshot: MDBListDiscoverySnapshot, target: File) {
+        val tempFile = File(target.parentFile, "${target.name}.tmp")
+        FileOutputStream(tempFile).use { fos ->
+            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                JsonWriter(bw).use { writer ->
+                    writer.beginObject()
+                    writer.name("personalLists")
+                    val personalListsType = object : TypeToken<List<MDBListListOption>>() {}.type
+                    gson.toJson(snapshot.personalLists, personalListsType, writer)
+                    writer.name("topLists")
+                    gson.toJson(snapshot.topLists, personalListsType, writer)
+                    writer.name("customListCatalogs")
+                    val catalogsType = object : TypeToken<List<MDBListCustomCatalog>>() {}.type
+                    gson.toJson(snapshot.customListCatalogs, catalogsType, writer)
+                    writer.name("updatedAtMs").value(snapshot.updatedAtMs)
+                    writer.endObject()
+                }
+            }
+        }
+        Files.move(
+            tempFile.toPath(),
+            target.toPath(),
+            StandardCopyOption.ATOMIC_MOVE,
+            StandardCopyOption.REPLACE_EXISTING
+        )
+    }
+
+    private fun migrateLegacySnapshotToFile(
+        profileId: Int,
+        target: File
+    ): MDBListDiscoverySnapshot? {
+        val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+        val legacy = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+        val decoded = decode(legacy) ?: return null
+        runCatching { writeSnapshotToFile(decoded, target) }
+            .onFailure { error -> Log.w(TAG, "Failed to migrate legacy MDBList snapshot to file", error) }
+        runCatching { prefs.edit().remove(SNAPSHOT_KEY).apply() }
+        return decoded
     }
 
     private fun decode(raw: String): MDBListDiscoverySnapshot? {
