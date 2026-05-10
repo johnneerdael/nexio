@@ -80,8 +80,13 @@ fun CatalogSeeAllScreen(
     // (addonId_apiType_catalogId). observeCatalogRail returns the rail
     // when present, null when absent, distinct-until-rail-content-changes —
     // SeeAll no longer recomposes on every full-inventory emission.
-    val catalogKey = "${addonId}_${type}_${catalogId}"
-    val catalogRow by viewModel.observeCatalogRail(catalogKey).collectAsState(initial = null)
+    // remember stabilizes the key string and the Flow reference across
+    // recompositions so collectAsState doesn't re-subscribe each pass.
+    val catalogKey = remember(addonId, type, catalogId) {
+        "${addonId}_${type}_${catalogId}"
+    }
+    val catalogRowFlow = remember(catalogKey) { viewModel.observeCatalogRail(catalogKey) }
+    val catalogRow by catalogRowFlow.collectAsState(initial = null)
 
     val gridState = rememberLazyGridState()
     val restoreFocusRequester = remember { FocusRequester() }
