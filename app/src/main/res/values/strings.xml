@@ -1472,4 +1472,6 @@
     <string name="troubleshooting_logcat_meta_route_subtitle">Mirror provider plan, route decision, identity resolution, and field selection events to logcat tag Nexio.MetaRoute so you can trace where each metadata field originated.</string>
     <string name="troubleshooting_logcat_int_runtime_title">Logcat: Integration Runtime</string>
     <string name="troubleshooting_logcat_int_runtime_subtitle">Mirror runtime cache decisions and HTTP request/response events to logcat tag Nexio.IntRuntime so you can prove which provider APIs were called and whether responses came from cache or the network.</string>
+    <string name="troubleshooting_logcat_subtitles_title">Logcat: Subtitle Sources</string>
+    <string name="troubleshooting_logcat_subtitles_subtitle">Mirror per-lane subtitle fetch decisions (provider invoked, parsed target, hash availability, integration-runtime outcome, result counts) to logcat tag Nexio.SubsDiag so you can see why a subtitle source returns zero results.</string>
 </resources>

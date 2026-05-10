@@ -153,6 +153,7 @@ internal fun PlaybackSettingsContent(
     val firstPaintLogcatEnabled by viewModel.firstPaintLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
     val metaRouteLogcatEnabled by viewModel.metaRouteLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
     val intRuntimeLogcatEnabled by viewModel.intRuntimeLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val subtitleDiagnosticsLogcatEnabled by viewModel.subtitleDiagnosticsLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoTranslateUnsafeBodyLoggingEnabled by viewModel.autoTranslateUnsafeBodyLoggingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
@@ -372,9 +373,11 @@ internal fun PlaybackSettingsContent(
                 firstPaintLogcatEnabled = firstPaintLogcatEnabled,
                 metaRouteLogcatEnabled = metaRouteLogcatEnabled,
                 intRuntimeLogcatEnabled = intRuntimeLogcatEnabled,
+                subtitleDiagnosticsLogcatEnabled = subtitleDiagnosticsLogcatEnabled,
                 onSetFirstPaintLogcatEnabled = viewModel::setFirstPaintLogcatEnabled,
                 onSetMetaRouteLogcatEnabled = viewModel::setMetaRouteLogcatEnabled,
                 onSetIntRuntimeLogcatEnabled = viewModel::setIntRuntimeLogcatEnabled,
+                onSetSubtitleDiagnosticsLogcatEnabled = viewModel::setSubtitleDiagnosticsLogcatEnabled,
                 autoTranslateUnsafeBodyLoggingEnabled = autoTranslateUnsafeBodyLoggingEnabled,
                 onSetFireOsIecVerboseLoggingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
