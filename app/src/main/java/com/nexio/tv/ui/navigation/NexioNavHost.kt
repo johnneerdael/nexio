@@ -61,11 +61,27 @@ import com.nexio.tv.domain.model.MetaPreview
  * which Phase A removed. After Phase C lands, `language` should never be
  * production-meaningful in any new write path.
  */
-fun chooseNavOriginalLanguage(item: MetaPreview): String? =
-    item.originalLanguage ?: item.language
+fun chooseNavOriginalLanguage(item: MetaPreview): String? {
+    val result = item.originalLanguage ?: item.language
+    android.util.Log.w(
+        "LANG_TRACE",
+        "chooseNavOriginalLanguage(MetaPreview) id=${item.id} " +
+            "item.originalLanguage=${item.originalLanguage} " +
+            "item.language=${item.language} → result=$result"
+    )
+    return result
+}
 
-fun chooseNavOriginalLanguage(meta: Meta): String? =
-    meta.originalLanguage ?: meta.language
+fun chooseNavOriginalLanguage(meta: Meta): String? {
+    val result = meta.originalLanguage ?: meta.language
+    android.util.Log.w(
+        "LANG_TRACE",
+        "chooseNavOriginalLanguage(Meta) id=${meta.id} " +
+            "meta.originalLanguage=${meta.originalLanguage} " +
+            "meta.language=${meta.language} → result=$result"
+    )
+    return result
+}
 
 @Composable
 fun NexioNavHost(
@@ -1295,57 +1311,73 @@ internal fun buildContinueWatchingStreamRoute(
     startFromBeginning: Boolean = false
 ): String {
     return when (item) {
-        is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
-            videoId = item.progress.videoId,
-            streamVideoId = item.streamFetchVideoId,
-            contentType = item.progress.contentType,
-            title = item.progress.name,
-            poster = item.displayMetadata().displayPoster,
-            backdrop = item.displayMetadata().displayBackdrop,
-            logo = item.displayMetadata().displayLogo,
-            season = item.progress.season,
-            episode = item.progress.episode,
-            episodeName = item.progress.episodeTitle,
-            genres = null,
-            year = null,
-            contentId = item.progress.contentId,
-            contentName = item.progress.name,
-            runtime = continueWatchingRuntimeMinutes(item),
-            originalLanguage = item.displayMetadata().originalLanguage,
-            returnToDetailOnBack = deterministicAutoplayEnabled ||
-                item.progress.contentType.equals("series", ignoreCase = true),
-            startFromBeginning = startFromBeginning,
-            deterministicAutoplay = deterministicAutoplayEnabled,
-            resumePositionMs = item.progress.position.takeUnless { startFromBeginning },
-            resumeDurationMs = item.progress.duration.takeUnless { startFromBeginning },
-            resumeProgressPercent = item.progress.progressPercent.takeUnless { startFromBeginning },
-            resumeLastWatchedMs = item.progress.lastWatched.takeUnless { startFromBeginning },
-            resumeSource = item.progress.source.takeUnless { startFromBeginning },
-            addonBaseUrl = item.progress.addonBaseUrl
-        )
+        is ContinueWatchingItem.InProgress -> {
+            android.util.Log.w(
+                "LANG_TRACE",
+                "buildContinueWatchingStreamRoute InProgress " +
+                    "contentId=${item.progress.contentId} " +
+                    "displayMetadata.originalLanguage=${item.displayMetadata().originalLanguage}"
+            )
+            Screen.Stream.createRoute(
+                videoId = item.progress.videoId,
+                streamVideoId = item.streamFetchVideoId,
+                contentType = item.progress.contentType,
+                title = item.progress.name,
+                poster = item.displayMetadata().displayPoster,
+                backdrop = item.displayMetadata().displayBackdrop,
+                logo = item.displayMetadata().displayLogo,
+                season = item.progress.season,
+                episode = item.progress.episode,
+                episodeName = item.progress.episodeTitle,
+                genres = null,
+                year = null,
+                contentId = item.progress.contentId,
+                contentName = item.progress.name,
+                runtime = continueWatchingRuntimeMinutes(item),
+                originalLanguage = item.displayMetadata().originalLanguage,
+                returnToDetailOnBack = deterministicAutoplayEnabled ||
+                    item.progress.contentType.equals("series", ignoreCase = true),
+                startFromBeginning = startFromBeginning,
+                deterministicAutoplay = deterministicAutoplayEnabled,
+                resumePositionMs = item.progress.position.takeUnless { startFromBeginning },
+                resumeDurationMs = item.progress.duration.takeUnless { startFromBeginning },
+                resumeProgressPercent = item.progress.progressPercent.takeUnless { startFromBeginning },
+                resumeLastWatchedMs = item.progress.lastWatched.takeUnless { startFromBeginning },
+                resumeSource = item.progress.source.takeUnless { startFromBeginning },
+                addonBaseUrl = item.progress.addonBaseUrl
+            )
+        }
 
-        is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
-            videoId = item.info.videoId,
-            streamVideoId = item.info.streamFetchVideoId,
-            contentType = item.info.contentType,
-            title = item.info.name,
-            poster = item.displayMetadata().displayPoster,
-            backdrop = item.displayMetadata().displayBackdrop,
-            logo = item.displayMetadata().displayLogo,
-            season = item.info.season,
-            episode = item.info.episode,
-            episodeName = item.info.episodeTitle,
-            genres = null,
-            year = null,
-            contentId = item.info.contentId,
-            contentName = item.info.name,
-            runtime = continueWatchingRuntimeMinutes(item),
-            originalLanguage = item.displayMetadata().originalLanguage,
-            returnToDetailOnBack = deterministicAutoplayEnabled ||
-                item.info.contentType.equals("series", ignoreCase = true),
-            startFromBeginning = startFromBeginning,
-            deterministicAutoplay = deterministicAutoplayEnabled
-        )
+        is ContinueWatchingItem.NextUp -> {
+            android.util.Log.w(
+                "LANG_TRACE",
+                "buildContinueWatchingStreamRoute NextUp " +
+                    "contentId=${item.info.contentId} " +
+                    "displayMetadata.originalLanguage=${item.displayMetadata().originalLanguage}"
+            )
+            Screen.Stream.createRoute(
+                videoId = item.info.videoId,
+                streamVideoId = item.info.streamFetchVideoId,
+                contentType = item.info.contentType,
+                title = item.info.name,
+                poster = item.displayMetadata().displayPoster,
+                backdrop = item.displayMetadata().displayBackdrop,
+                logo = item.displayMetadata().displayLogo,
+                season = item.info.season,
+                episode = item.info.episode,
+                episodeName = item.info.episodeTitle,
+                genres = null,
+                year = null,
+                contentId = item.info.contentId,
+                contentName = item.info.name,
+                runtime = continueWatchingRuntimeMinutes(item),
+                originalLanguage = item.displayMetadata().originalLanguage,
+                returnToDetailOnBack = deterministicAutoplayEnabled ||
+                    item.info.contentType.equals("series", ignoreCase = true),
+                startFromBeginning = startFromBeginning,
+                deterministicAutoplay = deterministicAutoplayEnabled
+            )
+        }
     }
 }
 

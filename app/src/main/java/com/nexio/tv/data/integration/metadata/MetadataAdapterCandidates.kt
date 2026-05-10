@@ -31,7 +31,10 @@ internal fun TmdbEnrichment?.toMetadataCandidate(provider: MetadataPrimaryProvid
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             language?.takeIf { it.isNotBlank() }
-                ?.let { put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+                ?.let {
+                    put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                    android.util.Log.w("LANG_TRACE", "TmdbEnrichment.toMetadataCandidate emit lang=$it provider=$provider")
+                }
             val remoteIds = buildMap<String, Set<String>> {
                 imdbId?.takeIf { it.isNotBlank() }?.let { put("imdb", setOf(it)) }
                 tvdbId?.let { put("tvdb", setOf(it.toString())) }
@@ -59,6 +62,7 @@ internal fun TvMetadataEnrichment?.toMetadataCandidate(provider: MetadataPrimary
             language?.takeIf { it.isNotBlank() }?.let {
                 put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
                 put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                android.util.Log.w("LANG_TRACE", "TvMetadataEnrichment.toMetadataCandidate emit lang=$it provider=$provider")
             }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
@@ -80,6 +84,7 @@ internal fun TvdbSeriesExtendedRecord?.toMetadataCandidate(provider: MetadataPri
             originalLanguage?.takeIf { it.isNotBlank() }?.let {
                 put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
                 put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                android.util.Log.w("LANG_TRACE", "TvdbSeriesExtendedRecord.toMetadataCandidate emit lang=$it provider=$provider")
             }
             originalCountry?.takeIf { it.isNotBlank() }
                 ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
@@ -303,6 +308,7 @@ internal fun buildTmdbLocalizedCandidate(
             source?.language?.takeIf { it.isNotBlank() }?.let {
                 put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
                 put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
+                android.util.Log.w("LANG_TRACE", "buildTmdbLocalizedCandidate emit lang=$it provider=$provider")
             }
             val people = buildList {
                 source?.directorMembers?.let(::addAll)
