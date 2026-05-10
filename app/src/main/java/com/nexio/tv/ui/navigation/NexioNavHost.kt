@@ -681,6 +681,11 @@ fun NexioNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("imdbId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
                 navArgument("poster") {
                     type = NavType.StringType
                     nullable = true
@@ -1385,13 +1390,23 @@ internal suspend fun buildContinueWatchingStreamRouteWithHydration(
     item: ContinueWatchingItem,
     deterministicAutoplayEnabled: Boolean,
     startFromBeginning: Boolean = false,
-    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?
+    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?,
+    resolveOriginalLanguageEnrichment: suspend (ContinueWatchingItem) -> ContinueWatchingItem = { it }
 ): String {
     val hydratedItem = item.withHydratedRuntimeMinutes(
         continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
     )
+    // Only call enrichment when displayMetadata.originalLanguage is missing —
+    // skip the API surface when the rail has already enriched this item. The
+    // value is plumbed to the player nav arg so the audio-track picker can
+    // target the show's production language.
+    val finalItem = if (hydratedItem.displayMetadata().originalLanguage.isNullOrBlank()) {
+        resolveOriginalLanguageEnrichment(hydratedItem)
+    } else {
+        hydratedItem
+    }
     return buildContinueWatchingStreamRoute(
-        item = hydratedItem,
+        item = finalItem,
         deterministicAutoplayEnabled = deterministicAutoplayEnabled,
         startFromBeginning = startFromBeginning
     )
@@ -1447,12 +1462,18 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
 
 internal suspend fun buildContinueWatchingManualSelectionStreamRouteWithHydration(
     item: ContinueWatchingItem,
-    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?
+    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?,
+    resolveOriginalLanguageEnrichment: suspend (ContinueWatchingItem) -> ContinueWatchingItem = { it }
 ): String {
     val hydratedItem = item.withHydratedRuntimeMinutes(
         continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
     )
-    return buildContinueWatchingManualSelectionStreamRoute(hydratedItem)
+    val finalItem = if (hydratedItem.displayMetadata().originalLanguage.isNullOrBlank()) {
+        resolveOriginalLanguageEnrichment(hydratedItem)
+    } else {
+        hydratedItem
+    }
+    return buildContinueWatchingManualSelectionStreamRoute(finalItem)
 }
 
 internal fun runtimeMinutesFromDurationMs(durationMs: Long?): Int? {
