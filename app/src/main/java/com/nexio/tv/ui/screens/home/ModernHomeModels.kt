@@ -20,7 +20,6 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
-import com.nexio.tv.ui.components.toContinueWatchingItem
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -383,13 +382,16 @@ internal fun buildContinueWatchingItem(
     airsDateTemplate: String,
     upcomingLabel: String
 ): ModernCarouselItem {
-    // The resolved projection drives surface-rendered display fields (title/poster/
-    // backdrop/logo/rating). The underlying ContinueWatchingItem still carries
-    // CW-specific fields the projection doesn't expose: episode thumbnail/description,
-    // genres, releaseInfo, episode-level imdb rating, has-aired/airDateLabel etc. So
-    // we alias `item = resolved.source` to keep this function's existing displayMetadata-
-    // driven branches intact while the [payload] carries the resolved type for downstream
-    // consumers.
+    // The resolved projection drives the rendered CW row card via
+    // ContinueWatchingCard (typed posterRef/backdropRef/logoRef). This function
+    // builds the Modern carousel's HERO PREVIEW (the focused-trailer big-preview
+    // image at the top of Modern Home), which still derives display fields from
+    // the legacy displayMetadata chain. The card layer is rule #1 compliant; the
+    // hero-preview layer is not yet.
+    //
+    // TODO(Plan B Surface 4 follow-up): migrate hero-preview poster/backdrop/logo
+    // reads to resolved.posterRef/backdropRef/logoRef.toLegacyArtworkString() so
+    // the focused-CW preview also enforces typed display authority.
     val item = resolved.toContinueWatchingItem()
     val displayMetadata = item.displayMetadata()
     val heroPreview = when (item) {
