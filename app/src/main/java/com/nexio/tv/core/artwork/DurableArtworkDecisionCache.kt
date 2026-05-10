@@ -5,15 +5,19 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
+import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -226,8 +230,27 @@ class DurableArtworkDecisionCache(
         }
 
         runCatching {
-            val raw = file.readText()
-            if (raw.isBlank()) {
+            // CLAUDE.md hard rule #3: streaming read. The previous
+            // implementation used `file.readText()` + `JsonParser.parseString(raw)`
+            // which materialised the entire decision cache (often >100 KB after
+            // a long browsing session) as a String, then re-pinned it via the
+            // parser's internal StringReader. With cold-start happening while
+            // the home pipeline is also loading, the transient cost competed
+            // with first-paint allocations. Streaming the file directly via
+            // JsonReader keeps the bytes off-heap until they're parsed into
+            // the typed JsonObject.
+            val storeJson: JsonObject = FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            null
+                        } else {
+                            gson.fromJson<JsonObject>(reader, JsonObject::class.java)
+                        }
+                    }
+                }
+            } ?: run {
                 val loadState = loadedAuthoritativeState(droppedDecisionCount = 0, quarantinedDecisionCount = 0)
                 traceDecisionStoreLoad(
                     success = true,
@@ -241,7 +264,6 @@ class DurableArtworkDecisionCache(
                 )
                 return
             }
-            val storeJson = JsonParser.parseString(raw).asJsonObject
             val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
             val legacyObfuscatedStore = storedSchemaVersion == null && storeJson.has("a")
             if (storedSchemaVersion == null) {
