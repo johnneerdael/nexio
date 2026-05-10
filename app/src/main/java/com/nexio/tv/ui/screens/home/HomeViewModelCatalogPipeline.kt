@@ -278,7 +278,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     startupRefreshPending = false
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
-    _fullCatalogRows.value = emptyList()
+    _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
+    catalogInventoryRepository.clear()
     _displayCatalogRows.value = emptyList()
     _displayHeroItems.value = emptyList()
     _uiState.update { state ->
@@ -1474,7 +1475,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             launch(Dispatchers.IO) {
                 try {
                     val addons = addonsCache
-                    var rawFirstPaintBatchActive = _fullCatalogRows.value.isEmpty()
+                    var rawFirstPaintBatchActive = catalogInventoryRepository.isEmpty()
                     refreshedCatalogCount.set(
                         homeCatalogRefreshCoordinator.refreshSerially(
                             addons = addons,
@@ -1620,10 +1621,14 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
         return
     }
 
-    val activeCatalogItemKeys = (_fullCatalogRows.value.asSequence() + catalogsMap.values.asSequence())
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
-        .toSet()
+    // Inventory contribution from the repository; union with the live
+    // catalogsMap (which holds rails not yet committed to the inventory
+    // snapshot at this point in the refresh pipeline).
+    val activeCatalogItemKeys = catalogInventoryRepository.activeItemKeys() +
+        catalogsMap.values.asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .map { item -> "${item.apiType}:${item.id}" }
+            .toSet()
     val visibleItems = _displayCatalogRows.value
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
@@ -2198,7 +2203,8 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             catalogOrder.clear()
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
-            _fullCatalogRows.value = emptyList()
+            _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
+            catalogInventoryRepository.clear()
             homeSnapshotPersistJob?.cancel()
             pendingHomeSnapshotPersist = null
             inMemoryHomeSnapshot = null
@@ -2789,7 +2795,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         // through transitional refreshes — and sampling at the merge call
         // site is generally more correct than function entry. Documented
         // explicitly so a future reader does not "fix" it back.
-        val cachedFullRows = _fullCatalogRows.value
+        // Snapshot.values is a view backed by the underlying LinkedHashMap;
+        // .toList() materializes it once into the list shape that
+        // mergeCachedRowsWithLiveRows expects. The snapshot-at-use-site
+        // semantics described in the KDoc above are preserved.
+        val cachedFullRows = catalogInventoryRepository.snapshot().values.toList()
         val effectiveOrderedRows = catalogRowMemo.intern(
             mergeCachedRowsWithLiveRows(
                 cachedRows = cachedFullRows,
