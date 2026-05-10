@@ -2477,7 +2477,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val mdbListPrefs = mdbListCatalogPreferences
     val tmdbSnapshot = tmdbDiscoverySnapshot
     val tmdbPrefs = tmdbCatalogPreferences
-    val currentVisibleFullRows = _fullCatalogRows.value
+    // currentVisibleFullRows used to live here as `val currentVisibleFullRows =
+    // _fullCatalogRows.value`, capturing the full inventory (27.98 MiB on the
+    // failing-state heap dump) into the outer-fun continuation across the
+    // catalogRowsComputationMutex.withLock wait + the entire withContext block.
+    // Heaptrail dominator-tree showed
+    // updateCatalogRowsPipeline$2$updateResult$1.$currentVisibleFullRows
+    // retaining 27.98 MiB across overlapping pipeline emissions (six such
+    // ArrayLists live simultaneously = 168 MiB duplicate state). Moved the
+    // read to its single use-site inside withContext (CLAUDE.md hard rule #6).
     val currentHydratedHomeOverlays = hydratedHomeOverlaysByItemKey.value
     val previousTruncatedRowCache = truncatedRowCache.toMap()
     val startupHydrationPending = !installedAddonsObserved ||
@@ -2766,9 +2774,17 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             ),
             retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )
+        // Read _fullCatalogRows.value INSIDE the withContext block instead of
+        // capturing it as an outer-fun local. The outer fun is suspend; if the
+        // local were declared at function-head scope, every suspension above
+        // (including the catalogRowsComputationMutex.withLock wait, which can
+        // be long when emissions overlap) would pin the 27.98 MiB inventory
+        // list in its continuation. Reading at use-site limits the pin to
+        // this withContext block's continuation only.
+        val cachedFullRows = _fullCatalogRows.value
         val effectiveOrderedRows = catalogRowMemo.intern(
             mergeCachedRowsWithLiveRows(
-                cachedRows = currentVisibleFullRows,
+                cachedRows = cachedFullRows,
                 liveRows = liveOrderedRows,
                 preservationState = preservationState,
                 orderedGroupKeys = effectiveOrderKeys,
