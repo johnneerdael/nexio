@@ -67,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nexio.tv.ui.navigation.chooseNavOriginalLanguage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyRow
@@ -665,7 +666,7 @@ fun MetaDetailsScreen(
                                     null,
                                     null,
                                     playbackRuntime,
-                                    meta.language,
+                                    chooseNavOriginalLanguage(meta),
                                     uiState.deterministicAutoplayEnabled,
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
@@ -693,7 +694,7 @@ fun MetaDetailsScreen(
                                     genresString,
                                     yearString,
                                     parseRuntimeMinutes(meta.runtime),
-                                    meta.language,
+                                    chooseNavOriginalLanguage(meta),
                                     uiState.deterministicAutoplayEnabled,
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
@@ -723,7 +724,7 @@ fun MetaDetailsScreen(
                                     video.episode,
                                     video.title,
                                     playbackRuntime,
-                                    meta.language,
+                                    chooseNavOriginalLanguage(meta),
                                     resolveImdbStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                         season = video.season,
