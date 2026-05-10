@@ -1,5 +1,6 @@
 package com.nexio.tv.core.tvdb
 
+import androidx.annotation.VisibleForTesting
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -37,19 +38,11 @@ class ProviderLocalizedMetadataResolver @Inject constructor(
         return TvMetadataDecision(
             provider = provider,
             reason = provider.canonicalDecisionReason(hasLocalizedPayload),
-            value = TvMetadataEnrichment(
-                seriesTvdbId = canonicalDocument.canonicalId?.substringAfter("tvdb:")?.toIntOrNull(),
-                localizedTitle = canonicalDocument.title,
-                description = canonicalDocument.overview,
-                poster = canonicalDocument.poster,
-                backdrop = canonicalDocument.backdrop,
-                logo = canonicalDocument.logo,
-                rating = (canonicalDocument.rating as? Number)?.toDouble(),
-                runtimeMinutes = canonicalDocument.runtimeMinutes,
-                // Bug B fix (2026-05-10 dossier): canonical document already knows the
-                // production language; do not strip it on the short-circuit path.
-                language = canonicalDocument.language
-            ),
+            // Bug B fix (2026-05-10 dossier): the canonical document already
+            // carries the production language; the short-circuit path used to
+            // strip it. Production and tests share a single mapping
+            // (`asTvMetadataEnrichmentForCanonicalRoute`) so they cannot drift.
+            value = canonicalDocument.asTvMetadataEnrichmentForCanonicalRoute(),
             diagnostics = provider.canonicalDiagnostics(tvRequest, hasLocalizedPayload)
         )
     }
@@ -158,10 +151,13 @@ class ProviderLocalizedMetadataResolver @Inject constructor(
 }
 
 // ---------------------------------------------------------------------------
-// Test seam helpers — exposed internal so unit tests can construct instances
-// without going through the full DI graph. Production code does not call these.
+// Canonical-route mapping. Production code in `fetchDecision` calls
+// `asTvMetadataEnrichmentForCanonicalRoute` directly; the same function is the
+// unit-test seam. Single mapping → no drift between production and tests.
+// `stubCanonicalDocumentWithLanguage` exists only for testing.
 // ---------------------------------------------------------------------------
 
+@VisibleForTesting
 internal fun stubCanonicalDocumentWithLanguage(language: String): ResolvedMetadataDocument =
     ResolvedMetadataDocument(
         canonicalId = "tvdb:393268",
@@ -177,6 +173,7 @@ internal fun stubCanonicalDocumentWithLanguage(language: String): ResolvedMetada
         ignoredOverwrites = emptyList()
     )
 
+@VisibleForTesting
 internal fun ResolvedMetadataDocument.asTvMetadataEnrichmentForCanonicalRoute(): TvMetadataEnrichment =
     TvMetadataEnrichment(
         seriesTvdbId = canonicalId?.substringAfter("tvdb:")?.toIntOrNull(),
@@ -187,5 +184,9 @@ internal fun ResolvedMetadataDocument.asTvMetadataEnrichmentForCanonicalRoute():
         logo = logo,
         rating = (rating as? Number)?.toDouble(),
         runtimeMinutes = runtimeMinutes,
-        language = language
+        language = language,
+        // E7: carry production language so the home/CW provider-localized
+        // overlay (toHomeCompatibilityDisplayMetadata, applyTo) can plumb
+        // it onto MetaPreview and into the player nav arg.
+        originalLanguage = originalLanguage
     )
