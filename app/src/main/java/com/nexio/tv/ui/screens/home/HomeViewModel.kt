@@ -63,7 +63,10 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.Rail
+import com.nexio.tv.domain.model.RailItemKey
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
@@ -82,8 +85,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -208,6 +213,21 @@ class HomeViewModel @Inject constructor(
     val displayCatalogRows: StateFlow<List<CatalogRow>> = _displayCatalogRows.asStateFlow()
 
     /**
+     * Typed structure-only view of [_displayCatalogRows]: each [CatalogRow]
+     * becomes a [Rail] with items as [RailItemKey]s rather than [MetaPreview]
+     * instances. Consumers that need typed authority lookup ([resolvedRailRowsFlow])
+     * read from this flow instead of [_displayCatalogRows] so they don't depend
+     * on the legacy item shape.
+     *
+     * Plan B Phase 3.2 bridge — derived from [_displayCatalogRows] via
+     * [CatalogRow.toRail]. Phase 3.6 will flip the producer to emit [Rail]
+     * directly; this derivation goes away then.
+     */
+    internal val railStructure: StateFlow<List<Rail>> = _displayCatalogRows
+        .map { rows -> rows.map { it.toRail() } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
      * Single-rail observation for `CatalogSeeAllScreen`. Delegates to
      * [CatalogInventoryRepository.observeRail] so the SeeAll screen does NOT
      * subscribe to the full inventory StateFlow — recomposes only when the
@@ -271,20 +291,20 @@ class HomeViewModel @Inject constructor(
                 // in which case the cached projection is correct anyway.
                 resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
             }
-            .combine(_displayCatalogRows) { resolvedItems, catalogRows ->
+            .combine(railStructure) { resolvedItems, rails ->
                 val byItemKey = resolvedItems.associateBy { it.itemKey }
                 val activeItemKeys = mutableSetOf<String>()
                 val activeCatalogIds = mutableSetOf<String>()
-                val rails = catalogRows.map { row ->
-                    val items = row.items.mapNotNull { meta ->
-                        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
-                        byItemKey[itemKey]?.let { resolved ->
-                            activeItemKeys += itemKey
+                val resolvedRails = rails.map { rail ->
+                    val items = rail.items.mapNotNull { railItemKey ->
+                        val key = railItemKey.key
+                        byItemKey[key]?.let { resolved ->
+                            activeItemKeys += key
                             projectionCache.projectItem(resolved)
                         }
                     }
-                    activeCatalogIds += row.catalogId
-                    projectionCache.projectRail(row.catalogId, row.catalogName, items)
+                    activeCatalogIds += rail.catalogId
+                    projectionCache.projectRail(rail.catalogId, rail.catalogName, items)
                 }
                 projectionCache.retainOnly(activeItemKeys)
                 projectionCache.retainOnlyRails(activeCatalogIds)
@@ -294,7 +314,7 @@ class HomeViewModel @Inject constructor(
                 // every element is reference-identical via projectRail), defeating
                 // the guard and pushing identical content into _uiState — which in
                 // turn defeats Compose stability skipping in the home tree.
-                projectionCache.internRailsList(rails)
+                projectionCache.internRailsList(resolvedRails)
             }
 
     // Plan B Task 9 — resolved-hero counterpart to [resolvedRailRowsFlow]. Joins

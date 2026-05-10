@@ -35,3 +35,34 @@ data class Rail(
     val apiType: String
         get() = type.toApiString(rawType)
 }
+
+/**
+ * Derive a structure-only [Rail] from a legacy [CatalogRow]. The items
+ * map: each [MetaPreview] in `CatalogRow.items` becomes a [RailItemKey].
+ * Item content (poster, name, etc.) is dropped — that data lives in
+ * [com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository]; rails
+ * carry only structure + ordered keys.
+ *
+ * Bridge code used by Plan B Phase 3.2 consumers (resolvedRailRowsFlow,
+ * etc.) until Phase 3.6 flips the producer pipeline to emit [Rail]
+ * directly. After 3.6, this extension is unreachable and Phase 3.9
+ * deletes it.
+ *
+ * Plan B Phase 3.2 of the home-MetaPreview-elimination spec
+ * (`docs/superpowers/specs/2026-05-10-phase-3-catalog-pipeline-restructure-design.md`).
+ */
+fun CatalogRow.toRail(): Rail = Rail(
+    addonId = addonId,
+    addonName = addonName,
+    addonBaseUrl = addonBaseUrl,
+    catalogId = catalogId,
+    catalogName = catalogName,
+    type = type,
+    rawType = rawType,
+    items = items.map { meta -> RailItemKey(apiType = meta.apiType, contentId = meta.id) },
+    isLoading = isLoading,
+    hasMore = hasMore,
+    currentPage = currentPage,
+    supportsSkip = supportsSkip,
+    skipStep = skipStep
+)
