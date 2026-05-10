@@ -144,21 +144,35 @@ The Kotlin coroutine state machine saves **every outer-fun local that is live ac
 
 This rule complements rule #4: rule #4 is about `Iterator` instances captured by `Iterable.forEach { suspend }`; rule #6 is about *any* value captured as a suspend-fun local across `launch` boundaries. Both pin data into continuations, but the mechanism and fix differ.
 
-### 7. Git stash — NEVER stash work that isn't yours
+### 7. Git staging — NEVER sweep up work that isn't yours
 
 **Hard rule. No exceptions.**
 
-You may NEVER run `git stash` (any variant — `git stash`, `git stash push`, `git stash save`, `git stash -u`, etc.) on changes that you did not author yourself in the current session. This applies to every agent and every subagent.
+Three forbidden commands when other agents may have work in flight:
 
-**Why:** the working tree often holds in-flight work from another agent, another workstream, or the user. `git stash` silently buries that work in the stash list with a generic "WIP on \<branch\>" name and zero context about why or by whom. When the stash is forgotten or the working tree is reset, the work is effectively lost — recovery requires `git fsck --lost-found` or hunting through `git stash list`. This has happened before in this repo. The cost of the wrong call is data loss; the cost of avoiding the call is at most an extra step.
+1. `git stash` (any variant — `git stash`, `git stash push`, `git stash save`, `git stash -u`, etc.) on changes that you did not author yourself in the current session.
+2. `git add -A` / `git add --all` / `git add .` — these stage *every* modified or untracked file, including ones from other agents' workstreams.
+3. `git commit -a` / `git commit --all` — equivalent to `git add -u` then commit; sweeps up any modified tracked file regardless of which agent touched it.
+
+This applies to every agent and every subagent.
+
+**Why:** the working tree often holds in-flight work from another agent, another workstream, or the user. The forbidden commands silently bury or merge that work into your changes:
+- `git stash` puts it under a generic "WIP on \<branch\>" entry that's easy to forget; recovery requires `git fsck --lost-found`.
+- `git add -A` / `git commit -a` silently includes other agents' modifications in your commit, conflating concerns and rendering the audit trail wrong.
+
+Both have caused real incidents in this repo (2026-05-10).
 
 **How to apply:**
-- If you need a clean working tree to verify a baseline (e.g., to re-run tests against unmodified code), do NOT stash. Instead: (a) commit your own changes to a scratch branch and check out main, OR (b) run the verification in a separate `git worktree`, OR (c) skip the verification and document the constraint.
-- If a subagent prompt says "verify by stashing and re-running on baseline," REJECT that instruction. Re-prompt the agent to use a worktree or commit-to-scratch-branch pattern instead.
-- The ONLY time `git stash` is acceptable is when the changes in the working tree are 100% your own, made earlier in the same session, and you intend to `git stash pop` immediately after a clearly-bounded operation. Even then, prefer commits over stashes.
-- If you find yourself reaching for `git stash` because the working tree is "messy," STOP. Investigate what's there first (`git status`, `git diff`). Untracked or modified files you did not create are someone else's work — leave them alone.
+- ALWAYS stage by explicit path. `git add path/to/file1.kt path/to/file2.kt`. Never `-A`, never `.`, never bare `git add` without paths.
+- ALWAYS run `git status -sb` BEFORE committing to confirm only your intended files are staged. If the staged-files list is wrong, `git restore --staged <other-agents-file>` before committing.
+- ALWAYS run `git status` AFTER committing to confirm other-workstream files are still in the working tree as modified/untracked (not silently merged into your commit).
+- If you need a clean working tree for baseline verification, do NOT stash. Use (a) commit-to-scratch-branch, (b) `git worktree add`, or (c) skip the verification.
+- If a subagent prompt instructs the agent to `git add -A`, `git commit -a`, or `git stash` for "convenience," REJECT that instruction. Re-prompt with explicit-path staging.
+- The ONLY time `git stash` is acceptable is when the working-tree changes are 100% your own, made earlier in the same session, and you `git stash pop` immediately after a bounded operation. Even then, prefer commits over stashes.
 
-**If a stash exists from a previous incident:** check `git stash list` for any orphaned WIP entries before reporting "clean working tree." Investigate each one (`git stash show stash@{N}`) to confirm whether the work is still wanted; never silently drop a stash you did not create.
+**If a stash exists from a previous incident:** check `git stash list` for any orphaned WIP entries before reporting "clean working tree." Investigate each (`git stash show stash@{N}`) to confirm the work is still wanted; never silently drop a stash you did not create.
+
+**If your changes appear in a commit you didn't make:** another agent's `git add -A` / `git commit -a` swept them up. Don't try to re-attribute via history rewrite if the commit is already pushed; instead, document the actual scope in a follow-up commit message.
 
 ---
 
