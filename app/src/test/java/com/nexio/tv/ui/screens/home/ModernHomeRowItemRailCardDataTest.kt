@@ -62,6 +62,10 @@ class ModernHomeRowItemRailCardDataTest {
         logoRef = null,
         thumbnailRef = null,
         rating = null,
+        description = null,
+        genres = emptyList(),
+        releaseInfo = null,
+        tomatoesRating = null,
         hydrationState = HydrationState.PREVIEW_ONLY,
         posterProviderTag = posterRef.deriveProviderTag()
     )
