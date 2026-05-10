@@ -2,10 +2,14 @@ package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
+import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.util.SortedMap
 
@@ -65,8 +69,18 @@ class FileBackedArtworkRemoteSourceStore(
             if (!file.exists()) {
                 mutableMapOf()
             } else {
+                // CLAUDE.md hard rule #3: streaming read, no file.readText() +
+                // gson.fromJson(String, type). The previous overload wrapped the
+                // entire file as a String (and a StringReader pinning it for the
+                // parse) every time the cache loaded.
                 val type = object : TypeToken<Map<String, String>>() {}.type
-                val restored = gson.fromJson<Map<String, String>>(file.readText(), type).orEmpty()
+                val restored: Map<String, String> = FileInputStream(file).use { fis ->
+                    BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                        JsonReader(br).use { reader ->
+                            gson.fromJson<Map<String, String>>(reader, type)
+                        }
+                    }
+                }.orEmpty()
                 val filtered = restored
                     .filterKeys { it.isNotBlank() }
                     .filterValues { !it.isPremiumProviderRawUrl() }
