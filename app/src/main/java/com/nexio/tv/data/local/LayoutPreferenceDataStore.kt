@@ -264,9 +264,29 @@ class LayoutPreferenceDataStore @Inject constructor(
         }
     }
 
+    @Deprecated(
+        message = "DataStore-backed home rail order state is being retired (CLAUDE.md hard rule #3 violation: " +
+            "the 45 KiB JSON-encoded state was pinned in MutablePreferences.preferencesMap, retained by " +
+            "every Flow collector continuation). HomeRailOrderStore now writes via file-backed streaming " +
+            "JSON; this entry point is retained for the one-time read-then-clear legacy migration only.",
+        level = DeprecationLevel.WARNING
+    )
     suspend fun setHomeRailOrderStateJson(json: String) {
         store().edit { prefs ->
             prefs[homeRailOrderStateKey] = json
+        }
+    }
+
+    /**
+     * Clears the legacy DataStore-stored home rail order state preference key.
+     * Called by [com.nexio.tv.ui.screens.home.order.HomeRailOrderStore] after
+     * the one-time legacy migration moves the payload from DataStore to a
+     * file under `filesDir/home-rail-order-v1/`. Idempotent; safe to call
+     * when the key is already absent.
+     */
+    suspend fun clearLegacyHomeRailOrderStateJson() {
+        store().edit { prefs ->
+            prefs.remove(homeRailOrderStateKey)
         }
     }
 

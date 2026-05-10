@@ -1,13 +1,20 @@
 package com.nexio.tv.ui.screens.home.order
 
+import android.content.Context
+import android.util.Log
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.di.ApplicationScope
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -15,6 +22,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,38 +61,116 @@ import javax.inject.Singleton
  * liveDefinitions-receiving methods.
  */
 @Singleton
-class HomeRailOrderStore @Inject constructor(
+class HomeRailOrderStore private constructor(
+    private val snapshotDir: File,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val codec: HomeRailOrderStateCodec,
     private val clock: Clock,
-    @ApplicationScope private val scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val diagnostics: HomeRailOrderDiagnosticsSink,
     private val profileManager: ProfileManager,
     private val reconciler: HomeRailOrderReconciler = HomeRailOrderReconciler(),
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        layoutPreferenceDataStore: LayoutPreferenceDataStore,
+        codec: HomeRailOrderStateCodec,
+        clock: Clock,
+        @ApplicationScope scope: CoroutineScope,
+        diagnostics: HomeRailOrderDiagnosticsSink,
+        profileManager: ProfileManager,
+    ) : this(
+        snapshotDir = File(context.filesDir, SNAPSHOT_DIR),
+        layoutPreferenceDataStore = layoutPreferenceDataStore,
+        codec = codec,
+        clock = clock,
+        scope = scope,
+        diagnostics = diagnostics,
+        profileManager = profileManager,
+        reconciler = HomeRailOrderReconciler(),
+    )
+
+    /**
+     * Test constructor — bypasses Android context. Defaults [snapshotDir] to
+     * an OS-managed temp directory unique to this process invocation so unit
+     * tests under JVM (without Robolectric) can exercise file persistence
+     * without an `@ApplicationContext`. Production code paths must use the
+     * `@Inject` constructor above; this overload exists only for the test
+     * suite under `app/src/test`.
+     */
+    constructor(
+        layoutPreferenceDataStore: LayoutPreferenceDataStore,
+        codec: HomeRailOrderStateCodec,
+        clock: Clock,
+        scope: CoroutineScope,
+        diagnostics: HomeRailOrderDiagnosticsSink,
+        profileManager: ProfileManager,
+        reconciler: HomeRailOrderReconciler = HomeRailOrderReconciler(),
+    ) : this(
+        snapshotDir = Files.createTempDirectory("home-rail-order-test").toFile().also { it.deleteOnExit() },
+        layoutPreferenceDataStore = layoutPreferenceDataStore,
+        codec = codec,
+        clock = clock,
+        scope = scope,
+        diagnostics = diagnostics,
+        profileManager = profileManager,
+        reconciler = reconciler,
+    )
+
+    companion object {
+        private const val TAG = "HomeRailOrderStore"
+        private const val SNAPSHOT_DIR = "home-rail-order-v1"
+    }
+
     private val mutationLock = Mutex()
     private val knownLiveKeysCache = MutableStateFlow<Set<HomeRailKey>>(emptySet())
     private var lastWrittenState: HomeRailOrderState? = null
     private var lastKnownLiveDefinitions: List<HomeRailDefinition> = emptyList()
 
+    /**
+     * File-backed typed StateFlow. CLAUDE.md hard rule #3: the previous
+     * implementation stored the rail order state as a 45 KiB JSON String in
+     * Jetpack DataStore Preferences; the
+     * `androidx.datastore.preferences.core.MutablePreferences.preferencesMap`
+     * pinned the entire String for the lifetime of every Flow collection
+     * (heap-confirmed 2026-05-10 ANR investigation, retainer chain
+     * `MutablePreferences.preferencesMap → Data.value →
+     * StateFlowImpl$collect$1.L$4`). Now backed by a file
+     * (`filesDir/home-rail-order-v1/p<profileId>.json`) plus this in-memory
+     * typed [MutableStateFlow] so the JSON String only lives for the duration
+     * of the streaming parse/serialize call.
+     *
+     * Read flow: per-profile load on activation, streaming JsonReader →
+     * codec.decodeFromReader → [MutableStateFlow.value]. No String
+     * materialisation.
+     *
+     * Write flow: [persist] streams the typed state to a temp file via
+     * JsonWriter + atomic rename, then updates [MutableStateFlow.value]. The
+     * legacy DataStore `setHomeRailOrderStateJson` setter is no longer called.
+     */
+    private val _state: MutableStateFlow<HomeRailOrderState> =
+        MutableStateFlow(HomeRailOrderState.Empty)
+    val state: StateFlow<HomeRailOrderState> = _state.asStateFlow()
+
     init {
         scope.launch {
             var lastSeenProfileId: Int? = null
             profileManager.activeProfileId.collect { profileId ->
+                val loaded = mutationLock.withLock { loadSnapshotForProfile(profileId) }
                 if (lastSeenProfileId != null && lastSeenProfileId != profileId) {
                     mutationLock.withLock {
-                        lastWrittenState = null
+                        lastWrittenState = loaded
                         lastKnownLiveDefinitions = emptyList()
                     }
+                } else {
+                    mutationLock.withLock { lastWrittenState = loaded }
                 }
+                _state.value = loaded
                 lastSeenProfileId = profileId
             }
         }
     }
-
-    val state: StateFlow<HomeRailOrderState> = layoutPreferenceDataStore.homeRailOrderStateJson
-        .map { codec.decode(it) }
-        .stateIn(scope, SharingStarted.Eagerly, HomeRailOrderState.Empty)
 
     fun effectiveOrder(
         liveDefinitions: Flow<List<HomeRailDefinition>>,
@@ -239,13 +333,105 @@ class HomeRailOrderStore @Inject constructor(
 
     private suspend fun currentForMutation(): HomeRailOrderState {
         lastWrittenState?.let { return it }
-        val initial = codec.decode(layoutPreferenceDataStore.homeRailOrderStateJson.first())
+        // First mutation before init's collector has loaded the file: load
+        // synchronously here so we don't observe HomeRailOrderState.Empty and
+        // overwrite persisted state.
+        val profileId = profileManager.activeProfileId.value
+        val initial = loadSnapshotForProfile(profileId)
         lastWrittenState = initial
+        _state.value = initial
         return initial
     }
 
     private suspend fun persist(state: HomeRailOrderState) {
-        layoutPreferenceDataStore.setHomeRailOrderStateJson(codec.encode(state))
+        val profileId = profileManager.activeProfileId.value
+        val file = snapshotFileFor(profileId)
+        runCatching {
+            file.parentFile?.mkdirs()
+            writeSnapshotToFile(state, file)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to persist home rail order state to file", error)
+        }
         lastWrittenState = state
+        _state.value = state
+    }
+
+    private fun snapshotFileFor(profileId: Int): File {
+        if (!snapshotDir.exists()) snapshotDir.mkdirs()
+        return File(snapshotDir, "p${profileId.coerceAtLeast(1)}.json")
+    }
+
+    private suspend fun loadSnapshotForProfile(profileId: Int): HomeRailOrderState {
+        val file = snapshotFileFor(profileId)
+        return if (file.exists()) {
+            streamReadSnapshot(file) ?: HomeRailOrderState.Empty
+        } else {
+            migrateLegacySnapshotToFile(profileId, file)
+        }
+    }
+
+    private fun streamReadSnapshot(file: File): HomeRailOrderState? {
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            null
+                        } else {
+                            codec.decodeFromReader(reader)
+                        }
+                    }
+                }
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read home rail order state", error)
+        }.getOrNull()
+    }
+
+    private fun writeSnapshotToFile(state: HomeRailOrderState, target: File) {
+        val tempFile = File(target.parentFile, "${target.name}.tmp")
+        FileOutputStream(tempFile).use { fos ->
+            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                JsonWriter(bw).use { writer ->
+                    codec.encodeToWriter(state, writer)
+                }
+            }
+        }
+        Files.move(
+            tempFile.toPath(),
+            target.toPath(),
+            StandardCopyOption.ATOMIC_MOVE,
+            StandardCopyOption.REPLACE_EXISTING
+        )
+    }
+
+    /**
+     * One-time legacy migration: when the file does not yet exist but the
+     * legacy DataStore preference key is populated, decode the legacy String
+     * once via the existing codec.decode path, write it to file, then clear
+     * the DataStore key so the next launch sees only the file. The legacy
+     * read pays the StringReader cost ONE TIME per device per profile during
+     * migration; subsequent reads stream from the file.
+     */
+    @Suppress("DEPRECATION")
+    private suspend fun migrateLegacySnapshotToFile(
+        profileId: Int,
+        target: File,
+    ): HomeRailOrderState {
+        val legacy = layoutPreferenceDataStore.homeRailOrderStateJson.first()
+        if (legacy.isNullOrBlank()) return HomeRailOrderState.Empty
+        val decoded = codec.decode(legacy)
+        runCatching {
+            target.parentFile?.mkdirs()
+            writeSnapshotToFile(decoded, target)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to migrate legacy home rail order state to file", error)
+        }
+        runCatching { layoutPreferenceDataStore.clearLegacyHomeRailOrderStateJson() }
+            .onFailure { error ->
+                Log.w(TAG, "Failed to clear legacy DataStore home rail order state", error)
+            }
+        return decoded
     }
 }
