@@ -46,6 +46,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
@@ -144,6 +145,7 @@ class HomeViewModel @Inject constructor(
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
+    private val catalogInventoryRepository: CatalogInventoryRepository,
     internal val projectionCache: ResolvedDisplayProjectionCache,
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
     internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
@@ -205,6 +207,17 @@ class HomeViewModel @Inject constructor(
     // this StateFlow directly; do not re-introduce a catalogRows field on HomeUiState.
     internal val _displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val displayCatalogRows: StateFlow<List<CatalogRow>> = _displayCatalogRows.asStateFlow()
+
+    /**
+     * Single-rail observation for `CatalogSeeAllScreen`. Delegates to
+     * [CatalogInventoryRepository.observeRail] so the SeeAll screen does NOT
+     * subscribe to the full inventory StateFlow — recomposes only when the
+     * specific rail's content changes.
+     *
+     * Spec: docs/superpowers/specs/2026-05-10-catalog-inventory-repository-design.md
+     */
+    fun observeCatalogRail(key: String): Flow<CatalogRow?> =
+        catalogInventoryRepository.observeRail(key)
     // Hero items held outside [HomeUiState] (mirrors small Task 26 catalogRows pattern) so
     // Compose's SnapshotStateRecord history does not pin prior MetaPreview lists alongside
     // the current set. UI consumes this StateFlow directly; do not re-introduce a

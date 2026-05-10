@@ -1335,6 +1335,7 @@ class HomeViewModelFocusHydrationTest {
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
                 activeProfileSession = { profileSessionFlow.value }
             ),
+            catalogInventoryRepository = com.nexio.tv.data.repository.CatalogInventoryRepository(),
             projectionCache = ResolvedDisplayProjectionCache(),
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
