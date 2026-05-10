@@ -1210,23 +1210,49 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             "persistedMdbGroups=${persistedMDBListSyntheticGroups.size} " +
             "persistedTmdbGroups=${persistedTmdbSyntheticGroups.size}"
     )
-    val beforeTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
-    val beforeSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
-    val beforeMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
-    val beforeTmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
+    // Don't pre-fetch the four full discovery snapshots into outer-fun locals.
+    // Every suspension inside any launch in the supervisorScope below saves the
+    // entire outer-fun local set into the branch's continuation, including the
+    // three snapshots that branch doesn't even use — heap dump showed a ~100k-
+    // element ArrayList pinned by L$24 across the whole fan-out.
+    //
+    // Capture only the diff-baseline `Set<String>` keys here (small, ~tens of KB
+    // each); these survive across supervisorScope.joinAll() and feed the final
+    // telemetry. The decision flags need the full snapshot, but only briefly:
+    // we wrap the fetch + decision in `let` so the snapshot has no named local,
+    // letting it be GC'd as soon as the boolean is computed.
+    val beforeTraktKeys = traktSnapshotItemKeys(
+        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    )
+    val beforeSimklKeys = simklSnapshotItemKeys(
+        simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    )
+    val beforeMdbKeys = mdbSnapshotItemKeys(
+        mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    )
+    val beforeTmdbKeys = tmdbSnapshotItemKeys(
+        tmdbDiscoveryService.observeSnapshot().first()
+    )
 
     logStartupPerf(
         "synthetic_refresh_start",
-        "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} simkl_items=${simklSnapshotItemKeys(beforeSimklSnapshot).size} " +
-            "mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size} tmdb_items=${tmdbSnapshotItemKeys(beforeTmdbSnapshot).size}"
+        "trakt_items=${beforeTraktKeys.size} simkl_items=${beforeSimklKeys.size} " +
+            "mdb_items=${beforeMdbKeys.size} tmdb_items=${beforeTmdbKeys.size}"
     )
 
     val refreshedCatalogCount = AtomicInteger(0)
     val refreshTraktDiscovery = activeProfileTraktAuthenticated &&
         shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)
-    val refreshSimklDiscovery = shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, beforeSimklSnapshot)
-    val refreshMdbDiscovery = shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, beforeMdbSnapshot)
-    val refreshTmdbDiscovery = shouldRefreshTmdbDiscoveryForState(tmdbCatalogPreferences, beforeTmdbSnapshot)
+    // The decision helpers need a full snapshot for their predicate but only briefly:
+    // wrap in `let` so the snapshot has no named local and is GC-eligible the moment
+    // the boolean is computed. Without `let`, the snapshot would stay in scope as
+    // an outer-fun local and get pinned in every launch's continuation below.
+    val refreshSimklDiscovery = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+        .let { snap -> shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, snap) }
+    val refreshMdbDiscovery = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+        .let { snap -> shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, snap) }
+    val refreshTmdbDiscovery = tmdbDiscoveryService.observeSnapshot().first()
+        .let { snap -> shouldRefreshTmdbDiscoveryForState(tmdbCatalogPreferences, snap) }
     supervisorScope {
         val refreshJobs = mutableListOf<Job>()
         refreshJobs.add(
@@ -1250,7 +1276,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     } else {
                         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
                     }
-                    val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
+                    val traktBeforeKeys = beforeTraktKeys
                     val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
                     withContext(Dispatchers.Main.immediate) {
                         if (!isCurrentSerializedRefreshScope()) return@withContext
@@ -1307,7 +1333,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                         }
                     }
                     val afterTmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-                    val tmdbBeforeKeys = tmdbSnapshotItemKeys(beforeTmdbSnapshot)
+                    val tmdbBeforeKeys = beforeTmdbKeys
                     val tmdbAfterKeys = tmdbSnapshotItemKeys(afterTmdbSnapshot)
                     withContext(Dispatchers.Main.immediate) {
                         if (!isCurrentSerializedRefreshScope()) return@withContext
@@ -1361,7 +1387,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                         }
                     }
                     val afterSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
-                    val simklBeforeKeys = simklSnapshotItemKeys(beforeSimklSnapshot)
+                    val simklBeforeKeys = beforeSimklKeys
                     val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
                     withContext(Dispatchers.Main.immediate) {
                         if (!isCurrentSerializedRefreshScope()) return@withContext
@@ -1411,7 +1437,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                         mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first(),
                         syntheticTomatoesOverridesByItemId
                     )
-                    val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
+                    val mdbBeforeKeys = beforeMdbKeys
                     val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
                     withContext(Dispatchers.Main.immediate) {
                         if (!isCurrentSerializedRefreshScope()) return@withContext
@@ -1549,13 +1575,9 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
         afterMdbSnapshot,
         syntheticTomatoesOverridesByItemId
     )
-    val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
     val traktAfterKeys = traktSnapshotItemKeys(hydratedAfterTraktSnapshot)
-    val simklBeforeKeys = simklSnapshotItemKeys(beforeSimklSnapshot)
     val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
-    val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
     val mdbAfterKeys = mdbSnapshotItemKeys(hydratedAfterMdbSnapshot)
-    val tmdbBeforeKeys = tmdbSnapshotItemKeys(beforeTmdbSnapshot)
     val tmdbAfterKeys = tmdbSnapshotItemKeys(afterTmdbSnapshot)
     if (activeProfileTraktAuthenticated) {
         traktDiscoverySnapshot = hydratedAfterTraktSnapshot
@@ -1569,10 +1591,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
 
     logStartupPerf(
         "synthetic_refresh_end",
-        "trakt_total=${traktAfterKeys.size} trakt_added=${(traktAfterKeys - traktBeforeKeys).size} trakt_retained=${(traktAfterKeys intersect traktBeforeKeys).size} " +
-            "simkl_total=${simklAfterKeys.size} simkl_added=${(simklAfterKeys - simklBeforeKeys).size} simkl_retained=${(simklAfterKeys intersect simklBeforeKeys).size} " +
-            "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - mdbBeforeKeys).size} mdb_retained=${(mdbAfterKeys intersect mdbBeforeKeys).size} " +
-            "tmdb_total=${tmdbAfterKeys.size} tmdb_added=${(tmdbAfterKeys - tmdbBeforeKeys).size} tmdb_retained=${(tmdbAfterKeys intersect tmdbBeforeKeys).size}"
+        "trakt_total=${traktAfterKeys.size} trakt_added=${(traktAfterKeys - beforeTraktKeys).size} trakt_retained=${(traktAfterKeys intersect beforeTraktKeys).size} " +
+            "simkl_total=${simklAfterKeys.size} simkl_added=${(simklAfterKeys - beforeSimklKeys).size} simkl_retained=${(simklAfterKeys intersect beforeSimklKeys).size} " +
+            "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - beforeMdbKeys).size} mdb_retained=${(mdbAfterKeys intersect beforeMdbKeys).size} " +
+            "tmdb_total=${tmdbAfterKeys.size} tmdb_added=${(tmdbAfterKeys - beforeTmdbKeys).size} tmdb_retained=${(tmdbAfterKeys intersect beforeTmdbKeys).size}"
     )
 
     Log.d(
