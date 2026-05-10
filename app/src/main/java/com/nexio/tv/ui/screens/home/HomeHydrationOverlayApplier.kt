@@ -36,7 +36,11 @@ internal fun CatalogRow.applyHydratedHomeOverlays(
             updatedItems += item
         } else {
             val updated = overlay.fields.applyTo(item)
-            if (updated !== item) changed = true
+            // Content equality, not reference equality — `applyTo` may return a
+            // fresh data-class instance with identical fields when the overlay
+            // value is content-equal to the existing item. Treat that as "no
+            // change" so the row instance can be reused upstream.
+            if (updated != item) changed = true
             updatedItems += updated
         }
     }
