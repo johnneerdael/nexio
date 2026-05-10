@@ -31,7 +31,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.coalesceWith
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.Dispatchers
@@ -604,7 +604,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             is ContinueWatchingItem.NextUp -> item.info.displayMetadata
         }
 
-        val enrichedMetadata = localizedPreview.toHomeDisplayMetadata().mergeFallback(existing)
+        val enrichedMetadata = localizedPreview.toHomeDisplayMetadata().coalesceWith(existing)
 
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
