@@ -58,7 +58,6 @@ import com.nexio.tv.ui.components.HeroCarousel
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.components.overlayResolvedDisplay
-import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 
 /** Minimum interval between processed key repeat events to prevent HWUI overload. */
@@ -341,8 +340,9 @@ fun GridHomeContent(
                             val effectiveItem = remember(originalItem, resolvedItem) {
                                 overlayResolvedDisplay(originalItem, resolvedItem)
                             }
+                            val cardData = remember(effectiveItem) { ModernHomeRowItem.fromMetaPreview(effectiveItem) }
                             GridContentCard(
-                                item = effectiveItem.toRailCardData(),
+                                item = cardData,
                                 focusRequester = focusRequester,
                                 posterCardStyle = posterCardStyle,
                                 showLabel = uiState.posterLabelsEnabled,
