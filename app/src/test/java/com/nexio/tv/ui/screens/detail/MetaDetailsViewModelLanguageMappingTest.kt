@@ -2,7 +2,6 @@ package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.domain.model.DetailAdvancedMetadata
 import com.nexio.tv.domain.model.LocalizationDisplayState
-import com.nexio.tv.domain.model.Meta
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
