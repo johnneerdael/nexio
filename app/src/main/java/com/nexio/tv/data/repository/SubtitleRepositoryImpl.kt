@@ -47,11 +47,20 @@ class SubtitleRepositoryImpl @Inject constructor(
         wyzieHints: WyzieIdHints,
         season: Int?,
         episode: Int?,
+        imdbId: String?,
     ): List<Subtitle> = withContext(Dispatchers.IO) {
         val requestType = canonicalSubtitleType(type)
         val requestId = if (requestType == "series" && videoId != null) videoId else id
         val startedAtMs = System.currentTimeMillis()
-        Log.d(TAG, "Fetching subtitles for type=$requestType, id=$requestId, videoId=$videoId")
+        Log.d(TAG, "Fetching subtitles for type=$requestType, id=$requestId, videoId=$videoId, imdbId=$imdbId")
+
+        // Synthesize a Wyzie hint when the canonical contentId namespace (e.g. tvdb:N) gave us
+        // nothing usable but a sidecar IMDB id was provided by the player.
+        val effectiveWyzieHints = if (wyzieHints.imdb.isNullOrBlank() && !imdbId.isNullOrBlank()) {
+            wyzieHints.copy(imdb = imdbId)
+        } else {
+            wyzieHints
+        }
 
         coroutineScope {
             val addonDeferred = async {
@@ -63,7 +72,7 @@ class SubtitleRepositoryImpl @Inject constructor(
                     }
             }
             val wyzieDeferred = async {
-                runCatching { fetchWyzieLane(type, wyzieHints, season, episode) }
+                runCatching { fetchWyzieLane(type, effectiveWyzieHints, season, episode) }
                     .getOrElse { e ->
                         if (e is CancellationException) throw e
                         Log.e(TAG, "Wyzie lane failed", e)
@@ -78,7 +87,8 @@ class SubtitleRepositoryImpl @Inject constructor(
                         videoId = videoId,
                         videoHash = videoHash,
                         videoSize = videoSize,
-                        filename = filename
+                        filename = filename,
+                        imdbHint = imdbId
                     )
                 }.getOrElse { e ->
                     if (e is CancellationException) throw e
