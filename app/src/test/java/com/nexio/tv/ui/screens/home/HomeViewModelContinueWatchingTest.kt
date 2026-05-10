@@ -426,7 +426,7 @@ class HomeViewModelContinueWatchingTest {
             snapshotService.recordMetadataSnapshot("series:tvdb:121361", any())
         }
         assertEquals("tvdb:121361", snapshotSlot.captured.parentId)
-        assertEquals("Game of Thrones", snapshotSlot.captured.clickTimeDisplayMetadata.title)
+        assertEquals("Game of Thrones", snapshotSlot.captured.clickTimeSlots.title.value)
         assertEquals(ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION, snapshotSlot.captured.routingVersion)
     }
 

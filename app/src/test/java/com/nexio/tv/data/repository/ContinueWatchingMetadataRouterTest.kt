@@ -13,8 +13,10 @@ import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.ui.screens.home.toResolvedFieldSlots
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -43,9 +45,13 @@ class ContinueWatchingMetadataRouterTest {
             reason = MetadataDecisionReason.ITEM_TYPE_SERIES
         )
 
+        val clickTimeSlots = clickTime.toResolvedFieldSlots(
+            nowMs = 0L,
+            rank = DisplaySourceRank.FIRST_PAINT,
+        )
         val metadataSnapshot = ContinueWatchingMetadataSnapshot.fromRoute(
             route = route,
-            clickTimeDisplayMetadata = clickTime
+            clickTimeSlots = clickTimeSlots
         )
         val snapshot = ContinueWatchingSnapshot(
             metadataSnapshotsByItemKey = mapOf("series:121361" to metadataSnapshot)
@@ -56,7 +62,7 @@ class ContinueWatchingMetadataRouterTest {
         assertEquals("tvdb:121361", stored.parentId)
         assertEquals(MetadataPrimaryProvider.TVDB, stored.primaryProvider)
         assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, stored.decisionReason)
-        assertEquals(clickTime, stored.clickTimeDisplayMetadata)
+        assertEquals(clickTimeSlots, stored.clickTimeSlots)
     }
 
     @Test
@@ -89,7 +95,10 @@ class ContinueWatchingMetadataRouterTest {
 
         val rendered = ContinueWatchingMetadataSnapshot.renderDisplayMetadata(
             canonical = canonical,
-            clickTime = clickTime,
+            clickTimeSlots = clickTime.toResolvedFieldSlots(
+                nowMs = 0L,
+                rank = DisplaySourceRank.FIRST_PAINT,
+            ),
             persistedFallback = persistedFallback
         )
 
@@ -111,12 +120,16 @@ class ContinueWatchingMetadataRouterTest {
         )
         val service = continueWatchingSnapshotService(metadataRouterFacade = facade)
         val clickTime = HomeDisplayMetadata(title = "Click Title")
+        val clickTimeSlots = clickTime.toResolvedFieldSlots(
+            nowMs = 0L,
+            rank = DisplaySourceRank.FIRST_PAINT,
+        )
         val staleSnapshot = ContinueWatchingMetadataSnapshot(
             routingVersion = 0,
             parentId = "tt12343534",
             primaryProvider = MetadataPrimaryProvider.TVDB,
             decisionReason = MetadataDecisionReason.ITEM_TYPE_SERIES,
-            clickTimeDisplayMetadata = clickTime
+            clickTimeSlots = clickTimeSlots
         )
 
         val upgraded = service.upgradeStaleRouteSnapshots(
@@ -146,7 +159,7 @@ class ContinueWatchingMetadataRouterTest {
         assertEquals(ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION, upgradedSnapshot.routingVersion)
         assertEquals("kitsu:7442", upgradedSnapshot.parentId)
         assertEquals(MetadataPrimaryProvider.KITSU, upgradedSnapshot.primaryProvider)
-        assertEquals(clickTime, upgradedSnapshot.clickTimeDisplayMetadata)
+        assertEquals(clickTimeSlots, upgradedSnapshot.clickTimeSlots)
         assertEquals("tt12343534", requestSlot.captured.contentId)
         assertEquals(ContentType.SERIES, requestSlot.captured.contentType)
         coVerify(exactly = 1) { facade.routeRequest(any()) }

@@ -25,7 +25,7 @@ class ContinueWatchingMetadataSnapshotTypeAdapterTest {
               "routingVersion": 1,
               "parentId": "tt0944947",
               "primaryProvider": "TMDB",
-              "decisionReason": "ADDON_PROVIDED",
+              "decisionReason": "PROVIDER_NATIVE_DIRECT",
               "clickTimeSlots": {
                 "title": { "value": "Game of Thrones", "rank": "FIRST_PAINT", "updatedAtMs": 0, "trace": [] },
                 "originalTitle": { "value": null, "rank": "EMPTY", "updatedAtMs": 0, "trace": [] },
@@ -49,7 +49,7 @@ class ContinueWatchingMetadataSnapshotTypeAdapterTest {
         assertEquals(1, snapshot.routingVersion)
         assertEquals("tt0944947", snapshot.parentId)
         assertEquals(MetadataPrimaryProvider.TMDB, snapshot.primaryProvider)
-        assertEquals(MetadataDecisionReason.ADDON_PROVIDED, snapshot.decisionReason)
+        assertEquals(MetadataDecisionReason.PROVIDER_NATIVE_DIRECT, snapshot.decisionReason)
         assertEquals("Game of Thrones", snapshot.clickTimeSlots.title.value)
         assertEquals(DisplaySourceRank.FIRST_PAINT, snapshot.clickTimeSlots.title.rank)
     }
@@ -61,7 +61,7 @@ class ContinueWatchingMetadataSnapshotTypeAdapterTest {
               "routingVersion": 1,
               "parentId": "tt0944947",
               "primaryProvider": "TMDB",
-              "decisionReason": "ADDON_PROVIDED",
+              "decisionReason": "PROVIDER_NATIVE_DIRECT",
               "clickTimeDisplayMetadata": {
                 "title": "Game of Thrones",
                 "description": "An epic fantasy series",
@@ -88,7 +88,7 @@ class ContinueWatchingMetadataSnapshotTypeAdapterTest {
               "routingVersion": 1,
               "parentId": "tt0944947",
               "primaryProvider": "TMDB",
-              "decisionReason": "ADDON_PROVIDED"
+              "decisionReason": "PROVIDER_NATIVE_DIRECT"
             }
         """.trimIndent()
 

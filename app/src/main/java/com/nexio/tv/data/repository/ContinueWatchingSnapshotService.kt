@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.ui.screens.home.toHomeDisplayMetadata
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -1045,14 +1046,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         contentType = ContentType.fromString(itemType),
                         sourceContext = MetadataSourceContext(
                             itemType = itemType,
-                            addonMetadata = metadataSnapshot.clickTimeDisplayMetadata
+                            addonMetadata = metadataSnapshot.clickTimeSlots.toHomeDisplayMetadata()
                         ),
                         depth = MetadataDepth.DETAIL_CORE
                     )
                 )
                 ContinueWatchingMetadataSnapshot.fromRoute(
                     route = route,
-                    clickTimeDisplayMetadata = metadataSnapshot.clickTimeDisplayMetadata
+                    clickTimeSlots = metadataSnapshot.clickTimeSlots
                 )
             }.getOrElse {
                 metadataSnapshot
@@ -1384,7 +1385,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
             val merged = ContinueWatchingMetadataSnapshot.renderDisplayMetadata(
                 canonical = fetched,
-                clickTime = routeUpgradedSnapshot.metadataSnapshotsByItemKey[itemKey]?.clickTimeDisplayMetadata,
+                clickTimeSlots = routeUpgradedSnapshot.metadataSnapshotsByItemKey[itemKey]?.clickTimeSlots,
                 persistedFallback = fallbackMetadata[itemKey]
             )
             if (merged.hasRenderableDisplayMetadata()) {
@@ -1407,7 +1408,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             contentType = ContentType.fromString(contentType),
             sourceContext = MetadataSourceContext(
                 itemType = contentType,
-                addonMetadata = routedSnapshot?.clickTimeDisplayMetadata
+                addonMetadata = routedSnapshot?.clickTimeSlots?.toHomeDisplayMetadata()
             ),
             depth = MetadataDepth.DETAIL_CORE
         )

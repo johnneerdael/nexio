@@ -15,8 +15,10 @@ import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.ui.screens.home.toResolvedFieldSlots
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -53,7 +55,10 @@ class ContinueWatchingResolveRequestTest {
             parentId = "tvdb:355567",
             primaryProvider = MetadataPrimaryProvider.TVDB,
             decisionReason = MetadataDecisionReason.ITEM_TYPE_SERIES,
-            clickTimeDisplayMetadata = expectedClickTimeDisplay
+            clickTimeSlots = expectedClickTimeDisplay.toResolvedFieldSlots(
+                nowMs = 0L,
+                rank = DisplaySourceRank.FIRST_PAINT,
+            )
         )
         val snapshot = ContinueWatchingSnapshot(
             metadataSnapshotsByItemKey = mapOf(itemKey to metadataSnapshot)

@@ -684,7 +684,10 @@ internal suspend fun HomeViewModel.recordContinueWatchingRouteContextForPlayback
             itemKey = homeDisplayItemKey(item.contentType(), item.contentId()),
             metadataSnapshot = ContinueWatchingMetadataSnapshot.fromRoute(
                 route = route,
-                clickTimeDisplayMetadata = item.displayMetadata()
+                clickTimeSlots = item.displayMetadata().toResolvedFieldSlots(
+                    nowMs = System.currentTimeMillis(),
+                    rank = DisplaySourceRank.FIRST_PAINT,
+                )
             )
         )
     } catch (e: CancellationException) {
