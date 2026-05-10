@@ -610,4 +610,50 @@ class PlayerStartupSelectionPolicyTest {
 
         assertEquals(1, index)
     }
+
+    @Test
+    fun `pickTranslatableInternal picks normal English over forced English when secondary unset`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "English (Forced)", language = "en", isForced = true, mimeType = "text/vtt"),
+            TrackInfo(index = 1, name = "English", language = "en", isForced = false, mimeType = "text/vtt")
+        )
+
+        val index = pickTranslatableInternalSubtitle(
+            subtitleTracks = tracks,
+            secondaryLanguage = null
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `pickTranslatableInternal picks normal secondary over SDH secondary`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Francais SDH", language = "fr", isForced = false, mimeType = "text/vtt"),
+            TrackInfo(index = 1, name = "Francais", language = "fr", isForced = false, mimeType = "text/vtt"),
+            TrackInfo(index = 2, name = "English", language = "en", isForced = false, mimeType = "text/vtt")
+        )
+
+        val index = pickTranslatableInternalSubtitle(
+            subtitleTracks = tracks,
+            secondaryLanguage = "fr"
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `pickTranslatableInternal picks any-tier normal track over forced same-tier`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Polish (Forced)", language = "pl", isForced = true, mimeType = "text/vtt"),
+            TrackInfo(index = 1, name = "Polish", language = "pl", isForced = false, mimeType = "text/vtt")
+        )
+
+        val index = pickTranslatableInternalSubtitle(
+            subtitleTracks = tracks,
+            secondaryLanguage = null
+        )
+
+        assertEquals(1, index)
+    }
 }

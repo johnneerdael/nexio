@@ -633,17 +633,21 @@ internal fun pickTranslatableInternalSubtitle(
         }
     if (textTracks.isEmpty()) return -1
 
+    fun bestByAccessibility(candidates: List<Int>): Int? {
+        return candidates.minByOrNull { subtitleTracks[it].subtitleAccessibilityRank() }
+    }
+
     if (!secondaryLanguage.isNullOrBlank()) {
-        val secondaryMatch = textTracks.firstOrNull { index ->
+        val secondaryMatches = textTracks.filter { index ->
             PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, secondaryLanguage)
         }
-        if (secondaryMatch != null) return secondaryMatch
+        bestByAccessibility(secondaryMatches)?.let { return it }
     }
-    val englishMatch = textTracks.firstOrNull { index ->
+    val englishMatches = textTracks.filter { index ->
         PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, "en")
     }
-    if (englishMatch != null) return englishMatch
-    return textTracks.first()
+    bestByAccessibility(englishMatches)?.let { return it }
+    return bestByAccessibility(textTracks) ?: textTracks.first()
 }
 
 /**
