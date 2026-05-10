@@ -6,6 +6,8 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.PlaceholderType
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.ui.screensaver.IdleScreensaverDisplayItem
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
@@ -14,11 +16,9 @@ import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -50,6 +50,7 @@ private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
 
 @Singleton
 class IdleScreensaverRepository(
+    @Suppress("unused")
     private val screensaverCandidateRepository: ScreensaverCandidateRepository,
     private val surfaceRepository: ResolvedDisplaySurfaceRepository,
     private val activeProfileId: () -> Int
@@ -77,15 +78,13 @@ class IdleScreensaverRepository(
      * its own [TrailerDisplayState] so consumers can pick image vs trailer mode
      * without consulting a parallel `_trailerCandidates` flow. Plan B Task 14.
      *
-     * **Coherence semantics:** [ResolvedDisplaySurfaceRepository.surfaces] is a
-     * hot `MutableStateFlow`, so both this projection and the legacy
-     * [slides]/[trailerCandidates] flows observe the same emission *value*. They
-     * are still populated by two independent collectors below, so brief
-     * intra-emission interleaving is possible (one StateFlow can update before
-     * the other within a single dispatcher tick). Consumers that need lockstep
-     * image+trailer state should treat them as eventually-coherent within an
-     * emission window. Plan B Task 15 retires the legacy flows so this
-     * coherence concern is structural-only and goes away with cleanup.
+     * Plan B Task 15 (adapter-bridge): this is now the SOLE upstream input. Both
+     * legacy [slides] and [trailerCandidates] flows are derived from this list via
+     * adapter functions ([toIdleScreensaverSlide] / [toIdleTrailerScreensaverCandidate]).
+     * As a result the three flows are guaranteed coherent within an emission and
+     * `ScreensaverCandidateRepository` is no longer consulted (param is retained
+     * for the Hilt graph; Task 26 cleanup will remove it after surfaces accept the
+     * new flow shape).
      */
     private val _screensaverDisplayItems = MutableStateFlow<List<IdleScreensaverDisplayItem>>(emptyList())
     val screensaverDisplayItems = _screensaverDisplayItems.asStateFlow()
@@ -98,45 +97,52 @@ class IdleScreensaverRepository(
         refreshFromResolvedSurface("Prepared")
     }
 
-    suspend fun observeResolvedSurface(profileId: Int = activeProfileId()) = coroutineScope {
-        // Observe both the projected candidates snapshot (legacy slides/trailerCandidates
-        // path) and the raw surface (new screensaverDisplayItems path) in parallel.
-        // Both paths read from ResolvedDisplaySurfaceRepository so they tick together.
-        launch {
-            screensaverCandidateRepository.observeCandidates(profileId).collect { snapshot ->
-                publishCandidatesSnapshot(snapshot, "Observed")
-            }
-        }
-        launch {
-            surfaceRepository.observeScreensaverSurface(profileId).collect { items ->
-                publishResolvedItems(items)
-            }
+    suspend fun observeResolvedSurface(profileId: Int = activeProfileId()) {
+        // Single upstream collector. From each emission of resolved screensaver items
+        // we publish all three flows (display items + adapter-derived legacy slides +
+        // trailer candidates) under one mutex hold so consumers always see coherent
+        // state within an emission window.
+        surfaceRepository.observeScreensaverSurface(profileId).collect { items ->
+            publishResolvedItems(items, "Observed")
         }
     }
 
     private suspend fun refreshFromResolvedSurface(logPrefix: String) {
         val profileId = activeProfileId()
-        publishCandidatesSnapshot(
-            snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId),
-            logPrefix = logPrefix
-        )
         publishResolvedItems(
             items = surfaceRepository.getSnapshot(
                 ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
                 profileId
-            )
+            ),
+            logPrefix = logPrefix
         )
     }
 
-    private suspend fun publishCandidatesSnapshot(
-        snapshot: ScreensaverCandidatesSnapshot,
-        logPrefix: String
+    private suspend fun publishResolvedItems(
+        items: List<ResolvedDisplayItem>,
+        logPrefix: String = "Observed"
     ) {
         refreshMutex.withLock {
-            val imageSlides = snapshot.imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
-            val trailerCandidates = snapshot.trailerCandidates.mapNotNull { candidate ->
-                candidate.toIdleTrailerScreensaverCandidate()
+            // Filter for items the screensaver can actually render: title + at least
+            // one displayable artwork (matches ScreensaverCandidateRepository's gate).
+            // Indexed-for to avoid suspending Iterable allocations (CLAUDE.md rule #4).
+            val displayItems = ArrayList<IdleScreensaverDisplayItem>(items.size)
+            for (i in items.indices) {
+                val item = items[i]
+                if (item.display.title.isNullOrBlank()) continue
+                if (item.artwork.backdrop == null && item.artwork.poster == null) continue
+                displayItems += IdleScreensaverDisplayItem.from(item)
             }
+
+            val imageSlides = ArrayList<IdleScreensaverSlide>(displayItems.size)
+            val trailerCandidates = ArrayList<IdleTrailerScreensaverCandidate>(displayItems.size)
+            for (i in displayItems.indices) {
+                val displayItem = displayItems[i]
+                displayItem.toIdleScreensaverSlide()?.let(imageSlides::add)
+                displayItem.toIdleTrailerScreensaverCandidate()?.let(trailerCandidates::add)
+            }
+
+            _screensaverDisplayItems.value = displayItems
             _slides.value = imageSlides.ifEmpty { listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE) }
             _trailerCandidates.value = trailerCandidates
             Log.d(
@@ -146,19 +152,72 @@ class IdleScreensaverRepository(
             )
         }
     }
+}
 
-    private suspend fun publishResolvedItems(items: List<ResolvedDisplayItem>) {
-        refreshMutex.withLock {
-            // Filter for items the screensaver can actually render: title + at least
-            // one displayable artwork (matches ScreensaverCandidateRepository's gate).
-            val out = ArrayList<IdleScreensaverDisplayItem>(items.size)
-            for (i in items.indices) {
-                val item = items[i]
-                if (item.display.title.isNullOrBlank()) continue
-                if (item.artwork.backdrop == null && item.artwork.poster == null) continue
-                out += IdleScreensaverDisplayItem.from(item)
-            }
-            _screensaverDisplayItems.value = out
-        }
-    }
+/**
+ * Adapt a [IdleScreensaverDisplayItem] to the legacy [IdleScreensaverSlide] shape
+ * consumed by `IdleScreensaverOverlay`. Returns null when the item lacks a non-blank
+ * title or any displayable background artwork.
+ *
+ * `backgroundRef` already enforces `backdrop ?: poster` (see [IdleScreensaverDisplayItem.from]),
+ * so a single-element fallback list is content-equivalent to the previous
+ * `listOfNotNull(preferredImage, artwork.backdrop, artwork.poster).distinct()` pipeline.
+ */
+internal fun IdleScreensaverDisplayItem.toIdleScreensaverSlide(): IdleScreensaverSlide? {
+    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: return null
+    val background = backgroundRef ?: return null
+    val fallbackArtwork = listOf(background)
+    return IdleScreensaverSlide(
+        itemId = contentId,
+        itemType = itemType,
+        addonBaseUrl = "",
+        title = resolvedTitle,
+        backgroundArtwork = background,
+        logoArtwork = logoRef,
+        genres = genres,
+        description = overview?.takeIf { it.isNotBlank() },
+        releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
+        runtime = runtime?.takeIf { it.isNotBlank() },
+        imdbRating = rating?.value
+            ?.takeIf { RatingValueValidator.validTitleRating(it) }
+            ?.toFloat(),
+        tomatoesRating = null,
+        modeData = IdleScreensaverModeData(
+            image = IdleScreensaverImageModeData(fallbackArtwork = fallbackArtwork)
+        )
+    )
+}
+
+/**
+ * Adapt a [IdleScreensaverDisplayItem] to the legacy [IdleTrailerScreensaverCandidate]
+ * shape consumed by `IdleTrailerScreensaverOverlay` /
+ * `IdleTrailerScreensaverSession`. Returns null when the item lacks a non-blank title
+ * or any displayable background artwork (same gate as the slide adapter).
+ *
+ * `stableIds` is intentionally [ProviderIds] empty — the prior
+ * `ScreensaverCandidateRepository` pipeline left these blank as well.
+ */
+internal fun IdleScreensaverDisplayItem.toIdleTrailerScreensaverCandidate(): IdleTrailerScreensaverCandidate? {
+    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: return null
+    val background = backgroundRef ?: return null
+    val fallbackArtwork = listOf(background)
+    return IdleTrailerScreensaverCandidate(
+        itemId = contentId,
+        itemType = itemType,
+        addonBaseUrl = "",
+        title = resolvedTitle,
+        logoArtwork = logoRef,
+        backgroundArtwork = background,
+        fallbackArtwork = fallbackArtwork,
+        genres = genres,
+        description = overview?.takeIf { it.isNotBlank() },
+        releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
+        runtime = runtime?.takeIf { it.isNotBlank() },
+        imdbRating = rating?.value
+            ?.takeIf { RatingValueValidator.validTitleRating(it) }
+            ?.toFloat(),
+        tomatoesRating = null,
+        trailerState = trailer,
+        stableIds = ProviderIds()
+    )
 }
