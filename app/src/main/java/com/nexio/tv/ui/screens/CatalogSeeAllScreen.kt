@@ -65,7 +65,6 @@ fun CatalogSeeAllScreen(
     onBackPress: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val fullCatalogRows by viewModel.fullCatalogRows.collectAsState()
     val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
     val posterCardStyle = PosterCardStyle(
         width = uiState.posterCardWidthDp.dp,
@@ -77,11 +76,12 @@ fun CatalogSeeAllScreen(
 
     BackHandler { onBackPress() }
 
-    // Find the matching catalog row from full (untruncated) data
+    // Catalog key matches CatalogInventoryRepository's keying convention
+    // (addonId_apiType_catalogId). observeCatalogRail returns the rail
+    // when present, null when absent, distinct-until-rail-content-changes —
+    // SeeAll no longer recomposes on every full-inventory emission.
     val catalogKey = "${addonId}_${type}_${catalogId}"
-    val catalogRow = fullCatalogRows.find {
-        "${it.addonId}_${it.apiType}_${it.catalogId}" == catalogKey
-    }
+    val catalogRow by viewModel.observeCatalogRail(catalogKey).collectAsState(initial = null)
 
     val gridState = rememberLazyGridState()
     val restoreFocusRequester = remember { FocusRequester() }
@@ -169,24 +169,25 @@ fun CatalogSeeAllScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        val hasItems = catalogRow?.items?.isNotEmpty() == true
-        val isCatalogLoading = catalogRow == null || catalogRow.isLoading
+        val currentRow = catalogRow
+        val hasItems = currentRow != null && currentRow.items.isNotEmpty()
+        val isCatalogLoading = currentRow == null || currentRow.isLoading
 
-        if (hasItems) {
+        if (hasItems && currentRow != null) {
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(
                         top = 12.dp,
-                        bottom = if (catalogRow.isLoading) 80.dp else 32.dp
+                        bottom = if (currentRow.isLoading) 80.dp else 32.dp
                     ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     itemsIndexed(
-                        items = catalogRow.items,
-                        key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
+                        items = currentRow.items,
+                        key = { index, item -> "${currentRow.catalogId}_${item.id}_$index" }
                     ) { index, item ->
                         GridContentCard(
                             item = item,
@@ -200,7 +201,7 @@ fun CatalogSeeAllScreen(
                                 onNavigateToDetail(
                                     item.id,
                                     item.apiType,
-                                    catalogRow.addonBaseUrl
+                                    currentRow.addonBaseUrl
                                 )
                             }
                         )
@@ -208,7 +209,7 @@ fun CatalogSeeAllScreen(
                 }
 
                 // Loading indicator at bottom when loading more items
-                if (catalogRow.isLoading) {
+                if (currentRow.isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
