@@ -79,5 +79,6 @@ class MetadataAdapterCandidatesLanguageTest {
         val candidate = record.toMetadataCandidate(MetadataPrimaryProvider.TVDB)
 
         assertEquals("eng", candidate.fields[ResolvedField.LANGUAGE]?.value)
+        assertEquals("usa", candidate.fields[ResolvedField.ORIGINAL_COUNTRY]?.value)
     }
 }
