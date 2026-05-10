@@ -12,7 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -115,7 +115,7 @@ class CatalogInventoryRepositoryTest {
         kotlinx.coroutines.yield()
         job.cancel()
         assertNull(emissions.first())
-        org.junit.Assert.assertNotNull(emissions.last())
+        assertNotNull(emissions.last())
     }
 
     @Test
