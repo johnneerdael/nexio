@@ -429,15 +429,19 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         "first_snapshot"
     }
     val readinessBeforePublish = _uiState.value.homeReadiness
-    if (snapshotVersion == continueWatchingSnapshotVersion) {
-        if (_displayContinueWatchingItems.value != items) {
-            _displayContinueWatchingItems.value = items
-        }
+    // Capture the pre-write CW equality BEFORE we publish to the StateFlow —
+    // otherwise the dedupe predicate inside the _uiState.update lambda below
+    // would compare items to themselves (always true) and the readiness /
+    // initialContinueWatchingResolved side-effects would fire on no-op CW
+    // changes that should have short-circuited.
+    val cwUnchanged = _displayContinueWatchingItems.value == items
+    if (snapshotVersion == continueWatchingSnapshotVersion && !cwUnchanged) {
+        _displayContinueWatchingItems.value = items
     }
     _uiState.update { state ->
         if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
         if (
-            _displayContinueWatchingItems.value == items &&
+            cwUnchanged &&
             state.traktUpNextItems == traktUpNextItems &&
             state.initialContinueWatchingResolved &&
             state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
@@ -499,15 +503,16 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 val readinessBeforeEnrichedPublish = _uiState.value.homeReadiness
-                if (snapshotVersion == continueWatchingSnapshotVersion) {
-                    if (_displayContinueWatchingItems.value != enrichedItems) {
-                        _displayContinueWatchingItems.value = enrichedItems
-                    }
+                // Same dedupe-before-write pattern as applyContinueWatchingSnapshotForSession;
+                // the inner predicate must compare against the pre-write value.
+                val cwUnchanged = _displayContinueWatchingItems.value == enrichedItems
+                if (snapshotVersion == continueWatchingSnapshotVersion && !cwUnchanged) {
+                    _displayContinueWatchingItems.value = enrichedItems
                 }
                 _uiState.update { state ->
                     if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
                     if (
-                        _displayContinueWatchingItems.value == enrichedItems &&
+                        cwUnchanged &&
                         state.traktUpNextItems == enrichedTraktItems &&
                         state.initialContinueWatchingResolved &&
                         state.homeReadiness.isResolved(HomeInitialGate.CONTINUE_WATCHING)
