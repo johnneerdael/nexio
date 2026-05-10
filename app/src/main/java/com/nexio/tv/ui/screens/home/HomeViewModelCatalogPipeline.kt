@@ -278,8 +278,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     startupRefreshPending = false
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
-    _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
     catalogInventoryRepository.clear()
+    _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
     _displayCatalogRows.value = emptyList()
     _displayHeroItems.value = emptyList()
     _uiState.update { state ->
@@ -2203,8 +2203,8 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             catalogOrder.clear()
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
-            _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
             catalogInventoryRepository.clear()
+            _fullCatalogRows.value = emptyList()  // legacy, removed in Task 6
             homeSnapshotPersistJob?.cancel()
             pendingHomeSnapshotPersist = null
             inMemoryHomeSnapshot = null
