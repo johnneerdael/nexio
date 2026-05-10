@@ -46,9 +46,9 @@ import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
-import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.screens.home.HomeEvent
 import com.nexio.tv.ui.screens.home.HomeViewModel
+import com.nexio.tv.ui.screens.home.ModernHomeRowItem
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
@@ -195,8 +195,9 @@ fun CatalogSeeAllScreen(
                         items = currentRow.items,
                         key = { index, item -> "${currentRow.catalogId}_${item.id}_$index" }
                     ) { index, item ->
+                        val cardData = remember(item) { ModernHomeRowItem.fromMetaPreview(item) }
                         GridContentCard(
-                            item = item.toRailCardData(),
+                            item = cardData,
                             posterCardStyle = posterCardStyle,
                             showLabel = uiState.posterLabelsEnabled,
                             focusRequester = if (index == focusedItemIndex) restoreFocusRequester else null,
