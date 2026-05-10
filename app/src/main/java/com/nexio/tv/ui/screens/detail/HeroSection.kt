@@ -671,11 +671,18 @@ private fun MetaInfoRow(
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
-    val secondaryItems = remember(meta.ageRating, meta.country, meta.language) {
+    val secondaryItems = remember(meta.ageRating, meta.country, meta.originalLanguage, meta.language) {
         buildList<String> {
             meta.ageRating?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
             meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-            meta.language?.trim()?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+            // Prefer the production-language field; fall back to the legacy field
+            // for cosmetic display only. The badge is purely informational, so the
+            // fallback is acceptable here even though it is forbidden for the
+            // player's audio targeting (Task C9).
+            (meta.originalLanguage ?: meta.language)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(it.uppercase()) }
         }
     }
 
