@@ -205,11 +205,7 @@ class SubtitleTranslationService @Inject constructor(
             targetLanguageName: String,
             sourceLanguageName: String
         ): String {
-            val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
-                "The source language is unknown — detect it automatically from the cue text and translate to $targetLanguageName."
-            } else {
-                "Translate from $sourceLanguageName to $targetLanguageName."
-            }
+            val sourceClause = rawSubRipSourceClause(targetLanguageName, sourceLanguageName)
             return """
                 You are SRT_TRANSLATION_ENGINE.
 
@@ -224,11 +220,7 @@ class SubtitleTranslationService @Inject constructor(
             targetLanguageName: String,
             sourceLanguageName: String
         ): String {
-            val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
-                "source_language = unknown — detect it automatically from the cue text and translate to $targetLanguageName."
-            } else {
-                "source_language = $sourceLanguageName — translate to $targetLanguageName."
-            }
+            val sourceClause = rawAssSsaSourceClause(targetLanguageName, sourceLanguageName)
             return """
                 You are ASS_SSA_SUBTITLE_TRANSLATOR.
 
@@ -1687,11 +1679,7 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName: String,
         sourceLanguageName: String
     ): String {
-        val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
-            "source_language = unknown — detect it automatically from the cue text and translate to $targetLanguageName."
-        } else {
-            "source_language = $sourceLanguageName — translate to $targetLanguageName."
-        }
+        val sourceClause = rawAssSsaSourceClause(targetLanguageName, sourceLanguageName)
         return """
             You are ASS_SSA_SUBTITLE_TRANSLATOR.
 
@@ -1791,11 +1779,7 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName: String,
         sourceLanguageName: String
     ): String {
-        val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
-            "The source language is unknown — detect it automatically from the cue text and translate to $targetLanguageName."
-        } else {
-            "Translate from $sourceLanguageName to $targetLanguageName."
-        }
+        val sourceClause = rawSubRipSourceClause(targetLanguageName, sourceLanguageName)
         return """
             You are SRT_TRANSLATION_ENGINE.
 
@@ -2103,3 +2087,25 @@ class SubtitleTranslationService @Inject constructor(
 typealias GeminiSubtitleTranslationService = SubtitleTranslationService
 typealias GeminiTranslatedSubtitleAsset = TranslatedSubtitleAsset
 typealias GeminiTranslationChunkConfig = SubtitleTranslationChunkConfig
+
+private fun rawSubRipSourceClause(
+    targetLanguageName: String,
+    sourceLanguageName: String
+): String {
+    return if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+        "The source language is unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+    } else {
+        "Translate from $sourceLanguageName to $targetLanguageName."
+    }
+}
+
+private fun rawAssSsaSourceClause(
+    targetLanguageName: String,
+    sourceLanguageName: String
+): String {
+    return if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+        "source_language = unknown — detect it automatically from the cue text and translate to $targetLanguageName."
+    } else {
+        "source_language = $sourceLanguageName — translate to $targetLanguageName."
+    }
+}
