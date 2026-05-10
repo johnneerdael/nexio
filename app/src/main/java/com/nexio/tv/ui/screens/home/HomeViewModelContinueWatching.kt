@@ -31,7 +31,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.coalesceWith
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.Dispatchers
@@ -604,7 +604,29 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             is ContinueWatchingItem.NextUp -> item.info.displayMetadata
         }
 
-        val enrichedMetadata = localizedPreview.toHomeDisplayMetadata().coalesceWith(existing)
+        // Phase 3.8 — rank-aware slot merge replacing the prior
+        // `localizedPreview.toHomeDisplayMetadata().coalesceWith(existing)`.
+        // The slot-conversion helpers in SlotConversions.kt coerce null/blank
+        // fields to DisplaySourceRank.EMPTY, so this preserves the
+        // localizedPreview-wins-on-non-null semantic of coalesceWith while
+        // routing through the typed-slot rank machinery.
+        val enrichedMetadata = run {
+            val nowMs = System.currentTimeMillis()
+            val previewSlots = localizedPreview.toHomeDisplayMetadata().toResolvedFieldSlots(
+                nowMs = nowMs,
+                rank = DisplaySourceRank.STALE_RESOLVED,
+            )
+            val existingSlots = existing?.toResolvedFieldSlots(
+                nowMs = nowMs,
+                rank = DisplaySourceRank.FIRST_PAINT,
+            )
+            HomeRailProjectionReducer.reduce(
+                firstPaint = existingSlots ?: previewSlots,
+                overlay = if (existingSlots != null) previewSlots else null,
+                existing = null,
+                profile = null,
+            ).toHomeDisplayMetadata()
+        }
 
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
