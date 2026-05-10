@@ -71,14 +71,12 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
-import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.GridContentCard
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.NexioDialog
-import com.nexio.tv.ui.components.toRailCardData
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.ui.util.formatAddonTypeLabel
@@ -342,8 +340,9 @@ fun LibraryScreen(
         } else {
             items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
                 val focusKey = "${item.type}:${item.id}"
+                val cardData = remember(item) { LibraryRailItem.fromEntry(item) }
                 GridContentCard(
-                    item = item.toMetaPreview().copy(posterShape = PosterShape.POSTER).toRailCardData(),
+                    item = cardData,
                     posterCardStyle = posterCardStyle,
                     focusRequester = posterFocusRequesters[focusKey],
                     showLabel = true,
