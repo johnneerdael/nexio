@@ -3123,11 +3123,14 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
         heroTmdbSettings = currentTmdbSettings
     )
-    // Plan-C migration (spec 2026-05-10-catalog-inventory-repository-design):
-    // Dual-write while consumers migrate. _fullCatalogRows stays in place
-    // until Task 6 deletes it; reads switch to inventoryRepository in Task 4.
-    _fullCatalogRows.value = composedSnapshot.fullRows
+    // Dual-write transition (spec docs/superpowers/specs/2026-05-10-catalog-inventory-repository-design.md,
+    // plan Task 3): publish to the new repository FIRST, then the legacy
+    // _fullCatalogRows StateFlow. Order matters during the migration window —
+    // any reader added accidentally is more likely to be a legacy reader, so
+    // the repo is already coherent when legacy emits. Reads migrate in
+    // Task 4; legacy field is deleted in Task 6.
     catalogInventoryRepository.publish(composedSnapshot.fullRows)
+    _fullCatalogRows.value = composedSnapshot.fullRows
     _displayCatalogRows.value = composedSnapshot.displayRows
     _displayHeroItems.value = composedSnapshot.heroItems
     _uiState.update { state ->
