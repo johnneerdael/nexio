@@ -628,46 +628,26 @@ internal fun composeHydratedHomeOverlaySnapshot(
     displayRows: List<CatalogRow>,
     fullRows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-    heroTmdbSettings: TmdbSettings = TmdbSettings()
+    @Suppress("UNUSED_PARAMETER") overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    @Suppress("UNUSED_PARAMETER") heroTmdbSettings: TmdbSettings = TmdbSettings()
 ): HydratedHomeOverlaySnapshotComponents {
-    if (overlaysByItemKey.isEmpty()) {
-        return HydratedHomeOverlaySnapshotComponents(
-            displayRows = displayRows,
-            fullRows = fullRows,
-            heroItems = heroItems
-        )
-    }
-
+    // Phase 3.6.5 — producer no longer applies overlays at compose time. The
+    // typed authority (ResolvedDisplaySurfaceRepository) is the sole source of
+    // hydrated content for visible Modern Home rendering; rails/hero structure
+    // is the only thing the producer emits. Phases 3.6.1-3.6.4 expanded the
+    // typed projections (ModernHomeRowItem, HeroDisplayItem) with description /
+    // genres / releaseInfo / tomatoesRating / runtimeText, and migrated
+    // buildCatalogItem + HeroCarouselSlide to read from those projections
+    // first, MetaPreview as fallback only. The overlay map and tmdbSettings
+    // remain in the signature so callers don't need to change shape — Phase 3.9
+    // will retire the call site entirely. Phase 4 deletes the unreferenced
+    // apply helpers (HomeHydrationOverlayApplier.kt, HomeDisplayMetadata.applyTo*,
+    // applyToHeroItem, etc.).
     return HydratedHomeOverlaySnapshotComponents(
-        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey),
-        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey),
-        heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(
-            overlaysByItemKey = overlaysByItemKey,
-            tmdbSettings = heroTmdbSettings
-        )
+        displayRows = displayRows,
+        fullRows = fullRows,
+        heroItems = heroItems
     )
-}
-
-private fun List<MetaPreview>.applyHydratedHomeOverlaysToHeroItems(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-    tmdbSettings: TmdbSettings
-): List<MetaPreview> {
-    if (overlaysByItemKey.isEmpty()) return this
-
-    var changed = false
-    val updatedItems = map { item ->
-        val overlay = item.overlayFromMap(overlaysByItemKey) ?: return@map item
-        val updated = overlay.fields.applyToHeroItem(item, tmdbSettings)
-        if (updated != item) {
-            changed = true
-            updated
-        } else {
-            item
-        }
-    }
-
-    return if (changed) updatedItems else this
 }
 
 internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<CatalogRow>) {
