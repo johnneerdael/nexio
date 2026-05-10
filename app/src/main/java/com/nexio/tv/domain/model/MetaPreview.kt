@@ -28,6 +28,12 @@ data class MetaPreview(
     val genres: List<String>,
     val trailerYtIds: List<String> = emptyList(),
     val language: String? = null,
+    /**
+     * Production language of the title (e.g. `"eng"` for English-original
+     * content). Distinct from [language] which is overloaded.
+     * See `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`.
+     */
+    val originalLanguage: String? = null,
     val posterProviderTag: String? = null,
     val firstPaintSource: FirstPaintSource = FirstPaintSource.ADDON_META_PREVIEW,
     val firstPaintSourceProvider: ProviderId? = null,
@@ -66,7 +72,7 @@ data class MetaPreview(
         return java.util.Objects.hash(
             id, type, rawType, name, poster, posterShape, background, logo, description,
             releaseInfo, runtime, imdbRating, ratingSource, tomatoesRating, genres,
-            trailerYtIds, language, posterProviderTag,
+            trailerYtIds, language, originalLanguage, posterProviderTag,
             safeSource,
             firstPaintSourceProvider, safeStableIds, firstPaintRailSource, firstPaintSourceItemId,
             artwork
@@ -98,6 +104,7 @@ data class MetaPreview(
             genres == other.genres &&
             trailerYtIds == other.trailerYtIds &&
             language == other.language &&
+            originalLanguage == other.originalLanguage &&
             posterProviderTag == other.posterProviderTag &&
             effectiveSource == otherEffectiveSource &&
             firstPaintSourceProvider == other.firstPaintSourceProvider &&

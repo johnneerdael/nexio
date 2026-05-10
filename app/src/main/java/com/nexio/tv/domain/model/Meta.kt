@@ -32,6 +32,14 @@ data class Meta(
     val country: String?,
     val awards: String?,
     val language: String?,
+    /**
+     * Production language of the title. Distinct from [language] which has
+     * historically been overloaded to also carry the user's UI-locale fetch
+     * language. New code MUST read this field for "what language is this
+     * content in" decisions (player audio targeting, stream filtering).
+     * See `docs/superpowers/notes/2026-05-10-original-language-audio-track-bug.md`.
+     */
+    val originalLanguage: String? = null,
     val links: List<MetaLink>,
     val trailerYtIds: List<String> = emptyList(),
     val tvdbSeasonOrderContext: TvdbSeasonOrderContext? = null,
