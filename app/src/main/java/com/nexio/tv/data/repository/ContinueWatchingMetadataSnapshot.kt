@@ -5,6 +5,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
 import com.nexio.tv.ui.screens.home.emptySlotsAt
 import com.nexio.tv.ui.screens.home.toHomeDisplayMetadata
@@ -15,21 +16,21 @@ data class ContinueWatchingMetadataSnapshot(
     val parentId: String,
     val primaryProvider: MetadataPrimaryProvider,
     val decisionReason: MetadataDecisionReason,
-    val clickTimeDisplayMetadata: HomeDisplayMetadata
+    val clickTimeSlots: ResolvedDisplayFieldSlots
 ) {
     companion object {
         const val CURRENT_ROUTING_VERSION = 1
 
         fun fromRoute(
             route: MetadataRoute,
-            clickTimeDisplayMetadata: HomeDisplayMetadata
+            clickTimeSlots: ResolvedDisplayFieldSlots
         ): ContinueWatchingMetadataSnapshot {
             return ContinueWatchingMetadataSnapshot(
                 routingVersion = CURRENT_ROUTING_VERSION,
                 parentId = route.parentId,
                 primaryProvider = route.provider,
                 decisionReason = route.reason,
-                clickTimeDisplayMetadata = clickTimeDisplayMetadata
+                clickTimeSlots = clickTimeSlots
             )
         }
 
@@ -38,38 +39,25 @@ data class ContinueWatchingMetadataSnapshot(
         }
 
         /**
-         * Phase 3.8 — rank-aware merge of CW metadata sources via the typed
-         * slot bag, replacing the prior `coalesceWith` chain. Observable
-         * semantics are preserved: the slot conversion helpers in
-         * `SlotConversions.kt` coerce null/blank input fields to
-         * `DisplaySourceRank.EMPTY` (rank 0), so a slot with a null value
-         * loses to any lower-rank slot with a non-null value. Combined with
-         * the rank assignment below, this yields exactly the same per-field
-         * winner as `canonical.coalesceWith(clickTime).coalesceWith(persistedFallback)`:
+         * Phase 3.8 full — rank-aware merge of CW metadata sources via the typed
+         * slot bag. The clickTimeSlots input is already typed (post-3.8-full
+         * field-type migration); canonical and persistedFallback still come in
+         * as HomeDisplayMetadata until those producers also migrate.
          *
-         * Precedence (matches the original `canonical.coalesceWith(clickTime)
-         * .coalesceWith(persistedFallback)` chain — canonical first, then
-         * clickTime fills canonical nulls, then persistedFallback fills the
-         * remainder):
+         * Precedence (matches the original coalesceWith chain):
+         *   canonical          -> RESOLVED       (rank 4)
+         *   clickTimeSlots     -> STALE_RESOLVED (rank 3) — already typed; re-ranked
+         *   persistedFallback  -> FIRST_PAINT    (rank 2)
          *
-         * - canonical          → RESOLVED       (rank 4) — wins per field when non-null
-         * - clickTime          → STALE_RESOLVED (rank 3) — fills canonical nulls
-         * - persistedFallback  → FIRST_PAINT    (rank 2) — fills remaining nulls
-         *
-         * Rank names don't perfectly match semantic intent (persistedFallback
-         * isn't literally "first paint"); we use the ordering for precedence
-         * because [DisplaySourceRank] doesn't expose finer-grained tiers.
-         *
-         * Closes Phase 3.8's `coalesceWith` migration without bumping the
-         * snapshot schema (clickTimeDisplayMetadata stays HomeDisplayMetadata
-         * for now; full type-shift to ResolvedDisplayFieldSlots is deferred).
+         * EMPTY-on-null behavior in SlotConversions.kt helpers preserves
+         * coalesceWith's `this.field ?: fallback.field` semantic field-by-field.
          */
         fun renderDisplayMetadata(
             canonical: HomeDisplayMetadata?,
-            clickTime: HomeDisplayMetadata?,
+            clickTimeSlots: ResolvedDisplayFieldSlots?,
             persistedFallback: HomeDisplayMetadata?
         ): HomeDisplayMetadata {
-            if (canonical == null && clickTime == null && persistedFallback == null) {
+            if (canonical == null && clickTimeSlots == null && persistedFallback == null) {
                 return HomeDisplayMetadata()
             }
             val nowMs = System.currentTimeMillis()
@@ -77,26 +65,17 @@ data class ContinueWatchingMetadataSnapshot(
                 nowMs = nowMs,
                 rank = DisplaySourceRank.RESOLVED,
             )
-            val clickTimeSlots = clickTime?.toResolvedFieldSlots(
-                nowMs = nowMs,
-                rank = DisplaySourceRank.STALE_RESOLVED,
-            )
+            val clickTimeSlotsReranked = clickTimeSlots?.rerankedTo(DisplaySourceRank.STALE_RESOLVED)
             val persistedFallbackSlots = persistedFallback?.toResolvedFieldSlots(
                 nowMs = nowMs,
                 rank = DisplaySourceRank.FIRST_PAINT,
             )
-            // HomeRailProjectionReducer.reduce signature: reduce(firstPaint, overlay, existing, profile).
-            // For rank-aware merge per-slot, the parameter assignment is
-            // positional — pickHigherRanked picks the highest rank with a
-            // non-null value across all 4 slots, so any input can go in any
-            // position. We pass the lowest-rank non-null input as firstPaint
-            // (required non-null), then layer the others above.
             val firstPaint = persistedFallbackSlots
-                ?: clickTimeSlots
+                ?: clickTimeSlotsReranked
                 ?: canonicalSlots
                 ?: emptySlotsAt(nowMs)
             val overlayInput = if (firstPaint !== canonicalSlots) canonicalSlots else null
-            val existingInput = if (firstPaint !== clickTimeSlots) clickTimeSlots else null
+            val existingInput = if (firstPaint !== clickTimeSlotsReranked) clickTimeSlotsReranked else null
             val merged = HomeRailProjectionReducer.reduce(
                 firstPaint = firstPaint,
                 overlay = overlayInput,
@@ -106,4 +85,29 @@ data class ContinueWatchingMetadataSnapshot(
             return merged.toHomeDisplayMetadata()
         }
     }
+}
+
+/**
+ * Re-ranks every non-EMPTY slot in this bag to the new [rank]. EMPTY slots
+ * stay EMPTY (the null-value-coerces-to-EMPTY rule from SlotConversions.kt
+ * must hold across rerankings — a slot was EMPTY because its value was
+ * null, and a re-rank doesn't change that).
+ */
+private fun ResolvedDisplayFieldSlots.rerankedTo(rank: DisplaySourceRank): ResolvedDisplayFieldSlots {
+    fun <T> com.nexio.tv.domain.model.ResolvedSlot<T>.reranked(): com.nexio.tv.domain.model.ResolvedSlot<T> =
+        if (this.rank == DisplaySourceRank.EMPTY) this else copy(rank = rank)
+    return ResolvedDisplayFieldSlots(
+        title = title.reranked(),
+        originalTitle = originalTitle.reranked(),
+        overview = overview.reranked(),
+        genres = genres.reranked(),
+        releaseInfo = releaseInfo.reranked(),
+        runtime = runtime.reranked(),
+        rating = rating.reranked(),
+        poster = poster.reranked(),
+        backdrop = backdrop.reranked(),
+        logo = logo.reranked(),
+        thumbnail = thumbnail.reranked(),
+        posterProviderTag = posterProviderTag.reranked()
+    )
 }

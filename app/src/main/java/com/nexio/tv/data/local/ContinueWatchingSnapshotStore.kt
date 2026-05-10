@@ -82,7 +82,12 @@ class ContinueWatchingSnapshotStore private constructor(
         private const val SNAPSHOT_DIR = "continue-watching-snapshot-v1"
     }
 
-    private val gson = Gson()
+    private val gson = com.google.gson.GsonBuilder()
+        .registerTypeAdapter(
+            com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot::class.java,
+            com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshotTypeAdapter()
+        )
+        .create()
 
     private fun injectedPrefsName(profileId: Int): String =
         profilePrefsName(BASE_PREFS_NAME, profileId)
@@ -228,10 +233,10 @@ class ContinueWatchingSnapshotStore private constructor(
                                     val obj: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
                                     metadataSnapshotsByItemKey = if (obj != null) {
                                         val type = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
+                                        // Phase 3.8 full — clickTimeSlots is sanitized at construction time
+                                        // (SlotConversions.kt coerces null/blank fields to rank=EMPTY); no
+                                        // separate sanitize step needed.
                                         gson.fromJson<Map<String, ContinueWatchingMetadataSnapshot>>(obj, type)
-                                            ?.mapValues { (_, s) ->
-                                                s.copy(clickTimeDisplayMetadata = s.clickTimeDisplayMetadata.sanitizedForCache())
-                                            }
                                             ?: emptyMap()
                                     } else emptyMap()
                                 }
@@ -854,12 +859,9 @@ class ContinueWatchingSnapshotStore private constructor(
     ): Map<String, ContinueWatchingMetadataSnapshot> {
         val obj = root.getAsJsonObject(key) ?: return emptyMap()
         val type = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
+        // Phase 3.8 full — clickTimeSlots is sanitized at construction; no
+        // separate sanitize step needed. Return decoded map unchanged.
         return gson.fromJson<Map<String, ContinueWatchingMetadataSnapshot>>(obj, type)
-            ?.mapValues { (_, snapshot) ->
-                snapshot.copy(
-                    clickTimeDisplayMetadata = snapshot.clickTimeDisplayMetadata.sanitizedForCache()
-                )
-            }
             ?: emptyMap()
     }
 
