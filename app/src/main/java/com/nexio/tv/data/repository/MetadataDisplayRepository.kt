@@ -265,6 +265,7 @@ class MetadataDisplayRepository @Inject constructor(
             ageRating = ageRating,
             countries = countries,
             language = language,
+            originalLanguage = originalLanguage,
             productionCompanies = productionCompanies,
             networks = networks,
             airsTime = airsTime,

@@ -57,6 +57,7 @@ data class DetailAdvancedMetadata(
     val ageRating: String? = null,
     val countries: List<String> = emptyList(),
     val language: String? = null,
+    val originalLanguage: String? = null,
     val productionCompanies: List<MetaCompany> = emptyList(),
     val networks: List<MetaCompany> = emptyList(),
     val airsTime: String? = null,
