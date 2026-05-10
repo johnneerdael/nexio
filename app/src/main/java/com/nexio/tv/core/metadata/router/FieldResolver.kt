@@ -295,6 +295,7 @@ class FieldResolver @Inject constructor(
             ageRating = fields[ResolvedField.AGE_RATING] as? String,
             countries = (fields[ResolvedField.COUNTRIES] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
             language = fields[ResolvedField.LANGUAGE] as? String,
+            originalLanguage = fields[ResolvedField.ORIGINAL_LANGUAGE] as? String,
             castMembers = (fields[ResolvedField.CAST] as? List<*>)
                 ?.filterIsInstance<com.nexio.tv.domain.model.MetaCastMember>() ?: emptyList(),
             crewMembers = (fields[ResolvedField.CREW] as? List<*>)
@@ -558,3 +559,21 @@ class FieldResolver @Inject constructor(
         )
     }
 }
+
+internal fun buildDocumentFromFieldsForTest(
+    fields: Map<ResolvedField, Any>
+): ResolvedMetadataDocument =
+    ResolvedMetadataDocument(
+        canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
+        title = fields[ResolvedField.TITLE] as? String,
+        overview = null,
+        poster = null,
+        backdrop = null,
+        logo = null,
+        rating = null,
+        runtimeMinutes = null,
+        language = fields[ResolvedField.LANGUAGE] as? String,
+        originalLanguage = fields[ResolvedField.ORIGINAL_LANGUAGE] as? String,
+        fieldOwners = emptyMap(),
+        ignoredOverwrites = emptyList()
+    )
