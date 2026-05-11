@@ -259,7 +259,8 @@ class HydratedHomeOverlayStore @Inject constructor(
             val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
             val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
             if (schemaVersion != OVERLAY_SCHEMA_VERSION) return null
-            val overlay = gson.fromJson(root.get("value"), HydratedHomeOverlay::class.java) ?: return null
+            val overlay = (gson.fromJson(root.get("value"), HydratedHomeOverlay::class.java) ?: return null)
+                .normalizeDefaults()
             if (!overlay.isValidFor(
                     overlayKey = overlayKey,
                     expectedCanonicalProvider = expectedCanonicalProvider,
@@ -336,6 +337,25 @@ class HydratedHomeOverlayStore @Inject constructor(
 
     private fun Set<String>.normalizedItemKeys(): Set<String> =
         mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+
+    /**
+     * Self-heals records persisted before Task 6 added stableIdsSnapshot /
+     * settingsSignature to [HydratedHomeOverlay]. Gson's reflection-based
+     * deserializer bypasses Kotlin constructors and leaves missing non-null
+     * fields as JVM nulls, which would NPE downstream (markStaleIfWeakerIds,
+     * ArtworkSettingsInvalidator comparisons). Restore the non-null contract
+     * by substituting the Kotlin-declared defaults.
+     */
+    @Suppress("SENSELESS_COMPARISON")
+    private fun HydratedHomeOverlay.normalizeDefaults(): HydratedHomeOverlay {
+        val needsSnapshot = stableIdsSnapshot == null
+        val needsSignature = settingsSignature == null
+        if (!needsSnapshot && !needsSignature) return this
+        return copy(
+            stableIdsSnapshot = if (needsSnapshot) ProviderIds() else stableIdsSnapshot,
+            settingsSignature = if (needsSignature) "" else settingsSignature
+        )
+    }
 
     private fun HydratedHomeOverlay.isValidFor(
         overlayKey: String,
