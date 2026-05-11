@@ -121,7 +121,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
+import com.nexio.tv.data.remote.supabase.V10PushResult
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import javax.inject.Inject
@@ -482,53 +485,62 @@ class AccountSettingsSyncService @Inject constructor(
 
             if (snapshot.changedPaths.isNotEmpty()) {
                 if (!hasLiveFullAccountSession()) return@withContext Result.success(Unit)
-                val pushResult = withJwtRefreshRetry {
-                    postgrest.rpc(
-                        "sync_push_account_settings_v7",
-                        buildAccountConfigSyncPushParamsV7(
-                            payload = snapshot.payload,
-                            baseRevision = snapshot.baseRevision,
-                            changedPaths = snapshot.changedPaths
-                        )
-                    ).decodeAs<AccountConfigV7PushResult>()
+                val baseUpdatedAtMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null)
+                val v7Params = buildAccountConfigSyncPushParamsV7(
+                    payload = snapshot.payload,
+                    baseRevision = snapshot.baseRevision,
+                    changedPaths = snapshot.changedPaths
+                )
+                val params = JsonObject(v7Params + ("p_base_updated_at_ms" to JsonPrimitive(baseUpdatedAtMs)))
+
+                val outcome = runV10Push {
+                    withJwtRefreshRetry {
+                        postgrest.rpc("sync_push_account_settings_v10", params).decodeAs<V10PushResult>()
+                    }
                 }
 
-                var pullAfterConflict = false
-                if (!pushResult.applied) {
-                    Log.w(TAG, "Account settings push conflicted paths=${pushResult.conflictPaths.joinToString(",")}")
-                    applyingRemoteMutex.withLock {
-                        if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
-                        val hasNewerLocalChanges = synchronized(pendingChangedPaths) {
-                            pendingChangedPathsGeneration != snapshot.changedPathsGeneration
-                        }
-                        if (hasNewerLocalChanges) {
-                            scheduleFollowUpPush = true
-                        } else {
-                            pullAfterConflict = true
-                        }
-                    }
-                    if (scheduleFollowUpPush && hasLiveFullAccountSession()) {
-                        pushJob = scope.launch {
-                            delay(500)
-                            pushToRemote()
+                when (outcome) {
+                    is V10PushOutcome.Applied -> {
+                        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = outcome.currentUpdatedAtMs)
+                        applyingRemoteMutex.withLock {
+                            if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
+                            lastAppliedRemoteRevision = outcome.syncRevision ?: lastAppliedRemoteRevision
+                            synchronized(pendingChangedPaths) {
+                                if (pendingChangedPathsGeneration == snapshot.changedPathsGeneration) {
+                                    pendingChangedPaths.removeAll(snapshot.changedPaths.toSet())
+                                } else {
+                                    scheduleFollowUpPush = true
+                                }
+                            }
                         }
                     }
-                    if (pullAfterConflict) {
+                    is V10PushOutcome.StaleBase -> {
+                        Log.w(TAG, "Account settings push stale (server=${outcome.currentUpdatedAtMs}, base=$baseUpdatedAtMs); pulling")
                         pullFromRemoteAndApply()
+                        return@withContext Result.success(Unit)
                     }
-                    return@withContext Result.success(Unit)
-                }
-
-                applyingRemoteMutex.withLock {
-                    if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
-                    lastAppliedRemoteRevision = pushResult.syncRevision
-                    synchronized(pendingChangedPaths) {
-                        if (pendingChangedPathsGeneration == snapshot.changedPathsGeneration) {
-                            pendingChangedPaths.removeAll(snapshot.changedPaths.toSet())
-                        } else {
-                            scheduleFollowUpPush = true
+                    is V10PushOutcome.FieldConflict -> {
+                        Log.w(TAG, "Account settings push conflicted paths=${outcome.conflictPaths.joinToString(",")}")
+                        applyingRemoteMutex.withLock {
+                            if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
+                            val hasNewerLocalChanges = synchronized(pendingChangedPaths) {
+                                pendingChangedPathsGeneration != snapshot.changedPathsGeneration
+                            }
+                            if (hasNewerLocalChanges) {
+                                scheduleFollowUpPush = true
+                            } else {
+                                pullFromRemoteAndApply()
+                            }
                         }
+                        if (scheduleFollowUpPush && hasLiveFullAccountSession()) {
+                            pushJob = scope.launch {
+                                delay(500)
+                                pushToRemote()
+                            }
+                        }
+                        return@withContext Result.success(Unit)
                     }
+                    is V10PushOutcome.Failed -> throw outcome.cause
                 }
             }
 
