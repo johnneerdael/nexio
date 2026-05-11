@@ -347,6 +347,87 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `extended autoplay fallback returns next 10 candidates after the primary tier`() {
+        // Build a pool of 1 selected + 5 primary + 12 extended candidates. Primary selector
+        // takes the first 5; the extended selector should take the next 10 (capping at 10
+        // out of the 12 available), excluding the selected key and the primary keys.
+        val primaryPool = (1..5).map { idx ->
+            scenarioCard(
+                streamKey = "primary-$idx",
+                providerId = "rd",
+                visualTags = listOf("DV"),
+                quality = "WEB-DL",
+                filename = "Movie.2160p.WEB-DL.$idx.mkv"
+            )
+        }
+        val extendedPool = (1..12).map { idx ->
+            scenarioCard(
+                streamKey = "extended-$idx",
+                providerId = "rd",
+                visualTags = listOf("HDR10"),
+                quality = "WEB-DL",
+                filename = "Movie.2160p.WEB-DL.ext$idx.mkv"
+            )
+        }
+        val selected = scenarioCard(
+            streamKey = "selected",
+            providerId = "rd",
+            visualTags = listOf("DV"),
+            quality = "WEB-DL",
+            filename = "Movie.2160p.WEB-DL.selected.mkv"
+        )
+        val fullPool = listOf(selected) + primaryPool + extendedPool
+
+        val primary = selectAutoplayFallbackCandidatesForTesting(
+            selectedKey = "selected",
+            fallbackCandidates = fullPool
+        )
+        val extended = selectExtendedAutoplayFallbackCandidatesForTesting(
+            selectedKey = "selected",
+            fallbackCandidates = fullPool,
+            primaryCandidates = primary
+        )
+
+        assertEquals(10, extended.size)
+        val extendedKeys = extended.map { it.stream.wrappedOriginalStreamKey }
+        assertTrue(
+            "extended must not include the selected stream",
+            "selected" !in extendedKeys
+        )
+        val primaryKeys = primary.map { it.stream.wrappedOriginalStreamKey }.toSet()
+        assertTrue(
+            "extended must not duplicate any primary candidate",
+            extendedKeys.none { it in primaryKeys }
+        )
+        // Primary keeps the first 5 DV candidates plus extended-1 as the non-DV bonus,
+        // so the extended tier starts at extended-2.
+        assertEquals("extended-2", extendedKeys.first())
+    }
+
+    @Test
+    fun `extended autoplay fallback is empty when pool size at or below primary tier`() {
+        val pool = (1..5).map { idx ->
+            scenarioCard(
+                streamKey = "primary-$idx",
+                providerId = "rd",
+                visualTags = listOf("DV"),
+                quality = "WEB-DL",
+                filename = "Movie.2160p.WEB-DL.$idx.mkv"
+            )
+        }
+        val primary = selectAutoplayFallbackCandidatesForTesting(
+            selectedKey = "none",
+            fallbackCandidates = pool
+        )
+        val extended = selectExtendedAutoplayFallbackCandidatesForTesting(
+            selectedKey = "none",
+            fallbackCandidates = pool,
+            primaryCandidates = primary
+        )
+        assertTrue(extended.isEmpty())
+    }
+
+    @Test
     fun `autoplay fallback list preserves non dv candidate outside cap`() {
         val fallback = selectAutoplayFallbackCandidatesForTesting(
             selectedKey = "dv-1",

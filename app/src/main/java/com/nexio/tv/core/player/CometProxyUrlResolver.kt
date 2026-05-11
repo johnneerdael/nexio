@@ -27,8 +27,25 @@ internal fun classifyHttpResponse(
     code: Int,
     location: String?,
     contentType: String?,
+    requestHost: String? = null,
 ): ProxyResolution {
     if (code in 300..399 && !location.isNullOrBlank()) {
+        // Same-host 302 means the addon resolved to one of its own static
+        // placeholder MP4s (DMCA / "451 Unavailable For Legal Reasons" stubs:
+        // StremThru `/v0/store/_/static/451.mp4`, Torrentio
+        // `/videos/failed_infringement*.mp4`). Real debrid resolutions always
+        // 302 to a CDN on a different host, so a same-host redirect at the
+        // resolve stage is never legitimate cached content. Classify as
+        // Placeholder so the data-probe and player both bypass it.
+        val locationHost = runCatching {
+            location.toHttpUrlOrNull()?.host?.lowercase(Locale.ROOT)
+        }.getOrNull()
+        if (!requestHost.isNullOrBlank() &&
+            locationHost != null &&
+            locationHost == requestHost.lowercase(Locale.ROOT)
+        ) {
+            return ProxyResolution.Placeholder
+        }
         return ProxyResolution.Redirected(location)
     }
     if (code == 200 &&
@@ -413,10 +430,12 @@ object CometProxyUrlResolver {
     }
 
     private fun classifyTransportResult(url: String, result: CometProxyHttpResult): ProxyResolution {
+        val requestHost = runCatching { url.toHttpUrlOrNull()?.host }.getOrNull()
         val outcome = classifyHttpResponse(
             code = result.code,
             location = result.location,
-            contentType = result.contentType
+            contentType = result.contentType,
+            requestHost = requestHost
         )
         val locationHost = runCatching { result.location?.toHttpUrlOrNull()?.host }.getOrNull()
         val decision = when (outcome) {

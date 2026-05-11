@@ -163,6 +163,78 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
+    fun `classifyHttpResponse marks same-host 302 as placeholder so probe and player bypass takedown stubs`() {
+        // StremThru DMCA stub: 302 → /v0/store/_/static/451.mp4 on the same addon host.
+        assertEquals(
+            ProxyResolution.Placeholder,
+            classifyHttpResponse(
+                code = 302,
+                location = "https://stremthru.13377001.xyz/v0/store/_/static/451.mp4",
+                contentType = null,
+                requestHost = "stremthru.13377001.xyz"
+            )
+        )
+        // Torrentio DMCA stub: 302 → /videos/failed_infringement_v2.mp4 on the same addon host.
+        assertEquals(
+            ProxyResolution.Placeholder,
+            classifyHttpResponse(
+                code = 302,
+                location = "https://torrentio.strem.fun/videos/failed_infringement_v2.mp4",
+                contentType = null,
+                requestHost = "torrentio.strem.fun"
+            )
+        )
+        // Host comparison is case-insensitive.
+        assertEquals(
+            ProxyResolution.Placeholder,
+            classifyHttpResponse(
+                code = 302,
+                location = "https://STREMTHRU.13377001.XYZ/v0/store/_/static/451.mp4",
+                contentType = null,
+                requestHost = "stremthru.13377001.xyz"
+            )
+        )
+    }
+
+    @Test
+    fun `classifyHttpResponse keeps cross-host 302 as redirected so real debrid CDN resolutions pass`() {
+        // Comet → real-debrid CDN: different hosts, real cached content.
+        assertEquals(
+            ProxyResolution.Redirected("https://40.real-debrid.com/d/SOMEHASH/file.mkv"),
+            classifyHttpResponse(
+                code = 302,
+                location = "https://40.real-debrid.com/d/SOMEHASH/file.mkv",
+                contentType = null,
+                requestHost = "comet.feels.legal"
+            )
+        )
+        // Subdomain of addon host counts as cross-host — addons sometimes split
+        // resolver and CDN onto sibling subdomains.
+        assertEquals(
+            ProxyResolution.Redirected("https://cdn.torrentio.strem.fun/files/foo.mkv"),
+            classifyHttpResponse(
+                code = 302,
+                location = "https://cdn.torrentio.strem.fun/files/foo.mkv",
+                contentType = null,
+                requestHost = "torrentio.strem.fun"
+            )
+        )
+    }
+
+    @Test
+    fun `classifyHttpResponse falls back to redirected when requestHost is null`() {
+        assertEquals(
+            ProxyResolution.Redirected("https://stremthru.13377001.xyz/v0/store/_/static/451.mp4"),
+            classifyHttpResponse(
+                code = 302,
+                location = "https://stremthru.13377001.xyz/v0/store/_/static/451.mp4",
+                contentType = null,
+                requestHost = null
+            )
+        )
+    }
+
+    @Test
     fun `resolve re-fetches after TTL expiry`() = runBlocking {
         val calls = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
