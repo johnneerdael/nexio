@@ -760,6 +760,7 @@ fun MetaDetailsScreen(
                         trailerUrl = uiState.trailerUrl,
                         trailerAudioUrl = uiState.trailerAudioUrl,
                         trailerUserAgent = uiState.trailerUserAgent,
+                        trailerSigningClientKey = uiState.trailerSigningClientKey,
                         trailerCaptions = uiState.trailerCaptions,
                         trailerExternalUrl = uiState.trailerExternalUrl,
                         isTrailerPlaying = uiState.isTrailerPlaying,
@@ -1037,6 +1038,7 @@ private fun MetaDetailsContent(
     trailerUrl: String?,
     trailerAudioUrl: String?,
     trailerUserAgent: String?,
+    trailerSigningClientKey: String?,
     trailerCaptions: List<YouTubeCaptionTrack>,
     trailerExternalUrl: String?,
     isTrailerPlaying: Boolean,
@@ -2195,6 +2197,7 @@ private fun MetaDetailsContent(
                         trailerUrl = trailerUrl,
                         trailerAudioUrl = trailerAudioUrl,
                         trailerUserAgent = trailerUserAgent,
+                        trailerSigningClientKey = trailerSigningClientKey,
                         trailerCaptions = trailerCaptions,
                         isPlaying = true,
                         onEnded = {

@@ -993,6 +993,14 @@ internal fun ModernHomeContent(
         } else {
             null
         }
+        val heroTrailerPreviewSigningClientKey = if (
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewSigningClientKeys[it] }
+        } else {
+            null
+        }
         val heroTrailerPreviewCaptions = if (
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
@@ -1173,6 +1181,7 @@ internal fun ModernHomeContent(
             trailerPreviewUrl = heroTrailerPreviewUrl,
             trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
             trailerPreviewUserAgent = heroTrailerPreviewUserAgent,
+            trailerPreviewSigningClientKey = heroTrailerPreviewSigningClientKey,
             trailerPreviewCaptions = heroTrailerPreviewCaptions,
             showLoadingIndicator = heroTrailerPending && heroTrailerPreviewUrl.isNullOrBlank(),
             showTextOverlay = !heroTrailerFullscreenMode || fullscreenTextOverlayVisible,
@@ -1410,6 +1419,7 @@ internal fun ModernHomeContent(
                             trailerPreviewUrls = contentState.trailerPreviewUrls,
                             trailerPreviewAudioUrls = contentState.trailerPreviewAudioUrls,
                             trailerPreviewUserAgents = contentState.trailerPreviewUserAgents,
+                            trailerPreviewSigningClientKeys = contentState.trailerPreviewSigningClientKeys,
                             trailerPreviewCaptions = contentState.trailerPreviewCaptions,
                             trailerPreviewExternalUrls = contentState.trailerPreviewExternalUrls,
                             modernCatalogCardWidth = modernCatalogCardWidth,
@@ -1511,6 +1521,7 @@ private fun ModernHeroSection(
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
     trailerPreviewUserAgent: String?,
+    trailerPreviewSigningClientKey: String?,
     trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>,
     showLoadingIndicator: Boolean,
     showTextOverlay: Boolean,
@@ -1542,6 +1553,7 @@ private fun ModernHeroSection(
         trailerPreviewUrl = trailerPreviewUrl,
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         trailerPreviewUserAgent = trailerPreviewUserAgent,
+        trailerPreviewSigningClientKey = trailerPreviewSigningClientKey,
         trailerPreviewCaptions = trailerPreviewCaptions,
         showLoadingIndicator = showLoadingIndicator,
         trailerMuted = trailerMuted,

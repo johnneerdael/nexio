@@ -49,11 +49,14 @@ private fun shouldUseYouTubeChunkedTransfer(
 @UnstableApi
 class YoutubeChunkedDataSourceFactory(
     private val chunkSizeBytes: Long = CHUNK_SIZE,
-    userAgent: String? = null
+    userAgent: String? = null,
+    requestProperties: Map<String, String>? = null
 ) : DataSource.Factory {
     val effectiveUserAgent: String = userAgent
         ?.takeIf { it.isNotBlank() }
         ?: YOUTUBE_STABLE_WEB_USER_AGENT
+    private val effectiveProperties: Map<String, String> = requestProperties
+        ?: buildStableYouTubeRequestHeaders()
 
     companion object {
         private const val TAG = "YTChunkedDS"
@@ -64,7 +67,7 @@ class YoutubeChunkedDataSourceFactory(
     override fun createDataSource(): DataSource {
         val upstream = DefaultHttpDataSource.Factory()
             .setUserAgent(effectiveUserAgent)
-            .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
+            .setDefaultRequestProperties(effectiveProperties)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
