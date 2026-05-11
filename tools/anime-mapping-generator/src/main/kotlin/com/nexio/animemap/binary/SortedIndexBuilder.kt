@@ -66,4 +66,38 @@ sealed interface SortedIndexBuilder {
             return indexBuf.array() to poolBuf.array()
         }
     }
+
+    /**
+     * [u64 keyHash | u32 stringPoolOffset | u32 listOffset | u32 listLen], stride=20.
+     * Sorted by keyHash. Collisions resolved at read time by comparing the
+     * string at stringPoolOffset within the hash-equal run.
+     */
+    class Imdb(private val stringPool: StringPoolBuilder) : SortedIndexBuilder {
+        private data class Entry(val hash: Long, val key: String, val offsets: IntArray)
+        private val entries = ArrayList<Entry>()
+
+        fun add(imdb: String, recordOffsets: IntArray) {
+            entries.add(Entry(StringHash.hash64(imdb), imdb, recordOffsets))
+        }
+
+        fun build(): Pair<ByteArray, ByteArray> {
+            // Stable sort: primary = hash, secondary = key (so collisions are deterministic)
+            entries.sortWith(compareBy({ it.hash }, { it.key }))
+            val indexBuf = ByteBuffer.allocate(entries.size * BinaryFormat.STRIDE_IMDB)
+                .order(ByteOrder.LITTLE_ENDIAN)
+            val poolBuf = ByteBuffer.allocate(entries.sumOf { it.offsets.size } * 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+            var listPoolOffset = 0
+            for (i in entries.indices) {
+                val e = entries[i]
+                indexBuf.putLong(e.hash)
+                indexBuf.putInt(stringPool.intern(e.key))
+                indexBuf.putInt(listPoolOffset)
+                indexBuf.putInt(e.offsets.size)
+                for (j in e.offsets.indices) poolBuf.putInt(e.offsets[j])
+                listPoolOffset += e.offsets.size * 4
+            }
+            return indexBuf.array() to poolBuf.array()
+        }
+    }
 }
