@@ -45,7 +45,7 @@ internal fun catalogRowContentType(row: com.nexio.tv.domain.model.CatalogRow): S
 @Composable
 fun ClassicHomeContent(
     uiState: HomeUiState,
-    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    presentation: ClassicHomePresentationState,
     heroItems: List<MetaPreview>,
     continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     posterCardStyle: PosterCardStyle,
@@ -119,43 +119,16 @@ fun ClassicHomeContent(
             focusState.verticalScrollIndex == 0 &&
             focusState.verticalScrollOffset == 0
     }
-    val catalogRowsByCatalogId = remember(catalogRows) {
-        catalogRows.associateBy { it.catalogId }
-    }
-    val visiblePairs: List<Pair<ResolvedRailRow, CatalogRow>> = remember(
-        uiState.resolvedRailRows,
-        catalogRowsByCatalogId
-    ) {
-        // LazyColumn requires unique item keys. The key for each row is
-        // "${addonId}_${apiType}_${catalogId}" and Compose throws
-        // IllegalArgumentException on collision. Upstream pipelines occasionally
-        // produce two CatalogRow entries with the same triple (e.g. synthetic
-        // group + raw rail with overlapping config); dedupe defensively here so
-        // a transient pipeline race never crashes Home.
-        val seen = HashSet<String>()
-        uiState.resolvedRailRows.mapNotNull { rail ->
-            if (rail.items.isEmpty()) return@mapNotNull null
-            val catalogRow = catalogRowsByCatalogId[rail.catalogId] ?: return@mapNotNull null
-            if (catalogRow.items.isEmpty()) return@mapNotNull null
-            val railKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
-            if (!seen.add(railKey)) return@mapNotNull null
-            rail to catalogRow
-        }
-    }
-    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = remember(uiState.resolvedRailRows) {
-        val builder = mutableMapOf<String, ModernHomeRowItem>()
-        uiState.resolvedRailRows.forEach { rail ->
-            rail.items.forEach { resolved ->
-                builder[resolved.itemKey] = resolved
-            }
-        }
-        builder
-    }
-    val visibleCatalogKeys = remember(visiblePairs) {
-        visiblePairs.mapTo(mutableSetOf()) { (_, row) ->
-            "${row.addonId}_${row.apiType}_${row.catalogId}"
-        }
-    }
+    // Plan B Task 5a — Classic Home now consumes the typed-surface
+    // [ClassicHomePresentationState]. The ViewModel-side
+    // [observeClassicHomePresentationPipeline] builds the deduped
+    // (resolvedRail, catalogRow) list, the resolved-item lookup map, and the
+    // active rail-key set with reference-stable memoization (CLAUDE.md rule #5).
+    // Compose-side recomputation of those structures is gone — `presentation`
+    // is already canonical.
+    val visibleRows: List<ClassicHomeRailEntry> = presentation.visibleRows
+    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = presentation.resolvedItemsByItemKey
+    val visibleCatalogKeys: Set<String> = presentation.visibleCatalogKeys
 
     LaunchedEffect(visibleCatalogKeys) {
         rowStates.keys.retainAll(visibleCatalogKeys)
@@ -286,12 +259,12 @@ fun ClassicHomeContent(
         }
 
         itemsIndexed(
-            items = visiblePairs,
-            key = { _, pair -> "${pair.second.addonId}_${pair.second.apiType}_${pair.second.catalogId}" },
-            contentType = { _, pair -> catalogRowContentType(pair.second) }
-        ) { index, pair ->
-            val catalogRow = pair.second
-            val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
+            items = visibleRows,
+            key = { _, row -> row.railKey },
+            contentType = { _, row -> catalogRowContentType(row.catalogRow) }
+        ) { index, entry ->
+            val catalogRow = entry.catalogRow
+            val catalogKey = entry.railKey
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val shouldInitialFocusFirstCatalogRow =
                 shouldRequestInitialFocus &&
