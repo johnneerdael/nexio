@@ -6,6 +6,8 @@ import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
@@ -20,11 +22,19 @@ import kotlinx.coroutines.flow.update
 
 @Singleton
 class ResolvedDisplaySurfaceRepository(
-    private val activeProfileSession: () -> ActiveProfileSession
+    private val activeProfileSession: () -> ActiveProfileSession,
+    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
+        sink = NoopRuntimeTraceSink,
+        sessionId = { null }
+    )
 ) {
     @Inject
-    constructor(profileManager: ProfileManager) : this(
-        activeProfileSession = { profileManager.activeProfileSession.value }
+    constructor(
+        profileManager: ProfileManager,
+        traceEvents: TraceMetadataEvents
+    ) : this(
+        activeProfileSession = { profileManager.activeProfileSession.value },
+        traceEvents = traceEvents
     )
 
     private val surfaces = MutableStateFlow<Map<String, Map<Int, List<ResolvedDisplayItem>>>>(emptyMap())
@@ -63,7 +73,7 @@ class ResolvedDisplaySurfaceRepository(
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
             val existing = currentSurface[active.profileId].orEmpty()
-            val merged = mergeIncrementalItems(existing, items)
+            val merged = mergeIncrementalItems(existing, items, traceEvents)
             val nextItems = merged.distinctBy { item -> item.itemKey }
             if (shouldSuppressSurfaceUpdate(surfaceKey, existing, nextItems)) {
                 current
@@ -103,9 +113,9 @@ class ResolvedDisplaySurfaceRepository(
             val currentSurface = current[surfaceKey].orEmpty()
             val existingList = currentSurface[profileSession.profileId].orEmpty()
             val nextItems = if (replace) {
-                applyNonDowngradeMergeForReplace(existingList, items)
+                applyNonDowngradeMergeForReplace(existingList, items, traceEvents)
             } else {
-                mergeIncrementalItems(existingList, items)
+                mergeIncrementalItems(existingList, items, traceEvents)
             }.distinctBy { item -> item.itemKey }
             if (shouldSuppressSurfaceUpdate(surfaceKey, existingList, nextItems)) {
                 current
@@ -168,7 +178,8 @@ private fun isSupportedSurface(surfaceKey: String): Boolean =
 
 private fun mergeIncrementalItems(
     existing: List<ResolvedDisplayItem>,
-    incoming: List<ResolvedDisplayItem>
+    incoming: List<ResolvedDisplayItem>,
+    traceEvents: TraceMetadataEvents?
 ): List<ResolvedDisplayItem> {
     if (existing.isEmpty()) return incoming
     // Fast path: incoming items are already reference-equal to existing in the same
@@ -192,7 +203,7 @@ private fun mergeIncrementalItems(
     for (i in incoming.indices) {
         val item = incoming[i]
         val existingForKey = existingByKey[item.itemKey]
-        val rankProtected = applyNonDowngradeMerge(item, existingForKey)
+        val rankProtected = applyNonDowngradeMerge(item, existingForKey, traceEvents)
         mergedIncoming += rankProtected.withPreservedTrailerState(existingForKey)
         incomingKeys += item.itemKey
     }
@@ -287,7 +298,8 @@ private fun ResolvedDisplayItem.screensaverStablePayload(): ResolvedDisplayItem 
  */
 private fun applyNonDowngradeMerge(
     incoming: ResolvedDisplayItem,
-    existing: ResolvedDisplayItem?
+    existing: ResolvedDisplayItem?,
+    traceEvents: TraceMetadataEvents?
 ): ResolvedDisplayItem {
     if (existing == null) return incoming
     val incomingSlots = incoming.slots ?: return incoming
@@ -303,11 +315,12 @@ private fun applyNonDowngradeMerge(
     // Apply preferred-provider tie-break for artwork slots only.
     // Reducer stays pure: settings/preferences are consulted only at this
     // merge boundary, not inside pickHigherRanked. (Bug A — Task 12)
+    val itemKey = incoming.itemKey
     val mergedSlots = reducerMerged.copy(
-        poster    = preferredAwareSlot(incomingSlots.poster,    existingSlots.poster,    incoming.preferredArtworkProviders[ArtworkType.POSTER]),
-        backdrop  = preferredAwareSlot(incomingSlots.backdrop,  existingSlots.backdrop,  incoming.preferredArtworkProviders[ArtworkType.BACKDROP]),
-        logo      = preferredAwareSlot(incomingSlots.logo,      existingSlots.logo,      incoming.preferredArtworkProviders[ArtworkType.LOGO]),
-        thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL])
+        poster    = preferredAwareSlot(incomingSlots.poster,    existingSlots.poster,    incoming.preferredArtworkProviders[ArtworkType.POSTER],    itemKey, "POSTER", traceEvents),
+        backdrop  = preferredAwareSlot(incomingSlots.backdrop,  existingSlots.backdrop,  incoming.preferredArtworkProviders[ArtworkType.BACKDROP],  itemKey, "BACKDROP", traceEvents),
+        logo      = preferredAwareSlot(incomingSlots.logo,      existingSlots.logo,      incoming.preferredArtworkProviders[ArtworkType.LOGO],      itemKey, "LOGO", traceEvents),
+        thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL], itemKey, "THUMBNAIL", traceEvents)
     )
 
     if (mergedSlots == existingSlots && incoming.slotDerivedFieldsMatch(existing)) {
@@ -352,7 +365,10 @@ private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayIte
 private fun preferredAwareSlot(
     incoming: ResolvedSlot<ArtworkDisplayRef>,
     existing: ResolvedSlot<ArtworkDisplayRef>,
-    preferred: ArtworkProviderId?
+    preferred: ArtworkProviderId?,
+    itemKey: String,
+    slotType: String,
+    traceEvents: TraceMetadataEvents?
 ): ResolvedSlot<ArtworkDisplayRef> {
     if (incoming.rank.ordinal > existing.rank.ordinal) return incoming
     if (incoming.rank.ordinal < existing.rank.ordinal) return existing
@@ -362,7 +378,16 @@ private fun preferredAwareSlot(
     val existingMatches = existing.provider == preferred.key
     return when {
         incomingMatches && !existingMatches -> incoming   // upgrade
-        !incomingMatches && existingMatches -> existing   // REJECT REGRESSION (Bug A)
+        !incomingMatches && existingMatches -> {           // REJECT REGRESSION (Bug A)
+            traceEvents?.emitSurfaceMergeTieBreakRejected(
+                itemKey = itemKey,
+                slotType = slotType,
+                existingProvider = existing.provider,
+                incomingProvider = incoming.provider,
+                preferredProvider = preferred.key
+            )
+            existing
+        }
         incomingMatches && existingMatches  -> incoming   // both preferred → newer wins
         else                                -> existing   // neither preferred → existing stays
     }
@@ -381,7 +406,8 @@ private fun preferredAwareSlot(
  */
 private fun applyNonDowngradeMergeForReplace(
     existing: List<ResolvedDisplayItem>,
-    incoming: List<ResolvedDisplayItem>
+    incoming: List<ResolvedDisplayItem>,
+    traceEvents: TraceMetadataEvents?
 ): List<ResolvedDisplayItem> {
     if (existing.isEmpty()) return incoming
     if (existing.size == incoming.size) {
@@ -400,7 +426,7 @@ private fun applyNonDowngradeMergeForReplace(
     for (i in incoming.indices) {
         val item = incoming[i]
         val existingForKey = existingByKey[item.itemKey]
-        val rankProtected = applyNonDowngradeMerge(item, existingForKey)
+        val rankProtected = applyNonDowngradeMerge(item, existingForKey, traceEvents)
         out += rankProtected.withPreservedTrailerState(existingForKey)
     }
     return out
