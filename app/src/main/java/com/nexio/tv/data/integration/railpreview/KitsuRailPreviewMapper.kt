@@ -1,5 +1,7 @@
 package com.nexio.tv.data.integration.railpreview
 
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.domain.model.ContentType
@@ -15,7 +17,23 @@ import com.nexio.tv.domain.model.SourcePayloadQuality
 import com.nexio.tv.domain.model.TrailerHint
 import java.util.Locale
 
-class KitsuRailPreviewMapper {
+/**
+ * Maps Kitsu API resources into [RailItemPreview]s. [animeIdMappingService] is
+ * consulted synchronously (mmap-backed, ~free) at construction time so the
+ * preview's `stableIds` arrives at the artwork resolver pre-enriched with
+ * imdb/tmdb/tvdb. Without this enrichment RPDB's capability check fails for
+ * anime items (kitsu-only ids are not in `rpdbDescriptor.supportedIdTypes`),
+ * the resolver falls back to ADDON, and `preferredArtworkProviders[POSTER]`
+ * gets tagged ADDON — which then poisons the surface tie-breaker by treating
+ * the addon URL as the "preferred" provider for anime rows.
+ *
+ * Constructor overload without the service keeps existing test sites working
+ * (`KitsuRailPreviewMapper()` falls back to kitsu-only stableIds, matching
+ * the legacy behaviour these tests asserted).
+ */
+class KitsuRailPreviewMapper(
+    private val animeIdMappingService: AnimeIdMappingService? = null
+) {
     fun mapAnime(
         railId: String,
         anime: KitsuAnimeResource,
@@ -25,12 +43,15 @@ class KitsuRailPreviewMapper {
         val kitsuId = anime.id?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val attributes = anime.attributes
         val sourceItemId = "kitsu:$kitsuId"
-        val stableIds = ProviderIds(kitsu = kitsuId)
         val itemType = if (attributes?.subtype.equals("movie", ignoreCase = true)) {
             ContentType.MOVIE
         } else {
             ContentType.SERIES
         }
+        val mediaKind = if (itemType == ContentType.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
+        val stableIds = animeIdMappingService
+            ?.resolveProviderIdsForKitsu(kitsuId, mediaKind)
+            ?: ProviderIds(kitsu = kitsuId)
         val posterUrl = attributes?.posterImage.bestKitsuImage()
         val backdropUrl = attributes?.coverImage.bestKitsuImage()
         val rating = attributes?.averageRating?.toDoubleOrNull()?.div(10.0)

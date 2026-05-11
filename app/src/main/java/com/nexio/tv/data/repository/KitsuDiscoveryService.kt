@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.data.integration.railpreview.KitsuRailFranchiseGrouper
 import com.nexio.tv.data.integration.railpreview.KitsuRailPreviewMapper
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
@@ -21,10 +22,11 @@ typealias RetrofitKitsuDiscoveryClient = KitsuDiscoveryIntegrationProvider
 @Singleton
 class KitsuDiscoveryService @Inject constructor(
     private val client: KitsuDiscoveryClient,
-    private val grouper: KitsuRailFranchiseGrouper
+    private val grouper: KitsuRailFranchiseGrouper,
+    animeIdMappingService: AnimeIdMappingService
 ) {
     private val snapshot = MutableStateFlow(KitsuDiscoverySnapshot())
-    private val railPreviewMapper = KitsuRailPreviewMapper()
+    private val railPreviewMapper = KitsuRailPreviewMapper(animeIdMappingService)
 
     fun observeSnapshot(): Flow<KitsuDiscoverySnapshot> = snapshot
 

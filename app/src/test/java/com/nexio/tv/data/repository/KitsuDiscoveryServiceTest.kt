@@ -154,11 +154,12 @@ class KitsuDiscoveryServiceTest {
 
         fun createService(
             grouper: KitsuRailFranchiseGrouper = noOpGrouper()
-        ): KitsuDiscoveryService = KitsuDiscoveryService(this, grouper)
+        ): KitsuDiscoveryService = KitsuDiscoveryService(this, grouper, noOpAnimeIdMappingService())
 
-        private fun noOpGrouper() = KitsuRailFranchiseGrouper(
+        private fun noOpGrouper() = KitsuRailFranchiseGrouper(noOpAnimeIdMappingService())
+
+        private fun noOpAnimeIdMappingService() =
             AnimeIdMappingService(assetProvider = { AnimeIdMapAsset(schemaVersion = 0) })
-        )
     }
 
     private fun animeResult(
