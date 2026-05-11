@@ -40,7 +40,9 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.core.player.FrameRateUtils
+import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YouTubeCaptionTrack
@@ -73,10 +75,19 @@ internal fun shouldUseChunkedTrailerDataSource(
 
 internal fun bindTrailerPlayerView(
     view: PlayerView,
-    player: Player?
+    player: Player?,
+    subtitleStyle: SubtitleStyleSettings? = null,
 ) {
     if (view.player !== player) {
         view.player = player
+    }
+    val subtitleView = view.subtitleView
+    if (subtitleView != null && subtitleStyle != null) {
+        applySubtitleViewStyle(
+            subtitleView = subtitleView,
+            subtitleStyle = subtitleStyle,
+            burnInProtection = BurnInProtectionState.DISABLED,
+        )
     }
 }
 
@@ -117,6 +128,7 @@ fun TrailerPlayer(
     val playerSettingsSnapshot by playerSettingsDataStore.playerSettings
         .collectAsStateWithLifecycle(initialValue = null)
     val preferredSubtitleLanguage = playerSettingsSnapshot?.subtitleStyle?.preferredLanguage
+    val subtitleStyleForView = playerSettingsSnapshot?.subtitleStyle
     val subtitleCache = remember(context) { TrailerSubtitleCacheAccess.from(context) }
     var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage) {
         mutableStateOf<MediaItem.SubtitleConfiguration?>(null)
@@ -483,7 +495,7 @@ fun TrailerPlayer(
                     (LayoutInflater.from(ctx)
                         .inflate(R.layout.exo_trailer_player_view, null, false) as PlayerView)
                         .apply {
-                            bindTrailerPlayerView(this, trailerPlayer)
+                            bindTrailerPlayerView(this, trailerPlayer, subtitleStyleForView)
                             useController = false
                             isFocusable = true
                             isFocusableInTouchMode = true
@@ -502,7 +514,7 @@ fun TrailerPlayer(
                         }
                 },
                 update = { view ->
-                    bindTrailerPlayerView(view, trailerPlayer)
+                    bindTrailerPlayerView(view, trailerPlayer, subtitleStyleForView)
                     view.keepScreenOn = shouldKeepScreenOn
                     view.resizeMode = if (cropToFill) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
