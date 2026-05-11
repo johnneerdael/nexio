@@ -8,6 +8,7 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
@@ -323,7 +324,19 @@ private fun applyNonDowngradeMerge(
         thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL], itemKey, "THUMBNAIL", traceEvents)
     )
 
-    if (mergedSlots == existingSlots && incoming.slotDerivedFieldsMatch(existing)) {
+    // Strengthen-only ProviderIds union. The cross-id enricher publishes the
+    // same item with progressively richer IDs (TMDB → +IMDB → +TVDB etc.) as
+    // Room resolves them. Slots can stay identical across these emissions, so
+    // the post-first-paint invariant ("hydrated items carry IMDB + native id")
+    // requires this merge to be ID-aware, not slot-only.
+    val mergedStableIds = strengthenProviderIds(existing.stableIds, incoming.stableIds)
+    val mergedImdbId = incoming.imdbId ?: existing.imdbId
+
+    if (mergedSlots == existingSlots &&
+        incoming.slotDerivedFieldsMatch(existing) &&
+        mergedStableIds == existing.stableIds &&
+        mergedImdbId == existing.imdbId
+    ) {
         return existing
     }
 
@@ -338,12 +351,30 @@ private fun applyNonDowngradeMerge(
         slots = mergedSlots,
         artwork = mergedArtwork,
         display = mergedDisplay,
-        rating = mergedRating
+        rating = mergedRating,
+        stableIds = mergedStableIds,
+        imdbId = mergedImdbId
     )
 }
 
 private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayItem): Boolean =
     artwork == other.artwork && display == other.display && rating == other.rating
+
+private fun strengthenProviderIds(existing: ProviderIds, incoming: ProviderIds): ProviderIds {
+    if (existing == incoming) return existing
+    return ProviderIds(
+        imdb = incoming.imdb ?: existing.imdb,
+        tmdb = incoming.tmdb ?: existing.tmdb,
+        tvdb = incoming.tvdb ?: existing.tvdb,
+        trakt = incoming.trakt ?: existing.trakt,
+        simkl = incoming.simkl ?: existing.simkl,
+        kitsu = incoming.kitsu ?: existing.kitsu,
+        slug = incoming.slug ?: existing.slug,
+        mal = incoming.mal ?: existing.mal,
+        anilist = incoming.anilist ?: existing.anilist,
+        anidb = incoming.anidb ?: existing.anidb
+    )
+}
 
 /**
  * Preferred-provider-aware tie-breaker for an artwork slot (Bug A — Task 12).

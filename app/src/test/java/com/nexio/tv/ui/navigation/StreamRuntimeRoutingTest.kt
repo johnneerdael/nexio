@@ -1,7 +1,11 @@
 package com.nexio.tv.ui.navigation
 
 import com.nexio.tv.core.metadata.parseRuntimeMinutes
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
@@ -282,6 +286,69 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("deterministicAutoplay=false"))
         assertTrue(route.contains("returnToDetailOnBack=false"))
     }
+
+    @Test
+    fun `meta preview manual selection route uses resolved IMDB id for addon fetch and subtitles`() {
+        val item = stubMetaPreview(
+            id = "tmdb:1325734",
+            providerIds = ProviderIds(imdb = "tt12345678", tmdb = "1325734")
+        )
+
+        val route = buildManualSelectionStreamRouteForMetaPreview(item)
+
+        assertTrue(
+            "route should carry streamVideoId=tt12345678 for addon fetch",
+            route.contains("streamVideoId=tt12345678")
+        )
+        assertTrue(
+            "route should carry imdbId=tt12345678 for downstream subtitle lookups",
+            route.contains("imdbId=tt12345678")
+        )
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(
+            "videoId belongs in the path segment, must reflect MetaPreview.id",
+            route.startsWith("stream/tmdb%3A1325734/")
+        )
+    }
+
+    @Test
+    fun `meta preview manual selection route omits IMDB params when unresolved`() {
+        val item = stubMetaPreview(
+            id = "tmdb:1325734",
+            providerIds = ProviderIds(tmdb = "1325734")
+        )
+
+        val route = buildManualSelectionStreamRouteForMetaPreview(item)
+
+        assertFalse(
+            "route must not carry a streamVideoId value when IMDB is null",
+            route.contains(Regex("streamVideoId=[^&]+"))
+        )
+        assertFalse(
+            "route must not carry an imdbId value when IMDB is null",
+            route.contains(Regex("imdbId=[^&]+"))
+        )
+        assertTrue(route.contains("manualSelection=true"))
+    }
+
+    private fun stubMetaPreview(
+        id: String,
+        providerIds: ProviderIds = ProviderIds()
+    ): MetaPreview =
+        MetaPreview(
+            id = id,
+            type = ContentType.MOVIE,
+            name = "Example",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            firstPaintStableIds = providerIds
+        )
 
     @Test
     fun `manual selection route preserves detail return behavior for episodes`() {
