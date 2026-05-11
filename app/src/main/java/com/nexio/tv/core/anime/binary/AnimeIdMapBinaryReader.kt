@@ -131,6 +131,32 @@ class AnimeIdMapBinaryReader @Inject constructor(
         return readRecordKitsuId(open, recordOffset)
     }
 
+    internal fun lookupMultiFirst(kind: IndexKind, value: String): String? {
+        val offsets = recordOffsetsForMultiKey(kind, value)
+        if (offsets.isEmpty()) return null
+        val open = state as State.Open
+        return readRecordKitsuId(open, offsets[0])
+    }
+
+    internal fun recordOffsetsForMultiKey(kind: IndexKind, value: String): IntArray {
+        val open = state as? State.Open ?: return IntArray(0)
+        val key = value.toLongOrNull() ?: return IntArray(0)
+        val d = readDescriptor(open, kind.slot)
+        require(d.kind == BinaryFormat.KIND_U64_MULTI) {
+            "expected KIND_U64_MULTI for $kind, got ${d.kind}"
+        }
+        val entryIndex = binarySearchU64(open.parent, d.offset.toInt(), BinaryFormat.STRIDE_U64_MULTI, d.count.toInt(), key)
+        if (entryIndex < 0) return IntArray(0)
+        val entryStart = d.offset.toInt() + entryIndex * BinaryFormat.STRIDE_U64_MULTI
+        val listOffset = open.parent.getInt(entryStart + 8)
+        val listLen = open.parent.getInt(entryStart + 12)
+        val result = IntArray(listLen)
+        for (i in 0 until listLen) {
+            result[i] = open.parent.getInt(listOffset + i * 4)
+        }
+        return result
+    }
+
     private data class Descriptor(val kind: Int, val stride: Int, val offset: Long, val count: Long)
 
     private fun readDescriptor(open: State.Open, slot: Int): Descriptor {
