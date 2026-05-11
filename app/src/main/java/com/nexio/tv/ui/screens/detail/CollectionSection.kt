@@ -102,7 +102,7 @@ fun CollectionSection(
                             }
                         }
                     )
-                    val year = item.source.releaseInfo
+                    val year = item.source?.releaseInfo
                     if (!year.isNullOrBlank()) {
                         Text(
                             text = year,

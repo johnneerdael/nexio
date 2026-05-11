@@ -5,6 +5,7 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -34,13 +35,21 @@ import com.nexio.tv.ui.components.RailCardData
 data class DetailRailItem(
     val itemKey: String,
     val contentId: String,
+    val apiType: String,
     val title: String,
     val year: Int?,
     override val posterRef: ArtworkDisplayRef?,
     val backdropRef: ArtworkDisplayRef?,
     val logoRef: ArtworkDisplayRef?,
     val rating: TitleRating?,
-    val source: MetaPreview,
+    /**
+     * Legacy MetaPreview source — non-null when constructed via
+     * [fromMetaPreview], null when constructed via [fromResolved]. Consumers
+     * should prefer [contentId] + [apiType] for navigation and the typed
+     * artwork refs for rendering. Phase 4 retires the remaining MetaPreview-
+     * in-callback patterns; this field can then drop entirely.
+     */
+    val source: MetaPreview?,
     override val posterProviderTag: String?
 ) : RailCardData {
     override val id: String get() = contentId
@@ -50,6 +59,7 @@ data class DetailRailItem(
         fun fromMetaPreview(meta: MetaPreview): DetailRailItem = DetailRailItem(
             itemKey = homeDisplayItemKey(meta.apiType, meta.id),
             contentId = meta.id,
+            apiType = meta.apiType,
             title = meta.name,
             year = meta.releaseInfo?.split("-")?.firstOrNull()?.toIntOrNull(),
             posterRef = meta.poster.toLegacyRailRefOrNull(ArtworkType.POSTER),
@@ -60,6 +70,32 @@ data class DetailRailItem(
             },
             source = meta,
             posterProviderTag = meta.posterProviderTag
+        )
+
+        /**
+         * Plan B Surface 5 Task 6 — typed-authority constructor. Builds a
+         * DetailRailItem directly from a [ResolvedDisplayItem] without going
+         * through MetaPreview. `source` is null because the typed authority
+         * doesn't carry the legacy shape; consumers must use [contentId] +
+         * [apiType] for navigation routing.
+         *
+         * Currently unused by MetaDetailsViewModel — the
+         * MetadataDisplayRepository.resolveDetailDisplay path still emits
+         * `List<MetaPreview>` for recommendations/collection. Once that
+         * repository upgrades to emit typed items, switch callers here.
+         */
+        fun fromResolved(item: ResolvedDisplayItem): DetailRailItem = DetailRailItem(
+            itemKey = item.itemKey,
+            contentId = item.contentId,
+            apiType = item.mediaKind.name.lowercase(),
+            title = item.display.title.orEmpty(),
+            year = item.display.year,
+            posterRef = item.artwork.poster,
+            backdropRef = item.artwork.backdrop,
+            logoRef = item.artwork.logo,
+            rating = item.rating,
+            source = null,
+            posterProviderTag = null
         )
     }
 }
