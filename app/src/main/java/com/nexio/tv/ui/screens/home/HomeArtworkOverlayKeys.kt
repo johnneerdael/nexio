@@ -5,6 +5,8 @@ import com.nexio.tv.core.metadata.router.IdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataIdParser
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ParsedMetadataId
+import com.nexio.tv.domain.model.HydratedHomeOverlay
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -121,4 +123,62 @@ internal object HomeArtworkOverlayKeys {
             "movie" -> setOf("movie")
             else -> setOf(type.lowercase(Locale.US))
         }
+}
+
+/**
+ * Looks up the hydrated overlay for this preview, probing the row's own
+ * item key first and then falling through to the same alias set the
+ * read scope used to subscribe ([HomeArtworkOverlayKeys.aliasesFor]). Without
+ * this fall-through, overlays stored under a canonical alias (e.g.,
+ * `series:tvdb:355567`) would never reach a row keyed by a different provider
+ * (e.g., `series:trakt:171028`).
+ */
+internal fun MetaPreview.overlayFromMap(
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): HydratedHomeOverlay? {
+    if (overlaysByItemKey.isEmpty()) return null
+    val rowKey = homeDisplayItemKey(apiType, id)
+    overlaysByItemKey[rowKey]?.let { return it }
+    val aliases = HomeArtworkOverlayKeys.aliasesFor(
+        rowItemKey = rowKey,
+        contentId = id,
+        itemType = apiType,
+        providerIds = firstPaintStableIds,
+        canonicalProvider = null,
+        canonicalId = null
+    )
+    return aliases.asSequence()
+        .filter { it != rowKey }
+        .mapNotNull { overlaysByItemKey[it] }
+        .firstOrNull()
+}
+
+/**
+ * Cross-id-aware variant of [overlayFromMap]. Consults [IdMappingStore] to enrich
+ * [firstPaintStableIds] with any cached imdb id before computing the alias set, allowing
+ * a TMDB-keyed row to match an overlay stored under an imdb-form alias by another rail.
+ *
+ * Cache-miss path: delegates to the standard alias set, equivalent to [overlayFromMap].
+ * No network call.
+ */
+internal suspend fun MetaPreview.overlayFromMapEnriched(
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    idMappingStore: IdMappingStore
+): HydratedHomeOverlay? {
+    if (overlaysByItemKey.isEmpty()) return null
+    val rowKey = homeDisplayItemKey(apiType, id)
+    overlaysByItemKey[rowKey]?.let { return it }
+    val aliases = HomeArtworkOverlayKeys.aliasesForEnriched(
+        rowItemKey = rowKey,
+        contentId = id,
+        itemType = apiType,
+        providerIds = firstPaintStableIds,
+        canonicalProvider = null,
+        canonicalId = null,
+        idMappingStore = idMappingStore
+    )
+    return aliases.asSequence()
+        .filter { it != rowKey }
+        .mapNotNull { overlaysByItemKey[it] }
+        .firstOrNull()
 }

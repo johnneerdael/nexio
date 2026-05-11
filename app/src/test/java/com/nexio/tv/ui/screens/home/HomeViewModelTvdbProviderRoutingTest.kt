@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
@@ -215,7 +216,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         )
         return HydratedHomeOverlay(
             overlayKey = "canonical:TVDB:121361:type:SERIES:lang:en:policy:1",
-            itemKey = item.homeOverlayItemKey(),
+            itemKey = homeDisplayItemKey(item.apiType, item.id),
             canonicalProvider = ProviderId.TVDB,
             canonicalId = "121361",
             imdbId = item.id,

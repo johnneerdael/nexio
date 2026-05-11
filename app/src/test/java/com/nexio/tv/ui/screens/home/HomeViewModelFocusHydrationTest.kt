@@ -49,6 +49,7 @@ import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -155,7 +156,7 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(item)
         advanceUntilIdle()
 
-        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.homeOverlayItemKey()])
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[homeDisplayItemKey(item.apiType, item.id)])
         assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
         assertNotNull(viewModel.catalogUpdateJob)
         coVerify(exactly = 1) {
@@ -208,7 +209,7 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(item)
         advanceUntilIdle()
 
-        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.homeOverlayItemKey()])
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[homeDisplayItemKey(item.apiType, item.id)])
         assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
         assertNotNull(viewModel.catalogUpdateJob)
         coVerify(exactly = 1) {
@@ -676,7 +677,7 @@ class HomeViewModelFocusHydrationTest {
             nonPlaybackHomeWorkAllowed = true
         )
         viewModel.homeProfileGeneration = 7L
-        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(visible.homeOverlayItemKey() to currentOverlay)
+        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(homeDisplayItemKey(visible.apiType, visible.id) to currentOverlay)
 
         viewModel.hydrateVisibleHomeItemsWithCoordinator(
             items = listOf(visible),
@@ -684,7 +685,7 @@ class HomeViewModelFocusHydrationTest {
         )
         advanceUntilIdle()
 
-        assertEquals(currentOverlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue(visible.homeOverlayItemKey()))
+        assertEquals(currentOverlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue(homeDisplayItemKey(visible.apiType, visible.id)))
         coVerify(exactly = 0) {
             homeHydrationCoordinator.hydrate(
                 item = any(),
@@ -868,7 +869,7 @@ class HomeViewModelFocusHydrationTest {
         } coAnswers {
             val item = firstArg<MetaPreview>()
             val itemOverlay = overlay(
-                itemKey = item.homeOverlayItemKey(),
+                itemKey = homeDisplayItemKey(item.apiType, item.id),
                 fields = HomeDisplayMetadata(title = "Canonical ${item.apiType}")
             )
             callbacks.last().invoke(itemOverlay)
