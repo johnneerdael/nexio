@@ -4,6 +4,8 @@ import android.content.Context
 import com.nexio.tv.domain.model.ProviderIds
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
+import okio.buffer
+import okio.source
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,13 +22,29 @@ class AnimeIdMappingService(
     ) : this(
         assetProvider = {
             val adapter = moshi.adapter(AnimeIdMapAsset::class.java)
-            context.assets.open(ANIME_ID_MAP_ASSET).bufferedReader().use { reader ->
-                requireNotNull(adapter.fromJson(reader.readText())) {
+            // Streaming parse: moshi consumes tokens directly from the okio
+            // BufferedSource wrapping the asset InputStream. The previous
+            // bufferedReader().readText() + adapter.fromJson(String) path
+            // materialised the entire JSON as a String (observed: 48 MiB
+            // transient LOS peak during cold-start, ~700ms GC mid-parse on
+            // Android TV). CLAUDE.md rule #3 — no fromJson(rawString).
+            context.assets.open(ANIME_ID_MAP_ASSET).source().buffer().use { source ->
+                requireNotNull(adapter.fromJson(source)) {
                     "Unable to parse anime ID map asset"
                 }
             }
         }
     )
+
+    /**
+     * Triggers the lazy [asset] resolution on the calling thread. Intended for
+     * a single fire-and-forget warmup call from [NexioApplication.onCreate] on
+     * the application IO scope, so the 318k-node moshi deserialization happens
+     * off the main thread before any real consumer touches the service.
+     */
+    fun warmUp() {
+        asset.schemaVersion
+    }
 
     private val asset: AnimeIdMapAsset by lazy {
         runCatching { assetProvider() }
