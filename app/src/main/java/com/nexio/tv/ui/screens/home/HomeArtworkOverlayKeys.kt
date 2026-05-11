@@ -1,5 +1,10 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.metadata.router.AnimeIdScheme
+import com.nexio.tv.core.metadata.router.IdMappingStore
+import com.nexio.tv.core.metadata.router.MetadataIdParser
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -33,6 +38,57 @@ internal object HomeArtworkOverlayKeys {
                 }
             )
         }
+    }
+
+    /**
+     * Cross-id-aware variant of [aliasesFor]. Before computing the alias set,
+     * looks up [IdMappingStore] to enrich [providerIds] with any imdb (or other
+     * cross-provider id) cached for a tmdb/tvdb-prefixed [contentId]. This lets
+     * a TMDB-rail row consume an overlay that was originally hydrated under
+     * the imdb-form alias by another rail (Trakt, etc.).
+     *
+     * Cache-miss path: returns the same alias set as the non-enriched
+     * [aliasesFor] would. No network call.
+     */
+    suspend fun aliasesForEnriched(
+        rowItemKey: String,
+        contentId: String,
+        itemType: String,
+        providerIds: ProviderIds,
+        canonicalProvider: ProviderId?,
+        canonicalId: String?,
+        idMappingStore: IdMappingStore
+    ): Set<String> {
+        val enriched = enrichProviderIdsFromStore(itemType, contentId, providerIds, idMappingStore)
+        return aliasesFor(
+            rowItemKey = rowItemKey,
+            contentId = contentId,
+            itemType = itemType,
+            providerIds = enriched,
+            canonicalProvider = canonicalProvider,
+            canonicalId = canonicalId
+        )
+    }
+
+    private suspend fun enrichProviderIdsFromStore(
+        itemType: String,
+        contentId: String,
+        providerIds: ProviderIds,
+        idMappingStore: IdMappingStore
+    ): ProviderIds {
+        if (!providerIds.imdb.isNullOrBlank()) return providerIds
+        val parsed = MetadataIdParser.parse(contentId)
+        val sourceId = when (parsed.scheme) {
+            AnimeIdScheme.TMDB -> {
+                val mediaPrefix = if (itemType.equals("movie", ignoreCase = true)) "movie" else "tv"
+                ParsedMetadataId(AnimeIdScheme.TMDB, "$mediaPrefix:${parsed.value}", parsed.raw)
+            }
+            AnimeIdScheme.TVDB -> ParsedMetadataId(AnimeIdScheme.TVDB, parsed.value, parsed.raw)
+            else -> return providerIds
+        }
+        val imdb = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId)?.providerId
+            ?.takeIf { it.isNotBlank() } ?: return providerIds
+        return providerIds.copy(imdb = imdb)
     }
 
     private fun MutableSet<String>.addTypedProviderAlias(itemType: String, contentId: String) {

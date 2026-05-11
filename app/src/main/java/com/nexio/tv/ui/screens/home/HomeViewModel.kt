@@ -161,6 +161,7 @@ class HomeViewModel @Inject constructor(
     internal val homeRailHydrationExecutor: HomeRailHydrationExecutor = NoOpHomeRailHydrationExecutor,
     internal val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
     internal val catalogItemCrossIdEnricher: com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher,
+    internal val idMappingStore: com.nexio.tv.core.metadata.router.IdMappingStore,
     internal val homeHydrationCoordinator: HomeHydrationCoordinator,
     internal val traceEvents: TraceMetadataEvents,
     internal val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),

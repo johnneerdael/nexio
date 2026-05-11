@@ -1365,6 +1365,7 @@ class HomeViewModelFocusHydrationTest {
                 ),
                 animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
             ),
+            idMappingStore = InMemoryIdMappingStore(),
             homeHydrationCoordinator = homeHydrationCoordinator,
             traceEvents = traceEvents,
             premiumArtworkInvalidationNotifier = premiumArtworkInvalidationNotifier,

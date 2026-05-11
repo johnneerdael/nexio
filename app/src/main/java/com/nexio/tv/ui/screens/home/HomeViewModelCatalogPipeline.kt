@@ -3021,9 +3021,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             orderedGroupKeys = orderedGroupKeys
         )
         applyHomeSnapshotToUiPipeline(transientSnapshot)
-        val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+        val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched(
             rows = _displayCatalogRows.value,
             overlaysByItemKey = currentHydratedHomeOverlays,
+            idMappingStore = idMappingStore,
             resolveTrailer = null
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
