@@ -35,6 +35,7 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
+import com.nexio.tv.domain.model.toMetadataMediaKind
 
 internal object HomeResolvedDisplayMapper {
 
@@ -391,14 +392,6 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(
         slots = overlaySlots
     )
 }
-
-private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
-    when (this) {
-        ContentType.MOVIE -> MetadataMediaKind.MOVIE
-        ContentType.SERIES,
-        ContentType.TV -> MetadataMediaKind.SERIES
-        else -> MetadataMediaKind.UNKNOWN
-    }
 
 private fun HomeDisplayMetadata.toResolvedArtworkBundle(): ArtworkBundle {
     val structured = artwork?.enforceArtworkTypeBoundaries() ?: ArtworkBundle()
