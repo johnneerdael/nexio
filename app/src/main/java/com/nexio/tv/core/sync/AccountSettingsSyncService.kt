@@ -124,6 +124,7 @@ import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
 import com.nexio.tv.data.remote.supabase.V10PushResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -367,6 +368,50 @@ class AccountSettingsSyncService @Inject constructor(
 
     fun markStartupRemotePullSucceeded(userId: String) {
         startupPushGate.markRemotePullSucceeded(userId)
+    }
+
+    /**
+     * v10 wrapper for `sync_set_account_secret`. Reads the current
+     * ACCOUNT_SECRETS watermark, injects it as `p_base_updated_at_ms`, and on
+     * applied responses advances the watermark. Stale-base rejections are
+     * logged and silently dropped — the next `pullFromRemoteAndApply` cycle
+     * reconciles.
+     */
+    private suspend fun setAccountSecretV10(extraParams: JsonObject) {
+        val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+        val params = JsonObject(extraParams + ("p_base_updated_at_ms" to JsonPrimitive(baseMs)))
+        val outcome = runV10Push {
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_set_account_secret_v10", params).decodeAs<V10PushResult>()
+            }
+        }
+        when (outcome) {
+            is V10PushOutcome.Applied ->
+                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
+            is V10PushOutcome.StaleBase ->
+                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.Failed -> throw outcome.cause
+            is V10PushOutcome.FieldConflict -> Unit
+        }
+    }
+
+    /** v10 wrapper for `sync_delete_account_secret`. See [setAccountSecretV10]. */
+    private suspend fun deleteAccountSecretV10(extraParams: JsonObject) {
+        val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+        val params = JsonObject(extraParams + ("p_base_updated_at_ms" to JsonPrimitive(baseMs)))
+        val outcome = runV10Push {
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_delete_account_secret_v10", params).decodeAs<V10PushResult>()
+            }
+        }
+        when (outcome) {
+            is V10PushOutcome.Applied ->
+                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
+            is V10PushOutcome.StaleBase ->
+                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.Failed -> throw outcome.cause
+            is V10PushOutcome.FieldConflict -> Unit
+        }
     }
 
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
@@ -1225,32 +1270,22 @@ class AccountSettingsSyncService @Inject constructor(
         val apiKey = rawApiKey.trim()
 
         if (apiKey.isBlank()) {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
+            deleteAccountSecretV10(buildJsonObject {
                         put("p_secret_type", secretType)
                         put("p_secret_ref", secretRef)
                         put("p_source", "app")
-                    }
-                )
-            }
+                    })
             return
         }
 
-        withJwtRefreshRetry {
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
+        setAccountSecretV10(buildJsonObject {
                     put("p_secret_type", secretType)
                     put("p_secret_ref", secretRef)
                     put("p_secret_payload", Json.encodeToJsonElement(AccountSecretApiKeyPayload.serializer(), AccountSecretApiKeyPayload(apiKey)))
                     put("p_masked_preview", "Stored ••••${apiKey.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
-                }
-            )
-        }
+                })
     }
 
     private suspend fun syncTvdbCredentialSecretToRemote(
@@ -1261,23 +1296,15 @@ class AccountSettingsSyncService @Inject constructor(
         val tvdbPin = rawTvdbPin.trim()
 
         if (tvdbApiKey.isBlank()) {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
+            deleteAccountSecretV10(buildJsonObject {
                         put("p_secret_type", TVDB_SECRET_TYPE)
                         put("p_secret_ref", TVDB_SECRET_REF)
                         put("p_source", "app")
-                    }
-                )
-            }
+                    })
             return
         }
 
-        withJwtRefreshRetry {
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
+        setAccountSecretV10(buildJsonObject {
                     put("p_secret_type", TVDB_SECRET_TYPE)
                     put("p_secret_ref", TVDB_SECRET_REF)
                     put(
@@ -1293,9 +1320,7 @@ class AccountSettingsSyncService @Inject constructor(
                     put("p_masked_preview", "Stored ••••${tvdbApiKey.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
-                }
-            )
-        }
+                })
     }
 
     private suspend fun syncRealDebridSecretsToRemote(state: RealDebridSecretPushSnapshot) {
@@ -1310,69 +1335,53 @@ class AccountSettingsSyncService @Inject constructor(
             userClientId.isBlank() ||
             userClientSecret.isBlank()
         ) {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                )
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
-                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                )
-            }
+            deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
+                put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                put("p_source", "app")
+            })
+            deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
+                put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                put("p_source", "app")
+            })
             return
         }
 
-        withJwtRefreshRetry {
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
-                    put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
-                    put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                    put(
-                        "p_secret_payload",
-                        Json.encodeToJsonElement(
-                            AccountRealDebridAccessSecretPayload.serializer(),
-                                AccountRealDebridAccessSecretPayload(
-                                    accessToken = accessToken,
-                                    tokenType = state.tokenType,
-                                    expiresIn = state.expiresIn,
-                                    userClientId = userClientId,
-                                    userClientSecret = userClientSecret
-                                )
-                        )
+        setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
+            put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountRealDebridAccessSecretPayload.serializer(),
+                    AccountRealDebridAccessSecretPayload(
+                        accessToken = accessToken,
+                        tokenType = state.tokenType,
+                        expiresIn = state.expiresIn,
+                        userClientId = userClientId,
+                        userClientSecret = userClientSecret
                     )
-                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
-                    put("p_status", "configured")
-                    put("p_source", "app")
-                }
+                )
             )
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
-                    put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
-                    put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                    put(
-                        "p_secret_payload",
-                        Json.encodeToJsonElement(
-                            AccountRealDebridRefreshSecretPayload.serializer(),
-                            AccountRealDebridRefreshSecretPayload(refreshToken = refreshToken)
-                        )
-                    )
-                    put("p_masked_preview", "Connected ••••${refreshToken.takeLast(4)}")
-                    put("p_status", "configured")
-                    put("p_source", "app")
-                }
+            put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
+        setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
+            put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountRealDebridRefreshSecretPayload.serializer(),
+                    AccountRealDebridRefreshSecretPayload(refreshToken = refreshToken)
+                )
             )
-        }
+            put("p_masked_preview", "Connected ••••${refreshToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
     }
 
     private suspend fun syncTraktSecretsToRemote(traktState: TraktSecretPushSnapshot) {
@@ -1380,91 +1389,67 @@ class AccountSettingsSyncService @Inject constructor(
         val refreshToken = traktState.refreshToken
 
         if (accessToken.isBlank() || refreshToken.isBlank()) {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", TRAKT_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                )
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
-                        put("p_secret_ref", TRAKT_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                )
-            }
+            deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
+                put("p_secret_ref", TRAKT_SECRET_REF)
+                put("p_source", "app")
+            })
+            deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
+                put("p_secret_ref", TRAKT_SECRET_REF)
+                put("p_source", "app")
+            })
             return
         }
 
-        withJwtRefreshRetry {
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
-                    put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
-                    put("p_secret_ref", TRAKT_SECRET_REF)
-                    put(
-                        "p_secret_payload",
-                        Json.encodeToJsonElement(
-                            AccountTraktAccessSecretPayload.serializer(),
-                            AccountTraktAccessSecretPayload(
-                                accessToken = accessToken,
-                                tokenType = traktState.tokenType,
-                                createdAt = traktState.createdAt,
-                                expiresIn = traktState.expiresIn
-                            )
-                        )
+        setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
+            put("p_secret_ref", TRAKT_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountTraktAccessSecretPayload.serializer(),
+                    AccountTraktAccessSecretPayload(
+                        accessToken = accessToken,
+                        tokenType = traktState.tokenType,
+                        createdAt = traktState.createdAt,
+                        expiresIn = traktState.expiresIn
                     )
-                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
-                    put("p_status", "configured")
-                    put("p_source", "app")
-                }
+                )
             )
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
-                    put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
-                    put("p_secret_ref", TRAKT_SECRET_REF)
-                    put(
-                        "p_secret_payload",
-                        Json.encodeToJsonElement(
-                            AccountTraktRefreshSecretPayload.serializer(),
-                            AccountTraktRefreshSecretPayload(refreshToken = refreshToken)
-                        )
-                    )
-                    put("p_masked_preview", "Stored ••••${refreshToken.takeLast(4)}")
-                    put("p_status", "configured")
-                    put("p_source", "app")
-                }
+            put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
+        setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
+            put("p_secret_ref", TRAKT_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountTraktRefreshSecretPayload.serializer(),
+                    AccountTraktRefreshSecretPayload(refreshToken = refreshToken)
+                )
             )
-        }
+            put("p_masked_preview", "Stored ••••${refreshToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
     }
 
     private suspend fun syncSimklSecretsToRemote(simklState: SimklSecretPushSnapshot) {
         val accessToken = simklState.accessToken
 
         if (accessToken.isBlank()) {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_delete_account_secret",
-                    buildJsonObject {
+            deleteAccountSecretV10(buildJsonObject {
                         put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
                         put("p_secret_ref", SIMKL_SECRET_REF)
                         put("p_source", "app")
-                    }
-                )
-            }
+                    })
             return
         }
 
-        withJwtRefreshRetry {
-            postgrest.rpc(
-                "sync_set_account_secret",
-                buildJsonObject {
+        setAccountSecretV10(buildJsonObject {
                     put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
                     put("p_secret_ref", SIMKL_SECRET_REF)
                     put(
@@ -1477,9 +1462,7 @@ class AccountSettingsSyncService @Inject constructor(
                     put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
-                }
-            )
-        }
+                })
     }
 
     private suspend fun resolveRemoteSecretsForApply(settings: AccountConfigSyncPayload): ResolvedRemoteSecretsForApply {

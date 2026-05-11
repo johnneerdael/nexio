@@ -18,6 +18,8 @@ import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonArray
@@ -38,6 +40,25 @@ class AddonSyncService @Inject constructor(
     private val startupPushGate: AccountConfigStartupPushGate,
     private val syncWatermarkStore: SyncWatermarkDataStore
 ) {
+    /** See `AccountSettingsSyncService.setAccountSecretV10` — same contract. */
+    private suspend fun setAccountSecretV10(extraParams: JsonObject) {
+        val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+        val params = JsonObject(extraParams + ("p_base_updated_at_ms" to JsonPrimitive(baseMs)))
+        val outcome = runV10Push {
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_set_account_secret_v10", params).decodeAs<V10PushResult>()
+            }
+        }
+        when (outcome) {
+            is V10PushOutcome.Applied ->
+                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
+            is V10PushOutcome.StaleBase ->
+                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.Failed -> throw outcome.cause
+            is V10PushOutcome.FieldConflict -> Unit
+        }
+    }
+
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
             block()
@@ -75,10 +96,7 @@ class AddonSyncService @Inject constructor(
                 val secretPayload = parsed.secretPayload
                 val secretRef = parsed.secretRef
                 if (secretPayload != null && !secretRef.isNullOrBlank()) {
-                    withJwtRefreshRetry {
-                        postgrest.rpc(
-                            "sync_set_account_secret",
-                            buildJsonObject {
+                    setAccountSecretV10(buildJsonObject {
                                 put("p_secret_type", "addon_credential")
                                 put("p_secret_ref", secretRef)
                                 put(
@@ -97,14 +115,9 @@ class AddonSyncService @Inject constructor(
                                 )
                                 put("p_status", "configured")
                                 put("p_source", "app")
-                            }
-                        )
-                    }
+                            })
                 }
-                withJwtRefreshRetry {
-                    postgrest.rpc(
-                        "sync_set_account_secret",
-                        buildJsonObject {
+                setAccountSecretV10(buildJsonObject {
                             put("p_secret_type", "addon_credential")
                             put("p_secret_ref", parsed.transportSecretRef)
                             put(
@@ -120,9 +133,7 @@ class AddonSyncService @Inject constructor(
                             )
                             put("p_status", "configured")
                             put("p_source", "app")
-                        }
-                    )
-                }
+                        })
             }
 
             val baseUpdatedAtMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null)
