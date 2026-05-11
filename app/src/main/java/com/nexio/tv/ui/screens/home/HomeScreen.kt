@@ -529,18 +529,6 @@ fun HomeScreen(
             pendingPosterTrailerResolution = null
             return@LaunchedEffect
         }
-        val externalUrl = viewModel.trailerPreviewExternalUrls[pendingRequest.item.id]
-        if (!externalUrl.isNullOrBlank()) {
-            runCatching {
-                context.startActivity(
-                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(externalUrl)).apply {
-                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                )
-            }
-            pendingPosterTrailerResolution = null
-            return@LaunchedEffect
-        }
         if (
             pendingRequest.item.id in viewModel.trailerPreviewNegativeCacheIds &&
             pendingRequest.item.id !in viewModel.trailerPreviewLoadingItemIds

@@ -7,13 +7,13 @@ import org.junit.Test
 
 /**
  * High-level seam test for the canonical-route short-circuit. We assert that
- * when the canonical document already supplies a `language`, the
- * `ProviderLocalizedMetadataResolver` short-circuit propagates it through
- * `TvMetadataEnrichment.language` into the `ResolvedMetadataDocument`.
+ * when the upstream `ResolvedMetadataDocument` carries a `language`, the
+ * `ProviderLocalizedMetadataResolver` short-circuit propagates it forward
+ * into `TvMetadataEnrichment.language`.
  *
  * This is the path that fires when the metadata router decides not to
  * re-fetch (cache hit, no localization request). Per the 2026-05-10 dossier,
- * it currently strips `language`.
+ * the canonical-route path stripped `language` before this fix.
  */
 class TvdbMetadataServiceOriginalLanguageTest {
     @Test

@@ -87,10 +87,11 @@ private val DEFAULT_YOUTUBE_FIELDS = mapOf(
 
 internal class NonEnglishYouTubeTrailerException(
     val languageCode: String?,
-    val trailerTitle: String?
+    val trailerTitle: String?,
+    val originalLanguage: String? = null
 ) : IllegalStateException(
-    "Rejected non-English YouTube trailer " +
-        "language=${languageCode.orEmpty()} title=${trailerTitle.orEmpty()}"
+    "Rejected YouTube trailer language=${languageCode.orEmpty()} " +
+        "originalLanguage=${originalLanguage.orEmpty()} title=${trailerTitle.orEmpty()}"
 )
 
 internal fun sortTrailerCandidatesForPlayback(items: List<StreamCandidate>): List<StreamCandidate> {
@@ -175,21 +176,26 @@ class InAppYouTubeExtractor @Inject constructor(
     private val gson = Gson()
     private val concurrencyLimiter = Semaphore(EXTRACTOR_MAX_CONCURRENCY)
 
-    suspend fun extractPlaybackSource(youtubeUrl: String): TrailerPlaybackSource? = withContext(Dispatchers.IO) {
+    suspend fun extractPlaybackSource(
+        youtubeUrl: String,
+        originalLanguage: String? = null
+    ): TrailerPlaybackSource? = withContext(Dispatchers.IO) {
         if (youtubeUrl.isBlank()) return@withContext null
 
         Log.d(TAG, "Starting Kotlin extraction for ${summarizeUrl(youtubeUrl)}")
         val source = try {
             withTimeout(EXTRACTOR_TIMEOUT_MS) {
                 concurrencyLimiter.withPermit {
-                    extractPlaybackSourceInternal(youtubeUrl)
+                    extractPlaybackSourceInternal(youtubeUrl, originalLanguage)
                 }
             }
         } catch (error: NonEnglishYouTubeTrailerException) {
             Log.w(
                 TAG,
-                "Rejected non-English trailer for ${summarizeUrl(youtubeUrl)} " +
-                    "language=${error.languageCode.orEmpty()} title=${error.trailerTitle.orEmpty()}"
+                "Rejected trailer for ${summarizeUrl(youtubeUrl)} " +
+                    "language=${error.languageCode.orEmpty()} " +
+                    "originalLanguage=${error.originalLanguage.orEmpty()} " +
+                    "title=${error.trailerTitle.orEmpty()}"
             )
             throw error
         } catch (error: Exception) {
@@ -210,7 +216,10 @@ class InAppYouTubeExtractor @Inject constructor(
         source
     }
 
-    private suspend fun extractPlaybackSourceInternal(youtubeUrl: String): TrailerPlaybackSource? {
+    private suspend fun extractPlaybackSourceInternal(
+        youtubeUrl: String,
+        originalLanguage: String?
+    ): TrailerPlaybackSource? {
         val videoId = extractVideoId(youtubeUrl) ?: return null
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
@@ -247,11 +256,12 @@ class InAppYouTubeExtractor @Inject constructor(
                     resolvedTrailerTitle = extractYouTubeTrailerTitle(playerResponse)
                 }
                 extractDefaultYouTubeAudioLanguageCode(playerResponse)
-                    ?.takeIf { !isEnglishYouTubeLanguageCode(it) }
+                    ?.takeIf { code -> !isYouTubeTrailerLanguageAcceptable(code, originalLanguage) }
                     ?.let { languageCode ->
                         throw NonEnglishYouTubeTrailerException(
                             languageCode = languageCode,
-                            trailerTitle = resolvedTrailerTitle
+                            trailerTitle = resolvedTrailerTitle,
+                            originalLanguage = originalLanguage
                         )
                     }
 
@@ -795,6 +805,32 @@ internal fun isEnglishYouTubeLanguageCode(languageCode: String?): Boolean {
         ?.takeIf { it.isNotEmpty() }
         ?: return false
     return normalized == "en" || normalized.startsWith("en-")
+}
+
+internal fun isYouTubeTrailerLanguageAcceptable(
+    trailerLanguageCode: String?,
+    originalLanguage: String?
+): Boolean {
+    if (isEnglishYouTubeLanguageCode(trailerLanguageCode)) return true
+    return youtubeLanguageMatchesOriginalLanguage(trailerLanguageCode, originalLanguage)
+}
+
+internal fun youtubeLanguageMatchesOriginalLanguage(
+    trailerLanguageCode: String?,
+    originalLanguage: String?
+): Boolean {
+    val trailer = normalizeBaseLanguageCode(trailerLanguageCode) ?: return false
+    val original = normalizeBaseLanguageCode(originalLanguage) ?: return false
+    return trailer == original
+}
+
+private fun normalizeBaseLanguageCode(code: String?): String? {
+    return code
+        ?.trim()
+        ?.lowercase()
+        ?.replace('_', '-')
+        ?.substringBefore('-')
+        ?.takeIf { it.isNotEmpty() }
 }
 
 private fun Map<*, *>.mapValue(key: String): Map<*, *>? {

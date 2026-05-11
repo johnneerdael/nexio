@@ -440,18 +440,6 @@ fun MetaDetailsScreen(
         }
     }
 
-    LaunchedEffect(uiState.pendingExternalTrailerUrl) {
-        val externalTrailerUrl = uiState.pendingExternalTrailerUrl ?: return@LaunchedEffect
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(externalTrailerUrl)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
-        }
-        viewModel.onEvent(MetaDetailsEvent.OnExternalTrailerConsumed)
-    }
-
     fun handleUniversalStreamerPlayRequest(contentTitle: String) {
         val installedPackages = context.packageManager
             .getInstalledApplications(0)

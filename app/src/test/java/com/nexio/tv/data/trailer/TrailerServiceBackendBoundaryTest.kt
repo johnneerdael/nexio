@@ -67,7 +67,7 @@ class TrailerServiceBackendBoundaryTest {
         val backendSource = TrailerPlaybackSource(videoUrl = "https://backend.example/trailer.m3u8")
         val youtubeUrl = "https://www.youtube.com/watch?v=abc12345678"
 
-        coEvery { extractor.extractPlaybackSource(youtubeUrl) } returns null
+        coEvery { extractor.extractPlaybackSource(youtubeUrl, any()) } returns null
         coEvery {
             backendProvider.resolveYouTubePlaybackSource(youtubeUrl, "Demo", "2026")
         } returns backendSource
@@ -95,7 +95,7 @@ class TrailerServiceBackendBoundaryTest {
         val backendProvider = mockk<TrailerBackendProvider>(relaxed = true)
         val extractorSource = TrailerPlaybackSource(videoUrl = "https://local.example/trailer.mp4")
 
-        coEvery { extractor.extractPlaybackSource(any()) } returns extractorSource
+        coEvery { extractor.extractPlaybackSource(any(), any()) } returns extractorSource
 
         val service = buildService(
             inAppYouTubeExtractor = extractor,
@@ -117,7 +117,7 @@ class TrailerServiceBackendBoundaryTest {
         val extractor = mockk<InAppYouTubeExtractor>()
         val backendProvider = mockk<TrailerBackendProvider>()
 
-        coEvery { extractor.extractPlaybackSource(any()) } returns null
+        coEvery { extractor.extractPlaybackSource(any(), any()) } returns null
         coEvery { backendProvider.resolveYouTubePlaybackSource(any(), any(), any()) } returns null
 
         val service = buildService(
@@ -139,7 +139,7 @@ class TrailerServiceBackendBoundaryTest {
         val extractor = mockk<InAppYouTubeExtractor>()
         val backendProvider = mockk<TrailerBackendProvider>()
 
-        coEvery { extractor.extractPlaybackSource(any()) } returns null
+        coEvery { extractor.extractPlaybackSource(any(), any()) } returns null
         coEvery { backendProvider.resolveYouTubePlaybackSource(any(), any(), any()) } returns null
 
         val service = buildService(
@@ -166,7 +166,7 @@ class TrailerServiceBackendBoundaryTest {
         val backendProvider = mockk<TrailerBackendProvider>()
         val cancellation = CancellationException("backend request cancelled")
 
-        coEvery { extractor.extractPlaybackSource(any()) } returns null
+        coEvery { extractor.extractPlaybackSource(any(), any()) } returns null
         coEvery { backendProvider.resolveYouTubePlaybackSource(any(), any(), any()) } throws cancellation
 
         val service = buildService(

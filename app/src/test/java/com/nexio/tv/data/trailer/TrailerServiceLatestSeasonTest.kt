@@ -98,7 +98,7 @@ class TrailerServiceLatestSeasonTest {
             metadataDiskCacheStore.readTmdbSeasonVideos(any(), any(), any(), any())
         } returns null
         // YouTube extractor resolves any URL to our test playback source
-        coEvery { inAppYouTubeExtractor.extractPlaybackSource(any()) } returns playbackSource
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(any(), any()) } returns playbackSource
         // Default: series-level TV videos return empty so tests that don't care don't fail
         coEvery { tmdbIntegrationProvider.fetchTvVideos(any(), any()) } returns TmdbVideosResponse(
             id = 0, results = emptyList()
@@ -433,7 +433,7 @@ class TrailerServiceLatestSeasonTest {
 
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(apiKey = "tmdb-key"))
         every { tmdbMetadataService.currentTmdbLanguageTag() } returns "en-US"
-        coEvery { inAppYouTubeExtractor.extractPlaybackSource(any()) } returns playbackSource
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(any(), any()) } returns playbackSource
 
         // Old disk cache has a series-level entry (written by the pre-upgrade code)
         val oldSeriesTrailer = listOf(makeTrailerVideo("old_series_key"))
@@ -485,7 +485,8 @@ class TrailerServiceLatestSeasonTest {
         // The extractor must be called with the season 3 trailer URL, not the old series trailer
         coVerify(exactly = 1) {
             inAppYouTubeExtractor.extractPlaybackSource(
-                "https://www.youtube.com/watch?v=$season3TrailerKey"
+                "https://www.youtube.com/watch?v=$season3TrailerKey",
+                any()
             )
         }
     }

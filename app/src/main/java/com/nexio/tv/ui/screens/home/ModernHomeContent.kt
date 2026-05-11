@@ -5,8 +5,6 @@
 
 package com.nexio.tv.ui.screens.home
 
-import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -450,7 +448,6 @@ internal fun ModernHomeContent(
     var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
     var expandedCatalogRowKey by remember { mutableStateOf<String?>(null) }
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
-    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     var unlockedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
     var autoplayUnlockRetriedFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingHeroTrailerFocusKey by remember { mutableStateOf<String?>(null) }
@@ -1220,21 +1217,6 @@ internal fun ModernHomeContent(
                 if (heroTrailerPreviewUrl.isNullOrBlank()) {
                     heroFullscreenHintSessionNonce = 0
                 }
-            }
-        }
-
-        LaunchedEffect(heroTrailerItemId, heroTrailerExternalUrl, effectiveTrailerPlaybackTarget) {
-            if (heroTrailerItemId == null || heroTrailerExternalUrl.isNullOrBlank()) return@LaunchedEffect
-            if (effectiveTrailerPlaybackTarget != com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA) return@LaunchedEffect
-            val launchKey = "$heroTrailerItemId|$heroTrailerExternalUrl"
-            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
-            lastExternalTrailerLaunchKey = launchKey
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(heroTrailerExternalUrl)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                )
             }
         }
 

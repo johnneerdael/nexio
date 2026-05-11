@@ -2821,7 +2821,8 @@ class MetaDetailsViewModel @Inject constructor(
                     null
                 },
                 contentId = meta.id,
-                fallbackYtIds = fallbackTrailerYtIds
+                fallbackYtIds = fallbackTrailerYtIds,
+                originalLanguage = meta.originalLanguage
             )
 
             _uiState.update { state ->
@@ -2842,16 +2843,7 @@ class MetaDetailsViewModel @Inject constructor(
                         }
                     )
 
-                    is TrailerResolutionResult.External -> baseState.copy(
-                        trailerUrl = null,
-                        trailerAudioUrl = null,
-                        trailerUserAgent = null,
-                        trailerExternalUrl = trailerResult.url,
-                        pendingExternalTrailerUrl = if (playWhenReady) trailerResult.url else null,
-                        trailerResolutionStatus = TrailerResolutionStatus.READY,
-                        isTrailerLoading = false
-                    )
-
+                    is TrailerResolutionResult.External,
                     null -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
@@ -2869,8 +2861,6 @@ class MetaDetailsViewModel @Inject constructor(
                     showControls = true,
                     hideLogo = true
                 )
-            } else if (playWhenReady && trailerResult is TrailerResolutionResult.External) {
-                trailerHasPlayed = true
             }
 
         }
@@ -2918,7 +2908,8 @@ class MetaDetailsViewModel @Inject constructor(
                 tmdbId = tmdbId,
                 type = meta.apiType,
                 seasonNumber = selectedSeason,
-                contentId = meta.id
+                contentId = meta.id,
+                originalLanguage = meta.originalLanguage
             )
 
             _uiState.update { state ->
@@ -3008,7 +2999,8 @@ class MetaDetailsViewModel @Inject constructor(
                 tmdbId = tmdbId,
                 type = meta.apiType,
                 seasonNumber = selectedSeason,
-                contentId = meta.id
+                contentId = meta.id,
+                originalLanguage = meta.originalLanguage
             )
 
             _uiState.update { state ->
@@ -3107,13 +3099,6 @@ class MetaDetailsViewModel @Inject constructor(
                     showControls = true,
                     hideLogo = true
                 )
-            }
-
-            !state.trailerExternalUrl.isNullOrBlank() -> {
-                trailerHasPlayed = true
-                _uiState.update {
-                    it.copy(pendingExternalTrailerUrl = state.trailerExternalUrl)
-                }
             }
 
             state.titleHasPlayableTrailerMedia && !state.isTrailerLoading -> {
