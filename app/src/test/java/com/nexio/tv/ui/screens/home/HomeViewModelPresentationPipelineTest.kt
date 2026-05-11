@@ -191,9 +191,15 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals("nexio-artwork://decision/decision-poster", carouselItem.heroPreview.poster)
         assertEquals("nexio-artwork://decision/decision-backdrop", carouselItem.heroPreview.backdrop)
         assertEquals("nexio-artwork://decision/decision-logo", carouselItem.heroPreview.logo)
-        assertEquals("nexio-artwork://decision/decision-poster", carouselItem.metaPreview?.poster)
-        assertEquals("nexio-artwork://decision/decision-backdrop", carouselItem.metaPreview?.background)
-        assertEquals("nexio-artwork://decision/decision-logo", carouselItem.metaPreview?.logo)
+
+        // ModernCarouselItem.metaPreview was dropped in Phase 4 of the Plan B
+        // migration to eliminate ~430 retained MetaPreview references. The
+        // CW-specific MetaPreview projection still lives in
+        // continueWatchingInProgressToMetaPreview and is asserted here directly.
+        val cwPreview = continueWatchingInProgressToMetaPreview(item)
+        assertEquals("nexio-artwork://decision/decision-poster", cwPreview.poster)
+        assertEquals("nexio-artwork://decision/decision-backdrop", cwPreview.background)
+        assertEquals("nexio-artwork://decision/decision-logo", cwPreview.logo)
     }
 
     @Test
