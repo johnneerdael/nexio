@@ -23,6 +23,7 @@ import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.core.tvdb.TvdbUpdateCoordinator
 import com.nexio.tv.core.tvdb.TvdbUpdateTrigger
+import com.nexio.tv.data.invalidation.ArtworkSettingsInvalidator
 import com.nexio.tv.ui.screens.player.ObsoletePlaybackCacheCleanup
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var legacyRemoteArtworkFetcherFactory: LegacyRemoteArtworkFetcher.Factory
     @Inject lateinit var searchSuggestionPosterFetcherFactory: SearchSuggestionPosterFetcher.Factory
     @Inject lateinit var animeIdMappingService: AnimeIdMappingService
+    @Inject lateinit var artworkSettingsInvalidator: ArtworkSettingsInvalidator
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -82,6 +84,10 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             integrationPlaybackGate.setPlaybackActive(false)
             tvdbUpdateCoordinator.catchUpUpdates(TvdbUpdateTrigger.STARTUP)
         }
+
+        // Start the artwork settings invalidator. Fires markStaleAll when the user
+        // changes provider settings; first emission is a no-op.
+        artworkSettingsInvalidator.start(appScope)
     }
 
     override fun newImageLoader(): ImageLoader {
