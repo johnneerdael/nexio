@@ -1,15 +1,20 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.integration.addon.AddonCatalogIntegrationProvider
 import com.nexio.tv.data.local.CatalogDiskCacheStore
+import com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
@@ -29,6 +34,23 @@ import org.junit.Test
 import retrofit2.Response
 
 class CatalogRepositoryAddonRoutingTest {
+
+    private fun noopEnricher(): CatalogItemCrossIdEnricher = CatalogItemCrossIdEnricher(
+        idMappingStore = InMemoryIdMappingStore(),
+        stableIdBundleResolver = StableIdBundleResolver(
+            idMappingStore = InMemoryIdMappingStore(),
+            lookup = object : StableIdBundleResolver.Lookup {
+                override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+            }
+        ),
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+    )
+
     @Test
     fun `addon catalog provider routes addon catalog calls through integration runtime`() = runTest {
         val runtime = mockk<IntegrationRuntime>()
@@ -184,7 +206,8 @@ class CatalogRepositoryAddonRoutingTest {
         val repository = CatalogRepositoryImpl(
             addonCatalogIntegrationProvider = provider,
             posterRatingsUrlResolver = posterResolver,
-            catalogDiskCacheStore = diskCacheStore
+            catalogDiskCacheStore = diskCacheStore,
+            catalogItemCrossIdEnricher = noopEnricher()
         )
 
         val emissions = repository.getCatalogCachedFirst(
@@ -247,7 +270,8 @@ class CatalogRepositoryAddonRoutingTest {
         val repository = CatalogRepositoryImpl(
             addonCatalogIntegrationProvider = provider,
             posterRatingsUrlResolver = posterResolver,
-            catalogDiskCacheStore = diskCacheStore
+            catalogDiskCacheStore = diskCacheStore,
+            catalogItemCrossIdEnricher = noopEnricher()
         )
 
         val emissions = repository.getCatalogCachedFirst(

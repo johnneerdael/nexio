@@ -7,6 +7,7 @@ import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.data.integration.addon.AddonCatalogIntegrationProvider
 import com.nexio.tv.data.local.CatalogDiskCacheStore
+import com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -24,7 +25,8 @@ import javax.inject.Singleton
 class CatalogRepositoryImpl @Inject constructor(
     private val addonCatalogIntegrationProvider: AddonCatalogIntegrationProvider,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val catalogDiskCacheStore: CatalogDiskCacheStore
+    private val catalogDiskCacheStore: CatalogDiskCacheStore,
+    private val catalogItemCrossIdEnricher: CatalogItemCrossIdEnricher
 ) : CatalogRepository {
     companion object {
         private const val TAG = "CatalogRepository"
@@ -278,8 +280,10 @@ class CatalogRepositoryImpl @Inject constructor(
             )
         ) {
             is NetworkResult.Success -> {
-                val items = result.data.metas.map { meta ->
-                    meta.toDomain()
+                val metas = result.data.metas
+                val items = ArrayList<com.nexio.tv.domain.model.MetaPreview>(metas.size)
+                for (i in metas.indices) {
+                    items += metas[i].toDomain(catalogItemCrossIdEnricher)
                 }
                 Log.d(
                     TAG,

@@ -1,9 +1,14 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.integration.addon.AddonCatalogIntegrationProvider
 import com.nexio.tv.data.local.CatalogDiskCacheStore
+import com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
 import com.nexio.tv.domain.model.CatalogRow
@@ -22,6 +27,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CatalogRepositoryImplTest {
+
+    private fun noopEnricher(): CatalogItemCrossIdEnricher = CatalogItemCrossIdEnricher(
+        idMappingStore = InMemoryIdMappingStore(),
+        stableIdBundleResolver = StableIdBundleResolver(
+            idMappingStore = InMemoryIdMappingStore(),
+            lookup = object : StableIdBundleResolver.Lookup {
+                override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+            }
+        ),
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+    )
+
     @Test
     fun `catalog refresh does not apply premium poster resolver to preview rows`() = runTest {
         val provider = mockk<AddonCatalogIntegrationProvider>()
@@ -31,7 +53,8 @@ class CatalogRepositoryImplTest {
         val repository = CatalogRepositoryImpl(
             addonCatalogIntegrationProvider = provider,
             posterRatingsUrlResolver = posterResolver,
-            catalogDiskCacheStore = diskCacheStore
+            catalogDiskCacheStore = diskCacheStore,
+            catalogItemCrossIdEnricher = noopEnricher()
         )
 
         every { diskCacheStore.write(any(), capture(rowSlot), any()) } returns Unit
@@ -89,7 +112,8 @@ class CatalogRepositoryImplTest {
         val repository = CatalogRepositoryImpl(
             addonCatalogIntegrationProvider = provider,
             posterRatingsUrlResolver = posterResolver,
-            catalogDiskCacheStore = diskCacheStore
+            catalogDiskCacheStore = diskCacheStore,
+            catalogItemCrossIdEnricher = noopEnricher()
         )
 
         every { diskCacheStore.read(any()) } returns null

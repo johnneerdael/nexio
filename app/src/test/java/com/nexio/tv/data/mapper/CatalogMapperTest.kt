@@ -1,5 +1,9 @@
 package com.nexio.tv.data.mapper
 
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.CatalogBehaviorHintsDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
@@ -7,12 +11,30 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.PosterShape
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CatalogMapperTest {
+
+    private val noopEnricher: CatalogItemCrossIdEnricher = CatalogItemCrossIdEnricher(
+        idMappingStore = InMemoryIdMappingStore(),
+        stableIdBundleResolver = StableIdBundleResolver(
+            idMappingStore = InMemoryIdMappingStore(),
+            lookup = object : StableIdBundleResolver.Lookup {
+                override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+            }
+        ),
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+    )
+
     @Test
-    fun `tmdb addon search shape maps genre and year for first paint`() {
+    fun `tmdb addon search shape maps genre and year for first paint`() = runTest {
         val preview = MetaPreviewDto(
             id = "tmdb:687163",
             type = "movie",
@@ -24,7 +46,7 @@ class CatalogMapperTest {
             imdbRating = "8.2",
             genre = listOf("Science Fiction", "Adventure"),
             year = "2026"
-        ).toDomain()
+        ).toDomain(noopEnricher)
 
         assertEquals("tmdb:687163", preview.id)
         assertEquals(ContentType.MOVIE, preview.type)
@@ -38,7 +60,7 @@ class CatalogMapperTest {
     }
 
     @Test
-    fun `addon catalog preview harvests tmdb and imdb stable ids`() {
+    fun `addon catalog preview harvests tmdb and imdb stable ids`() = runTest {
         val preview = MetaPreviewDto(
             id = "tmdb:687163",
             type = "movie",
@@ -47,7 +69,7 @@ class CatalogMapperTest {
             behaviorHints = CatalogBehaviorHintsDto(
                 defaultVideoId = "tt12042730"
             )
-        ).toDomain()
+        ).toDomain(noopEnricher)
 
         assertEquals("687163", preview.firstPaintStableIds.tmdb)
         assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
@@ -55,7 +77,7 @@ class CatalogMapperTest {
     }
 
     @Test
-    fun `addon imdb id wins over behavior hint imdb id`() {
+    fun `addon imdb id wins over behavior hint imdb id`() = runTest {
         val preview = MetaPreviewDto(
             id = "tmdb:687163",
             type = "movie",
@@ -64,14 +86,14 @@ class CatalogMapperTest {
             behaviorHints = CatalogBehaviorHintsDto(
                 defaultVideoId = "tt2222222"
             )
-        ).toDomain()
+        ).toDomain(noopEnricher)
 
         assertEquals("tt1111111", preview.firstPaintStableIds.imdb)
         assertEquals("687163", preview.firstPaintStableIds.tmdb)
     }
 
     @Test
-    fun `addon stable id harvest rejects episode and malformed imdb ids`() {
+    fun `addon stable id harvest rejects episode and malformed imdb ids`() = runTest {
         val episodeLikePreview = MetaPreviewDto(
             id = "tt1234567:1:1",
             type = "series",
@@ -80,25 +102,25 @@ class CatalogMapperTest {
             behaviorHints = CatalogBehaviorHintsDto(
                 defaultVideoId = "tt7654321:2:3"
             )
-        ).toDomain()
+        ).toDomain(noopEnricher)
 
         assertEquals(null, episodeLikePreview.firstPaintStableIds.imdb)
     }
 
     @Test
-    fun `addon raw imdb title id is harvested as stable imdb id`() {
+    fun `addon raw imdb title id is harvested as stable imdb id`() = runTest {
         val preview = MetaPreviewDto(
             id = "tt12042730",
             type = "movie",
             name = "Project Hail Mary"
-        ).toDomain()
+        ).toDomain(noopEnricher)
 
         assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
         assertEquals(null, preview.firstPaintStableIds.tmdb)
     }
 
     @Test
-    fun `moshi parses tmdb addon alias fields for first paint`() {
+    fun `moshi parses tmdb addon alias fields for first paint`() = runTest {
         val response = parseCatalogResponse(
             """
             {
@@ -115,14 +137,14 @@ class CatalogMapperTest {
             """.trimIndent()
         )
 
-        val preview = response.metas.single().toDomain()
+        val preview = response.metas.single().toDomain(noopEnricher)
 
         assertEquals(listOf("Science Fiction", "Adventure"), preview.genres)
         assertEquals("2026", preview.releaseInfo)
     }
 
     @Test
-    fun `addon behavior hints provide imdb stable id when imdb id is absent`() {
+    fun `addon behavior hints provide imdb stable id when imdb id is absent`() = runTest {
         val response = parseCatalogResponse(
             """
             {
@@ -140,14 +162,14 @@ class CatalogMapperTest {
             """.trimIndent()
         )
 
-        val preview = response.metas.single().toDomain()
+        val preview = response.metas.single().toDomain(noopEnricher)
 
         assertEquals("687163", preview.firstPaintStableIds.tmdb)
         assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
     }
 
     @Test
-    fun `canonical addon fields win over alias fields for first paint`() {
+    fun `canonical addon fields win over alias fields for first paint`() = runTest {
         val response = parseCatalogResponse(
             """
             {
@@ -166,14 +188,14 @@ class CatalogMapperTest {
             """.trimIndent()
         )
 
-        val preview = response.metas.single().toDomain()
+        val preview = response.metas.single().toDomain(noopEnricher)
 
         assertEquals(listOf("Drama"), preview.genres)
         assertEquals("2026-03-15", preview.releaseInfo)
     }
 
     @Test
-    fun `addon catalog root preserves mixed item source payload for first paint`() {
+    fun `addon catalog root preserves mixed item source payload for first paint`() = runTest {
         val response = parseCatalogResponse(
             """
             {
@@ -201,7 +223,11 @@ class CatalogMapperTest {
             """.trimIndent()
         )
 
-        val previews = response.metas.map { it.toDomain() }
+        val metas = response.metas
+        val previews = ArrayList<com.nexio.tv.domain.model.MetaPreview>(metas.size)
+        for (i in metas.indices) {
+            previews += metas[i].toDomain(noopEnricher)
+        }
         val movie = previews[0]
         val series = previews[1]
 

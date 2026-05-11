@@ -6,8 +6,10 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
 
-fun MetaPreviewDto.toDomain(): MetaPreview {
-    return MetaPreview(
+suspend fun MetaPreviewDto.toDomain(
+    enricher: CatalogItemCrossIdEnricher
+): MetaPreview {
+    val base = MetaPreview(
         id = id,
         type = ContentType.fromString(type),
         rawType = type,
@@ -29,6 +31,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
             defaultVideoId = behaviorHints?.defaultVideoId
         )
     )
+    return enricher.enrichFromCache(base)
 }
 
 private fun deriveAddonStableIds(

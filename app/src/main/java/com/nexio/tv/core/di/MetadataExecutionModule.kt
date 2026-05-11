@@ -18,6 +18,7 @@ import com.nexio.tv.data.integration.posters.RpdbMetadataProviderAdapter
 import com.nexio.tv.data.integration.posters.TopPostersMetadataProviderAdapter
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
@@ -78,4 +79,9 @@ abstract class MetadataExecutionModule {
 
     @Binds
     abstract fun bindStableIdBundleLookup(impl: RuntimeMetadataIdentityLookup): StableIdBundleResolver.Lookup
+
+    companion object {
+        @Provides
+        fun provideNowEpochMs(): () -> Long = { System.currentTimeMillis() }
+    }
 }
