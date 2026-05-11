@@ -8,6 +8,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.integration.addon.AddonCatalogIntegrationProvider
 import com.nexio.tv.data.local.CatalogDiskCacheStore
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
@@ -41,7 +42,8 @@ class CatalogRepositoryImplTest {
                 override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
             }
         ),
-        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+        overlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
     )
 
     @Test
