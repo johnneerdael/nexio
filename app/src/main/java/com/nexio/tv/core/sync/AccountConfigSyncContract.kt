@@ -18,6 +18,7 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.local.normalizeSubtitleTranslationSettings
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
@@ -547,4 +548,34 @@ internal suspend fun applyCatalogsSection(
             )
         }
     }
+}
+
+/**
+ * Map a raw v10 push envelope to a typed outcome. Pure function; caller is
+ * responsible for invoking the RPC + JWT refresh.
+ */
+internal fun mapV10PushResult(rawResult: V10PushResult): V10PushOutcome = when {
+    rawResult.applied ->
+        V10PushOutcome.Applied(rawResult.currentUpdatedAtMs, rawResult.syncRevision)
+    rawResult.reason == "stale_base" ->
+        V10PushOutcome.StaleBase(rawResult.currentUpdatedAtMs)
+    rawResult.reason == "field_conflict" ->
+        V10PushOutcome.FieldConflict(
+            currentUpdatedAtMs = rawResult.currentUpdatedAtMs,
+            conflictPaths = rawResult.conflictPaths,
+            syncRevision = rawResult.syncRevision ?: 0L
+        )
+    else ->
+        V10PushOutcome.Failed(IllegalStateException("Unknown v10 push reason: ${rawResult.reason}"))
+}
+
+/**
+ * Wrap a v10 push RPC invocation. Any exception thrown by `block` becomes
+ * `V10PushOutcome.Failed` instead of propagating, so service-layer call-sites
+ * can branch on the outcome uniformly.
+ */
+internal suspend fun runV10Push(block: suspend () -> V10PushResult): V10PushOutcome = try {
+    mapV10PushResult(block())
+} catch (e: Exception) {
+    V10PushOutcome.Failed(e)
 }
