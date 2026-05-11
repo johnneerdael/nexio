@@ -8,6 +8,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -21,8 +22,9 @@ import kotlinx.coroutines.withContext
  * `file://` URI suitable for `MediaItem.SubtitleConfiguration` with
  * `application/x-subrip` MIME (ExoPlayer's SubripParser).
  *
- * Cache key is `<videoId>-<languageCode>[-<tlang>]`. Translated tracks
- * cache independently from native tracks.
+ * Cache key is derived from a SHA-1 of the caption baseUrl plus the
+ * effective tlang. baseUrl already encodes the video and source-track
+ * identity; translated tracks cache independently via the tlang suffix.
  */
 @Singleton
 class TrailerSubtitleCache @Inject constructor(
@@ -38,9 +40,9 @@ class TrailerSubtitleCache @Inject constructor(
      * Returns a `file://` URI to an SRT file for the given track, fetching
      * and caching on first call. Returns `null` on network or parse failure.
      */
-    suspend fun ensure(videoId: String, selected: SelectedTrailerCaptionTrack): String? =
+    suspend fun ensure(selected: SelectedTrailerCaptionTrack): String? =
         mutex.withLock {
-            val target = cacheFileFor(videoId, selected)
+            val target = cacheFileFor(selected)
             if (target.exists() && target.length() > 0) {
                 return@withLock target.toURI().toString()
             }
@@ -57,14 +59,22 @@ class TrailerSubtitleCache @Inject constructor(
             target.toURI().toString()
         }
 
-    private fun cacheFileFor(videoId: String, selected: SelectedTrailerCaptionTrack): File {
-        val key = buildString {
-            append(videoId).append('-').append(selected.languageCode.replace('/', '_'))
+    private fun cacheFileFor(selected: SelectedTrailerCaptionTrack): File {
+        val sourceKey = buildString {
+            append(selected.baseUrl)
             selected.translateTo?.takeIf { it.isNotBlank() }?.let {
-                append('-').append(it.replace('/', '_'))
+                append('|').append(it)
             }
         }
-        return File(baseDir, "$key.srt")
+        val hash = sha1Hex(sourceKey).take(16)
+        val lang = selected.languageCode.replace('/', '_')
+        val tlangSuffix = selected.translateTo?.takeIf { it.isNotBlank() }?.let { "-$it" }.orEmpty()
+        return File(baseDir, "$hash-$lang$tlangSuffix.srt")
+    }
+
+    private fun sha1Hex(input: String): String {
+        val bytes = MessageDigest.getInstance("SHA-1").digest(input.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     /**
