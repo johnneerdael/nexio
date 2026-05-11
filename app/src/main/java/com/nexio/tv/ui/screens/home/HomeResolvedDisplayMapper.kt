@@ -24,6 +24,9 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RatingValueValidator
+import com.nexio.tv.data.repository.toArtworkBundle
+import com.nexio.tv.data.repository.toRating
+import com.nexio.tv.data.repository.toResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
@@ -157,23 +160,12 @@ internal object HomeResolvedDisplayMapper {
             canonicalId = overlay?.canonicalId,
             imdbId = stableIds.imdb,
             stableIds = stableIds,
-            display = ResolvedDisplayFields(
-                title = title,
-                originalTitle = mergedSlots.originalTitle.value,
-                year = year?.toIntOrNull(),
-                releaseDate = mergedSlots.releaseInfo.value,
-                overview = mergedSlots.overview.value,
-                genres = mergedSlots.genres.value.orEmpty(),
-                runtimeText = mergedSlots.runtime.value,
-                tomatoesRating = overlay?.fields?.tomatoesRating
+            display = mergedSlots.toResolvedDisplayFields(
+                fallbackTitle = name,
+                fallbackTomatoesRating = overlay?.fields?.tomatoesRating
             ),
-            artwork = ArtworkBundle(
-                poster = mergedSlots.poster.value,
-                backdrop = mergedSlots.backdrop.value,
-                logo = mergedSlots.logo.value,
-                thumbnail = mergedSlots.thumbnail.value
-            ).enforceArtworkTypeBoundaries(),
-            rating = mergedSlots.rating.value,
+            artwork = mergedSlots.toArtworkBundle(),
+            rating = mergedSlots.toRating(),
             trailer = trailerState,
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
