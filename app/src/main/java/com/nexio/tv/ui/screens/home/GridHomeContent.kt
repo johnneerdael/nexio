@@ -68,6 +68,7 @@ private const val KEY_REPEAT_THROTTLE_MS = 80L
 fun GridHomeContent(
     uiState: HomeUiState,
     presentation: GridHomePresentationState,
+    gridItems: List<GridItem>,
     continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -102,8 +103,10 @@ fun GridHomeContent(
         }
     }
 
-    // Offset for section indices when continue watching is present
-    val gridItems = uiState.gridItems
+    // Plan B Task 5f.3 — gridItems is now sourced from
+    // HomeViewModel._displayGridItems via the caller, off HomeUiState
+    // (CLAUDE.md rule #2: hot lists must not be observed through Compose
+    // state record chains).
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
 
     // Plan B Task 5b — Grid Home now consumes the typed-surface
