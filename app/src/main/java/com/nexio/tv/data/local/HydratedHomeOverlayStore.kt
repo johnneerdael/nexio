@@ -146,7 +146,8 @@ class HydratedHomeOverlayStore @Inject constructor(
         } ?: return
         if (overlay.state == HomeItemHydrationState.STALE_READY) return
         if (!currentIds.strictlyContains(overlay.stableIdsSnapshot)) return
-        staleItemKeys.update { current -> current + trimmed }
+        if (trimmed in staleItemKeys.value) return  // already marked — avoid redundant version bump
+        staleItemKeys.update { current -> if (trimmed in current) current else current + trimmed }
         incrementVersion()
     }
 
@@ -226,9 +227,18 @@ class HydratedHomeOverlayStore @Inject constructor(
         // canonical identity, not the row alias), so we walk the staleItemKeys set looking
         // for ANY itemKey whose stored alias resolves to this overlayKey. Cheap when set
         // is empty (common steady state) or small (typical post-invalidation).
-        val stale = staleItemKeys.value.any { staleKey ->
-            prefs().getString(aliasPrefsKey(staleKey, languageTag, policyVersion), null) ==
-                overlay.overlayKey
+        // prefs() hoisted outside the lambda — getSharedPreferences acquires a framework
+        // lock per call; doing it once per read instead of once per stale entry matters
+        // post-markStaleAll when the set holds ~all home items.
+        val currentStale = staleItemKeys.value
+        val stale = if (currentStale.isEmpty()) {
+            false
+        } else {
+            val sp = prefs()
+            currentStale.any { staleKey ->
+                sp.getString(aliasPrefsKey(staleKey, languageTag, policyVersion), null) ==
+                    overlay.overlayKey
+            }
         }
         return if (stale) overlay.copy(state = HomeItemHydrationState.STALE_READY) else overlay
     }
