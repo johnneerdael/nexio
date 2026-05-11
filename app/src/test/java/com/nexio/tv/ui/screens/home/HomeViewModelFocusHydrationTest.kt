@@ -1370,7 +1370,8 @@ class HomeViewModelFocusHydrationTest {
                         override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
                     }
                 ),
-                animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+                animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+                overlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
             ),
             idMappingStore = InMemoryIdMappingStore(),
             homeHydrationCoordinator = homeHydrationCoordinator,

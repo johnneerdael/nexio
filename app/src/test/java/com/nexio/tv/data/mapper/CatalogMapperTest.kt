@@ -4,6 +4,7 @@ import com.nexio.tv.core.anime.AnimeIdMapAsset
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.StableIdBundleResolver
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.CatalogBehaviorHintsDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
@@ -11,6 +12,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.PosterShape
 import com.squareup.moshi.Moshi
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -30,7 +32,8 @@ class CatalogMapperTest {
                 override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
             }
         ),
-        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+        overlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
     )
 
     @Test
