@@ -1,5 +1,8 @@
 package com.nexio.tv.domain.model
 
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.integration.IntegrationProvider
+
 enum class ArtworkTypeKey {
     POSTER,
     LOGO,
@@ -84,3 +87,19 @@ data class ArtworkProviderSettings(
     val topPostersCanProvideThumbnails: Boolean
         get() = hasTopPostersKey && topPostersEntitlement?.allowsEpisodeThumbnails == true
 }
+
+fun ArtworkProviderChoiceKey.toRuntimeProviderId(): ArtworkProviderId =
+    when (this) {
+        ArtworkProviderChoiceKey.RPDB ->
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
+        ArtworkProviderChoiceKey.TOP_POSTERS ->
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
+        ArtworkProviderChoiceKey.DEFAULT ->
+            throw IllegalArgumentException(
+                "DEFAULT must be coerced upstream by ArtworkProviderResolver — never passed to toRuntimeProviderId"
+            )
+        else ->
+            throw IllegalArgumentException(
+                "Unknown ArtworkProviderChoiceKey: $value"
+            )
+    }
