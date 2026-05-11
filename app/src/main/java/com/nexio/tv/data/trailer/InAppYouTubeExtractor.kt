@@ -131,16 +131,21 @@ private val CLIENTS = listOf(
         id = "5",
         version = "21.03.2",
         userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
+        // Mirrors NewPipeExtractor's iOS Innertube client info: osName="iOS"
+        // (not "iPhone") and the matching 22H124 build, deviceMake="Apple",
+        // platform="MOBILE". YouTube cross-checks these context fields against
+        // the UA when signing HLS manifest URLs.
         context = mapOf(
             "clientName" to "IOS",
             "clientVersion" to "21.03.2",
             "deviceMake" to "Apple",
             "deviceModel" to "iPhone16,2",
-            "osName" to "iPhone",
-            "osVersion" to "18.7.2.22G100",
+            "osName" to "iOS",
+            "osVersion" to "18.7.2.22H124",
             "platform" to "MOBILE",
             "hl" to "en",
-            "gl" to "US"
+            "gl" to "US",
+            "utcOffsetMinutes" to 0
         ),
         priority = 0
     ),

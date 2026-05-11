@@ -273,19 +273,13 @@ fun TrailerPlayer(
         }
     }
 
-    LaunchedEffect(trailerPlayer, subtitleConfig) {
-        val player = trailerPlayer ?: return@LaunchedEffect
-        val builder = player.trackSelectionParameters.buildUpon()
-        if (subtitleConfig == null) {
-            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            builder.setPreferredTextLanguage(null)
-        } else {
-            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            builder.setPreferredTextLanguage(subtitleConfig.language)
-            builder.setSelectUndeterminedTextLanguage(true)
-        }
-        player.trackSelectionParameters = builder.build()
-    }
+    // Intentionally not mutating `player.trackSelectionParameters`. YouTube's
+    // iOS-extracted HLS manifests advertise alternate text renditions (the
+    // `tts_caps/1` flag) whose sub-rendition URLs can 403 fatally; setting
+    // `setPreferredTextLanguage` or `setSelectUndeterminedTextLanguage` can
+    // force Media3 to fetch those. Our sideloaded VTT already carries
+    // `SELECTION_FLAG_DEFAULT`, which the default track selector will pick
+    // without us touching parameters.
 
     LaunchedEffect(seekRequestToken, seekDeltaMs, trailerPlayer) {
         val player = trailerPlayer ?: return@LaunchedEffect
