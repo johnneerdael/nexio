@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
@@ -31,6 +32,7 @@ import com.nexio.tv.core.metadata.router.StableIdEvidence
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -46,6 +48,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -208,7 +211,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -247,7 +253,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -287,7 +296,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -328,7 +340,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -371,7 +386,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+            traceEvents = TraceMetadataEvents(sink) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -419,7 +437,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+            traceEvents = TraceMetadataEvents(sink) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -469,7 +490,10 @@ class HomeHydrationCoordinatorTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = store,
-            traceEvents = TraceMetadataEvents(sink) { "home-test" }
+            traceEvents = TraceMetadataEvents(sink) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -1117,14 +1141,126 @@ class HomeHydrationCoordinatorTest {
         assertEquals(true, artworkPayload["overlayApplied"])
     }
 
+    @Test
+    fun `STALE_READY existing overlay bypasses content-equality gate and upserts`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        // First pass: capture the overlay the coordinator builds, so we can construct
+        // a matching "stale" existing overlay with identical hash + fields.
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+
+        coordinator(facade, store, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val builtOverlay = overlaySlot.captured
+        val staleExisting = builtOverlay.copy(state = HomeItemHydrationState.STALE_READY)
+
+        // Second pass: existing overlay matches fields + displayHash exactly but is STALE_READY.
+        // The gate must bypass and upsert again rather than short-circuiting.
+        val sink2 = RecordingTraceSink()
+        val store2 = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        every {
+            store2.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns staleExisting
+        coEvery { store2.upsert(any(), any()) } returns Unit
+
+        coordinator(facade, store2, sink2).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        // STALE_READY bypass means the gate trace event is NOT emitted, and upsert IS called.
+        assertFalse(
+            sink2.events.any { it.eventType == "home.hydration_ignored" }
+        )
+        coVerify(exactly = 1) { store2.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `non-STALE existing overlay with identical hash short-circuits via content-equality gate`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+
+        coordinator(facade, store, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val canonicalExisting = overlaySlot.captured // state defaults to CANONICAL_READY
+
+        val sink2 = RecordingTraceSink()
+        val store2 = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        every {
+            store2.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns canonicalExisting
+        coEvery { store2.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store2, sink2).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        // Gate trips: existing overlay returned as-is, no upsert call.
+        assertSame(canonicalExisting, result)
+        coVerify(exactly = 0) { store2.upsert(any(), any()) }
+        assertTrue(
+            sink2.events.any { it.eventType == "home.hydration_ignored" }
+        )
+    }
+
     private fun coordinator(
         facade: MetadataRouterFacade,
         store: HydratedHomeOverlayStore,
-        sink: RecordingTraceSink
+        sink: RecordingTraceSink,
+        settings: ArtworkProviderSettings = ArtworkProviderSettings()
     ) = HomeHydrationCoordinator(
         metadataRouterFacade = facade,
         overlayStore = store,
-        traceEvents = TraceMetadataEvents(sink) { "home-test" }
+        traceEvents = TraceMetadataEvents(sink) { "home-test" },
+        settingsSource = object : ArtworkProviderSettingsSource {
+            override val settings = flowOf(settings)
+        }
     )
 
     private fun preview(

@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
@@ -31,9 +32,11 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
+import com.nexio.tv.domain.model.toSettingsSignature
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 
 enum class HomeHydrationPriority {
     FOCUSED,
@@ -46,7 +49,8 @@ enum class HomeHydrationPriority {
 class HomeHydrationCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val overlayStore: HydratedHomeOverlayStore,
-    private val traceEvents: TraceMetadataEvents
+    private val traceEvents: TraceMetadataEvents,
+    private val settingsSource: ArtworkProviderSettingsSource
 ) {
     suspend fun hydrate(
         item: MetaPreview,
@@ -99,11 +103,25 @@ class HomeHydrationCoordinator @Inject constructor(
             }
 
             val bundle = stableIds.bundle
+            val currentSettings = settingsSource.settings.first()
+            val settingsSignature = currentSettings.toSettingsSignature()
+            val stableIdsSnapshot = bundle?.let { b ->
+                ProviderIds(
+                    imdb = b.sidecars.imdbId ?: item.firstPaintStableIds.imdb,
+                    tmdb = b.canonical.tmdbMovieId ?: item.firstPaintStableIds.tmdb,
+                    tvdb = b.canonical.tvdbSeriesId ?: item.firstPaintStableIds.tvdb,
+                    kitsu = b.canonical.kitsuAnimeId ?: item.firstPaintStableIds.kitsu,
+                    trakt = item.firstPaintStableIds.trakt,
+                    simkl = item.firstPaintStableIds.simkl
+                )
+            } ?: item.firstPaintStableIds
             val overlay = result.toHydratedHomeOverlay(
                 item = item,
                 itemKey = itemKey,
                 bundle = bundle,
-                languageTag = languageTag
+                languageTag = languageTag,
+                stableIdsSnapshot = stableIdsSnapshot,
+                settingsSignature = settingsSignature
             ) ?: return failed(itemKey, trigger, "canonical_identity_unresolved")
 
             if (currentGeneration() != expectedGeneration) {
@@ -130,6 +148,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 policyVersion = overlay.policyVersion
             )
             if (existingOverlay != null &&
+                existingOverlay.state != HomeItemHydrationState.STALE_READY &&
                 existingOverlay.displayHash == overlay.displayHash &&
                 existingOverlay.fields == overlay.fields
             ) {
@@ -234,7 +253,9 @@ class HomeHydrationCoordinator @Inject constructor(
         item: MetaPreview,
         itemKey: String,
         bundle: StableIdBundle?,
-        languageTag: String
+        languageTag: String,
+        stableIdsSnapshot: ProviderIds,
+        settingsSignature: String
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
@@ -264,7 +285,9 @@ class HomeHydrationCoordinator @Inject constructor(
             updatedAtMs = nowMs,
             staleAtMs = nowMs + OVERLAY_STALE_MS,
             expiresAtMs = nowMs + OVERLAY_EXPIRES_MS,
-            state = HomeItemHydrationState.CANONICAL_READY
+            state = HomeItemHydrationState.CANONICAL_READY,
+            stableIdsSnapshot = stableIdsSnapshot,
+            settingsSignature = settingsSignature
         )
     }
 

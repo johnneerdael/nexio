@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
@@ -21,6 +22,7 @@ import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -33,6 +35,7 @@ import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TitleRatingSource
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -88,7 +91,10 @@ class HomeResolvedSurfacePublishingTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = overlayStore,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -162,7 +168,10 @@ class HomeResolvedSurfacePublishingTest {
         HomeHydrationCoordinator(
             metadataRouterFacade = facade,
             overlayStore = overlayStore,
-            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" }
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { "home-test" },
+            settingsSource = object : ArtworkProviderSettingsSource {
+                override val settings = flowOf(ArtworkProviderSettings())
+            }
         ).hydrate(
             item = preview,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
