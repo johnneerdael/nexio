@@ -15,6 +15,13 @@ data class MetaDetailsUiState(
     val isLoading: Boolean = true,
     val meta: Meta? = null,
     val resolvedDetail: ResolvedDetailDisplayDocument? = null,
+    /**
+     * Plan B Surface 5 — typed detail-surface projection produced by
+     * [MetaDetailsViewModel] observing [com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository]
+     * for the current meta's itemKey. Consumers prefer this over [meta] /
+     * [resolvedDetail]; falls back to legacy paths during initial load.
+     */
+    val resolvedDetailFields: MetaDetailsResolvedFields? = null,
     val localizationFallbackReason: String? = null,
     val trailerState: TrailerDisplayState = TrailerDisplayState(),
     val error: String? = null,
