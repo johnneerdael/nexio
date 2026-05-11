@@ -461,7 +461,7 @@ class HomeProfileSessionLifecycleContractTest {
 
     @Test
     fun `profile reset clears only profile-owned visible home state`() {
-        assertTrue(resetProfileScopedHomeStateSource.contains("_displayCatalogRows.value = emptyList()"))
+        assertTrue(resetProfileScopedHomeStateSource.contains("_internalCatalogRows.value = emptyList()"))
         assertTrue(resetProfileScopedHomeStateSource.contains("_displayContinueWatchingItems.value = emptyList()"))
         assertTrue(resetProfileScopedHomeStateSource.contains("traktUpNextItems = emptyList()"))
 

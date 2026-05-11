@@ -216,7 +216,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
     viewModelScope.launch {
         combine(
             _uiState,
-            _displayCatalogRows,
+            _internalCatalogRows,
             _metaByItemKey,
             _resolvedContinueWatchingItems
         ) { state, catalogRows, metaByItemKey, continueWatchingItems ->
@@ -256,13 +256,13 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
 
 /**
  * Plan B Task 5a — drives [HomeUiState.classicHomePresentation] from
- * [_displayCatalogRows] (the rendering-shape CatalogRow source) joined with
+ * [_internalCatalogRows] (the rendering-shape CatalogRow source) joined with
  * the typed-surface-derived [HomeUiState.resolvedRailRows]. Mirrors
  * [observeModernHomePresentationPipeline].
  *
  * Classic Home consumes the resulting [ClassicHomePresentationState] directly
  * instead of taking `displayCatalogRows` as a parameter — paving the way for
- * Task 5e (`_displayCatalogRows` retirement) without re-touching Classic.
+ * Task 5e (`_internalCatalogRows` retirement) without re-touching Classic.
  *
  * Reference stability is preserved by [buildClassicHomePresentation]'s outer-list
  * memoization; the `_uiState.update { ... }` short-circuit below avoids
@@ -272,7 +272,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
 internal fun HomeViewModel.observeClassicHomePresentationPipeline() {
     viewModelScope.launch {
         combine(
-            _displayCatalogRows,
+            _internalCatalogRows,
             _uiState
         ) { catalogRows, state ->
             ClassicHomePresentationInput(
@@ -310,8 +310,8 @@ internal fun HomeViewModel.observeClassicHomePresentationPipeline() {
  * Grid Home consumes the resulting [GridHomePresentationState] directly
  * instead of re-walking [HomeUiState.resolvedRailRows] inside Compose on
  * every emission. With Classic (5a) and Grid (5b) both off the legacy
- * `_displayCatalogRows` consumption path for resolved-item lookup,
- * Plan B Task 5e can retire `_displayCatalogRows` next.
+ * `_internalCatalogRows` consumption path for resolved-item lookup,
+ * Plan B Task 5e can retire `_internalCatalogRows` next.
  *
  * Reference stability is preserved by [buildGridHomePresentation]'s outer-map
  * memoization; the `_uiState.update { ... }` short-circuit below avoids

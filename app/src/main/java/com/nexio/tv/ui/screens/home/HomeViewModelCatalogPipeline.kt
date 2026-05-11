@@ -152,7 +152,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         // Phase 3.7 — restore the typed authority's state from disk so the
         // post-3.6.5 typed surfaces (ModernHomeRowItem / HeroDisplayItem)
         // render with hydrated content immediately on cold-start. The legacy
-        // snapshot.catalogRows path continues to drive _displayCatalogRows
+        // snapshot.catalogRows path continues to drive _internalCatalogRows
         // for now; the typed cache provides the rule #1-compliant overlay.
         runCatching {
             val typedCache = resolvedDisplaySnapshotStore.read(profileId)
@@ -176,7 +176,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         }
 
         withContext(Dispatchers.Main.immediate) {
-            val hasRenderedContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
+            val hasRenderedContent = _internalCatalogRows.value.any { it.items.isNotEmpty() } ||
                 _heroItemKeys.value.isNotEmpty()
             if (hasRenderedContent) {
                 return@withContext
@@ -291,7 +291,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
     catalogInventoryRepository.clear()
-    _displayCatalogRows.value = emptyList()
+    _internalCatalogRows.value = emptyList()
+    publishCatalogStructureFromRows(emptyList())
     _metaByItemKey.value = emptyMap()
     _heroItemKeys.value = emptyList()
     _displayContinueWatchingItems.value = emptyList()
@@ -760,20 +761,20 @@ internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
             }
         }
         if (enrichedByItemKey.isEmpty()) return@launch
-        // Apply enriched MetaPreviews back to _displayCatalogRows so the next
+        // Apply enriched MetaPreviews back to _internalCatalogRows so the next
         // catalog-pipeline emission carries the resolver-populated imdb id into
         // the artwork pipeline (which queries RPDB). Without this re-apply, the
         // resolver populates the IdMappingStore but the in-memory rail items
         // stay frozen with `firstPaintStableIds.imdb = null`, the artwork
         // pipeline never gets the imdb it needs, and RPDB never queries.
-        _displayCatalogRows.update { current ->
+        _internalCatalogRows.update { current ->
             applyEnrichedItemsToRows(current, enrichedByItemKey)
         }
         // Plan B Task 5e-pre — re-publish the surface-level MetaPreview lookup
         // so the presentation pipeline sees the resolver-enriched items
         // (otherwise the metaByItemKey signal would be stale relative to
-        // _displayCatalogRows for one emission cycle).
-        publishMetaByItemKeyFromRows(_displayCatalogRows.value)
+        // _internalCatalogRows for one emission cycle).
+        publishMetaByItemKeyFromRows(_internalCatalogRows.value)
     }
 }
 
@@ -1695,7 +1696,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             "tmdbGroups=${persistedTmdbSyntheticGroups.size} tmdbRows=${persistedTmdbSyntheticGroups.sumOf { it.rows.size }}"
     )
 
-    val visibleItemsBeforeSettle = _displayCatalogRows.value
+    val visibleItemsBeforeSettle = _internalCatalogRows.value
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
@@ -1718,7 +1719,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             .flatMap { row -> row.items.asSequence() }
             .map { item -> "${item.apiType}:${item.id}" }
             .toSet()
-    val visibleItems = _displayCatalogRows.value
+    val visibleItems = _internalCatalogRows.value
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
@@ -2267,7 +2268,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     setEnrichingItemId(null)
 
     try {
-        val hasRestoredContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
+        val hasRestoredContent = _internalCatalogRows.value.any { it.items.isNotEmpty() } ||
             _heroItemKeys.value.isNotEmpty()
         val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
             catalogsLoadInProgress = catalogsLoadInProgress,
@@ -3023,7 +3024,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
 
     val hasCurrentRenderedContent = hasRenderableHomeContent(
         currentState,
-        _displayCatalogRows.value,
+        _catalogStructure.value,
         heroItemsNonEmpty = _heroItemKeys.value.isNotEmpty(),
         _displayContinueWatchingItems.value
     )
@@ -3069,7 +3070,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         )
         applyHomeSnapshotToUiPipeline(transientSnapshot)
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched(
-            rows = _displayCatalogRows.value,
+            rows = _internalCatalogRows.value,
             overlaysByItemKey = currentHydratedHomeOverlays,
             idMappingStore = idMappingStore,
             resolveTrailer = null
@@ -3236,7 +3237,8 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         heroTmdbSettings = currentTmdbSettings
     )
     catalogInventoryRepository.publish(composedSnapshot.fullRows)
-    _displayCatalogRows.value = composedSnapshot.displayRows
+    _internalCatalogRows.value = composedSnapshot.displayRows
+    publishCatalogStructureFromRows(composedSnapshot.displayRows)
     publishMetaByItemKeyFromRows(composedSnapshot.displayRows)
     publishHeroItemKeysFromMetas(composedSnapshot.heroItems)
     _uiState.update { state ->
