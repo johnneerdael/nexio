@@ -6,16 +6,34 @@ import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TitleRating
 
 /**
- * The single non-downgrade reducer for Home rail projection. Implements the
- * spec's `choose()` rule: for every field, the highest-ranked slot among
- * (firstPaint, overlay, existing, profile) wins. A higher rank ALWAYS beats a
- * lower rank, even when the higher-rank slot's value is null — null at RESOLVED
- * means "the authoritative source explicitly produced no value", which must
- * not be papered over by FIRST_PAINT.
+ * Pure rank-aware slot picker. For every field in [ResolvedDisplayFieldSlots],
+ * picks the highest-ranked non-null candidate among (firstPaint, overlay,
+ * existing, profile). A higher rank ALWAYS beats a lower rank, even when the
+ * higher-rank slot's value is null — null at RESOLVED means "the authoritative
+ * source explicitly produced no value", which must not be papered over by
+ * FIRST_PAINT.
  *
- * This is the ONLY place that may merge multiple display inputs into final
- * row state. Every other site (apply seam, refresh coordinator, hydration
- * mapper) must funnel through here.
+ * **Where this is invoked from:**
+ *
+ * - [com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository] — the
+ *   load-bearing **non-downgrade enforcement point**. Every per-itemKey
+ *   transition published into the typed authority routes through here with
+ *   `existing = previously-published slots`. This is what guarantees the
+ *   "RESOLVED never downgrades to FIRST_PAINT" contract end-to-end (see
+ *   `applyNonDowngradeMerge` / `applyNonDowngradeMergeForReplace`).
+ *
+ * - [HomeResolvedDisplayMapper.toResolvedDisplayItem] — combines a single
+ *   CatalogRow item's `firstPaint` slots with its overlay slots. Passes
+ *   `existing = null` because the mapper has no access to the repository's
+ *   current state. The non-downgrade contract is enforced downstream at the
+ *   boundary, not here.
+ *
+ * - Non-home surface merges in `HomeCatalogRefreshCoordinator`,
+ *   `HomeViewModelContinueWatching`, and `ContinueWatchingMetadataSnapshot`.
+ *
+ * Previously documented as "the ONLY place that may merge display inputs" —
+ * that was aspirational, never true. The boundary is the enforcement site;
+ * this reducer is its rank-picker utility.
  */
 internal object HomeRailProjectionReducer {
     fun reduce(
