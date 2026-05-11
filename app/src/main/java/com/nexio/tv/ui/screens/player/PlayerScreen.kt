@@ -5,8 +5,6 @@
 
 package com.nexio.tv.ui.screens.player
 
-import android.graphics.Typeface
-import android.util.TypedValue
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -95,12 +93,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.text.Cue
-import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.nexio.tv.core.player.BurnInProtectionState
-import com.nexio.tv.core.player.SUBTITLE_MAX_ALPHA
-import com.nexio.tv.core.player.SUBTITLE_OFF_WHITE_ARGB
+import com.nexio.tv.ui.components.applySubtitleViewStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
@@ -135,56 +131,11 @@ internal fun applySubtitleStyle(
     subtitleStyle: com.nexio.tv.data.local.SubtitleStyleSettings,
     burnInProtection: BurnInProtectionState,
 ) {
-    val baseFontSize = 24f
-    val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
-    subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
-    subtitleView.setApplyEmbeddedFontSizes(false)
-
-    val typeface = if (subtitleStyle.bold) {
-        Typeface.DEFAULT_BOLD
-    } else {
-        Typeface.DEFAULT
-    }
-    val edgeType = if (subtitleStyle.outlineEnabled) {
-        CaptionStyleCompat.EDGE_TYPE_OUTLINE
-    } else {
-        CaptionStyleCompat.EDGE_TYPE_NONE
-    }
-
-    val foregroundColor = if (burnInProtection.enabled) {
-        SUBTITLE_OFF_WHITE_ARGB
-    } else {
-        android.graphics.Color.WHITE
-    }
-
-    subtitleView.setStyle(
-        CaptionStyleCompat(
-            foregroundColor,
-            subtitleStyle.backgroundColor,
-            android.graphics.Color.TRANSPARENT,
-            edgeType,
-            subtitleStyle.outlineColor,
-            typeface
-        )
+    applySubtitleViewStyle(
+        subtitleView = subtitleView,
+        subtitleStyle = subtitleStyle,
+        burnInProtection = burnInProtection,
     )
-    subtitleView.setApplyEmbeddedStyles(false)
-    subtitleView.alpha = if (burnInProtection.enabled) SUBTITLE_MAX_ALPHA else 1.0f
-    subtitleView.translationX = burnInProtection.horizontalOffsetPx
-
-    val effectivePercent = subtitleStyle.verticalOffset + burnInProtection.verticalDeltaPercent
-    val bottomPaddingFraction = (0.06f + (effectivePercent / 250f)).coerceIn(0f, 0.4f)
-    subtitleView.setBottomPaddingFraction(bottomPaddingFraction)
-    subtitleView.post {
-        val extraPadding = (subtitleView.height * (effectivePercent / 400f))
-            .toInt()
-            .coerceAtLeast(0)
-        subtitleView.setPadding(
-            subtitleView.paddingLeft,
-            subtitleView.paddingTop,
-            subtitleView.paddingRight,
-            extraPadding
-        )
-    }
 }
 
 internal fun PlayerView.ensureExternalSubtitleOverlay(): SubtitleView? {
