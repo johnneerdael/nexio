@@ -15,6 +15,7 @@ data class HomeUiState(
     val resolvedRailRows: List<ResolvedRailRow> = emptyList(),
     val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
+    val classicHomePresentation: ClassicHomePresentationState = ClassicHomePresentationState(),
     val homeReadiness: HomeInitialReadiness = HomeInitialReadiness.started(
         sessionId = "profile:1:initial",
         profileId = 1

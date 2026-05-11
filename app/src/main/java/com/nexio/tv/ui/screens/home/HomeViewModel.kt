@@ -650,6 +650,7 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var homeProfileGeneration: Long = 0L
     internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
+    internal val classicHomePresentationBuildCache = ClassicHomePresentationBuildCache()
     internal val activeHomeProfileSession: StateFlow<HomeProfileSession> =
         homeProfileSessionCoordinator.start(viewModelScope, ::advanceHomeProfileGeneration)
     internal var activeHomeProfileSessionSnapshot: HomeProfileSession = activeHomeProfileSession.value
@@ -690,6 +691,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
         observeModernHomePresentation()
+        observeClassicHomePresentation()
         observeTrailerAutoplaySettings()
         observePlayerSettings()
         observeExternalMetaPrefetchPreference()
@@ -828,6 +830,8 @@ class HomeViewModel @Inject constructor(
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
 
     private fun observeModernHomePresentation() = observeModernHomePresentationPipeline()
+
+    private fun observeClassicHomePresentation() = observeClassicHomePresentationPipeline()
 
     private fun observeTrailerAutoplaySettings() {
         viewModelScope.launch {

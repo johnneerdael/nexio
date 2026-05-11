@@ -367,7 +367,6 @@ fun HomeScreen(
                         HomeLayout.CLASSIC -> ClassicHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
-                            displayCatalogRows = displayCatalogRows,
                             displayHeroItems = displayHeroItems,
                             resolvedContinueWatchingItems = resolvedContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
@@ -665,7 +664,6 @@ fun HomeScreen(
 private fun ClassicHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
-    displayCatalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
     displayHeroItems: List<MetaPreview>,
     resolvedContinueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
@@ -684,7 +682,7 @@ private fun ClassicHomeRoute(
     }
     ClassicHomeContent(
         uiState = uiState,
-        catalogRows = displayCatalogRows,
+        presentation = uiState.classicHomePresentation,
         heroItems = displayHeroItems,
         continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,

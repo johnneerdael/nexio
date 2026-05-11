@@ -252,6 +252,54 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
     }
 }
 
+/**
+ * Plan B Task 5a — drives [HomeUiState.classicHomePresentation] from
+ * [_displayCatalogRows] (the rendering-shape CatalogRow source) joined with
+ * the typed-surface-derived [HomeUiState.resolvedRailRows]. Mirrors
+ * [observeModernHomePresentationPipeline].
+ *
+ * Classic Home consumes the resulting [ClassicHomePresentationState] directly
+ * instead of taking `displayCatalogRows` as a parameter — paving the way for
+ * Task 5e (`_displayCatalogRows` retirement) without re-touching Classic.
+ *
+ * Reference stability is preserved by [buildClassicHomePresentation]'s outer-list
+ * memoization; the `_uiState.update { ... }` short-circuit below avoids
+ * Compose recomposition when the presentation is `===` to the previous state.
+ */
+@OptIn(FlowPreview::class)
+internal fun HomeViewModel.observeClassicHomePresentationPipeline() {
+    viewModelScope.launch {
+        combine(
+            _displayCatalogRows,
+            _uiState
+        ) { catalogRows, state ->
+            ClassicHomePresentationInput(
+                catalogRows = catalogRows,
+                resolvedRailRows = state.resolvedRailRows
+            )
+        }
+            .distinctUntilChanged()
+            .debounce(80)
+            .collectLatest { input ->
+                val capturedGeneration = homeProfileGeneration
+                val presentation = withContext(Dispatchers.Default) {
+                    buildClassicHomePresentation(
+                        input = input,
+                        cache = classicHomePresentationBuildCache
+                    )
+                }
+                if (!isCurrentHomeProfileGeneration(capturedGeneration)) return@collectLatest
+                _uiState.update { current ->
+                    if (current.classicHomePresentation === presentation) {
+                        current
+                    } else {
+                        current.copy(classicHomePresentation = presentation)
+                    }
+                }
+            }
+    }
+}
+
 internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.preferExternalMetaAddonDetail
