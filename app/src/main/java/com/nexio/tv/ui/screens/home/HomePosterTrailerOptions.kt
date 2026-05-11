@@ -8,6 +8,7 @@ internal data class HomePosterTrailerPlayback(
     val videoUrl: String,
     val audioUrl: String? = null,
     val userAgent: String? = null,
+    val captions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack> = emptyList(),
     val heroPreview: HeroPreview? = null
 )
 
@@ -34,7 +35,8 @@ internal fun playableHomeTrailerFor(
     item: com.nexio.tv.domain.model.MetaPreview? = null,
     previewUrls: Map<String, String>,
     previewAudioUrls: Map<String, String>,
-    previewUserAgents: Map<String, String> = emptyMap()
+    previewUserAgents: Map<String, String> = emptyMap(),
+    previewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>> = emptyMap()
 ): HomePosterTrailerPlayback? {
     val videoUrl = previewUrls[itemId]?.takeIf { it.isNotBlank() } ?: return null
     return HomePosterTrailerPlayback(
@@ -43,6 +45,7 @@ internal fun playableHomeTrailerFor(
         videoUrl = videoUrl,
         audioUrl = previewAudioUrls[itemId]?.takeIf { it.isNotBlank() },
         userAgent = previewUserAgents[itemId]?.takeIf { it.isNotBlank() },
+        captions = previewCaptions[itemId].orEmpty(),
         heroPreview = item?.toHomeHeroPreview()
     )
 }

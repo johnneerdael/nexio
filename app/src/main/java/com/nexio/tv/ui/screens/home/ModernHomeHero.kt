@@ -65,6 +65,7 @@ internal fun ModernHeroMediaLayer(
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
     trailerPreviewUserAgent: String?,
+    trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>,
     showLoadingIndicator: Boolean,
     trailerMuted: Boolean,
     showFullscreenHint: Boolean,
@@ -117,6 +118,7 @@ internal fun ModernHeroMediaLayer(
                 trailerUrl = trailerPreviewUrl,
                 trailerAudioUrl = trailerPreviewAudioUrl,
                 trailerUserAgent = trailerPreviewUserAgent,
+                trailerCaptions = trailerPreviewCaptions,
                 isPlaying = true,
                 onEnded = {
                     trailerFirstFrameRendered = false

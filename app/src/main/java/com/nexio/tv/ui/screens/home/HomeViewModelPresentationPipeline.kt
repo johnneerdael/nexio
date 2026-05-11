@@ -464,6 +464,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
             trailerPreviewUrls = trailerPreviewUrlsState,
             trailerPreviewAudioUrls = trailerPreviewAudioUrlsState,
             trailerPreviewUserAgents = trailerPreviewUserAgentsState,
+            trailerPreviewCaptions = trailerPreviewCaptionsState,
             trailerPreviewExternalUrls = trailerPreviewExternalUrlsState,
             trailerPreviewNegativeCache = trailerPreviewNegativeCache
         )
@@ -501,6 +502,7 @@ internal fun publishHomeTrailerPreviewResolution(
     trailerPreviewUrls: MutableMap<String, String>,
     trailerPreviewAudioUrls: MutableMap<String, String>,
     trailerPreviewUserAgents: MutableMap<String, String>,
+    trailerPreviewCaptions: MutableMap<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>,
     trailerPreviewExternalUrls: MutableMap<String, String>,
     trailerPreviewNegativeCache: MutableMap<String, Boolean>
 ): Boolean {
@@ -511,6 +513,8 @@ internal fun publishHomeTrailerPreviewResolution(
                 ?: trailerPreviewAudioUrls.remove(itemId)
             result.source.userAgent?.takeIf { it.isNotBlank() }?.let { trailerPreviewUserAgents[itemId] = it }
                 ?: trailerPreviewUserAgents.remove(itemId)
+            result.source.captions.takeIf { it.isNotEmpty() }?.let { trailerPreviewCaptions[itemId] = it }
+                ?: trailerPreviewCaptions.remove(itemId)
             trailerPreviewExternalUrls.remove(itemId)
             trailerPreviewNegativeCache.remove(itemId)
             true
@@ -519,6 +523,7 @@ internal fun publishHomeTrailerPreviewResolution(
             trailerPreviewUrls.remove(itemId)
             trailerPreviewAudioUrls.remove(itemId)
             trailerPreviewUserAgents.remove(itemId)
+            trailerPreviewCaptions.remove(itemId)
             trailerPreviewExternalUrls[itemId] = result.url
             trailerPreviewNegativeCache.remove(itemId)
             true
