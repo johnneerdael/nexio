@@ -39,7 +39,9 @@ data class HydratedHomeOverlay(
     val updatedAtMs: Long,
     val staleAtMs: Long,
     val expiresAtMs: Long,
-    val state: HomeItemHydrationState = HomeItemHydrationState.CANONICAL_READY
+    val state: HomeItemHydrationState = HomeItemHydrationState.CANONICAL_READY,
+    val stableIdsSnapshot: ProviderIds = ProviderIds(),
+    val settingsSignature: String = ""
 ) {
     init {
         require(displayHash == fields.hydratedHomeDisplayHash()) {
@@ -72,7 +74,9 @@ fun HydratedHomeOverlay.contentEquals(other: HydratedHomeOverlay): Boolean =
         fields == other.fields &&
         fieldTrace == other.fieldTrace &&
         displayHash == other.displayHash &&
-        state == other.state
+        state == other.state &&
+        stableIdsSnapshot == other.stableIdsSnapshot &&
+        settingsSignature == other.settingsSignature
 
 fun hydratedHomeOverlayKey(
     canonicalProvider: ProviderId,
