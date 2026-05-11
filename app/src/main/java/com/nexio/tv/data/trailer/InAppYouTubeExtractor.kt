@@ -320,6 +320,16 @@ class InAppYouTubeExtractor @Inject constructor(
                 if (!hlsManifestUrl.isNullOrBlank()) {
                     manifestUrls += Triple(client.key, client.priority, hlsManifestUrl)
                 }
+                // YoutubeExplode StreamClient.cs:235-251 — DASH manifests
+                // carry the richest adaptive set (4K when available) for
+                // clients that return one (typically TVHTML5). HLS is
+                // preferred when both are present (priority + 10 on DASH).
+                // Media3's DefaultMediaSourceFactory dispatches by URL/MIME
+                // to DashMediaSource automatically.
+                val dashManifestUrl = streamingData.stringValue("dashManifestUrl")
+                if (!dashManifestUrl.isNullOrBlank()) {
+                    manifestUrls += Triple(client.key, client.priority + 10, dashManifestUrl)
+                }
 
                 val formats = streamingData.listMapValue("formats")
                 for (i in formats.indices) {
