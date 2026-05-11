@@ -1,6 +1,6 @@
 package com.nexio.tv.data.trailer.cipher
 
-internal data class CipherManifest(
+data class CipherManifest(
     val signatureTimestamp: String,
     val operations: List<CipherOperation>
 ) {

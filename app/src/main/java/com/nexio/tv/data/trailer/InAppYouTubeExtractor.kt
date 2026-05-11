@@ -7,8 +7,11 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.integration.youtube.YouTubeTrailerIntegrationProvider
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransportCall
+import com.nexio.tv.data.trailer.cipher.PlayerSourceCache
+import com.nexio.tv.data.trailer.cipher.SignatureCipherDecoder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -201,7 +204,8 @@ internal fun lookupClientUserAgentForTest(clientKey: String?): String? =
 
 @Singleton
 class InAppYouTubeExtractor @Inject constructor(
-    private val integrationProvider: YouTubeTrailerIntegrationProvider
+    private val integrationProvider: YouTubeTrailerIntegrationProvider,
+    private val playerSourceCache: PlayerSourceCache
 ) {
     private val gson = Gson()
     private val concurrencyLimiter = Semaphore(EXTRACTOR_MAX_CONCURRENCY)
@@ -266,6 +270,17 @@ class InAppYouTubeExtractor @Inject constructor(
         val apiKey = watchConfig.apiKey
             ?: throw IllegalStateException("Unable to extract INNERTUBE_API_KEY")
 
+        return coroutineScope {
+        // Kick off the player-JS fetch + cipher manifest parse in parallel
+        // with the per-client player API calls. The TVHTML5 client returns
+        // signatureCipher fields rather than direct URLs; without a manifest
+        // those entries get dropped at the format-collection branches below.
+        val cipherManifestDeferred = async {
+            val playerJsUrl = playerSourceCache.extractPlayerJsUrl(watchResponse.body)
+                ?: return@async null
+            playerSourceCache.getCipherManifest(playerJsUrl)
+        }
+
         val progressive = mutableListOf<StreamCandidate>()
         val adaptiveVideo = mutableListOf<StreamCandidate>()
         val adaptiveAudio = mutableListOf<StreamCandidate>()
@@ -307,7 +322,13 @@ class InAppYouTubeExtractor @Inject constructor(
                 }
 
                 for (format in streamingData.listMapValue("formats")) {
-                    val url = format.stringValue("url") ?: continue
+                    val url = format.stringValue("url") ?: run {
+                        val signatureCipher = format.stringValue("signatureCipher")
+                            ?: format.stringValue("cipher")
+                            ?: return@run null
+                        val manifest = cipherManifestDeferred.await() ?: return@run null
+                        SignatureCipherDecoder.decode(signatureCipher, manifest)
+                    } ?: continue
                     val mimeType = format.stringValue("mimeType").orEmpty()
                     if (!mimeType.contains("video/") && mimeType.isNotBlank()) continue
 
@@ -333,7 +354,13 @@ class InAppYouTubeExtractor @Inject constructor(
                 }
 
                 for (format in streamingData.listMapValue("adaptiveFormats")) {
-                    val url = format.stringValue("url") ?: continue
+                    val url = format.stringValue("url") ?: run {
+                        val signatureCipher = format.stringValue("signatureCipher")
+                            ?: format.stringValue("cipher")
+                            ?: return@run null
+                        val manifest = cipherManifestDeferred.await() ?: return@run null
+                        SignatureCipherDecoder.decode(signatureCipher, manifest)
+                    } ?: continue
                     val mimeType = format.stringValue("mimeType").orEmpty()
                     val hasVideo = mimeType.contains("video/")
                     val hasAudio = mimeType.contains("audio/") || mimeType.startsWith("audio/")
@@ -385,7 +412,7 @@ class InAppYouTubeExtractor @Inject constructor(
         }
 
         if (manifestUrls.isEmpty() && progressive.isEmpty() && adaptiveVideo.isEmpty() && adaptiveAudio.isEmpty()) {
-            return null
+            return@coroutineScope null
         }
 
         var bestManifest: ManifestCandidate? = null
@@ -448,7 +475,7 @@ class InAppYouTubeExtractor @Inject constructor(
         )?.copy(
             captions = resolvedCaptionTracks,
             signingClientKey = resolvedClientKey
-        ) ?: return null
+        ) ?: return@coroutineScope null
 
         if (BuildConfig.DEBUG) {
             Log.d(
@@ -464,7 +491,8 @@ class InAppYouTubeExtractor @Inject constructor(
             )
         }
 
-        return playbackSource
+        playbackSource
+        } // end coroutineScope
     }
 
     private fun extractVideoId(input: String): String? {

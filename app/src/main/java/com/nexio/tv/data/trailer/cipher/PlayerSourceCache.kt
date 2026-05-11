@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
  * invalidates.
  */
 @Singleton
-internal class PlayerSourceCache @Inject constructor() {
+class PlayerSourceCache @Inject constructor() {
 
     private val mutex = Mutex()
     private var cachedUrl: String? = null
