@@ -3,7 +3,16 @@ package com.nexio.tv.data.trailer
 data class TrailerPlaybackSource(
     val videoUrl: String,
     val audioUrl: String? = null,
-    val userAgent: String? = null
+    val userAgent: String? = null,
+    val captions: List<YouTubeCaptionTrack> = emptyList()
+)
+
+data class YouTubeCaptionTrack(
+    val baseUrl: String,
+    val languageCode: String,
+    val languageName: String? = null,
+    val kind: String? = null,
+    val isTranslatable: Boolean = false
 )
 
 internal fun selectPreferredTrailerPlaybackSource(

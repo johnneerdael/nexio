@@ -2833,6 +2833,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = trailerResult.source.videoUrl,
                         trailerAudioUrl = trailerResult.source.audioUrl,
                         trailerUserAgent = trailerResult.source.userAgent,
+                        trailerCaptions = trailerResult.source.captions,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false,
@@ -2848,6 +2849,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = null,
                         trailerAudioUrl = null,
                         trailerUserAgent = null,
+                        trailerCaptions = emptyList(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
@@ -2934,6 +2936,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = recapSource?.videoUrl,
                         trailerAudioUrl = recapSource?.audioUrl,
                         trailerUserAgent = recapSource?.userAgent,
+                        trailerCaptions = recapSource?.captions.orEmpty(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (recapSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
@@ -3025,6 +3028,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = seasonTrailerSource?.videoUrl,
                         trailerAudioUrl = seasonTrailerSource?.audioUrl,
                         trailerUserAgent = seasonTrailerSource?.userAgent,
+                        trailerCaptions = seasonTrailerSource?.captions.orEmpty(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (seasonTrailerSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
