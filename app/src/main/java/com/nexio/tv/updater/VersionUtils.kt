@@ -36,4 +36,11 @@ internal object VersionUtils {
         }
         return false
     }
+
+    fun pickNewer(a: String?, b: String?): String? = when {
+        a == null -> b
+        b == null -> a
+        isRemoteNewer(a, b) -> a
+        else -> b
+    }
 }
