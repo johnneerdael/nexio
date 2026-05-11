@@ -234,6 +234,11 @@ class SubtitleTranslationService @Inject constructor(
                 $sourceClause
             """.trimIndent()
         }
+
+        internal val SRT_TIMESTAMP_REGEX =
+            Regex("""\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}""")
+        internal val SRT_CUE_HEADER_REGEX = Regex("""(^|\n)\s*1\s*\r?\n""")
+
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
@@ -2064,6 +2069,116 @@ class SubtitleTranslationService @Inject constructor(
             model = SubtitleTranslationDefaults.GEMINI_MODEL,
             baseUrl = SubtitleTranslationDefaults.GEMINI_BASE_URL
         )
+    }
+
+    // ---------------------------------------------------------------------------
+    // Atomic SRT translation (trailer captions)
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Pluggable seam for tests. In production this delegates to
+     * executeRawTranslationRequest. Tests inject a fake responder via
+     * [forAtomicTranslationTest].
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var atomicRawResponder: (
+        systemPrompt: String,
+        userPayload: String,
+        sourceLanguageName: String,
+        targetLanguageName: String,
+        settings: SubtitleTranslationSettings
+    ) -> String? = { systemPrompt, userPayload, sourceLanguageName, targetLanguageName, settings ->
+        executeRawTranslationRequest(
+            systemPrompt = systemPrompt,
+            userPayload = userPayload,
+            sourceLanguageName = sourceLanguageName,
+            targetLanguageName = targetLanguageName,
+            settings = settings
+        )
+    }
+
+    /**
+     * Translate a complete SRT body in a single provider call. Trailer
+     * captions are short (~10–50 cues, 1–3 KB) so chunking adds latency
+     * without benefit. Validates the response parses as SRT with the same
+     * cue count as the input; returns null on any failure so the caller
+     * can fall back to source-language captions.
+     *
+     * Designed for TrailerSubtitleCache; the stream subtitle pipeline
+     * continues to use the chunked translateRawSubRipText path.
+     */
+    suspend fun translateSrtAtomically(
+        srt: String,
+        sourceLanguageCode: String,
+        targetLanguageCode: String,
+        settings: SubtitleTranslationSettings
+    ): String? = withContext(Dispatchers.IO) {
+        val normalizedSettings = settings.copy(apiKey = settings.apiKey.trim())
+        if (!normalizedSettings.enabled) return@withContext null
+        if (normalizedSettings.apiKey.isBlank()) return@withContext null
+        if (srt.isBlank()) return@withContext null
+
+        val sourceCueCount = countSrtCues(srt)
+        if (sourceCueCount == 0) return@withContext null
+
+        val targetLanguageName = displayLanguage(targetLanguageCode)
+        val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
+        val systemPrompt = buildAtomicSrtSystemPrompt(
+            sourceLanguageName = sourceLanguageName,
+            targetLanguageName = targetLanguageName
+        )
+
+        val raw = runCatching {
+            atomicRawResponder.invoke(
+                systemPrompt,
+                srt,
+                sourceLanguageName,
+                targetLanguageName,
+                normalizedSettings
+            )
+        }.getOrNull() ?: return@withContext null
+
+        val cleaned = stripConversationalPreamble(raw)
+        val translatedCueCount = countSrtCues(cleaned)
+        if (translatedCueCount != sourceCueCount) {
+            return@withContext null
+        }
+        cleaned
+    }
+
+    private fun buildAtomicSrtSystemPrompt(
+        sourceLanguageName: String,
+        targetLanguageName: String
+    ): String {
+        val sourceClause = if (sourceLanguageName.equals("auto", ignoreCase = true)) {
+            "the source language"
+        } else {
+            sourceLanguageName
+        }
+        return """
+            You are a subtitle translator. Translate the SRT content below
+            from $sourceClause into $targetLanguageName.
+
+            Rules:
+            1. Preserve every cue number line and every timestamp line
+               (HH:MM:SS,mmm --> HH:MM:SS,mmm) exactly as written.
+            2. Translate only the text-content lines between the timestamp
+               and the blank-line separator. Replace each source-language
+               text with its $targetLanguageName translation.
+            3. Keep the same total number of cues. Do not merge, drop, or
+               add cues.
+            4. Output the full translated SRT and nothing else — no
+               commentary, no markdown fences, no preamble.
+        """.trimIndent()
+    }
+
+    private fun countSrtCues(srt: String): Int {
+        return SRT_TIMESTAMP_REGEX.findAll(srt).count()
+    }
+
+    private fun stripConversationalPreamble(raw: String): String {
+        val firstCueIndex = SRT_CUE_HEADER_REGEX.find(raw)?.range?.first ?: return raw
+        return if (firstCueIndex == 0) raw else raw.substring(firstCueIndex).trimStart('\n')
     }
 
     private fun displayLanguage(code: String): String {
