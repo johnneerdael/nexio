@@ -58,6 +58,11 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.ui.screens.home.order.EffectiveHomeRailOrder
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
+import com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -264,8 +269,12 @@ class HomeViewModelFocusHydrationTest {
 
         assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
         assertNull(viewModel.catalogUpdateJob)
-        assertEquals(1, traceSink.events.size)
-        val traceEvent = traceSink.events.single()
+        // Filter for home.hydration_ignored specifically — init and pipeline boot
+        // also emit trace events (profile session started, trailer surface synced)
+        // that are unrelated to the assertion under test.
+        val hydrationIgnoredEvents = traceSink.events.filter { it.eventType == "home.hydration_ignored" }
+        assertEquals(1, hydrationIgnoredEvents.size)
+        val traceEvent = hydrationIgnoredEvents.single()
         val tracePayload = traceEvent.payload as Map<*, *>
         assertEquals("home.hydration_ignored", traceEvent.eventType)
         assertEquals("movie:${visible.id}", tracePayload["itemKey"])
@@ -1341,6 +1350,21 @@ class HomeViewModelFocusHydrationTest {
             projectionCache = ResolvedDisplayProjectionCache(),
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
+            catalogItemCrossIdEnricher = CatalogItemCrossIdEnricher(
+                idMappingStore = InMemoryIdMappingStore(),
+                stableIdBundleResolver = StableIdBundleResolver(
+                    idMappingStore = InMemoryIdMappingStore(),
+                    lookup = object : StableIdBundleResolver.Lookup {
+                        override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                        override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                        override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                        override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                        override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                        override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+                    }
+                ),
+                animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+            ),
             homeHydrationCoordinator = homeHydrationCoordinator,
             traceEvents = traceEvents,
             premiumArtworkInvalidationNotifier = premiumArtworkInvalidationNotifier,
