@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -40,12 +41,10 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
-import com.nexio.tv.data.trailer.TrailerSubtitleFormat
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YouTubeCaptionTrack
 import com.nexio.tv.data.trailer.YouTubeWireProfile
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
-import com.nexio.tv.data.trailer.buildTrailerSubtitleUrl
 import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
@@ -117,13 +116,19 @@ fun TrailerPlayer(
     val playerSettingsSnapshot by playerSettingsDataStore.playerSettings
         .collectAsStateWithLifecycle(initialValue = null)
     val preferredSubtitleLanguage = playerSettingsSnapshot?.subtitleStyle?.preferredLanguage
-    val subtitleConfig = remember(trailerCaptions, preferredSubtitleLanguage) {
+    val subtitleCache = remember(context) { TrailerSubtitleCacheAccess.from(context) }
+    val videoIdForSubtitles = trailerUrl?.let { extractYouTubeVideoIdForSubtitles(it) }
+    var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage, videoIdForSubtitles) {
+        mutableStateOf<MediaItem.SubtitleConfiguration?>(null)
+    }
+    LaunchedEffect(trailerCaptions, preferredSubtitleLanguage, videoIdForSubtitles) {
+        subtitleConfig = null
+        val videoId = videoIdForSubtitles ?: return@LaunchedEffect
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
-            ?: return@remember null
-        val format = TrailerSubtitleFormat.TTML
-        val subtitleUrl = buildTrailerSubtitleUrl(selected, format)
-        MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
-            .setMimeType(format.mimeType)
+            ?: return@LaunchedEffect
+        val cachedUri = subtitleCache.ensure(videoId, selected) ?: return@LaunchedEffect
+        subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(cachedUri))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
             .setLanguage(selected.languageCode)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
@@ -349,9 +354,9 @@ fun TrailerPlayer(
         // host header dispatch in place, the sideloaded TTML URL on
         // youtube.com timedtext fetches with web headers (no 429),
         // and we don't poke alternate-rendition URLs.
-        if (subtitleConfig == null) return@LaunchedEffect
+        val activeSubtitleConfig = subtitleConfig ?: return@LaunchedEffect
         val builder = player.trackSelectionParameters.buildUpon()
-            .setPreferredTextLanguage(subtitleConfig.language)
+            .setPreferredTextLanguage(activeSubtitleConfig.language)
         player.trackSelectionParameters = builder.build()
     }
 
@@ -502,4 +507,12 @@ fun TrailerPlayer(
             )
         }
     }
+}
+
+private val YOUTUBE_VIDEO_ID_QUERY_REGEX = Regex("""[?&]v=([a-zA-Z0-9_-]{11})""")
+private val YOUTUBE_VIDEO_ID_SHORT_REGEX = Regex("""youtu\.be/([a-zA-Z0-9_-]{11})""")
+
+private fun extractYouTubeVideoIdForSubtitles(youtubeUrl: String): String? {
+    YOUTUBE_VIDEO_ID_QUERY_REGEX.find(youtubeUrl)?.groupValues?.getOrNull(1)?.let { return it }
+    return YOUTUBE_VIDEO_ID_SHORT_REGEX.find(youtubeUrl)?.groupValues?.getOrNull(1)
 }
