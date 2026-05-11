@@ -67,6 +67,7 @@ private const val KEY_REPEAT_THROTTLE_MS = 80L
 @Composable
 fun GridHomeContent(
     uiState: HomeUiState,
+    presentation: GridHomePresentationState,
     continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -105,15 +106,13 @@ fun GridHomeContent(
     val gridItems = uiState.gridItems
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
 
-    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = remember(uiState.resolvedRailRows) {
-        val builder = mutableMapOf<String, ModernHomeRowItem>()
-        uiState.resolvedRailRows.forEach { rail ->
-            rail.items.forEach { resolved ->
-                builder[resolved.itemKey] = resolved
-            }
-        }
-        builder
-    }
+    // Plan B Task 5b — Grid Home now consumes the typed-surface
+    // [GridHomePresentationState]. The ViewModel-side
+    // [observeGridHomePresentationPipeline] builds the resolved-item lookup map
+    // with reference-stable memoization (CLAUDE.md rule #5). Compose-side
+    // recomputation of this map on every uiState.resolvedRailRows reference flip
+    // is gone — `presentation.resolvedItemsByItemKey` is already canonical.
+    val resolvedItemsByItemKey: Map<String, ModernHomeRowItem> = presentation.resolvedItemsByItemKey
 
     // Build index-to-section mapping for sticky header
     val sectionMapping = remember(gridItems, continueWatchingOffset) {
