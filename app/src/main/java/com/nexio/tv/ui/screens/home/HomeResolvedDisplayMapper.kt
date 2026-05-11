@@ -6,6 +6,7 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
+import com.nexio.tv.core.metadata.router.IdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
@@ -103,14 +104,71 @@ internal object HomeResolvedDisplayMapper {
         cache.clear()
     }
 
+    /**
+     * Cross-id-aware variant of [toResolvedDisplayItems]. Consults [idMappingStore] when
+     * looking up the hydrated overlay for each row item, enriching tmdb/tvdb-keyed rows
+     * with any cached imdb-form alias so they can match overlays stored under a different
+     * provider key.
+     *
+     * This overload is `suspend` because the [IdMappingStore] lookup is async. Callers in
+     * coroutine contexts (e.g. [HomeViewModelCatalogPipeline]) should prefer this overload.
+     * The existing non-suspend [toResolvedDisplayItems] remains unchanged for compatibility
+     * with test helpers and non-coroutine call sites.
+     */
+    suspend fun toResolvedDisplayItemsEnriched(
+        rows: List<CatalogRow>,
+        overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+        idMappingStore: IdMappingStore,
+        nowMs: Long = System.currentTimeMillis(),
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
+        traceEvents: TraceMetadataEvents? = null
+    ): List<ResolvedDisplayItem> {
+        val items = rows.flatMap { row -> row.items }
+        // Collect cache hits synchronously first; misses need suspend overlay lookup.
+        val result = mutableListOf<ResolvedDisplayItem>()
+        val activeKeys = HashSet<MapperCacheKey>(items.size)
+        for (i in items.indices) {
+            val item = items[i]
+            val itemKey = homeDisplayItemKey(item.apiType, item.id)
+            val overlay = item.overlayFromMapEnriched(overlaysByItemKey, idMappingStore)
+            val cacheKey = MapperCacheKey(
+                itemKey = itemKey,
+                metaContentHash = item.hashCode(),
+                overlayContentHash = overlay?.hashCode() ?: 0
+            )
+            activeKeys += cacheKey
+            val cached = synchronized(this) { cache[cacheKey] }
+            if (cached != null) {
+                result += cached
+            } else {
+                val computed = item.toResolvedDisplayItemWithOverlay(
+                    overlay, nowMs, resolveTrailer, traceEvents
+                )
+                synchronized(this) { cache[cacheKey] = computed }
+                result += computed
+            }
+        }
+        synchronized(this) { cache.keys.retainAll(activeKeys) }
+        return result
+    }
+
     private fun MetaPreview.toResolvedDisplayItem(
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         nowMs: Long,
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
         traceEvents: TraceMetadataEvents? = null
     ): ResolvedDisplayItem {
-        val itemKey = homeDisplayItemKey(apiType, id)
         val overlay = overlayFromMap(overlaysByItemKey)
+        return toResolvedDisplayItemWithOverlay(overlay, nowMs, resolveTrailer, traceEvents)
+    }
+
+    private fun MetaPreview.toResolvedDisplayItemWithOverlay(
+        overlay: HydratedHomeOverlay?,
+        nowMs: Long,
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
+        traceEvents: TraceMetadataEvents? = null
+    ): ResolvedDisplayItem {
+        val itemKey = homeDisplayItemKey(apiType, id)
 
         val firstPaintSlots = toFirstPaintSlots(nowMs)
         val overlaySlots = overlay?.toResolvedSlots(nowMs, isStale = overlay.isStale(nowMs))

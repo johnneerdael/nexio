@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.metadata.router.IdMappingStore
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -36,6 +37,36 @@ internal fun MetaPreview.overlayFromMap(
         providerIds = firstPaintStableIds,
         canonicalProvider = null,
         canonicalId = null
+    )
+    return aliases.asSequence()
+        .filter { it != rowKey }
+        .mapNotNull { overlaysByItemKey[it] }
+        .firstOrNull()
+}
+
+/**
+ * Cross-id-aware variant of [overlayFromMap]. Consults [IdMappingStore] to enrich
+ * [firstPaintStableIds] with any cached imdb id before computing the alias set, allowing
+ * a TMDB-keyed row to match an overlay stored under an imdb-form alias by another rail.
+ *
+ * Cache-miss path: delegates to the standard alias set, equivalent to [overlayFromMap].
+ * No network call.
+ */
+internal suspend fun MetaPreview.overlayFromMapEnriched(
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    idMappingStore: IdMappingStore
+): HydratedHomeOverlay? {
+    if (overlaysByItemKey.isEmpty()) return null
+    val rowKey = homeOverlayItemKey()
+    overlaysByItemKey[rowKey]?.let { return it }
+    val aliases = HomeArtworkOverlayKeys.aliasesForEnriched(
+        rowItemKey = rowKey,
+        contentId = id,
+        itemType = apiType,
+        providerIds = firstPaintStableIds,
+        canonicalProvider = null,
+        canonicalId = null,
+        idMappingStore = idMappingStore
     )
     return aliases.asSequence()
         .filter { it != rowKey }
