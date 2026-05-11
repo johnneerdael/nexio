@@ -107,7 +107,7 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
 internal fun hasRenderableHomeContent(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
-    heroItems: List<MetaPreview>,
+    heroItemsNonEmpty: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>
 ): Boolean {
     val hasCatalogContent = catalogRows.any { row ->
@@ -116,19 +116,19 @@ internal fun hasRenderableHomeContent(
     }
     return hasCatalogContent ||
         continueWatchingItems.isNotEmpty() ||
-        heroItems.isNotEmpty()
+        heroItemsNonEmpty
 }
 
 internal fun shouldShowHomeEmptyState(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
-    heroItems: List<MetaPreview>,
+    heroItemsNonEmpty: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     return !startupContentGateTimedOut &&
-        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItems, continueWatchingItems, startupContentGateTimedOut) &&
-        !hasRenderableHomeContent(uiState, catalogRows, heroItems, continueWatchingItems) &&
+        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItemsNonEmpty, continueWatchingItems, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState, catalogRows, heroItemsNonEmpty, continueWatchingItems) &&
         !uiState.isLoading &&
         uiState.error == null
 }
@@ -163,14 +163,14 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
-    val displayHeroItems by viewModel.displayHeroItems.collectAsStateWithLifecycle()
+    val heroItemsNonEmpty by viewModel.heroItemsNonEmpty.collectAsStateWithLifecycle()
     val displayContinueWatchingItems by viewModel.displayContinueWatchingItems.collectAsStateWithLifecycle()
     val resolvedContinueWatchingItems by viewModel.resolvedContinueWatchingItems.collectAsStateWithLifecycle()
     val resolvedHeroItems by viewModel.resolvedHeroItems.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
         mutableStateOf(false)
@@ -178,11 +178,11 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems, startupContentGateTimedOut)
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut)
     val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
         uiState = uiState,
         catalogRows = displayCatalogRows,
-        heroItems = displayHeroItems,
+        heroItemsNonEmpty = heroItemsNonEmpty,
         continueWatchingItems = displayContinueWatchingItems,
         startupContentGateTimedOut = false
     )
@@ -334,7 +334,7 @@ fun HomeScreen(
                 }
             }
 
-            shouldShowHomeEmptyState(uiState, displayCatalogRows, displayHeroItems, displayContinueWatchingItems, startupContentGateTimedOut) -> {
+            shouldShowHomeEmptyState(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -367,7 +367,6 @@ fun HomeScreen(
                         HomeLayout.CLASSIC -> ClassicHomeRoute(
                             viewModel = viewModel,
                             uiState = uiState,
-                            displayHeroItems = displayHeroItems,
                             resolvedContinueWatchingItems = resolvedContinueWatchingItems,
                             resolvedHeroItems = resolvedHeroItems,
                             posterCardStyle = posterCardStyle,
@@ -664,7 +663,6 @@ fun HomeScreen(
 private fun ClassicHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
-    displayHeroItems: List<MetaPreview>,
     resolvedContinueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     resolvedHeroItems: List<HeroDisplayItem>,
     posterCardStyle: PosterCardStyle,
@@ -683,7 +681,6 @@ private fun ClassicHomeRoute(
     ClassicHomeContent(
         uiState = uiState,
         presentation = uiState.classicHomePresentation,
-        heroItems = displayHeroItems,
         continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,

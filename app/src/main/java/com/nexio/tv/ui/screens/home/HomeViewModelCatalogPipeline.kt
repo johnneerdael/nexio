@@ -177,7 +177,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
 
         withContext(Dispatchers.Main.immediate) {
             val hasRenderedContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
-                _displayHeroItems.value.isNotEmpty()
+                _heroItemKeys.value.isNotEmpty()
             if (hasRenderedContent) {
                 return@withContext
             }
@@ -292,7 +292,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogOrderDiagnosticsSignature = null
     catalogInventoryRepository.clear()
     _displayCatalogRows.value = emptyList()
-    _displayHeroItems.value = emptyList()
+    _heroItemKeys.value = emptyList()
     _displayContinueWatchingItems.value = emptyList()
     _uiState.update { state ->
         state.copy(
@@ -2262,7 +2262,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
 
     try {
         val hasRestoredContent = _displayCatalogRows.value.any { it.items.isNotEmpty() } ||
-            _displayHeroItems.value.isNotEmpty()
+            _heroItemKeys.value.isNotEmpty()
         val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
             catalogsLoadInProgress = catalogsLoadInProgress,
             traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
@@ -3018,7 +3018,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val hasCurrentRenderedContent = hasRenderableHomeContent(
         currentState,
         _displayCatalogRows.value,
-        _displayHeroItems.value,
+        heroItemsNonEmpty = _heroItemKeys.value.isNotEmpty(),
         _displayContinueWatchingItems.value
     )
     val shouldKeepVisibleContent =
@@ -3231,7 +3231,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     )
     catalogInventoryRepository.publish(composedSnapshot.fullRows)
     _displayCatalogRows.value = composedSnapshot.displayRows
-    _displayHeroItems.value = composedSnapshot.heroItems
+    publishHeroItemKeysFromMetas(composedSnapshot.heroItems)
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(

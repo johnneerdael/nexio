@@ -248,26 +248,37 @@ class HomeViewModel @Inject constructor(
      */
     fun observeCatalogRail(key: String): Flow<CatalogRow?> =
         catalogInventoryRepository.observeRail(key)
-    // Hero items held outside [HomeUiState] (mirrors small Task 26 catalogRows pattern) so
-    // Compose's SnapshotStateRecord history does not pin prior MetaPreview lists alongside
-    // the current set. UI consumes this StateFlow directly; do not re-introduce a
-    // heroItems field on HomeUiState.
-    internal val _displayHeroItems = MutableStateFlow<List<MetaPreview>>(emptyList())
-    val displayHeroItems: StateFlow<List<MetaPreview>> = _displayHeroItems.asStateFlow()
+    // Hero keys held outside [HomeUiState] (mirrors small Task 26 catalogRows pattern) so
+    // Compose's SnapshotStateRecord history does not pin prior key lists alongside the
+    // current set. UI consumes [heroItemsNonEmpty] (for gating) and [resolvedHeroItems]
+    // (for rendering); do not re-introduce a heroItems / displayHeroItems flow of
+    // MetaPreview here. The typed-surface authority
+    // ([ResolvedDisplaySurfaceRepository.observeHomeSurface]) is the rendering source.
+    //
+    // Plan B Task 5d (2026-05-11): `_displayHeroItems` was retired. The legacy
+    // `MutableStateFlow<List<MetaPreview>>` produced fresh `List<MetaPreview>` per
+    // emission and was observed by Compose via `collectAsStateWithLifecycle`, pinning
+    // prior emissions through SnapshotStateRecord (CLAUDE.md hard rule #2). The
+    // producer pipeline now writes the typed key list to `_heroItemKeys` and the UI
+    // consumes `heroItemsNonEmpty` (a tiny Boolean) for gating decisions, leaving
+    // rendering to `resolvedHeroItems` (already a typed projection).
+    internal val _heroItemKeys = MutableStateFlow<List<RailItemKey>>(emptyList())
     /**
-     * Typed structure-only view of [_displayHeroItems]: each [MetaPreview]
-     * becomes a [RailItemKey]. Consumers that need typed authority lookup
-     * ([resolvedHeroItemsFlow]) read from this flow instead of
-     * [_displayHeroItems] so they don't depend on the legacy item shape.
-     *
-     * Plan B Phase 3.3 bridge — derived from [_displayHeroItems]. Phase 3.6
-     * will flip the producer to emit hero keys directly; this derivation
-     * goes away then. Hero list is small (~7 items), so the per-emission
-     * derivation cost is trivial.
+     * Typed key list driving [resolvedHeroItemsFlow]. Producer writes here at the
+     * same site that used to write `_displayHeroItems.value = composedSnapshot.heroItems`.
+     * Reference-stable via the writer's per-emission signature memoization (same key
+     * count + same key signature → same list reference).
      */
-    internal val heroItemKeys: StateFlow<List<RailItemKey>> = _displayHeroItems
-        .map { metas -> metas.map { RailItemKey(apiType = it.apiType, contentId = it.id) } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    internal val heroItemKeys: StateFlow<List<RailItemKey>> = _heroItemKeys.asStateFlow()
+    /**
+     * Boolean projection of [heroItemKeys] for HomeScreen gating decisions
+     * ([hasRenderableHomeContent], [shouldShowFullHomeLoadingGate]). UI surfaces no
+     * longer collect a `List<MetaPreview>` for hero gating — Compose's snapshot
+     * machinery only sees a Boolean, which has no history-pinning cost.
+     */
+    internal val heroItemsNonEmpty: StateFlow<Boolean> = _heroItemKeys
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     // Continue watching items held outside [HomeUiState] (mirrors small Task 26 catalogRows
     // pattern + cb59c1a5e heroItems pattern) so Compose's SnapshotStateRecord history does not
     // pin prior `ContinueWatchingItem` lists alongside the current set. UI consumes this
@@ -275,17 +286,16 @@ class HomeViewModel @Inject constructor(
     internal val _displayContinueWatchingItems = MutableStateFlow<List<ContinueWatchingItem>>(emptyList())
     val displayContinueWatchingItems: StateFlow<List<ContinueWatchingItem>> = _displayContinueWatchingItems.asStateFlow()
     // Resolved hero projection (Plan B Task 9). Held outside [HomeUiState] for the
-    // same reason as [_displayHeroItems] and [_displayCatalogRows] — Compose's
-    // SnapshotStateRecord chain pins prior versions of every observed list field
-    // (CLAUDE.md hard rule #2). Composable consumers collect this StateFlow
-    // directly. Derived from observeHomeSurface(profileId) joined with
-    // [_displayHeroItems] by itemKey; per-item projections are memoized via
-    // [ResolvedDisplayProjectionCache.projectHero] and the outer list is
-    // memoized via [ResolvedDisplayProjectionCache.internHeroList].
+    // same reason as [_displayCatalogRows] — Compose's SnapshotStateRecord chain
+    // pins prior versions of every observed list field (CLAUDE.md hard rule #2).
+    // Composable consumers collect this StateFlow directly. Derived from
+    // observeHomeSurface(profileId) joined with [heroItemKeys]; per-item projections
+    // are memoized via [ResolvedDisplayProjectionCache.projectHero] and the outer
+    // list is memoized via [ResolvedDisplayProjectionCache.internHeroList].
     internal val _resolvedHeroItems = MutableStateFlow<List<HeroDisplayItem>>(emptyList())
     val resolvedHeroItems: StateFlow<List<HeroDisplayItem>> = _resolvedHeroItems.asStateFlow()
     // Resolved CW projection (Plan B Surface 4 Phase 2). Held outside [HomeUiState]
-    // for the same reason as [_displayHeroItems] / [_displayCatalogRows] — Compose's
+    // for the same reason as [_displayCatalogRows] — Compose's
     // SnapshotStateRecord chain pins prior versions of every observed list field
     // (CLAUDE.md hard rule #2). Composable consumers collect this StateFlow
     // directly. Derived from observeHomeSurface(profileId) joined with
@@ -343,9 +353,10 @@ class HomeViewModel @Inject constructor(
             }
 
     // Plan B Task 9 — resolved-hero counterpart to [resolvedRailRowsFlow]. Joins
-    // the home surface's resolved items with the existing hero MetaPreview list
-    // (already populated by the legacy hero pipeline at [_displayHeroItems]) by
-    // itemKey, projects via [HeroDisplayItem.from] (memoized through
+    // the home surface's resolved items with the typed hero key list
+    // ([_heroItemKeys], written by the producer at the same site that used to
+    // populate the legacy `_displayHeroItems` MetaPreview list) by itemKey,
+    // projects via [HeroDisplayItem.from] (memoized through
     // projectionCache.projectHero), and stabilises the outer list reference via
     // internHeroList. Profile switches are handled via flatMapLatest on the
     // active profile session — same pattern as resolvedRailRowsFlow; the cache
@@ -747,6 +758,44 @@ class HomeViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+    }
+
+    /**
+     * Producer-side writer for [_heroItemKeys]. Memoizes by signature so a
+     * content-equal hero list re-emission preserves the existing list reference —
+     * downstream `combine(heroItemKeys)` in [resolvedHeroItemsFlow] and the
+     * `heroItemsNonEmpty` projection short-circuit on `===` when content is
+     * unchanged.
+     *
+     * Plan B Task 5d (2026-05-11). Replaces the legacy
+     * `_displayHeroItems.value = composedSnapshot.heroItems` write that produced
+     * fresh `List<MetaPreview>` per emission and pinned prior snapshots through
+     * Compose's `SnapshotStateRecord` chain (CLAUDE.md hard rule #2).
+     */
+    internal fun publishHeroItemKeysFromMetas(metas: List<MetaPreview>) {
+        val current = _heroItemKeys.value
+        if (current.size == metas.size) {
+            var same = true
+            for (i in metas.indices) {
+                val meta = metas[i]
+                val key = current[i]
+                if (key.apiType != meta.apiType || key.contentId != meta.id) {
+                    same = false
+                    break
+                }
+            }
+            if (same) return
+        }
+        if (metas.isEmpty()) {
+            _heroItemKeys.value = emptyList()
+            return
+        }
+        val out = ArrayList<RailItemKey>(metas.size)
+        for (i in metas.indices) {
+            val meta = metas[i]
+            out += RailItemKey(apiType = meta.apiType, contentId = meta.id)
+        }
+        _heroItemKeys.value = out
     }
 
     // Plan B Surface 4 Phase 2 — collects [resolvedContinueWatchingItemsFlow]
