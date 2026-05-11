@@ -3,7 +3,6 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -19,11 +18,8 @@ import com.nexio.tv.core.trace.TraceEventEnvelope
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
-import com.nexio.tv.domain.model.CatalogRow
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.Rail
 import com.nexio.tv.domain.model.RailItemKey
-import com.nexio.tv.domain.model.toRail
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -109,8 +105,6 @@ class HomeCatalogSnapshotStore private constructor(
     private val gson = Gson()
     private val traceSequence = AtomicLong(0L)
 
-    private val catalogRowListType = object : TypeToken<List<CatalogRow>>() {}.type
-    private val metaPreviewListType = object : TypeToken<List<MetaPreview>>() {}.type
     private val stringListType = object : TypeToken<List<String>>() {}.type
     private val railListType = object : TypeToken<List<Rail>>() {}.type
     private val railItemKeyListType = object : TypeToken<List<RailItemKey>>() {}.type
@@ -121,31 +115,19 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     /**
-     * In-memory + persisted snapshot.
+     * In-memory + persisted snapshot — structure-only.
      *
-     * Plan B Task 6d (schema v5) added the structure-only [rails] and
-     * [heroItemKeys] fields. They are populated automatically by [write]
-     * (derived from [catalogRows]/[fullCatalogRows] and [heroItems]) and
-     * round-trip through the persisted JSON. They have empty defaults so
-     * existing in-memory constructor call sites stay source-compatible.
+     * Plan B Task 6f.5 phase 3 dropped the legacy denormalized
+     * `catalogRows`/`fullCatalogRows`/`heroItems` fields. The structure-only
+     * [rails] + [heroItemKeys] are now the sole representation; row item
+     * content is reconstructed on-demand by consumers via the typed authority
+     * ([com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository]) +
+     * snapshot content lookup at apply time.
      *
-     * Plan B Task 6e gutted the ~920 LOC MetaPreview-content sanitization
-     * subsystem that previously ran on every read/write: premium-URL clearing,
-     * provider-tag mismatch detection, decision/asset ref repair, artwork-type
-     * boundary enforcement. The typed authority
-     * ([com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository]) is now
-     * the sole owner of MetaPreview content correctness upstream of write.
-     * The legacy denormalized [catalogRows]/[fullCatalogRows]/[heroItems]
-     * fields remain on this data class as transition support for pipeline
-     * filter helpers and the search corpus; a follow-up task will retire them
-     * once consumers consume rails + typed surface directly. Persistence still
-     * applies bounded caps via [capForPersist] so the on-disk file cannot grow
-     * unbounded across sessions.
+     * Persistence still applies a bounded cap via [capForPersist] so the
+     * on-disk file cannot grow unbounded across sessions.
      */
     data class Snapshot(
-        val catalogRows: List<CatalogRow>,
-        val fullCatalogRows: List<CatalogRow>,
-        val heroItems: List<MetaPreview>,
         val orderedGroupKeys: List<String> = emptyList(),
         val rails: List<Rail> = emptyList(),
         val heroItemKeys: List<RailItemKey> = emptyList()
@@ -200,9 +182,9 @@ class HomeCatalogSnapshotStore private constructor(
                     "success" to true,
                     "profileId" to profileId,
                     "snapshotFound" to true,
-                    "catalogRowCount" to decoded.catalogRows.size,
-                    "fullCatalogRowCount" to decoded.fullCatalogRows.size,
-                    "heroItemCount" to decoded.heroItems.size,
+                    "railCount" to decoded.rails.size,
+                    "heroItemKeyCount" to decoded.heroItemKeys.size,
+                    "orderedGroupKeyCount" to decoded.orderedGroupKeys.size,
                     "reason" to null
                 )
             )
@@ -259,9 +241,9 @@ class HomeCatalogSnapshotStore private constructor(
                 payload = mapOf(
                     "success" to success,
                     "profileId" to profileId,
-                    "catalogRowCount" to capped.catalogRows.size,
-                    "fullCatalogRowCount" to capped.fullCatalogRows.size,
-                    "heroItemCount" to capped.heroItems.size
+                    "railCount" to capped.rails.size,
+                    "heroItemKeyCount" to capped.heroItemKeys.size,
+                    "orderedGroupKeyCount" to capped.orderedGroupKeys.size
                 )
             )
         }.onFailure { error ->
@@ -309,9 +291,6 @@ class HomeCatalogSnapshotStore private constructor(
         var schemaVersion: Int = -1
         var languageTag: String? = null
         var cachedPosterToken: String? = null
-        var catalogRows: List<CatalogRow> = emptyList()
-        var fullCatalogRows: List<CatalogRow> = emptyList()
-        var heroItems: List<MetaPreview> = emptyList()
         var orderedGroupKeys: List<String> = emptyList()
         var rails: List<Rail> = emptyList()
         var heroItemKeys: List<RailItemKey> = emptyList()
@@ -351,18 +330,6 @@ class HomeCatalogSnapshotStore private constructor(
                                         return@runCatching null
                                     }
                                 }
-                                "catalogRows" -> {
-                                    catalogRows = gson.fromJson<List<CatalogRow>>(reader, catalogRowListType)
-                                        ?: emptyList()
-                                }
-                                "fullCatalogRows" -> {
-                                    fullCatalogRows = gson.fromJson<List<CatalogRow>>(reader, catalogRowListType)
-                                        ?: emptyList()
-                                }
-                                "heroItems" -> {
-                                    heroItems = gson.fromJson<List<MetaPreview>>(reader, metaPreviewListType)
-                                        ?: emptyList()
-                                }
                                 "orderedGroupKeys" -> {
                                     orderedGroupKeys = gson.fromJson<List<String>>(reader, stringListType)
                                         ?: emptyList()
@@ -375,6 +342,10 @@ class HomeCatalogSnapshotStore private constructor(
                                     heroItemKeys = gson.fromJson<List<RailItemKey>>(reader, railItemKeyListType)
                                         ?: emptyList()
                                 }
+                                // Legacy schema (<=v5 from pre-Plan B 6f.5 writers) persisted these
+                                // denormalized fields. Skip — rails + heroItemKeys (derived from them
+                                // during the v4->v5 writer migration) are authoritative on disk now.
+                                "catalogRows", "fullCatalogRows", "heroItems" -> reader.skipValue()
                                 else -> reader.skipValue()
                             }
                         }
@@ -383,9 +354,6 @@ class HomeCatalogSnapshotStore private constructor(
                 }
             }
             Snapshot(
-                catalogRows = catalogRows,
-                fullCatalogRows = fullCatalogRows,
-                heroItems = heroItems,
                 orderedGroupKeys = orderedGroupKeys,
                 rails = rails,
                 heroItemKeys = heroItemKeys
@@ -439,34 +407,6 @@ class HomeCatalogSnapshotStore private constructor(
             if (parent != null && !parent.exists()) parent.mkdirs()
             tempFile = File(parent ?: File("."), "${target.name}.tmp")
 
-            // Plan B Task 6d schema v5: persist structure-only [rails] +
-            // [heroItemKeys] alongside the legacy denormalized fields. If the
-            // in-memory Snapshot was built by a producer that has not yet been
-            // updated to populate these (default to empty), derive them from
-            // the legacy fields so the on-disk shape is always complete.
-            val railsForPersist: List<Rail> = snapshot.rails.ifEmpty {
-                // Mirror buildRailMemberships' row dedupe (fullCatalogRows wins; catalogRows fills gaps).
-                val merged = linkedMapOf<String, CatalogRow>()
-                for (i in snapshot.fullCatalogRows.indices) {
-                    val row = snapshot.fullCatalogRows[i]
-                    merged[row.catalogId] = row
-                }
-                for (i in snapshot.catalogRows.indices) {
-                    val row = snapshot.catalogRows[i]
-                    merged.putIfAbsent(row.catalogId, row)
-                }
-                val out = ArrayList<Rail>(merged.size)
-                for (row in merged.values) out += row.toRail()
-                out
-            }
-            val heroItemKeysForPersist: List<RailItemKey> = snapshot.heroItemKeys.ifEmpty {
-                val out = ArrayList<RailItemKey>(snapshot.heroItems.size)
-                for (i in snapshot.heroItems.indices) {
-                    val item = snapshot.heroItems[i]
-                    out += RailItemKey(apiType = item.apiType, contentId = item.id)
-                }
-                out
-            }
             FileOutputStream(tempFile).use { fos ->
                 BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                     JsonWriter(bw).use { writer ->
@@ -475,19 +415,12 @@ class HomeCatalogSnapshotStore private constructor(
                         writer.name("languageEpoch").value(languageEpoch)
                         writer.name("languageTag").value(languageTag)
                         writer.name("posterProviderToken").value(posterProviderToken)
-                        writer.name("catalogRows")
-                        gson.toJson(snapshot.catalogRows, catalogRowListType, writer)
-                        writer.name("fullCatalogRows")
-                        gson.toJson(snapshot.fullCatalogRows, catalogRowListType, writer)
-                        writer.name("heroItems")
-                        gson.toJson(snapshot.heroItems, metaPreviewListType, writer)
                         writer.name("orderedGroupKeys")
                         gson.toJson(snapshot.orderedGroupKeys, stringListType, writer)
-                        // Plan B Task 6d schema v5: structure-only fields.
                         writer.name("rails")
-                        gson.toJson(railsForPersist, railListType, writer)
+                        gson.toJson(snapshot.rails, railListType, writer)
                         writer.name("heroItemKeys")
-                        gson.toJson(heroItemKeysForPersist, railItemKeyListType, writer)
+                        gson.toJson(snapshot.heroItemKeys, railItemKeyListType, writer)
                         writer.endObject()
                     }
                 }
@@ -546,21 +479,28 @@ class HomeCatalogSnapshotStore private constructor(
         profileId: Int
     ): List<RailMembership> {
         val now = System.currentTimeMillis()
-        val rows = linkedMapOf<String, CatalogRow>().apply {
-            snapshot.fullCatalogRows.forEach { put(it.catalogId, it) }
-            snapshot.catalogRows.forEach { putIfAbsent(it.catalogId, it) }
-        }.values.toList()
-
-        return rows.map { row ->
-            val railKey = RailKeyFactory.homeCatalog(profileId, row.catalogId)
-            val resolvedItems = row.items.map { item ->
-                identityResolver.fromPreview(item, updatedAtEpochMs = now)
+        // Plan B Task 6f.5: rails are the authoritative structure now. Items
+        // carry only [RailItemKey] (apiType + contentId); title/year fuzzy
+        // hints are no longer available on this code path. Identity resolution
+        // falls back to the raw-content path which is sufficient for the
+        // rail-membership ownership index (consumed by
+        // [integrationOwnershipService.syncRails]).
+        return snapshot.rails.map { rail ->
+            val railKey = RailKeyFactory.homeCatalog(profileId, rail.catalogId)
+            val resolvedItems = rail.items.map { itemKey ->
+                identityResolver.fromRawContent(
+                    mediaType = itemKey.apiType,
+                    rawId = itemKey.contentId,
+                    title = null,
+                    year = null,
+                    updatedAtEpochMs = now
+                )
             }
             RailMembership(
                 rail = RailCacheEntity(
                     railKey = railKey,
-                    provider = row.catalogId.substringBefore(':').uppercase(),
-                    kind = row.type.name,
+                    provider = rail.catalogId.substringBefore(':').uppercase(),
+                    kind = rail.type.name,
                     paramsHash = "$posterProviderToken:${currentLanguageTag()}",
                     fetchedAtEpochMs = now,
                     expiresAtEpochMs = now + 30_000L,
@@ -582,43 +522,12 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun decodeSnapshot(raw: String, posterProviderToken: String): Snapshot? {
-        val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
-        val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion != SCHEMA_VERSION) {
-            return null
-        }
-        val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
-        if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
-            return null
-        }
-        val cachedPosterToken = root.get("posterProviderToken")?.asString?.trim().orEmpty()
-        if (cachedPosterToken != posterProviderToken) {
-            Log.d(TAG, "Poster provider changed ($cachedPosterToken -> $posterProviderToken), invalidating snapshot")
-            return null
-        }
-        // Plan B Task 6d schema v5 includes persisted `rails` + `heroItemKeys`
-        // on disk, but no in-memory consumer has been wired yet (Task 6e). Drop
-        // them on read here too — see streamReadSnapshot for the same rationale.
-        val canonical = Snapshot(
-            catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
-            fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),
-            heroItems = decodeArray<MetaPreview>(root, "heroItems"),
-            orderedGroupKeys = decodeArray<String>(root, "orderedGroupKeys")
-        )
-        if (canonical.catalogRows.isNotEmpty() || canonical.fullCatalogRows.isNotEmpty() || canonical.heroItems.isNotEmpty()) {
-            return canonical
-        }
-
-        // Legacy payloads were stored via direct Gson reflection and may use obfuscated field names.
-        return runCatching {
-            gson.fromJson(raw, Snapshot::class.java)
-        }.getOrNull()
-    }
-
-    private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {
-        val array = root.getAsJsonArray(key) ?: return emptyList()
-        val type = object : TypeToken<List<T>>() {}.type
-        return gson.fromJson<List<T>>(array, type) ?: emptyList()
+        // Plan B Task 6f.5 — the legacy SharedPreferences payload pre-dates the
+        // rails representation. Rather than back-derive rails+heroItemKeys here
+        // (which would require reading catalogRows/fullCatalogRows/heroItems we
+        // no longer model), return null to force a fresh catalog fetch. Migration
+        // is one-shot and the user perceives at most one extra refresh.
+        return null
     }
 
     private fun currentLanguageTag(): String {
@@ -629,57 +538,50 @@ class HomeCatalogSnapshotStore private constructor(
         return "$SNAPSHOT_KEY:p$profileId:${currentLanguageTag()}"
     }
     /**
-     * Plan B Task 6e: applies the hard caps that previously lived inside the
-     * sanitization subsystem ([List<CatalogRow>.capRowsAndItems] + [MAX_HERO_ITEMS]
-     * subList) directly during write. Keeps the on-disk file bounded across
-     * sessions without re-introducing MetaPreview-content sanitization. The
-     * structure-only [Snapshot.rails] + [Snapshot.heroItemKeys] pass through
-     * unchanged; the legacy denormalized fields are only bounded.
+     * Plan B Task 6f.5: applies the hard caps directly during write so the
+     * on-disk file cannot grow unbounded across sessions. Now operates on the
+     * structure-only [Snapshot.rails] + [Snapshot.heroItemKeys].
      */
     private fun Snapshot.capForPersist(): Snapshot {
-        val cappedCatalogRows = catalogRows.capRowsAndItems()
-        val cappedFullCatalogRows = fullCatalogRows.capRowsAndItems()
-        val cappedHeroItems = if (heroItems.size > MAX_HERO_ITEMS) {
-            heroItems.subList(0, MAX_HERO_ITEMS)
+        val cappedRails = rails.capRailsAndItems()
+        val cappedHeroItemKeys = if (heroItemKeys.size > MAX_HERO_ITEMS) {
+            heroItemKeys.subList(0, MAX_HERO_ITEMS)
         } else {
-            heroItems
+            heroItemKeys
         }
         if (
-            cappedCatalogRows === catalogRows &&
-            cappedFullCatalogRows === fullCatalogRows &&
-            cappedHeroItems === heroItems
+            cappedRails === rails &&
+            cappedHeroItemKeys === heroItemKeys
         ) {
             return this
         }
         Log.w(
             TAG,
             "Capped persisted home snapshot: " +
-                "catalogRows ${catalogRows.size} -> ${cappedCatalogRows.size}, " +
-                "fullCatalogRows ${fullCatalogRows.size} -> ${cappedFullCatalogRows.size}, " +
-                "heroItems ${heroItems.size} -> ${cappedHeroItems.size}"
+                "rails ${rails.size} -> ${cappedRails.size}, " +
+                "heroItemKeys ${heroItemKeys.size} -> ${cappedHeroItemKeys.size}"
         )
         return copy(
-            catalogRows = cappedCatalogRows,
-            fullCatalogRows = cappedFullCatalogRows,
-            heroItems = cappedHeroItems
+            rails = cappedRails,
+            heroItemKeys = cappedHeroItemKeys
         )
     }
 
-    private fun List<CatalogRow>.capRowsAndItems(): List<CatalogRow> {
+    private fun List<Rail>.capRailsAndItems(): List<Rail> {
         val capped = if (size > MAX_PERSISTED_CATALOG_ROWS) subList(0, MAX_PERSISTED_CATALOG_ROWS) else this
-        // Avoid allocating a new list / new CatalogRow if no row exceeds the item cap.
+        // Avoid allocating a new list / new Rail if no rail exceeds the item cap.
         var anyItemCapped = false
         for (i in capped.indices) {
             if (capped[i].items.size > MAX_PERSISTED_ITEMS_PER_ROW) { anyItemCapped = true; break }
         }
         if (!anyItemCapped) return capped
-        val out = ArrayList<CatalogRow>(capped.size)
+        val out = ArrayList<Rail>(capped.size)
         for (i in capped.indices) {
-            val row = capped[i]
-            out += if (row.items.size > MAX_PERSISTED_ITEMS_PER_ROW) {
-                row.copy(items = row.items.subList(0, MAX_PERSISTED_ITEMS_PER_ROW))
+            val rail = capped[i]
+            out += if (rail.items.size > MAX_PERSISTED_ITEMS_PER_ROW) {
+                rail.copy(items = rail.items.subList(0, MAX_PERSISTED_ITEMS_PER_ROW))
             } else {
-                row
+                rail
             }
         }
         return out
