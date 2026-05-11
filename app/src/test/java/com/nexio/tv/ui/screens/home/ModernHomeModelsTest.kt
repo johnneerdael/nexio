@@ -510,6 +510,7 @@ class ModernHomeModelsTest {
     private fun buildModernCarouselItem(tomatoesText: String?): ModernCarouselItem {
         return ModernCarouselItem(
             key = "item_1",
+            itemKey = com.nexio.tv.domain.model.homeDisplayItemKey("movie", "tt123"),
             title = "Paradise",
             subtitle = "2025",
             imageUrl = "background",

@@ -14,6 +14,11 @@ internal fun buildModernHomePresentation(
     val catalogRowByCatalogId = LinkedHashMap<String, CatalogRow_>(visibleCatalogRows.size).also { map ->
         visibleCatalogRows.forEach { row -> map[row.catalogId] = row }
     }
+    // Surface-level MetaPreview lookup keyed by homeDisplayItemKey(apiType, id),
+    // exposed via ModernHomePresentationState.metaByItemKey so the carousel render
+    // path can consult it instead of holding a per-item MetaPreview field on
+    // ModernCarouselItem. Built across ALL visible catalog rows in one pass.
+    val metaByItemKey = HashMap<String, MetaPreview>()
     val rows = buildList {
         val activeCatalogKeys = LinkedHashSet<String>(visibleCatalogRows.size)
 
@@ -70,6 +75,14 @@ internal fun buildModernHomePresentation(
             if (rowKey in activeCatalogKeys) return@forEach
             activeCatalogKeys += rowKey
 
+            // Populate the surface-level MetaPreview lookup for this rail. Done
+            // unconditionally (before the cache-reuse branch below) so the map
+            // is correct even when the mapped row is reused from cache and the
+            // per-rail iteration body is skipped.
+            sourceRow.items.forEach { meta ->
+                metaByItemKey[homeDisplayItemKey(meta.apiType, meta.id)] = meta
+            }
+
             val cached = cache.catalogRows[rowKey]
             // Resolved authority gates cache reuse: the rail row instance returned by
             // ResolvedDisplayProjectionCache is stable when content is unchanged, so a
@@ -91,14 +104,8 @@ internal fun buildModernHomePresentation(
                     cachedMappedRow.copy(globalRowIndex = globalIndex)
                 }
             } else {
-                // Build a per-rail MetaPreview lookup: resolved itemKey -> MetaPreview
-                // (homeDisplayItemKey of (apiType, id)). MetaPreview may be missing during
-                // a transient race; buildCatalogItem tolerates null.
-                val metaByItemKey = HashMap<String, MetaPreview>(sourceRow.items.size)
-                sourceRow.items.forEach { meta ->
-                    metaByItemKey[homeDisplayItemKey(meta.apiType, meta.id)] = meta
-                }
-
+                // The surface-level metaByItemKey map (populated above) supplies
+                // MetaPreview lookups for buildCatalogItem; no per-rail map needed.
                 val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
                 val rowItemCache = cache.catalogItemCache.getOrPut(rowKey) { mutableMapOf() }
                 val activeItemCacheKeys = mutableSetOf<String>()
@@ -172,7 +179,8 @@ internal fun buildModernHomePresentation(
 
     return ModernHomePresentationState(
         rows = rows,
-        lookups = buildCarouselRowLookups(rows)
+        lookups = buildCarouselRowLookups(rows),
+        metaByItemKey = metaByItemKey
     )
 }
 
