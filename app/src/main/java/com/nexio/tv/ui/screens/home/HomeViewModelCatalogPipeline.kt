@@ -297,6 +297,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     _metaByItemKey.value = emptyMap()
     _heroItemKeys.value = emptyList()
     _displayContinueWatchingItems.value = emptyList()
+    _displayGridItems.value = emptyList()
     _uiState.update { state ->
         state.copy(
             heroCatalogKeys = emptyList(),
@@ -3266,7 +3267,13 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
                 heroSectionEnabled = state.heroSectionEnabled
             )
         } else {
-            state.gridItems
+            _displayGridItems.value
+        }
+        // Plan B Task 5f.2 — dual-write: keep UiState.gridItems updated for
+        // legacy readers while routing the new StateFlow consumer. Task 5f.4
+        // drops the UiState field once GridHomeContent collects displayGridItems.
+        if (snapshotGridItems !== _displayGridItems.value) {
+            _displayGridItems.value = snapshotGridItems
         }
 
         state.copy(
