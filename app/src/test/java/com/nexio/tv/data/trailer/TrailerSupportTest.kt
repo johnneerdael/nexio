@@ -189,11 +189,26 @@ class TrailerSupportTest {
     }
 
     @Test
-    fun `selectPreferredTrailerPlaybackSource prefers combined trailer source over split adaptive playback`() {
+    fun `selectPreferredTrailerPlaybackSource prefers split adaptive over combined`() {
+        // NewPipe pattern: pick the best video-only + audio-only streams
+        // and merge in ExoPlayer. The HLS manifest path caps around 720p
+        // muxed and triggers ABR that never ramps up for short trailers.
         val selected = selectPreferredTrailerPlaybackSource(
             combinedUrl = "https://example.com/trailer/master.m3u8",
             adaptiveVideoUrl = "https://example.com/trailer/video.mp4",
             adaptiveAudioUrl = "https://example.com/trailer/audio.m4a"
+        )
+
+        assertEquals("https://example.com/trailer/video.mp4", selected?.videoUrl)
+        assertEquals("https://example.com/trailer/audio.m4a", selected?.audioUrl)
+    }
+
+    @Test
+    fun `selectPreferredTrailerPlaybackSource falls back to combined when split adaptive is incomplete`() {
+        val selected = selectPreferredTrailerPlaybackSource(
+            combinedUrl = "https://example.com/trailer/master.m3u8",
+            adaptiveVideoUrl = "https://example.com/trailer/video.mp4",
+            adaptiveAudioUrl = null
         )
 
         assertEquals("https://example.com/trailer/master.m3u8", selected?.videoUrl)
@@ -201,15 +216,15 @@ class TrailerSupportTest {
     }
 
     @Test
-    fun `selectPreferredTrailerPlaybackSource falls back to adaptive split playback when combined source is absent`() {
+    fun `selectPreferredTrailerPlaybackSource uses adaptive video alone when combined and audio are missing`() {
         val selected = selectPreferredTrailerPlaybackSource(
             combinedUrl = null,
             adaptiveVideoUrl = "https://example.com/trailer/video.mp4",
-            adaptiveAudioUrl = "https://example.com/trailer/audio.m4a"
+            adaptiveAudioUrl = null
         )
 
         assertEquals("https://example.com/trailer/video.mp4", selected?.videoUrl)
-        assertEquals("https://example.com/trailer/audio.m4a", selected?.audioUrl)
+        assertNull(selected?.audioUrl)
     }
 
     @Test
