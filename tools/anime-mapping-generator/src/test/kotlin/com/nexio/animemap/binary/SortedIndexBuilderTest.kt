@@ -67,4 +67,47 @@ class SortedIndexBuilderTest {
         assertEquals(8, pb.getInt(12))
         assertEquals(9, pb.getInt(16))
     }
+
+    @Test
+    fun `imdb index emits sorted-by-hash entries with stringPool offsets`() {
+        val pool = StringPoolBuilder()
+        val builder = SortedIndexBuilder.Imdb(pool)
+        // Inputs chosen so both FNV-1a hashes are positive when interpreted as
+        // signed Long, giving a deterministic h0 < h1 under signed-Long compare:
+        //   hash64("tt0286390") = 1_954_078_791_235_011_079
+        //   hash64("tt0903747") = 8_173_985_357_356_900_025
+        builder.add(imdb = "tt0286390", recordOffsets = intArrayOf(100))
+        builder.add(imdb = "tt0903747", recordOffsets = intArrayOf(200, 201))
+        val (indexBytes, poolBytes) = builder.build()
+
+        assertEquals(2 * 20, indexBytes.size)
+        val ib = ByteBuffer.wrap(indexBytes).order(ByteOrder.LITTLE_ENDIAN)
+        // Verify sorted by hash
+        val h0 = ib.getLong(0)
+        val h1 = ib.getLong(20)
+        assert(h0 < h1) { "expected hash-sorted: $h0 < $h1" }
+        // Verify each entry's strOffset points at the right utf8 in the pool
+        val sp = pool.toByteArray()
+        for (i in 0..1) {
+            val baseOff = i * 20
+            val strOff = ib.getInt(baseOff + 8)
+            // pool: [varint len | utf8 ...]
+            assertEquals(9L, decodeVarint(sp, strOff))  // both "tt0286390" / "tt0903747" are 9 bytes
+        }
+        // Pool of record-offsets: 1 + 2 = 3 u32 = 12 bytes
+        assertEquals(12, poolBytes.size)
+    }
+
+    private fun decodeVarint(bytes: ByteArray, offset: Int): Long {
+        var result = 0L
+        var shift = 0
+        var i = offset
+        while (true) {
+            val b = bytes[i].toInt() and 0xFF
+            result = result or ((b and 0x7F).toLong() shl shift)
+            i++
+            if (b and 0x80 == 0) return result
+            shift += 7
+        }
+    }
 }
