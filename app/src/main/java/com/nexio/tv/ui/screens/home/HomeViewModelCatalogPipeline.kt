@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.contentEquals
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
@@ -458,7 +459,7 @@ internal fun hydratedHomeOverlayItemKeysForRows(rows: List<CatalogRow>): Set<Str
         .flatMap { row -> row.items.asSequence() }
         .flatMap { item ->
             HomeArtworkOverlayKeys.aliasesFor(
-                rowItemKey = item.homeOverlayItemKey(),
+                rowItemKey = homeDisplayItemKey(item.apiType, item.id),
                 contentId = item.id,
                 itemType = item.apiType,
                 providerIds = item.firstPaintStableIds,
@@ -572,7 +573,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
 ) {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
-    val uniqueItems = items.distinctBy { it.homeOverlayItemKey() }
+    val uniqueItems = items.distinctBy { homeDisplayItemKey(it.apiType, it.id) }
     if (uniqueItems.isEmpty()) return
 
     val languageTag = profileBoundary.currentLanguageTag()
@@ -602,7 +603,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
         ) {
             return
         }
-        val itemKey = item.homeOverlayItemKey()
+        val itemKey = homeDisplayItemKey(item.apiType, item.id)
         if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) continue
         if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) continue
         try {
@@ -750,7 +751,7 @@ internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
                     try {
                         val enriched = catalogItemCrossIdEnricher.enrichResolving(item)
                         if (enriched !== item) {
-                            enrichedByItemKey[com.nexio.tv.domain.model.homeDisplayItemKey(item.apiType, item.id)] = enriched
+                            enrichedByItemKey[homeDisplayItemKey(item.apiType, item.id)] = enriched
                         }
                     } catch (cancel: kotlinx.coroutines.CancellationException) {
                         throw cancel
@@ -790,7 +791,7 @@ private fun applyEnrichedItemsToRows(
         val newItems = ArrayList<com.nexio.tv.domain.model.MetaPreview>(row.items.size)
         for (itemIndex in row.items.indices) {
             val item = row.items[itemIndex]
-            val key = com.nexio.tv.domain.model.homeDisplayItemKey(item.apiType, item.id)
+            val key = homeDisplayItemKey(item.apiType, item.id)
             val enriched = enrichedByItemKey[key]
             if (enriched != null && enriched !== item) {
                 newItems += enriched

@@ -27,6 +27,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RatingValueValidator
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -56,7 +57,7 @@ class HomeHydrationCoordinator @Inject constructor(
         currentGeneration: () -> Long,
         onOverlayApplied: (HydratedHomeOverlay) -> Boolean
     ): HydratedHomeOverlay? {
-        val itemKey = item.homeOverlayItemKey()
+        val itemKey = homeDisplayItemKey(item.apiType, item.id)
         traceEvents.emitHomeHydrationStarted(
             railId = item.firstPaintRailSource?.name,
             itemKey = itemKey,
@@ -214,7 +215,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 priority = priority.name,
                 workClass = WORK_CLASS_BACKGROUND_HYDRATION,
                 changedFields = changedFields(firstPaintMetadata, overlay.fields),
-                displayHashBefore = item.displayHashForHomeOverlay(),
+                displayHashBefore = item.toHomeDisplayMetadata().hydratedHomeDisplayHash(),
                 displayHashAfter = overlay.displayHash,
                 rowOrderChanged = false,
                 focusChanged = false,

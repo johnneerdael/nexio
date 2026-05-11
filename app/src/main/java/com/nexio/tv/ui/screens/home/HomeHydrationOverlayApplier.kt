@@ -1,80 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
-import com.nexio.tv.core.metadata.router.IdMappingStore
-import com.nexio.tv.domain.model.HydratedHomeOverlay
-import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.hydratedHomeDisplayHash
-import com.nexio.tv.domain.model.toHomeDisplayMetadata
-
-// Phase 4 — the compose-time overlay-application functions
-// (`CatalogRow.applyHydratedHomeOverlays`, `List<CatalogRow>.applyHydratedHomeOverlays`,
-// `rowsForResolvedDisplaySurface`) were deleted after the Phase 3.6.5
-// producer flip (commit `63aa16286`) made the producer a passthrough.
-// The remaining helpers below are overlay key/hash utilities still used by
-// downstream consumers (HomeResolvedDisplayMapper.overlayFromMap,
-// HomeViewModelPresentationPipeline.homeOverlayItemKey,
-// HomeHydrationCoordinator.displayHashForHomeOverlay).
-
-/**
- * Looks up the hydrated overlay for this preview, probing the row's own
- * [homeOverlayItemKey] first and then falling through to the same alias set the
- * read scope used to subscribe ([HomeArtworkOverlayKeys.aliasesFor]). Without
- * this fall-through, overlays stored under a canonical alias (e.g.,
- * `series:tvdb:355567`) would never reach a row keyed by a different provider
- * (e.g., `series:trakt:171028`).
- */
-internal fun MetaPreview.overlayFromMap(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
-): HydratedHomeOverlay? {
-    if (overlaysByItemKey.isEmpty()) return null
-    val rowKey = homeOverlayItemKey()
-    overlaysByItemKey[rowKey]?.let { return it }
-    val aliases = HomeArtworkOverlayKeys.aliasesFor(
-        rowItemKey = rowKey,
-        contentId = id,
-        itemType = apiType,
-        providerIds = firstPaintStableIds,
-        canonicalProvider = null,
-        canonicalId = null
-    )
-    return aliases.asSequence()
-        .filter { it != rowKey }
-        .mapNotNull { overlaysByItemKey[it] }
-        .firstOrNull()
-}
-
-/**
- * Cross-id-aware variant of [overlayFromMap]. Consults [IdMappingStore] to enrich
- * [firstPaintStableIds] with any cached imdb id before computing the alias set, allowing
- * a TMDB-keyed row to match an overlay stored under an imdb-form alias by another rail.
- *
- * Cache-miss path: delegates to the standard alias set, equivalent to [overlayFromMap].
- * No network call.
- */
-internal suspend fun MetaPreview.overlayFromMapEnriched(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
-    idMappingStore: IdMappingStore
-): HydratedHomeOverlay? {
-    if (overlaysByItemKey.isEmpty()) return null
-    val rowKey = homeOverlayItemKey()
-    overlaysByItemKey[rowKey]?.let { return it }
-    val aliases = HomeArtworkOverlayKeys.aliasesForEnriched(
-        rowItemKey = rowKey,
-        contentId = id,
-        itemType = apiType,
-        providerIds = firstPaintStableIds,
-        canonicalProvider = null,
-        canonicalId = null,
-        idMappingStore = idMappingStore
-    )
-    return aliases.asSequence()
-        .filter { it != rowKey }
-        .mapNotNull { overlaysByItemKey[it] }
-        .firstOrNull()
-}
-
-internal fun MetaPreview.homeOverlayItemKey(): String = homeDisplayItemKey(apiType, id)
-
-internal fun MetaPreview.displayHashForHomeOverlay(): String =
-    toHomeDisplayMetadata().hydratedHomeDisplayHash()
+// Plan B Task 6a — all helpers migrated:
+//   overlayFromMap + overlayFromMapEnriched  →  HomeArtworkOverlayKeys.kt (as top-level extensions)
+//   homeOverlayItemKey()                     →  inlined as homeDisplayItemKey(apiType, id) at each call site
+//   displayHashForHomeOverlay()              →  inlined as toHomeDisplayMetadata().hydratedHomeDisplayHash() at each call site
+//
+// This file is intentionally left empty pending deletion in Task 6b.

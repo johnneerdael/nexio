@@ -27,6 +27,7 @@ import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -687,7 +688,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         return
     }
     pendingFocusedItemForEnrichment = null
-    val itemKey = item.homeOverlayItemKey()
+    val itemKey = homeDisplayItemKey(item.apiType, item.id)
     if (isFocusedPreviewEnrichmentComplete(item)) return
     if (pendingTmdbEnrichItemId == itemKey) return
 
@@ -779,7 +780,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPreview) {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
-    val itemKey = item.homeOverlayItemKey()
+    val itemKey = homeDisplayItemKey(item.apiType, item.id)
     val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
     if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return
 
@@ -846,7 +847,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
         return
     }
-    val itemKey = item.homeOverlayItemKey()
+    val itemKey = homeDisplayItemKey(item.apiType, item.id)
     if (isFocusedPreviewEnrichmentComplete(item)) return
     if (pendingTmdbEnrichItemId == itemKey || pendingAdjacentPrefetchItemId == itemKey) return
 
@@ -1007,7 +1008,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     // is pinned across every suspension into the calling continuation (HARD RULE #4 in
     // CLAUDE.md). Heap dump showed enrichHeroItemsPipeline$1.L$9 holding live iterators
     // across hero hydration cycles.
-    val distinctItems = items.distinctBy { it.homeOverlayItemKey() }
+    val distinctItems = items.distinctBy { homeDisplayItemKey(it.apiType, it.id) }
     val hydratedByItemKey = HashMap<String, MetaPreview>(distinctItems.size)
     for (i in distinctItems.indices) {
         val item = distinctItems[i]
@@ -1044,12 +1045,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
             Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
             item
         }
-        hydratedByItemKey[item.homeOverlayItemKey()] = hydrated
+        hydratedByItemKey[homeDisplayItemKey(item.apiType, item.id)] = hydrated
     }
     val out = ArrayList<MetaPreview>(items.size)
     for (i in items.indices) {
         val item = items[i]
-        out += hydratedByItemKey[item.homeOverlayItemKey()] ?: item
+        out += hydratedByItemKey[homeDisplayItemKey(item.apiType, item.id)] ?: item
     }
     return out
 }
@@ -1171,7 +1172,7 @@ internal fun applyTomatoesOverridesToMDBListSnapshot(
 }
 
 private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(item: MetaPreview): Boolean {
-    val itemKey = item.homeOverlayItemKey()
+    val itemKey = homeDisplayItemKey(item.apiType, item.id)
     return (!item.type.isHomeTvContent() && !currentTmdbSettings.isActive) ||
         itemKey in prefetchedTmdbIds ||
         itemKey in prefetchedExternalMetaIds

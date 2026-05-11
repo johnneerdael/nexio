@@ -33,6 +33,7 @@ import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -325,7 +326,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         telemetryEnabled: Boolean,
         onLog: (String, String?) -> Unit
     ) {
-        val uniqueItems = items.distinctBy { it.homeOverlayItemKey() }
+        val uniqueItems = items.distinctBy { homeDisplayItemKey(it.apiType, it.id) }
         if (uniqueItems.isEmpty()) return
 
         val catalogKey = "visible_home"
