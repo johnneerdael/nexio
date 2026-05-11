@@ -168,10 +168,10 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         }
         Log.d(
             HomeViewModel.TAG,
-            "Restored merged home snapshot rows=${snapshot.catalogRows.size} fullRows=${snapshot.fullCatalogRows.size} " +
-                "hero=${snapshot.heroItems.size} orderedKeys=${snapshot.orderedGroupKeys.size}"
+            "Restored merged home snapshot rails=${snapshot.rails.size} hero=${snapshot.heroItemKeys.size} " +
+                "orderedKeys=${snapshot.orderedGroupKeys.size}"
         )
-        if (snapshot.catalogRows.isEmpty() && snapshot.fullCatalogRows.isEmpty() && snapshot.heroItems.isEmpty()) {
+        if (snapshot.rails.isEmpty() && snapshot.heroItemKeys.isEmpty()) {
             return@launch
         }
 
@@ -193,11 +193,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
                 kitsuSnapshot = kitsuDiscoverySnapshot,
                 currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
             )
-            if (
-                restoredSnapshot.catalogRows.isEmpty() &&
-                restoredSnapshot.fullCatalogRows.isEmpty() &&
-                restoredSnapshot.heroItems.isEmpty()
-            ) {
+            if (restoredSnapshot.rails.isEmpty() && restoredSnapshot.heroItemKeys.isEmpty()) {
                 return@withContext
             }
 
@@ -3656,7 +3652,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     Log.d(
         HomeViewModel.TAG,
         "Persisted snapshot applied orderedKeys=${restoredSnapshot.orderedGroupKeys.size} expected=${publishableExpectedOrderKeys.size} " +
-            "sourceCachesReady=$sourceCachesReady rows=${restoredSnapshot.catalogRows.size} fullRows=${restoredSnapshot.fullCatalogRows.size}"
+            "sourceCachesReady=$sourceCachesReady rails=${restoredSnapshot.rails.size} hero=${restoredSnapshot.heroItemKeys.size}"
     )
     inMemoryHomeSnapshot = restoredSnapshot
     pendingRestoredCatalogSnapshot = null
@@ -3729,8 +3725,8 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         // that became death-spiral fuel.
         Log.d(
             HomeViewModel.TAG,
-            "Persisted merged home snapshot write rows=${latestSnapshot.catalogRows.size} fullRows=${latestSnapshot.fullCatalogRows.size} " +
-                "hero=${latestSnapshot.heroItems.size} orderedKeys=${latestSnapshot.orderedGroupKeys.size}"
+            "Persisted merged home snapshot write rails=${latestSnapshot.rails.size} hero=${latestSnapshot.heroItemKeys.size} " +
+                "orderedKeys=${latestSnapshot.orderedGroupKeys.size}"
         )
         withContext(Dispatchers.Main.immediate) {
             if (!isCurrentHomeProfileGeneration(profileGeneration)) return@withContext
