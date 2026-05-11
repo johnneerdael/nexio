@@ -246,7 +246,7 @@ class InAppYouTubeExtractor @Inject constructor(
         val adaptiveAudio = mutableListOf<StreamCandidate>()
         val manifestUrls = mutableListOf<Triple<String, Int, String>>()
         var resolvedTrailerTitle: String? = null
-        var resolvedCaptionTracks: List<YouTubeCaptionTrack> = emptyList()
+        val captionsPerClient = mutableMapOf<String, List<YouTubeCaptionTrack>>()
 
         for (client in CLIENTS) {
             try {
@@ -261,11 +261,9 @@ class InAppYouTubeExtractor @Inject constructor(
                 if (resolvedTrailerTitle.isNullOrBlank()) {
                     resolvedTrailerTitle = extractYouTubeTrailerTitle(playerResponse)
                 }
-                if (resolvedCaptionTracks.isEmpty()) {
-                    val captions = extractYouTubeCaptionTracks(playerResponse)
-                    if (captions.isNotEmpty()) {
-                        resolvedCaptionTracks = captions
-                    }
+                val captions = extractYouTubeCaptionTracks(playerResponse)
+                if (captions.isNotEmpty()) {
+                    captionsPerClient[client.key] = captions
                 }
                 extractDefaultYouTubeAudioLanguageCode(playerResponse)
                     ?.takeIf { code -> !isYouTubeTrailerLanguageAcceptable(code, originalLanguage) }
@@ -405,6 +403,14 @@ class InAppYouTubeExtractor @Inject constructor(
             else -> null
         }
         val resolvedUserAgent = lookupClientUserAgent(resolvedClientKey)
+
+        // Prefer Android's caption tracks over iOS — Android responses
+        // sometimes carry more languages because iOS filters by platform
+        // availability. NewPipeExtractor falls back to iOS captions only
+        // when Android's set is empty; we mirror that ordering.
+        val resolvedCaptionTracks: List<YouTubeCaptionTrack> = captionsPerClient["android"]
+            ?: captionsPerClient["ios"]
+            ?: emptyList()
 
         val playbackSource = selectPreferredTrailerPlaybackSource(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
