@@ -72,8 +72,12 @@ class ModernHomeModelsTest {
         assertEquals("8.5", built.heroPreview.imdbText)
         assertEquals("96", built.heroPreview.tomatoesText)
         assertEquals("displayBackdrop", built.imageUrl)
-        assertEquals("tt123", built.metaPreview?.id)
-        assertEquals(96.0, built.metaPreview?.tomatoesRating ?: 0.0, 0.0)
+        // ModernCarouselItem.metaPreview was dropped in Phase 4 of the Plan B
+        // migration; the CW-specific projection still lives in
+        // continueWatchingInProgressToMetaPreview and is asserted here directly.
+        val cwPreview = continueWatchingInProgressToMetaPreview(item)
+        assertEquals("tt123", cwPreview.id)
+        assertEquals(96.0, cwPreview.tomatoesRating ?: 0.0, 0.0)
         assertTrue(built.heroPreview.genres.contains("Drama"))
     }
 
@@ -535,21 +539,6 @@ class ModernHomeModelsTest {
                 trailerTitle = "Paradise",
                 trailerReleaseInfo = "2025",
                 trailerApiType = "movie"
-            ),
-            metaPreview = MetaPreview(
-                id = "tt123",
-                type = ContentType.MOVIE,
-                name = "Paradise",
-                poster = "poster",
-                posterShape = PosterShape.POSTER,
-                background = "background",
-                logo = "logo",
-                description = "desc",
-                releaseInfo = "2025",
-                runtime = null,
-                imdbRating = 7.8f,
-                tomatoesRating = tomatoesText?.toDouble(),
-                genres = listOf("Action")
             )
         )
     }

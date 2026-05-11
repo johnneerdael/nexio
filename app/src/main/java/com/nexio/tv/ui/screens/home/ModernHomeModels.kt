@@ -105,8 +105,7 @@ data class ModernCarouselItem(
     val subtitle: String?,
     val imageUrl: String?,
     val heroPreview: HeroPreview,
-    val payload: ModernPayload,
-    val metaPreview: MetaPreview? = null
+    val payload: ModernPayload
 )
 
 @Immutable
@@ -573,11 +572,7 @@ internal fun buildContinueWatchingItem(
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(resolved),
-        metaPreview = when (item) {
-            is ContinueWatchingItem.InProgress -> continueWatchingInProgressToMetaPreview(item)
-            is ContinueWatchingItem.NextUp -> nextUpToMetaPreview(item)
-        }
+        payload = ModernPayload.ContinueWatching(resolved)
     )
 }
 
@@ -737,8 +732,7 @@ internal fun buildCatalogItem(
             trailerReleaseInfo = trailerReleaseInfo,
             trailerApiType = itemType,
             fallbackTrailerYtId = selectedTrailerFallbackYtId
-        ),
-        metaPreview = item
+        )
     )
 }
 

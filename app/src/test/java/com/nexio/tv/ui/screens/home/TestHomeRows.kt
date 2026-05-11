@@ -58,20 +58,6 @@ internal object TestHomeRows {
                 trailerTitle = "Title",
                 trailerReleaseInfo = null,
                 trailerApiType = itemType
-            ),
-            metaPreview = MetaPreview(
-                id = "tt123",
-                type = ContentType.MOVIE,
-                rawType = itemType,
-                name = "Title",
-                poster = null,
-                posterShape = PosterShape.POSTER,
-                background = null,
-                logo = null,
-                description = null,
-                releaseInfo = null,
-                imdbRating = null,
-                genres = emptyList()
             )
         )
     }
