@@ -74,4 +74,21 @@ class AnimeIdMapBinaryReaderTest {
         assertEquals("11469", reader.lookupSingle(IndexKind.BY_ANIDB, "11739"))
         assertNull(reader.lookupSingle(IndexKind.BY_ANIDB, "99999999"))
     }
+
+    @Test
+    fun `lookupMultiFirst returns first kitsu for tvdb id with multiple records`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        // Fixture: byTvdb { "305074" -> ["11469","13881"] }
+        assertEquals("11469", reader.lookupMultiFirst(IndexKind.BY_TVDB, "305074"))
+        assertNull(reader.lookupMultiFirst(IndexKind.BY_TVDB, "99999"))
+    }
+
+    @Test
+    fun `recordOffsetsForMultiKey returns full list of offsets`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        val offsets = reader.recordOffsetsForMultiKey(IndexKind.BY_TVDB, "305074")
+        assertEquals(2, offsets.size)
+    }
 }
