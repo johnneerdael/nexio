@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.ActiveRailTracker
@@ -34,6 +35,7 @@ import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
@@ -59,6 +61,7 @@ import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
@@ -167,6 +170,8 @@ class HomeViewModel @Inject constructor(
     internal val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),
     internal val animeSeasonProjectionResolver: com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver,
     internal val catalogRowMemo: CatalogRowMemo,
+    internal val artworkProviderResolver: ArtworkProviderResolver,
+    internal val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -310,6 +315,25 @@ class HomeViewModel @Inject constructor(
     internal val heroItemsNonEmpty: StateFlow<Boolean> = _heroItemKeys
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Cached snapshot of [ArtworkProviderSettings] for synchronous reads from
+     * the catalog-pipeline call sites that invoke
+     * [HomeResolvedDisplayMapper.toResolvedDisplayItems(Enriched)] (Plan B
+     * Task 11). The mapper's per-item projection consults
+     * [ArtworkProviderResolver] to compute
+     * [ResolvedDisplayItem.preferredArtworkProviders]; the resolver needs the
+     * current settings synchronously, but
+     * [applyHomeResolvedRowsToUiPipeline] is a non-suspend extension and the
+     * screensaver publisher [publishTmdbTrendingScreensaverSurface] is also
+     * non-suspend, so we materialize a [StateFlow] here via [stateIn] with
+     * an `ArtworkProviderSettings()` placeholder so the first emission is
+     * never blocking. Compose never observes this flow — it is read with
+     * `.value` from the producer-pipeline call sites.
+     */
+    internal val currentArtworkProviderSettings: StateFlow<ArtworkProviderSettings> =
+        posterRatingsSettingsDataStore.settings
+            .stateIn(viewModelScope, SharingStarted.Eagerly, ArtworkProviderSettings())
 
     /**
      * Surface-level MetaPreview lookup keyed by

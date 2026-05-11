@@ -1378,6 +1378,10 @@ class HomeViewModelFocusHydrationTest {
             premiumArtworkInvalidationNotifier = premiumArtworkInvalidationNotifier,
             animeSeasonProjectionResolver = mockk(relaxed = true),
             catalogRowMemo = CatalogRowMemo(),
+            artworkProviderResolver = com.nexio.tv.core.artwork.ArtworkProviderResolver(
+                com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver()
+            ),
+            posterRatingsSettingsDataStore = mockk(relaxed = true),
             appContext = appContext
         ).also(createdViewModels::add)
     }

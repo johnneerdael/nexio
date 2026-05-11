@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import androidx.annotation.VisibleForTesting
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
@@ -13,6 +14,7 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.DisplaySourceRank
@@ -24,6 +26,7 @@ import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.data.repository.toArtworkBundle
 import com.nexio.tv.data.repository.toRating
@@ -36,6 +39,7 @@ import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.toMetadataMediaKind
+import com.nexio.tv.domain.model.toSettingsSignature
 
 internal object HomeResolvedDisplayMapper {
 
@@ -53,7 +57,16 @@ internal object HomeResolvedDisplayMapper {
     private data class MapperCacheKey(
         val itemKey: String,
         val metaContentHash: Int,
-        val overlayContentHash: Int
+        val overlayContentHash: Int,
+        /**
+         * Settings signature captured at mapper-call time. Different artwork-provider
+         * settings select different `preferredArtworkProviders` for the same
+         * (meta, overlay) tuple, so two emissions with identical content but
+         * different settings must NOT collide on the cache. We use the cheap
+         * pre-existing [toSettingsSignature] (4 short fields) rather than the
+         * full settings hashCode to avoid pinning credential text in the key.
+         */
+        val settingsSignature: String
     )
 
     private val cache = mutableMapOf<MapperCacheKey, ResolvedDisplayItem>()
@@ -62,19 +75,30 @@ internal object HomeResolvedDisplayMapper {
     fun toResolvedDisplayItems(
         rows: List<CatalogRow>,
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+        // Defaults exist so the large body of existing mapper tests (which
+        // pre-date Plan B Task 11) continue to compile without 20+ test-site
+        // edits. Production call sites in [HomeViewModelCatalogPipeline]
+        // always pass an explicit injected [ArtworkProviderResolver] and the
+        // current snapshot from [HomeViewModel.currentArtworkProviderSettings].
+        resolver: ArtworkProviderResolver = ArtworkProviderResolver(
+            com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver()
+        ),
+        currentSettings: ArtworkProviderSettings = ArtworkProviderSettings(),
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
         traceEvents: TraceMetadataEvents? = null
     ): List<ResolvedDisplayItem> {
         val items = rows.flatMap { row -> row.items }
         val activeKeys = HashSet<MapperCacheKey>(items.size)
+        val settingsSignature = currentSettings.toSettingsSignature()
         val result = items.map { item ->
             val itemKey = homeDisplayItemKey(item.apiType, item.id)
             val overlay = overlaysByItemKey[itemKey]
             val cacheKey = MapperCacheKey(
                 itemKey = itemKey,
                 metaContentHash = item.hashCode(),
-                overlayContentHash = overlay?.hashCode() ?: 0
+                overlayContentHash = overlay?.hashCode() ?: 0,
+                settingsSignature = settingsSignature
             )
             activeKeys += cacheKey
             // Cache hit: skip recomputation entirely. We deliberately do NOT emit
@@ -87,7 +111,8 @@ internal object HomeResolvedDisplayMapper {
                 cached
             } else {
                 val computed = item.toResolvedDisplayItem(
-                    overlaysByItemKey, nowMs, resolveTrailer, traceEvents
+                    overlaysByItemKey, nowMs, resolveTrailer, traceEvents,
+                    resolver, currentSettings
                 )
                 cache[cacheKey] = computed
                 computed
@@ -120,6 +145,11 @@ internal object HomeResolvedDisplayMapper {
         rows: List<CatalogRow>,
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         idMappingStore: IdMappingStore,
+        // See [toResolvedDisplayItems] for the default-arg rationale.
+        resolver: ArtworkProviderResolver = ArtworkProviderResolver(
+            com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver()
+        ),
+        currentSettings: ArtworkProviderSettings = ArtworkProviderSettings(),
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
         traceEvents: TraceMetadataEvents? = null
@@ -128,6 +158,7 @@ internal object HomeResolvedDisplayMapper {
         // Collect cache hits synchronously first; misses need suspend overlay lookup.
         val result = mutableListOf<ResolvedDisplayItem>()
         val activeKeys = HashSet<MapperCacheKey>(items.size)
+        val settingsSignature = currentSettings.toSettingsSignature()
         for (i in items.indices) {
             val item = items[i]
             val itemKey = homeDisplayItemKey(item.apiType, item.id)
@@ -135,7 +166,8 @@ internal object HomeResolvedDisplayMapper {
             val cacheKey = MapperCacheKey(
                 itemKey = itemKey,
                 metaContentHash = item.hashCode(),
-                overlayContentHash = overlay?.hashCode() ?: 0
+                overlayContentHash = overlay?.hashCode() ?: 0,
+                settingsSignature = settingsSignature
             )
             activeKeys += cacheKey
             val cached = synchronized(this) { cache[cacheKey] }
@@ -143,7 +175,8 @@ internal object HomeResolvedDisplayMapper {
                 result += cached
             } else {
                 val computed = item.toResolvedDisplayItemWithOverlay(
-                    overlay, nowMs, resolveTrailer, traceEvents
+                    overlay, nowMs, resolveTrailer, traceEvents,
+                    resolver, currentSettings
                 )
                 synchronized(this) { cache[cacheKey] = computed }
                 result += computed
@@ -157,17 +190,23 @@ internal object HomeResolvedDisplayMapper {
         overlaysByItemKey: Map<String, HydratedHomeOverlay>,
         nowMs: Long,
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
-        traceEvents: TraceMetadataEvents? = null
+        traceEvents: TraceMetadataEvents? = null,
+        resolver: ArtworkProviderResolver,
+        currentSettings: ArtworkProviderSettings
     ): ResolvedDisplayItem {
         val overlay = overlayFromMap(overlaysByItemKey)
-        return toResolvedDisplayItemWithOverlay(overlay, nowMs, resolveTrailer, traceEvents)
+        return toResolvedDisplayItemWithOverlay(
+            overlay, nowMs, resolveTrailer, traceEvents, resolver, currentSettings
+        )
     }
 
     private fun MetaPreview.toResolvedDisplayItemWithOverlay(
         overlay: HydratedHomeOverlay?,
         nowMs: Long,
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
-        traceEvents: TraceMetadataEvents? = null
+        traceEvents: TraceMetadataEvents? = null,
+        resolver: ArtworkProviderResolver,
+        currentSettings: ArtworkProviderSettings
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
 
@@ -205,6 +244,22 @@ internal object HomeResolvedDisplayMapper {
             resolveTrailer = resolveTrailer
         )
 
+        val isAnime = isAnimeForArtworkRouting()
+        val preferred = mapOf(
+            ArtworkType.POSTER to resolver.resolve(
+                ArtworkType.POSTER, type, isAnime, stableIds, currentSettings
+            ),
+            ArtworkType.BACKDROP to resolver.resolve(
+                ArtworkType.BACKDROP, type, isAnime, stableIds, currentSettings
+            ),
+            ArtworkType.LOGO to resolver.resolve(
+                ArtworkType.LOGO, type, isAnime, stableIds, currentSettings
+            ),
+            ArtworkType.THUMBNAIL to resolver.resolve(
+                ArtworkType.THUMBNAIL, type, isAnime, stableIds, currentSettings
+            )
+        )
+
         return ResolvedDisplayItem(
             itemKey = itemKey,
             contentId = id,
@@ -233,9 +288,25 @@ internal object HomeResolvedDisplayMapper {
             },
             sourceTrace = overlay?.fieldTrace.orEmpty(),
             updatedAtMs = overlay?.updatedAtMs ?: nowMs,
-            slots = mergedSlots
+            slots = mergedSlots,
+            preferredArtworkProviders = preferred
         )
     }
+
+    /**
+     * Anime detection at the mapper boundary. Used to drive
+     * [ArtworkProviderResolver]'s anime-aware default routing for portrait
+     * cards, backdrops, and logos. Two signals are considered equivalent:
+     *  1. [MetaPreview.apiType] == `"anime"` (case-insensitive), which is the
+     *     Stremio addon-side convention preserved on the producer row.
+     *  2. [MetaPreview.firstPaintRailSource] == [RailSource.BUILT_IN_KITSU],
+     *     the built-in Kitsu discovery rail used for the anime catalog.
+     * No `RailSource.KITSU` exists; the enum's anime entry is named
+     * [RailSource.BUILT_IN_KITSU].
+     */
+    private fun MetaPreview.isAnimeForArtworkRouting(): Boolean =
+        apiType.equals("anime", ignoreCase = true) ||
+            firstPaintRailSource == RailSource.BUILT_IN_KITSU
 
     private fun resolveHomeTrailerDisplayState(
         itemKey: String,
@@ -389,7 +460,19 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(
         },
         sourceTrace = fieldTrace,
         updatedAtMs = updatedAtMs,
-        slots = overlaySlots
+        slots = overlaySlots,
+        // TODO(artwork-routing): overlay-only path lacks the MetaPreview row
+        // context (apiType / firstPaintRailSource) needed for anime detection,
+        // so we cannot reliably compute preferredArtworkProviders here. The
+        // empty map is intentional: this extension is used during cold-start
+        // restore of a snapshot before any producer emission has run. The
+        // next producer emission flushes through the MetaPreview-aware path
+        // ([HomeResolvedDisplayMapper.toResolvedDisplayItems(Enriched)]),
+        // which overwrites this projection with the correct preferred-
+        // providers map. The surface tie-breaker (T12) falls back to
+        // "newer wins" for items still on this projection, which is a safe
+        // first-paint default until the producer-aware path takes over.
+        preferredArtworkProviders = emptyMap()
     )
 }
 
