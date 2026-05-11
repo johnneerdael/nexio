@@ -52,8 +52,10 @@ import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
-import com.nexio.tv.ui.screens.player.BuiltInSubtitleCueTranslator
+import com.nexio.tv.ui.screens.player.TimedAddonCueGroup
+import com.nexio.tv.ui.screens.player.ensureExternalSubtitleOverlay
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.util.concurrent.atomic.AtomicBoolean
@@ -80,17 +82,39 @@ internal fun bindTrailerPlayerView(
     view: PlayerView,
     player: Player?,
     subtitleStyle: SubtitleStyleSettings? = null,
+    overlayCues: List<Cue> = emptyList(),
 ) {
     if (view.player !== player) {
         view.player = player
     }
-    val subtitleView = view.subtitleView
-    if (subtitleView != null && subtitleStyle != null) {
-        applySubtitleViewStyle(
-            subtitleView = subtitleView,
-            subtitleStyle = subtitleStyle,
-            burnInProtection = BurnInProtectionState.DISABLED,
-        )
+    if (subtitleStyle != null) {
+        view.subtitleView?.let {
+            applySubtitleViewStyle(
+                subtitleView = it,
+                subtitleStyle = subtitleStyle,
+                burnInProtection = BurnInProtectionState.DISABLED,
+            )
+        }
+        view.ensureExternalSubtitleOverlay()?.let {
+            applySubtitleViewStyle(
+                subtitleView = it,
+                subtitleStyle = subtitleStyle,
+                burnInProtection = BurnInProtectionState.DISABLED,
+            )
+        }
+    }
+    // Render trailer cues into the external overlay (same pattern as the
+    // stream player's addon subtitle overlay). The native subtitleView is
+    // hidden whenever we own the overlay so we never get dual-rendering.
+    view.ensureExternalSubtitleOverlay()?.let { overlay ->
+        val hasCues = overlayCues.isNotEmpty()
+        overlay.visibility = if (hasCues) android.view.View.VISIBLE else android.view.View.GONE
+        overlay.setCues(overlayCues)
+        view.subtitleView?.visibility = if (hasCues) {
+            android.view.View.INVISIBLE
+        } else {
+            android.view.View.VISIBLE
+        }
     }
 }
 
@@ -134,69 +158,72 @@ fun TrailerPlayer(
     val subtitleStyleForView = playerSettingsSnapshot?.subtitleStyle
     val subtitleCache = remember(context) { TrailerSubtitleCacheAccess.from(context) }
 
-    // Cue-replacement pipeline (same as streams): plug a
-    // BuiltInSubtitleCueTranslator into ExoPlayer's TextRenderer below so
-    // source-language SRT renders instantly and cues swap to translated
-    // text as Media3 hands them to the translator. The trailer never
-    // blocks on a full-file translation.
-    val cueTranslatorAccess = remember(context) { TrailerCueTranslatorAccess.from(context) }
-    val translationSettings by cueTranslatorAccess
+    // App-controlled subtitle overlay — mirrors the stream player's
+    // AddonSubtitleOverlay design. Parse the SRT into TimedAddonCueGroups
+    // in-memory; a polling coroutine selects active cues at the player's
+    // current position and pushes them into the PlayerView's external
+    // subtitle overlay (see ensureExternalSubtitleOverlay in PlayerScreen).
+    // Media3's text track is left empty (no SubtitleConfiguration on the
+    // MediaItem) so there's no MergingMediaSource sideload to block
+    // playback start, no TextRenderer cue queue to dual-render, and the
+    // translated cue list cleanly replaces source on swap.
+    val overlayAccess = remember(context) { TrailerSubtitleOverlayAccess.from(context) }
+    val translationSettings by overlayAccess
         .subtitleTranslationSettingsDataStore()
         .settings
         .collectAsStateWithLifecycle(initialValue = SubtitleTranslationSettings())
-    val cueTranslatorScope = rememberCoroutineScope()
-    val currentTranslationSettings by rememberUpdatedState(translationSettings)
-    val currentTargetLanguage by rememberUpdatedState(
-        preferredSubtitleLanguage
-            ?.takeIf { it.isNotBlank() && !it.equals("off", true) && !it.equals("none", true) }
-    )
-    val cueGroupTranslator = remember(cueTranslatorAccess, cueTranslatorScope) {
-        val delegate = BuiltInSubtitleCueTranslator(
-            scope = cueTranslatorScope,
-            translationService = cueTranslatorAccess.subtitleTranslationService(),
-            isEnabledProvider = {
-                currentTranslationSettings.enabled &&
-                    currentTranslationSettings.apiKey.isNotBlank() &&
-                    !currentTargetLanguage.isNullOrBlank()
-            },
-            settingsProvider = { currentTranslationSettings },
-            targetLanguageProvider = { currentTargetLanguage },
-            onTranslatingChanged = { /* no-op for trailers */ },
-            onTranslationError = { msg ->
-                if (msg != null) Log.d(TAG, "cue translator: $msg")
-            }
-        )
-        // Wrap with a short prefetch horizon so playback isn't blocked
-        // until every cue batch returns from the AI provider. Trailers
-        // sideload subtitles via SingleSampleMediaSource inside a
-        // MergingMediaSource that gates preparation on every child; with
-        // the unbounded default (Long.MAX_VALUE / 2) inherited from
-        // BuiltInSubtitleCueTranslator, that gate doesn't release until
-        // the entire SRT is translated. Streams don't hit this because
-        // their subtitle track is embedded, not sideloaded.
-        TrailerCueGroupTranslator(delegate, trailerPrefetchDurationUs = 0L)
-    }
+    val translationService = remember(overlayAccess) { overlayAccess.subtitleTranslationService() }
+    val targetLanguage = preferredSubtitleLanguage
+        ?.takeIf { it.isNotBlank() && !it.equals("off", true) && !it.equals("none", true) }
 
-    var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage) {
-        mutableStateOf<MediaItem.SubtitleConfiguration?>(null)
+    var cueGroups by remember(trailerCaptions, preferredSubtitleLanguage) {
+        mutableStateOf<List<TimedAddonCueGroup>>(emptyList())
     }
+    var overlayCues by remember(trailerCaptions, preferredSubtitleLanguage) {
+        mutableStateOf<List<Cue>>(emptyList())
+    }
+    val currentOverlayCues by rememberUpdatedState(overlayCues)
+
     LaunchedEffect(trailerCaptions, preferredSubtitleLanguage) {
-        subtitleConfig = null
-        // Always select WITHOUT translateTo — the SubtitleConfiguration
-        // gets the source SRT; the cue translator handles target-language
-        // substitution on-demand as Media3 reads cues.
+        overlayCues = emptyList()
+        cueGroups = emptyList()
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
             ?.copy(translateTo = null)
             ?: return@LaunchedEffect
         val cachedUri = subtitleCache.ensure(selected) ?: return@LaunchedEffect
         Log.d(TAG, "subtitle ready lang=${selected.languageCode} uri=$cachedUri")
-        subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(cachedUri))
-            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
-            .setLanguage(selected.languageCode)
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            .build()
+        val sourceCueGroups = parseTrailerSubtitleCueGroups(cachedUri)
+        if (sourceCueGroups.isEmpty()) {
+            Log.d(TAG, "subtitle parse produced zero cue groups")
+            return@LaunchedEffect
+        }
+        // Show source-language cues immediately.
+        cueGroups = sourceCueGroups
+
+        // If AI translation is configured and the target language differs
+        // from the source, translate in the background and swap cueGroups
+        // when the translation arrives. The poll loop on (cueGroups,
+        // trailerPlayer) picks up the swap automatically — no player
+        // re-prepare, no playback restart.
+        val resolvedTarget = targetLanguage
+        if (resolvedTarget != null &&
+            !resolvedTarget.equals(selected.languageCode, ignoreCase = true) &&
+            translationSettings.enabled &&
+            translationSettings.apiKey.isNotBlank()
+        ) {
+            val translated = translateTrailerCueGroups(
+                service = translationService,
+                settings = translationSettings,
+                sourceLanguageCode = selected.languageCode,
+                targetLanguageCode = resolvedTarget,
+                cueGroups = sourceCueGroups
+            )
+            if (translated !== sourceCueGroups) {
+                Log.d(TAG, "translated cueGroups ready (size=${translated.size})")
+                cueGroups = translated
+            }
+        }
     }
-    val currentSubtitleConfig by rememberUpdatedState(subtitleConfig)
     val lifecycleOwner = remember(context, navLifecycleOwner) {
         context.findLifecycleOwner() ?: navLifecycleOwner
     }
@@ -217,7 +244,7 @@ fun TrailerPlayer(
         label = "trailerFirstFrameAlpha"
     )
 
-    val trailerPlayer = remember(trailerUrl, trailerAudioUrl, cueGroupTranslator) {
+    val trailerPlayer = remember(trailerUrl, trailerAudioUrl) {
         if (trailerUrl != null) {
             // Trailers are short (~30s–2min) and rarely seek; the previous
             // 30s/120s/5s/10s defaults caused DefaultAllocator to preallocate
@@ -236,10 +263,8 @@ fun TrailerPlayer(
                 .setTargetBufferBytes(2 * 1024 * 1024)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
-            val renderersFactory = TrailerRenderersFactory(context, cueGroupTranslator)
             ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
-                .setRenderersFactory(renderersFactory)
                 .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                 .build()
                 .apply {
@@ -256,16 +281,31 @@ fun TrailerPlayer(
                     // it never reaches a high variant before playback ends.
                     // Force the highest available video variant up front;
                     // the 2 MiB target buffer cap on the LoadControl above
-                    // bounds memory. This is video-only and doesn't affect
-                    // text-track selection (so the HLS `tts_caps/1`
-                    // alternate-rendition concern from prior fixes still
-                    // doesn't apply).
+                    // bounds memory. Also disable text tracks because we
+                    // render subtitles via the app-controlled overlay
+                    // pipeline (TrailerSubtitleOverlay), not Media3's
+                    // TextRenderer.
                     trackSelectionParameters = trackSelectionParameters.buildUpon()
                         .setForceHighestSupportedBitrate(true)
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                         .build()
                 }
         } else {
             null
+        }
+    }
+
+    // Poll player position and update overlayCues from the current cueGroups.
+    // The loop re-runs whenever cueGroups changes (e.g. source → translated
+    // swap) so the overlay picks up the new language without re-prepare.
+    LaunchedEffect(trailerPlayer, cueGroups) {
+        val player = trailerPlayer ?: return@LaunchedEffect
+        if (cueGroups.isEmpty()) {
+            overlayCues = emptyList()
+            return@LaunchedEffect
+        }
+        pollTrailerActiveCues(player, cueGroups) { active ->
+            overlayCues = active
         }
     }
     var isBuffering by remember(trailerPlayer) { mutableStateOf(false) }
@@ -366,25 +406,13 @@ fun TrailerPlayer(
         }
     }
 
-    fun buildVideoMediaItem(
-        videoUrl: String,
-        subtitleConfig: MediaItem.SubtitleConfiguration?
-    ): MediaItem {
-        val builder = MediaItem.Builder().setUri(videoUrl)
-        if (subtitleConfig != null) {
-            builder.setSubtitleConfigurations(listOf(subtitleConfig))
-        }
-        return builder.build()
-    }
-
     fun prepareTrailerMediaSource(
         player: ExoPlayer,
         videoUrl: String,
-        audioUrl: String?,
-        subtitleConfig: MediaItem.SubtitleConfiguration?
+        audioUrl: String?
     ) {
         val mediaSourceFactory = buildTrailerMediaSourceFactory(videoUrl, audioUrl)
-        val videoMediaItem = buildVideoMediaItem(videoUrl, subtitleConfig)
+        val videoMediaItem = MediaItem.fromUri(videoUrl)
         if (!audioUrl.isNullOrBlank()) {
             val videoSource = mediaSourceFactory.createMediaSource(videoMediaItem)
             val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))
@@ -394,13 +422,13 @@ fun TrailerPlayer(
         }
     }
 
-    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted, lifecycleState, subtitleConfig) {
+    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted, lifecycleState) {
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
         if (shouldPrepareTrailerPlayback(lifecycleState, isPlaying, trailerUrl)) {
             FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
             hasRenderedFirstFrame = false
-            prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl, subtitleConfig)
+            prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl)
             player.prepare()
             player.playWhenReady = true
         } else {
@@ -417,25 +445,6 @@ fun TrailerPlayer(
         } else {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
-    }
-
-    LaunchedEffect(trailerPlayer, subtitleConfig) {
-        val player = trailerPlayer ?: return@LaunchedEffect
-        // Only mutate track-selection params when we actually have a
-        // sideloaded subtitle to render. Media3's default selector does
-        // NOT auto-select even SELECTION_FLAG_DEFAULT text tracks
-        // without a preferred-text-language hint, so we set one. We do
-        // NOT enable selectUndeterminedTextLanguage — that's the flag
-        // that historically forced Media3 to load HLS alternate text
-        // renditions, and YouTube's `tts_caps/1`-flagged manifests
-        // contain sub-rendition URLs that can 403 fatally. With per-
-        // host header dispatch in place, the sideloaded TTML URL on
-        // youtube.com timedtext fetches with web headers (no 429),
-        // and we don't poke alternate-rendition URLs.
-        val activeSubtitleConfig = subtitleConfig ?: return@LaunchedEffect
-        val builder = player.trackSelectionParameters.buildUpon()
-            .setPreferredTextLanguage(activeSubtitleConfig.language)
-        player.trackSelectionParameters = builder.build()
     }
 
     LaunchedEffect(seekRequestToken, seekDeltaMs, trailerPlayer) {
@@ -498,8 +507,7 @@ fun TrailerPlayer(
                             prepareTrailerMediaSource(
                                 player,
                                 currentTrailerUrl!!,
-                                currentTrailerAudioUrl,
-                                currentSubtitleConfig
+                                currentTrailerAudioUrl
                             )
                             player.prepare()
                         }
@@ -548,7 +556,7 @@ fun TrailerPlayer(
                     (LayoutInflater.from(ctx)
                         .inflate(R.layout.exo_trailer_player_view, null, false) as PlayerView)
                         .apply {
-                            bindTrailerPlayerView(this, trailerPlayer, subtitleStyleForView)
+                            bindTrailerPlayerView(this, trailerPlayer, subtitleStyleForView, currentOverlayCues)
                             useController = false
                             isFocusable = true
                             isFocusableInTouchMode = true
@@ -567,7 +575,7 @@ fun TrailerPlayer(
                         }
                 },
                 update = { view ->
-                    bindTrailerPlayerView(view, trailerPlayer, subtitleStyleForView)
+                    bindTrailerPlayerView(view, trailerPlayer, subtitleStyleForView, currentOverlayCues)
                     view.keepScreenOn = shouldKeepScreenOn
                     view.resizeMode = if (cropToFill) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
