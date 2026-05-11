@@ -3,7 +3,9 @@ package com.nexio.tv.core.anime.binary
 import android.content.Context
 import android.content.res.AssetManager
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -54,5 +56,22 @@ class AnimeIdMapBinaryReaderTest {
         reader.ensureOpen()
         assertFalse(reader.isOpen())
         assertTrue(reader.isFailed())
+    }
+
+    @Test
+    fun `containsKitsu returns true for known id, false for unknown`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertTrue(reader.containsKitsu("11469"))
+        assertFalse(reader.containsKitsu("000000"))
+    }
+
+    @Test
+    fun `lookupSingle finds by mal anidb tmdbMovie`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        // From fixture JSON: byAnidb { "11739" -> "11469" }
+        assertEquals("11469", reader.lookupSingle(IndexKind.BY_ANIDB, "11739"))
+        assertNull(reader.lookupSingle(IndexKind.BY_ANIDB, "99999999"))
     }
 }

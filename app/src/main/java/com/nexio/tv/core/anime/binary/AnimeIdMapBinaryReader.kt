@@ -112,6 +112,69 @@ class AnimeIdMapBinaryReader @Inject constructor(
         return dup.slice().order(ByteOrder.LITTLE_ENDIAN)
     }
 
+    fun containsKitsu(kitsuId: String): Boolean {
+        val open = state as? State.Open ?: return false
+        val key = kitsuId.toLongOrNull() ?: return false
+        return findSingleEntry(open, IndexKind.BY_KITSU, key) >= 0
+    }
+
+    internal fun lookupSingle(kind: IndexKind, value: String): String? {
+        val open = state as? State.Open ?: return null
+        val key = value.toLongOrNull() ?: return null
+        val entryIndex = findSingleEntry(open, kind, key)
+        if (entryIndex < 0) return null
+        val descriptor = readDescriptor(open, kind.slot)
+        val entryStart = descriptor.offset.toInt() + entryIndex * BinaryFormat.STRIDE_U64_SINGLE
+        val recordOffset = open.parent.getInt(entryStart + 8)
+        // For single-value indexes the value IS the kitsu numeric ID of the
+        // referenced record — decode the kitsu varint from the record's body.
+        return readRecordKitsuId(open, recordOffset)
+    }
+
+    private data class Descriptor(val kind: Int, val stride: Int, val offset: Long, val count: Long)
+
+    private fun readDescriptor(open: State.Open, slot: Int): Descriptor {
+        val base = slot * BinaryFormat.INDEX_DESCRIPTOR_SIZE
+        val k = open.indexTable.getInt(base)
+        val stride = open.indexTable.getInt(base + 4)
+        val offset = open.indexTable.getLong(base + 8)
+        val count = open.indexTable.getLong(base + 16)
+        return Descriptor(k, stride, offset, count)
+    }
+
+    private fun findSingleEntry(open: State.Open, kind: IndexKind, key: Long): Int {
+        val d = readDescriptor(open, kind.slot)
+        require(d.kind == BinaryFormat.KIND_U64_SINGLE) {
+            "expected KIND_U64_SINGLE for $kind, got ${d.kind}"
+        }
+        return binarySearchU64(open.parent, d.offset.toInt(), BinaryFormat.STRIDE_U64_SINGLE, d.count.toInt(), key)
+    }
+
+    private fun binarySearchU64(region: ByteBuffer, baseOffset: Int, stride: Int, count: Int, key: Long): Int {
+        var lo = 0; var hi = count - 1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            val midKey = region.getLong(baseOffset + mid * stride)
+            when {
+                midKey < key -> lo = mid + 1
+                midKey > key -> hi = mid - 1
+                else -> return mid
+            }
+        }
+        return -1
+    }
+
+    private fun readRecordKitsuId(open: State.Open, recordOffset: Int): String? {
+        val records = open.records
+        if (records.get(recordOffset).toInt() and 0xFF != BinaryFormat.RECORD_KIND_IDENTITY.toInt() and 0xFF) {
+            return null
+        }
+        // skip recordKind(1) + presence(1) + presence2(1)
+        val r = LongRef()
+        VarintReader.readULong(records, recordOffset + 3, r)
+        return r.value.toString()
+    }
+
     private fun ensureBinaryOnDisk(): File? {
         val dir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
         val target = File(dir, "fmt$BINARY_FORMAT_VERSION.bin")
