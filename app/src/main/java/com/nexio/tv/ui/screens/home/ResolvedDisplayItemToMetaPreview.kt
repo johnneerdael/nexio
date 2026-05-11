@@ -38,6 +38,7 @@ internal fun ResolvedDisplayItem.toMetaPreview(): MetaPreview {
         ratingSource = rating?.source ?: TitleRatingSource.IMDB,
         tomatoesRating = display.tomatoesRating,
         genres = display.genres,
-        artwork = artwork
+        artwork = artwork,
+        firstPaintStableIds = stableIds
     )
 }

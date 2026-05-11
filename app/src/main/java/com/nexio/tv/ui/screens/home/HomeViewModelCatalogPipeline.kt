@@ -3203,20 +3203,35 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     )
     val filteredSnapshot = builtInSafeSnapshot.filterDisabledHomeCatalogRows(
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
-        isAddonRowDisabled = { row ->
+        isAddonRailDisabled = { rail ->
             isCatalogDisabled(
-                addonBaseUrl = row.addonBaseUrl,
-                addonId = row.addonId,
-                type = row.apiType,
-                catalogId = row.catalogId,
-                catalogName = row.catalogName
+                addonBaseUrl = rail.addonBaseUrl,
+                addonId = rail.addonId,
+                type = rail.apiType,
+                catalogId = rail.catalogId,
+                catalogName = rail.catalogName
             )
         }
     )
+
+    // Plan B Task 6f.5 — reconstruct CatalogRow content from rails via the
+    // typed surface lookup. The typed authority is populated synchronously
+    // before this function runs (restorePersistedCatalogSnapshotPipeline does
+    // `resolvedDisplaySurfaceRepository.restoreFromDisk(...)` immediately
+    // before `withContext(Main.immediate) { applyPending... }`). Empty
+    // reconstruction is acceptable degradation: home renders empty briefly,
+    // the next producer emission populates everything.
+    val typedItemsByKey = currentTypedItemsByKey()
+    val reconstructedDisplayRows = filteredSnapshot.rails.mapNotNull { rail ->
+        rail.toCatalogRowOrNull(typedItemsByKey)
+    }
+    val reconstructedFullRows = reconstructedDisplayRows  // 6f.5: no separate fullRows persisted
+    val reconstructedHeroItems = filteredSnapshot.reconstructHeroItems(typedItemsByKey)
+
     val composedSnapshot = composeHydratedHomeOverlaySnapshot(
-        displayRows = filteredSnapshot.catalogRows,
-        fullRows = filteredSnapshot.fullCatalogRows,
-        heroItems = filteredSnapshot.heroItems,
+        displayRows = reconstructedDisplayRows,
+        fullRows = reconstructedFullRows,
+        heroItems = reconstructedHeroItems,
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
         heroTmdbSettings = currentTmdbSettings
     )
@@ -3287,73 +3302,48 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
         currentSyntheticTmdbGroups = currentSyntheticTmdbGroups
     )
 
-    fun isRetained(row: CatalogRow): Boolean {
-        return row.addonId != TMDB_RAIL_ADDON_ID || row.catalogId in currentTmdbCatalogIds
-    }
-
-    fun isRetainedRail(rail: com.nexio.tv.domain.model.Rail): Boolean {
+    fun isRetained(rail: com.nexio.tv.domain.model.Rail): Boolean {
         return rail.addonId != TMDB_RAIL_ADDON_ID || rail.catalogId in currentTmdbCatalogIds
     }
 
-    val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
-    val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
-    val filteredRails = snapshot.rails.filter(::isRetainedRail)
-    if (
-        filteredFullRows.size == snapshot.fullCatalogRows.size &&
-        filteredDisplayRows.size == snapshot.catalogRows.size &&
-        filteredRails.size == snapshot.rails.size
-    ) {
+    val filteredRails = snapshot.rails.filter(::isRetained)
+    if (filteredRails.size == snapshot.rails.size) {
         return snapshot
     }
 
-    val removedTmdbRows = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
+    val removedTmdbKeys = snapshot.rails
+        .asSequence()
         .filterNot(::isRetained)
-        .filter { row -> row.addonId == TMDB_RAIL_ADDON_ID }
-        .toList()
-    val removedTmdbKeys = (
-        removedTmdbRows.asSequence()
-            .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) } +
-        snapshot.rails.asSequence()
-            .filterNot(::isRetainedRail)
-            .filter { rail -> rail.addonId == TMDB_RAIL_ADDON_ID }
-            .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
-    ).toSet()
-    val removedTmdbItemKeys = removedTmdbRows
-        .asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .filter { rail -> rail.addonId == TMDB_RAIL_ADDON_ID }
+        .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
         .toSet()
-    val retainedItemKeys = filteredFullRows
+    val removedTmdbItemKeys = snapshot.rails
         .asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .filterNot(::isRetained)
+        .filter { rail -> rail.addonId == TMDB_RAIL_ADDON_ID }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
         .toSet()
-    val retainedCurrentTmdbItemKeys = filteredFullRows
+    val retainedItemKeys = filteredRails
         .asSequence()
-        .filter { row -> row.addonId == TMDB_RAIL_ADDON_ID }
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
         .toSet()
-
-    fun heroKeyPredicate(key: String): Boolean =
-        key in retainedItemKeys &&
-            (key !in removedTmdbItemKeys || key in retainedCurrentTmdbItemKeys)
+    val retainedCurrentTmdbItemKeys = filteredRails
+        .asSequence()
+        .filter { rail -> rail.addonId == TMDB_RAIL_ADDON_ID }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
+        .toSet()
 
     return snapshot.copy(
-        catalogRows = filteredDisplayRows,
-        fullCatalogRows = filteredFullRows,
-        heroItems = snapshot.heroItems.filter { item ->
-            heroKeyPredicate("${item.apiType}:${item.id}")
-        },
-        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys },
-        // Plan B Task 6f.2 — rails + heroItemKeys filtered alongside the
-        // legacy fields. Same predicate (addonId/catalogId) applies; same
-        // hero membership computation. Task 6f.5 drops the legacy fields
-        // and makes these the sole representation.
         rails = filteredRails,
         heroItemKeys = snapshot.heroItemKeys.filter { key ->
-            heroKeyPredicate("${key.apiType}:${key.contentId}")
-        }
+            val asStr = "${key.apiType}:${key.contentId}"
+            asStr in retainedItemKeys &&
+                (asStr !in removedTmdbItemKeys || asStr in retainedCurrentTmdbItemKeys)
+        },
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys }
     )
 }
 
@@ -3369,73 +3359,48 @@ internal fun filterRestoredHomeSnapshotKitsuRows(
         currentSyntheticKitsuGroups = currentSyntheticKitsuGroups
     )
 
-    fun isRetained(row: CatalogRow): Boolean {
-        return row.addonId != KITSU_HOME_ADDON_ID || row.catalogId in currentKitsuCatalogIds
-    }
-
-    fun isRetainedRail(rail: com.nexio.tv.domain.model.Rail): Boolean {
+    fun isRetained(rail: com.nexio.tv.domain.model.Rail): Boolean {
         return rail.addonId != KITSU_HOME_ADDON_ID || rail.catalogId in currentKitsuCatalogIds
     }
 
-    val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
-    val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
-    val filteredRails = snapshot.rails.filter(::isRetainedRail)
-    if (
-        filteredFullRows.size == snapshot.fullCatalogRows.size &&
-        filteredDisplayRows.size == snapshot.catalogRows.size &&
-        filteredRails.size == snapshot.rails.size
-    ) {
+    val filteredRails = snapshot.rails.filter(::isRetained)
+    if (filteredRails.size == snapshot.rails.size) {
         return snapshot
     }
 
-    val removedKitsuRows = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
+    val removedKitsuKeys = snapshot.rails
+        .asSequence()
         .filterNot(::isRetained)
-        .filter { row -> row.addonId == KITSU_HOME_ADDON_ID }
-        .toList()
-    val removedKitsuKeys = (
-        removedKitsuRows.asSequence()
-            .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) } +
-        snapshot.rails.asSequence()
-            .filterNot(::isRetainedRail)
-            .filter { rail -> rail.addonId == KITSU_HOME_ADDON_ID }
-            .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
-    ).toSet()
-    val removedKitsuItemKeys = removedKitsuRows
-        .asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .filter { rail -> rail.addonId == KITSU_HOME_ADDON_ID }
+        .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
         .toSet()
-    val retainedItemKeys = filteredFullRows
+    val removedKitsuItemKeys = snapshot.rails
         .asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .filterNot(::isRetained)
+        .filter { rail -> rail.addonId == KITSU_HOME_ADDON_ID }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
         .toSet()
-    val retainedCurrentKitsuItemKeys = filteredFullRows
+    val retainedItemKeys = filteredRails
         .asSequence()
-        .filter { row -> row.addonId == KITSU_HOME_ADDON_ID }
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
         .toSet()
-
-    fun heroKeyPredicate(key: String): Boolean =
-        key in retainedItemKeys &&
-            (key !in removedKitsuItemKeys || key in retainedCurrentKitsuItemKeys)
+    val retainedCurrentKitsuItemKeys = filteredRails
+        .asSequence()
+        .filter { rail -> rail.addonId == KITSU_HOME_ADDON_ID }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
+        .toSet()
 
     return snapshot.copy(
-        catalogRows = filteredDisplayRows,
-        fullCatalogRows = filteredFullRows,
-        heroItems = snapshot.heroItems.filter { item ->
-            heroKeyPredicate("${item.apiType}:${item.id}")
-        },
-        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedKitsuKeys },
-        // Plan B Task 6f.2 — rails + heroItemKeys filtered alongside the
-        // legacy fields. Same predicate (addonId/catalogId) applies; same
-        // hero membership computation. Task 6f.5 drops the legacy fields
-        // and makes these the sole representation.
         rails = filteredRails,
         heroItemKeys = snapshot.heroItemKeys.filter { key ->
-            heroKeyPredicate("${key.apiType}:${key.contentId}")
-        }
+            val asStr = "${key.apiType}:${key.contentId}"
+            asStr in retainedItemKeys &&
+                (asStr !in removedKitsuItemKeys || asStr in retainedCurrentKitsuItemKeys)
+        },
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedKitsuKeys }
     )
 }
 
@@ -3475,14 +3440,10 @@ private fun currentKitsuCatalogIds(
 
 private fun com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot.filterDisabledHomeCatalogRows(
     disabledHomeCatalogKeys: Set<String>,
-    isAddonRowDisabled: (CatalogRow) -> Boolean
+    isAddonRailDisabled: (com.nexio.tv.domain.model.Rail) -> Boolean
 ): com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot {
     // Pre-compute non-"custom" disabled slugs ONCE for the whole filter pass.
-    // Without this, slugifySyntheticHomeCatalogKey(disabledKey) was recomputed for every row × every
-    // disabled key, each call allocating 4-5 Strings (lowercase + replace(Regex) + trim + ifBlank).
-    // ANR trace on PID 2076 (2026-05-10) caught the main thread burning CPU here under sustained
-    // Modern Home soak — String.toLowerCase / CaseMapper at the top of the stack. CLAUDE.md hard
-    // rule #5: memoize at every reference-fresh boundary; this is the canonical case.
+    // CLAUDE.md hard rule #5: memoize at every reference-fresh boundary.
     val disabledSlugs: Set<String> = if (disabledHomeCatalogKeys.isEmpty()) {
         emptySet()
     } else {
@@ -3494,38 +3455,37 @@ private fun com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot.filterDisa
         out
     }
 
-    fun isDisabled(row: CatalogRow): Boolean {
-        return when (row.addonId) {
+    fun isDisabled(rail: com.nexio.tv.domain.model.Rail): Boolean {
+        return when (rail.addonId) {
             TRAKT_RAIL_ADDON_ID,
             SIMKL_RAIL_ADDON_ID,
             MDBLIST_RAIL_ADDON_ID,
             TMDB_RAIL_ADDON_ID -> {
-                if (isSyntheticHomeCatalogDisabled(row.catalogId, disabledHomeCatalogKeys)) return true
-                if (isSyntheticHomeCatalogDisabled(homeCatalogGlobalKey(row), disabledHomeCatalogKeys)) return true
+                if (isSyntheticHomeCatalogDisabled(rail.catalogId, disabledHomeCatalogKeys)) return true
+                if (isSyntheticHomeCatalogDisabled(homeCatalogGlobalKey(rail), disabledHomeCatalogKeys)) return true
                 if (disabledSlugs.isEmpty()) return false
-                // Compute lowercase ONCE per row, not once per (row × disabled key).
-                val rowCatalogIdLower = row.catalogId.lowercase()
-                disabledSlugs.any { slug -> rowCatalogIdLower.contains(slug) }
+                val railCatalogIdLower = rail.catalogId.lowercase()
+                disabledSlugs.any { slug -> railCatalogIdLower.contains(slug) }
             }
-            else -> isAddonRowDisabled(row)
+            else -> isAddonRailDisabled(rail)
         }
     }
 
-    val filteredFullRows = fullCatalogRows.filterNot(::isDisabled)
-    val filteredDisplayRows = catalogRows.filterNot(::isDisabled)
-    if (filteredFullRows.size == fullCatalogRows.size && filteredDisplayRows.size == catalogRows.size) {
+    val filteredRails = rails.filterNot(::isDisabled)
+    if (filteredRails.size == rails.size) {
         return this
     }
 
-    val retainedItemKeys = filteredFullRows
+    val retainedItemKeys = filteredRails
         .asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .map { item -> "${item.apiType}:${item.id}" }
+        .flatMap { rail -> rail.items.asSequence() }
+        .map { key -> "${key.apiType}:${key.contentId}" }
         .toSet()
     return copy(
-        catalogRows = filteredDisplayRows,
-        fullCatalogRows = filteredFullRows,
-        heroItems = heroItems.filter { item -> "${item.apiType}:${item.id}" in retainedItemKeys },
+        rails = filteredRails,
+        heroItemKeys = heroItemKeys.filter { key ->
+            "${key.apiType}:${key.contentId}" in retainedItemKeys
+        },
         orderedGroupKeys = orderedGroupKeys.filterNot { key ->
             isSyntheticHomeCatalogDisabled(key, disabledHomeCatalogKeys)
         }

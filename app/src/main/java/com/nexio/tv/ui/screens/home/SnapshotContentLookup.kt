@@ -22,7 +22,7 @@ internal fun Snapshot.reconstructHeroItems(
     typedItemsByKey: Map<String, MetaPreview>
 ): List<MetaPreview> {
     val keys = heroItemKeys
-    if (keys.isEmpty()) return heroItems
+    if (keys.isEmpty()) return emptyList()
     val out = ArrayList<MetaPreview>(keys.size)
     for (i in keys.indices) {
         typedItemsByKey[keys[i].key]?.let(out::add)
