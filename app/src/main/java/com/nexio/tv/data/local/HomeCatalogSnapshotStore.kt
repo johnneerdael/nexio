@@ -33,6 +33,9 @@ import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.Rail
+import com.nexio.tv.domain.model.RailItemKey
+import com.nexio.tv.domain.model.toRail
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -104,7 +107,17 @@ class HomeCatalogSnapshotStore private constructor(
         private const val TAG = "HomeCatalogSnapshot"
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 4
+        // SCHEMA_VERSION bumped 4 → 5 (Plan B Task 6d) to introduce structure-only
+        // persisted fields [Snapshot.rails] + [Snapshot.heroItemKeys] alongside the
+        // legacy denormalized [Snapshot.catalogRows]/[Snapshot.heroItems]/
+        // [Snapshot.fullCatalogRows] fields. v4 snapshots are discarded on read
+        // (no projector); next write produces v5 which includes both shapes for
+        // backward compat. Task 6e (next) will retire the legacy fields and gut
+        // the ~920 LOC MetaPreview-content sanitization subsystem that operates
+        // on them. Typed item content is persisted separately by
+        // [ResolvedDisplaySnapshotStore] (Phase 3.7 narrowed `f705ad049`); the
+        // home pipeline reads both stores at cold-start to seed first paint.
+        private const val SCHEMA_VERSION = 5
         // Persisted-snapshot bounds. The on-disk JSON is restored at startup as a
         // first-paint cache; the network refresh that follows replaces it. The
         // cache only needs enough rows/items to seed an initial paint, not the
@@ -144,17 +157,37 @@ class HomeCatalogSnapshotStore private constructor(
     private val catalogRowListType = object : TypeToken<List<CatalogRow>>() {}.type
     private val metaPreviewListType = object : TypeToken<List<MetaPreview>>() {}.type
     private val stringListType = object : TypeToken<List<String>>() {}.type
+    private val railListType = object : TypeToken<List<Rail>>() {}.type
+    private val railItemKeyListType = object : TypeToken<List<RailItemKey>>() {}.type
 
     suspend fun currentPosterProviderToken(): String {
         val provider = posterRatingsUrlResolver.getActiveProvider() ?: return "native"
         return "${provider.provider.name}:${provider.apiKey.hashCode()}"
     }
 
+    /**
+     * In-memory + persisted snapshot.
+     *
+     * Plan B Task 6d (schema v5) added the structure-only [rails] and
+     * [heroItemKeys] fields. They are populated automatically by [write]
+     * (derived from [catalogRows]/[fullCatalogRows] and [heroItems]) and
+     * round-trip through the persisted JSON. They have empty defaults so
+     * existing in-memory constructor call sites stay source-compatible.
+     *
+     * Task 6e will retire the denormalized [catalogRows]/[fullCatalogRows]/
+     * [heroItems] fields and the ~920 LOC sanitization subsystem that
+     * operates on them; consumers will move to the [rails]/[heroItemKeys]
+     * pair plus typed item lookup via
+     * [com.nexio.tv.data.local.ResolvedDisplaySnapshotStore] /
+     * [com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository].
+     */
     data class Snapshot(
         val catalogRows: List<CatalogRow>,
         val fullCatalogRows: List<CatalogRow>,
         val heroItems: List<MetaPreview>,
-        val orderedGroupKeys: List<String> = emptyList()
+        val orderedGroupKeys: List<String> = emptyList(),
+        val rails: List<Rail> = emptyList(),
+        val heroItemKeys: List<RailItemKey> = emptyList()
     )
 
     fun read(
@@ -370,6 +403,11 @@ class HomeCatalogSnapshotStore private constructor(
                                     orderedGroupKeys = gson.fromJson<List<String>>(reader, stringListType)
                                         ?: emptyList()
                                 }
+                                // Plan B Task 6d schema v5 persisted these structure-only
+                                // fields, but no in-memory consumer has been wired yet
+                                // (Task 6e). Skip them to keep returned Snapshot
+                                // shape-equivalent to v4's behavior — see comment below.
+                                "rails", "heroItemKeys" -> reader.skipValue()
                                 else -> reader.skipValue()
                             }
                         }
@@ -377,7 +415,14 @@ class HomeCatalogSnapshotStore private constructor(
                     }
                 }
             }
-            // All gates passed; return the canonical Snapshot.
+            // All gates passed; return the canonical Snapshot. Plan B Task 6d
+            // schema v5 introduces persisted `rails` + `heroItemKeys`, but no
+            // in-memory consumer has been wired to them yet — Task 6e moves
+            // consumers off the denormalized fields and onto these. Until
+            // then, drop them on read so the returned Snapshot stays
+            // shape-equivalent to v4's behavior and existing equality
+            // assertions/tests remain valid. The on-disk JSON still carries
+            // them; the writer always re-derives if absent.
             Snapshot(
                 catalogRows = catalogRows,
                 fullCatalogRows = fullCatalogRows,
@@ -433,6 +478,34 @@ class HomeCatalogSnapshotStore private constructor(
             if (parent != null && !parent.exists()) parent.mkdirs()
             tempFile = File(parent ?: File("."), "${target.name}.tmp")
 
+            // Plan B Task 6d schema v5: persist structure-only [rails] +
+            // [heroItemKeys] alongside the legacy denormalized fields. If the
+            // in-memory Snapshot was built by a producer that has not yet been
+            // updated to populate these (default to empty), derive them from
+            // the legacy fields so the on-disk shape is always complete.
+            val railsForPersist: List<Rail> = snapshot.rails.ifEmpty {
+                // Mirror buildRailMemberships' row dedupe (fullCatalogRows wins; catalogRows fills gaps).
+                val merged = linkedMapOf<String, CatalogRow>()
+                for (i in snapshot.fullCatalogRows.indices) {
+                    val row = snapshot.fullCatalogRows[i]
+                    merged[row.catalogId] = row
+                }
+                for (i in snapshot.catalogRows.indices) {
+                    val row = snapshot.catalogRows[i]
+                    merged.putIfAbsent(row.catalogId, row)
+                }
+                val out = ArrayList<Rail>(merged.size)
+                for (row in merged.values) out += row.toRail()
+                out
+            }
+            val heroItemKeysForPersist: List<RailItemKey> = snapshot.heroItemKeys.ifEmpty {
+                val out = ArrayList<RailItemKey>(snapshot.heroItems.size)
+                for (i in snapshot.heroItems.indices) {
+                    val item = snapshot.heroItems[i]
+                    out += RailItemKey(apiType = item.apiType, contentId = item.id)
+                }
+                out
+            }
             FileOutputStream(tempFile).use { fos ->
                 BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                     JsonWriter(bw).use { writer ->
@@ -449,6 +522,11 @@ class HomeCatalogSnapshotStore private constructor(
                         gson.toJson(snapshot.heroItems, metaPreviewListType, writer)
                         writer.name("orderedGroupKeys")
                         gson.toJson(snapshot.orderedGroupKeys, stringListType, writer)
+                        // Plan B Task 6d schema v5: structure-only fields.
+                        writer.name("rails")
+                        gson.toJson(railsForPersist, railListType, writer)
+                        writer.name("heroItemKeys")
+                        gson.toJson(heroItemKeysForPersist, railItemKeyListType, writer)
                         writer.endObject()
                     }
                 }
@@ -557,6 +635,9 @@ class HomeCatalogSnapshotStore private constructor(
             Log.d(TAG, "Poster provider changed ($cachedPosterToken -> $posterProviderToken), invalidating snapshot")
             return null
         }
+        // Plan B Task 6d schema v5 includes persisted `rails` + `heroItemKeys`
+        // on disk, but no in-memory consumer has been wired yet (Task 6e). Drop
+        // them on read here too — see streamReadSnapshot for the same rationale.
         val canonical = Snapshot(
             catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
             fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),
@@ -710,7 +791,12 @@ class HomeCatalogSnapshotStore private constructor(
             heroItems = heroItems.mapIndexed { itemIndex, item ->
                 item.repairArtworkWriteInvariant("heroItems[$itemIndex]")
             },
-            orderedGroupKeys = orderedGroupKeys
+            orderedGroupKeys = orderedGroupKeys,
+            // Plan B Task 6d schema v5: preserve structure-only fields; the
+            // sanitization subsystem operates only on the denormalized
+            // MetaPreview content, not on opaque keys.
+            rails = rails,
+            heroItemKeys = heroItemKeys
         )
     }
 
@@ -1008,7 +1094,14 @@ class HomeCatalogSnapshotStore private constructor(
                 catalogRows = cappedCatalogRows,
                 fullCatalogRows = cappedFullCatalogRows,
                 heroItems = cappedHeroItems,
-                orderedGroupKeys = orderedGroupKeys.distinct()
+                orderedGroupKeys = orderedGroupKeys.distinct(),
+                // Plan B Task 6d schema v5: preserve structure-only fields if
+                // already populated upstream. The persisted write path also
+                // derives them from the legacy fields when empty, so callers
+                // that have not been updated to populate these still produce
+                // a valid v5 snapshot on disk.
+                rails = rails,
+                heroItemKeys = heroItemKeys
             ),
             providerTagMismatchExemptPosterRefs = traceState.providerTagMismatchExemptPosterRefs.toSet()
         )
