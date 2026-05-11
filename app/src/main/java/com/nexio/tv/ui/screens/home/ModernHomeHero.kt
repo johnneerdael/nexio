@@ -186,8 +186,18 @@ internal fun ModernHeroMediaLayer(
 @Composable
 internal fun ModernHeroGradientLayer(
     bgColor: Color,
+    fullscreenTrailerActive: Boolean,
     modifier: Modifier
 ) {
+    if (fullscreenTrailerActive) {
+        // Skip the gradient overlay entirely when the trailer occupies the
+        // full hero area. The gradient is designed to blend the corner-
+        // window trailer back into the home composition; in fullscreen
+        // it would darken the trailer's left/bottom corners and reduce
+        // subtitle readability.
+        Box(modifier = modifier)
+        return
+    }
     Box(
         modifier = modifier
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
