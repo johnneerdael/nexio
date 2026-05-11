@@ -1,6 +1,6 @@
 package com.nexio.tv.data.trailer
 
-internal data class SelectedTrailerCaptionTrack(
+data class SelectedTrailerCaptionTrack(
     val baseUrl: String,
     val languageCode: String,
     val translateTo: String? = null
