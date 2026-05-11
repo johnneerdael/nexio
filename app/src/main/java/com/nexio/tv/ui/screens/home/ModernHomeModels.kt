@@ -105,7 +105,18 @@ data class ModernCarouselItem(
     val subtitle: String?,
     val imageUrl: String?,
     val heroPreview: HeroPreview,
-    val payload: ModernPayload
+    val payload: ModernPayload,
+    /**
+     * Resolved-authority typed artwork refs sourced from `ModernHomeRowItem.posterRef`
+     * / `backdropRef` in [buildCatalogItem]. These take precedence over the
+     * `metaPreview.artwork.*` typed refs at the Coil-model resolver — without this,
+     * Modern Home rendered the raw addon-side `metaPreview.artwork.poster` (which
+     * bypasses the typed-authority merge boundary) and produced visible RPDB↔addon
+     * poster popping. Null when the resolved item lacks a typed ref (cold-start
+     * restore items currently emit null `posterRef`).
+     */
+    val posterRef: com.nexio.tv.core.artwork.ArtworkDisplayRef? = null,
+    val backdropRef: com.nexio.tv.core.artwork.ArtworkDisplayRef? = null
 )
 
 @Immutable
@@ -732,6 +743,8 @@ internal fun buildCatalogItem(
         subtitle = trailerReleaseInfo,
         imageUrl = heroImageUrl,
         heroPreview = heroPreview,
+        posterRef = resolved.posterRef,
+        backdropRef = resolved.backdropRef,
         payload = ModernPayload.Catalog(
             focusKey = "${row.key()}::${itemId}",
             itemId = itemId,

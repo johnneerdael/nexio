@@ -213,10 +213,18 @@ class ModernHomeRowsArtworkModelTest {
         )
 
         assertEquals("nexio-artwork://decision/decision-posterDecision", primary)
-        assertTrue(fallback is LegacyRemoteArtworkModel)
-        assertFalse(fallback is String)
-        assertFalse(fallback.toString().contains("https://"))
-        assertFalse((fallback as LegacyRemoteArtworkModel).key.contains("secret"))
+        // After CLAUDE.md rule #1 fix, the fallback prefers the resolved-authority
+        // legacy URL on [heroPreview.poster] (a safe nexio-artwork:// URI in this
+        // fixture) over the raw addon URL on [metaPreview.poster]. Both shapes
+        // protect the secret token: `LegacyRemoteArtworkModel` sha256-hashes the
+        // URL into its key, and the nexio-artwork:// URI short-circuit returns
+        // the safe URI string verbatim (no http URL ever surfaces).
+        val fallbackString = fallback.toString()
+        assertFalse("fallback exposed raw https URL: $fallbackString", fallbackString.contains("https://"))
+        assertFalse("fallback exposed secret token: $fallbackString", fallbackString.contains("secret"))
+        if (fallback is LegacyRemoteArtworkModel) {
+            assertFalse(fallback.key.contains("secret"))
+        }
     }
 
     @Test
@@ -259,9 +267,16 @@ class ModernHomeRowsArtworkModelTest {
 
         fun copyWithCarouselOverrides(
             imageUrl: String? = carousel.imageUrl,
-            heroPreview: HeroPreview = carousel.heroPreview
+            heroPreview: HeroPreview = carousel.heroPreview,
+            posterRef: com.nexio.tv.core.artwork.ArtworkDisplayRef? = carousel.posterRef,
+            backdropRef: com.nexio.tv.core.artwork.ArtworkDisplayRef? = carousel.backdropRef
         ): TestCarouselItem = TestCarouselItem(
-            carousel = carousel.copy(imageUrl = imageUrl, heroPreview = heroPreview),
+            carousel = carousel.copy(
+                imageUrl = imageUrl,
+                heroPreview = heroPreview,
+                posterRef = posterRef,
+                backdropRef = backdropRef
+            ),
             preview = preview
         )
     }
@@ -312,7 +327,13 @@ class ModernHomeRowsArtworkModelTest {
                 trailerTitle = preview.name,
                 trailerReleaseInfo = null,
                 trailerApiType = preview.apiType
-            )
+            ),
+            // Mirror production [buildCatalogItem]: ModernCarouselItem.posterRef /
+            // backdropRef come from the resolved authority. In tests the resolved
+            // authority is mocked via [artwork]; we project its typed refs onto
+            // the carousel item so the artwork-model resolver consumes them.
+            posterRef = artwork?.poster,
+            backdropRef = artwork?.backdrop
         )
         return TestCarouselItem(carousel, preview)
     }

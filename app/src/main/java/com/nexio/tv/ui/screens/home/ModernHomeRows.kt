@@ -119,6 +119,29 @@ internal fun resolveModernCarouselCardImageUrl(
     }
 }
 
+/**
+ * Resolves the Coil model the Modern Home card paints into for [item].
+ *
+ * Priority (load-bearing — see CLAUDE.md rule #1, Display authority):
+ * 1. Resolved-authority typed ref on [item] (`item.posterRef` / `item.backdropRef`)
+ *    — sourced from `ModernHomeRowItem.posterRef`/`backdropRef` in
+ *    [buildCatalogItem], which is the post-merge-boundary URL the
+ *    `ResolvedDisplaySurfaceRepository` protects from FIRST_PAINT downgrades.
+ * 2. Resolved-authority legacy URL on [item.heroPreview] — same provenance,
+ *    just stringly-typed. Used when the resolved row never produced a typed
+ *    ref (cold-start restore items pre-Phase-3.7).
+ * 3. `metaPreview.artwork.*` typed ref — addon-side artwork that bypasses
+ *    the merge boundary; last resort only, so it cannot win over a resolved
+ *    upgrade.
+ * 4. `metaPreview.poster` / `metaPreview.background` legacy URL — final
+ *    fallback for items where nothing resolved.
+ *
+ * Inverting this priority away from `metaPreview.artwork.*` is what stops
+ * the RPDB↔addon popping: previously the addon's `metaPreview.artwork.poster`
+ * won because it was checked first, and `_metaByItemKey` re-emissions kept
+ * resetting it back to the addon URL even after `applyNonDowngradeMerge`
+ * had upgraded the resolved row to RPDB.
+ */
 internal fun resolveModernCarouselCardArtworkModel(
     item: ModernCarouselItem,
     metaPreview: MetaPreview,
@@ -128,24 +151,37 @@ internal fun resolveModernCarouselCardArtworkModel(
     fallbackModel: String? = item.imageUrl
 ): Any? {
     val useBackdrop = useLandscapePosters || (focusedPosterBackdropExpandEnabled && isBackdropExpanded)
+    val resolvedTypedModel = if (useBackdrop) {
+        item.backdropRef.toCoilModelOrNull() ?: item.posterRef.toCoilModelOrNull()
+    } else {
+        item.posterRef.toCoilModelOrNull()
+    }
+    if (resolvedTypedModel != null) return resolvedTypedModel
+
+    val resolvedLegacyUrl = if (useBackdrop) {
+        firstNonBlank(item.heroPreview.backdrop, item.heroPreview.poster)
+    } else {
+        item.heroPreview.poster
+    }
+    val resolvedLegacyType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
+    val resolvedLegacyModel = resolvedLegacyUrl.toLegacyArtworkCoilModelOrNull(
+        ownerKey = "${item.key}:${resolvedLegacyType.name.lowercase()}",
+        imageType = resolvedLegacyType
+    )
+    if (resolvedLegacyModel != null) return resolvedLegacyModel
+
     val artwork = metaPreview.artwork
-    val typedModel = if (useBackdrop) {
+    val metaTypedModel = if (useBackdrop) {
         artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
     } else {
         artwork?.poster.toCoilModelOrNull()
     }
-    val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
-    val legacyFallback = if (useBackdrop) {
-        fallbackModel
-    } else {
-        firstNonBlank(
-            metaPreview.poster,
-            item.heroPreview.poster
-        )
-    }
-    return typedModel ?: legacyFallback.toLegacyArtworkCoilModelOrNull(
-        ownerKey = "${item.key}:${fallbackType.name.lowercase()}",
-        imageType = fallbackType
+    if (metaTypedModel != null) return metaTypedModel
+
+    val metaLegacyUrl = if (useBackdrop) fallbackModel else metaPreview.poster
+    return metaLegacyUrl.toLegacyArtworkCoilModelOrNull(
+        ownerKey = "${item.key}:${resolvedLegacyType.name.lowercase()}",
+        imageType = resolvedLegacyType
     )
 }
 
@@ -160,15 +196,15 @@ internal fun resolveModernCarouselCardFallbackArtworkModel(
     val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
     val legacyFallback = if (useBackdrop) {
         firstNonBlank(
-            metaPreview.background,
             item.heroPreview.backdrop,
-            metaPreview.poster,
-            item.heroPreview.poster
+            item.heroPreview.poster,
+            metaPreview.background,
+            metaPreview.poster
         )
     } else {
         firstNonBlank(
-            metaPreview.poster,
-            item.heroPreview.poster
+            item.heroPreview.poster,
+            metaPreview.poster
         )
     }
     return legacyFallback.toLegacyArtworkCoilModelOrNull(
