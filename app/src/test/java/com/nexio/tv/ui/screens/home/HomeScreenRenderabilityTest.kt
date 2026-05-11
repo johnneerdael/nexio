@@ -5,6 +5,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.toRail
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,14 +13,32 @@ import java.io.File
 
 class HomeScreenRenderabilityTest {
 
+    private val emptyStructure: HomeViewModel.CatalogStructureSignal =
+        HomeViewModel.CatalogStructureSignal()
+
+    private fun structureFor(rows: List<CatalogRow>): HomeViewModel.CatalogStructureSignal {
+        var hasItems = false
+        var anyLoading = false
+        rows.forEach { row ->
+            if (row.items.isNotEmpty()) hasItems = true
+            if (row.isLoading) anyLoading = true
+        }
+        return HomeViewModel.CatalogStructureSignal(
+            hasItems = hasItems,
+            anyLoading = anyLoading,
+            nonEmpty = rows.isNotEmpty(),
+            rails = rows.map { it.toRail() }
+        )
+    }
+
     @Test
     fun `modern home treats loading catalog rows as renderable`() {
         val state = HomeUiState(
             homeLayout = HomeLayout.MODERN
         )
-        val rows = listOf(loadingRow())
+        val structure = structureFor(listOf(loadingRow()))
 
-        assertTrue(hasRenderableHomeContent(state, rows, heroItemsNonEmpty = false, emptyList()))
+        assertTrue(hasRenderableHomeContent(state, structure, heroItemsNonEmpty = false, emptyList()))
     }
 
     @Test
@@ -30,10 +49,10 @@ class HomeScreenRenderabilityTest {
         val grid = HomeUiState(
             homeLayout = HomeLayout.GRID
         )
-        val rows = listOf(loadingRow())
+        val structure = structureFor(listOf(loadingRow()))
 
-        assertFalse(hasRenderableHomeContent(classic, rows, heroItemsNonEmpty = false, emptyList()))
-        assertFalse(hasRenderableHomeContent(grid, rows, heroItemsNonEmpty = false, emptyList()))
+        assertFalse(hasRenderableHomeContent(classic, structure, heroItemsNonEmpty = false, emptyList()))
+        assertFalse(hasRenderableHomeContent(grid, structure, heroItemsNonEmpty = false, emptyList()))
     }
 
     @Test
@@ -48,10 +67,10 @@ class HomeScreenRenderabilityTest {
                 profileId = 2
             ).markLoading(HomeInitialGate.CONTINUE_WATCHING)
         )
-        val rows = listOf(contentRow())
+        val structure = structureFor(listOf(contentRow()))
 
-        assertTrue(hasRenderableHomeContent(state, rows, heroItemsNonEmpty = false, emptyList()))
-        assertFalse(shouldShowFullHomeLoadingGate(state, rows, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(hasRenderableHomeContent(state, structure, heroItemsNonEmpty = false, emptyList()))
+        assertFalse(shouldShowFullHomeLoadingGate(state, structure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -67,7 +86,7 @@ class HomeScreenRenderabilityTest {
             ).markLoading(HomeInitialGate.CONTINUE_WATCHING)
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyStructure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -83,8 +102,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertTrue(shouldShowFullHomeLoadingGate(state, emptyList(), heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
-        assertFalse(shouldShowHomeEmptyState(state, emptyList(), heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowFullHomeLoadingGate(state, emptyStructure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertFalse(shouldShowHomeEmptyState(state, emptyStructure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test
@@ -100,8 +119,8 @@ class HomeScreenRenderabilityTest {
             ).markResolved(HomeInitialGate.CONTINUE_WATCHING, "first_snapshot_empty")
         )
 
-        assertFalse(shouldShowFullHomeLoadingGate(state, emptyList(), heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
-        assertTrue(shouldShowHomeEmptyState(state, emptyList(), heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertFalse(shouldShowFullHomeLoadingGate(state, emptyStructure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
+        assertTrue(shouldShowHomeEmptyState(state, emptyStructure, heroItemsNonEmpty = false, emptyList(), startupContentGateTimedOut = false))
     }
 
     @Test

@@ -216,26 +216,57 @@ class HomeViewModel @Inject constructor(
 
     internal val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
-    // Post-truncation/layout-adjusted catalog rows used for rendering. Held outside
-    // [HomeUiState] (Plan B small Task 26) to avoid Compose SlotTable retention pinning
-    // both legacy CatalogRow instances and resolved Plan B rails simultaneously. UI consumes
-    // this StateFlow directly; do not re-introduce a catalogRows field on HomeUiState.
-    internal val _displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
-    val displayCatalogRows: StateFlow<List<CatalogRow>> = _displayCatalogRows.asStateFlow()
+    // Post-truncation/layout-adjusted catalog rows. INTERNAL-ONLY: this flow is the
+    // producer-side source of MetaPreview content for hydration, playback-gate
+    // observers, and the presentation pipelines (Modern + Classic builders read
+    // `_internalCatalogRows` to produce typed presentation state). It is NOT
+    // observed by Compose; Compose subscribes to [catalogStructure] (a tiny
+    // fused signal) for gating and to typed projection flows
+    // ([resolvedHeroItems], [resolvedContinueWatchingItems], etc.) for rendering.
+    //
+    // Plan B Task 5e (2026-05-11): the legacy public `displayCatalogRows`
+    // StateFlow was retired. It produced fresh `List<CatalogRow>` references per
+    // emission and was observed by `HomeScreen` via `collectAsStateWithLifecycle`,
+    // pinning prior emissions through Compose's `SnapshotStateRecord` chain
+    // (CLAUDE.md hard rule #2). The structural gating signal lives on
+    // [catalogStructure]; the per-item rendering content lives on the typed
+    // surface authority.
+    //
+    // Do NOT add `displayCatalogRows: StateFlow<List<CatalogRow>>` back as a
+    // public exposure.
+    internal val _internalCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
 
     /**
-     * Typed structure-only view of [_displayCatalogRows]: each [CatalogRow]
-     * becomes a [Rail] with items as [RailItemKey]s rather than [MetaPreview]
-     * instances. Consumers that need typed authority lookup ([resolvedRailRowsFlow])
-     * read from this flow instead of [_displayCatalogRows] so they don't depend
-     * on the legacy item shape.
+     * Fused structural signal for UI gating + the typed [Rail] structure source.
+     * Replaces the legacy `displayCatalogRows: StateFlow<List<CatalogRow>>`
+     * exposure (Plan B Task 5e, 2026-05-11). Written by
+     * [publishCatalogStructureFromRows] from the catalog-pipeline producer site
+     * at the same step that writes [_internalCatalogRows]. The writer uses a
+     * cheap hash signature (catalogId + type + items.size + flags — no
+     * element-wise item walk) so content-equal emissions short-circuit and
+     * preserve the existing reference; downstream `===` guards in Compose +
+     * `combine` stages keep working (CLAUDE.md hard rule #5).
+     */
+    @androidx.compose.runtime.Immutable
+    data class CatalogStructureSignal(
+        val hasItems: Boolean = false,
+        val anyLoading: Boolean = false,
+        val nonEmpty: Boolean = false,
+        val rails: List<Rail> = emptyList()
+    )
+
+    internal val _catalogStructure = MutableStateFlow(CatalogStructureSignal())
+    val catalogStructure: StateFlow<CatalogStructureSignal> = _catalogStructure.asStateFlow()
+
+    /**
+     * Typed structure-only view derived from [_catalogStructure]. Consumers that
+     * need typed authority lookup ([resolvedRailRowsFlow]) read from this flow.
      *
-     * Plan B Phase 3.2 bridge — derived from [_displayCatalogRows] via
-     * [CatalogRow.toRail]. Phase 3.6 will flip the producer to emit [Rail]
+     * Plan B Phase 3.2 bridge. Phase 3.6 will flip the producer to emit [Rail]
      * directly; this derivation goes away then.
      */
-    internal val railStructure: StateFlow<List<Rail>> = _displayCatalogRows
-        .map { rows -> rows.map { it.toRail() } }
+    internal val railStructure: StateFlow<List<Rail>> = catalogStructure
+        .map { it.rails }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
@@ -284,18 +315,17 @@ class HomeViewModel @Inject constructor(
      * Surface-level MetaPreview lookup keyed by
      * [com.nexio.tv.domain.model.homeDisplayItemKey] (`"${apiType}_${id}"`).
      * Driven by the catalog producer pipeline at the same site that publishes
-     * [_displayCatalogRows]; consumed by [observeModernHomePresentationPipeline]
+     * [_internalCatalogRows]; consumed by [observeModernHomePresentationPipeline]
      * (and any future surface that needs the surface-level meta lookup) instead
-     * of walking [_displayCatalogRows].items inside the build function.
+     * of walking [_internalCatalogRows].items inside the build function.
      *
      * Plan B Task 5e-pre (2026-05-11). Mirrors Task 5d's [_heroItemKeys]
      * pattern: producer writes via [publishMetaByItemKeyFromRows] which
      * memoizes by signature so a content-equal emission preserves the existing
      * map reference, keeping downstream `===` short-circuits live
      * (CLAUDE.md hard rule #5). This severs the LAST MetaPreview-content
-     * coupling between [_displayCatalogRows] and the home presentation
-     * pipelines, unblocking Task 5e (`_displayCatalogRows` retirement /
-     * structural reshape).
+     * coupling between [_internalCatalogRows] and the home presentation
+     * pipelines.
      */
     internal val _metaByItemKey = MutableStateFlow<Map<String, MetaPreview>>(emptyMap())
     internal val metaByItemKey: StateFlow<Map<String, MetaPreview>> = _metaByItemKey.asStateFlow()
@@ -873,6 +903,67 @@ class HomeViewModel @Inject constructor(
         _metaByItemKey.value = next
     }
 
+    /**
+     * Producer-side writer for the fused [_catalogStructure] signal. Computes a
+     * cheap structural signature over [rows] (catalogId + addonId + type +
+     * items.size + isLoading per row, fold into a 32-bit Int) and short-circuits
+     * when the signature is unchanged — without walking row items element-wise.
+     *
+     * Walking `row.items` for equality on every emission is the death-spiral
+     * signature documented in CLAUDE.md hard rules #2/#5: a 1900-item home tree
+     * walked per emission turns into multi-MB AllocSpace churn per second. The
+     * structural signature here is O(rows) primitive operations, ~5 ns per row.
+     *
+     * When the signature changes, a fresh [CatalogStructureSignal] is emitted:
+     * [hasItems] (any row has items), [anyLoading] (any row is loading),
+     * [nonEmpty] (rows.isNotEmpty()), and the typed [Rail] projection. The
+     * Boolean fields drive HomeScreen gating
+     * ([shouldShowFullHomeLoadingGate] / [hasRenderableHomeContent] /
+     * [shouldShowHomeEmptyState]); the [Rail] list drives [resolvedRailRowsFlow]
+     * via [railStructure].
+     *
+     * Plan B Task 5e (2026-05-11).
+     */
+    internal fun publishCatalogStructureFromRows(rows: List<CatalogRow>) {
+        var signature = 1
+        var hasItems = false
+        var anyLoading = false
+        for (rowIndex in rows.indices) {
+            val row = rows[rowIndex]
+            signature = 31 * signature + row.catalogId.hashCode()
+            signature = 31 * signature + row.addonId.hashCode()
+            signature = 31 * signature + row.type.hashCode()
+            signature = 31 * signature + row.items.size
+            signature = 31 * signature + if (row.isLoading) 1 else 0
+            if (row.items.isNotEmpty()) hasItems = true
+            if (row.isLoading) anyLoading = true
+        }
+        // Mix in rows.size so the empty case is distinguishable from a single
+        // signature=1 collision after a clear.
+        signature = 31 * signature + rows.size
+        if (signature == lastCatalogStructureSignature && _catalogStructure.value.nonEmpty == rows.isNotEmpty()) {
+            return
+        }
+        lastCatalogStructureSignature = signature
+        val rails = if (rows.isEmpty()) {
+            emptyList()
+        } else {
+            val list = ArrayList<Rail>(rows.size)
+            for (i in rows.indices) {
+                list += rows[i].toRail()
+            }
+            list
+        }
+        _catalogStructure.value = CatalogStructureSignal(
+            hasItems = hasItems,
+            anyLoading = anyLoading,
+            nonEmpty = rows.isNotEmpty(),
+            rails = rails
+        )
+    }
+
+    private var lastCatalogStructureSignature: Int = 0
+
     // Plan B Surface 4 Phase 2 — collects [resolvedContinueWatchingItemsFlow]
     // into [_resolvedContinueWatchingItems], short-circuiting redundant pushes
     // via the `===` guard so unchanged content does not retrigger Compose.
@@ -897,7 +988,7 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActiveHomeRails() {
         viewModelScope.launch {
-            _displayCatalogRows
+            _internalCatalogRows
                 .map { rows ->
                     val profileId = profileManager.activeProfileId.value
                     rows.map { row ->

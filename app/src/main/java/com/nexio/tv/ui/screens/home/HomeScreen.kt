@@ -106,14 +106,12 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
 
 internal fun hasRenderableHomeContent(
     uiState: HomeUiState,
-    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    catalogStructure: HomeViewModel.CatalogStructureSignal,
     heroItemsNonEmpty: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>
 ): Boolean {
-    val hasCatalogContent = catalogRows.any { row ->
-        row.items.isNotEmpty() ||
-            (uiState.homeLayout == HomeLayout.MODERN && row.isLoading)
-    }
+    val hasCatalogContent = catalogStructure.hasItems ||
+        (uiState.homeLayout == HomeLayout.MODERN && catalogStructure.anyLoading)
     return hasCatalogContent ||
         continueWatchingItems.isNotEmpty() ||
         heroItemsNonEmpty
@@ -121,14 +119,14 @@ internal fun hasRenderableHomeContent(
 
 internal fun shouldShowHomeEmptyState(
     uiState: HomeUiState,
-    catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    catalogStructure: HomeViewModel.CatalogStructureSignal,
     heroItemsNonEmpty: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     return !startupContentGateTimedOut &&
-        !shouldShowFullHomeLoadingGate(uiState, catalogRows, heroItemsNonEmpty, continueWatchingItems, startupContentGateTimedOut) &&
-        !hasRenderableHomeContent(uiState, catalogRows, heroItemsNonEmpty, continueWatchingItems) &&
+        !shouldShowFullHomeLoadingGate(uiState, catalogStructure, heroItemsNonEmpty, continueWatchingItems, startupContentGateTimedOut) &&
+        !hasRenderableHomeContent(uiState, catalogStructure, heroItemsNonEmpty, continueWatchingItems) &&
         !uiState.isLoading &&
         uiState.error == null
 }
@@ -162,7 +160,13 @@ fun HomeScreen(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val displayCatalogRows by viewModel.displayCatalogRows.collectAsStateWithLifecycle()
+    // Plan B Task 5e (2026-05-11): UI no longer collects displayCatalogRows
+    // (CLAUDE.md hard rule #2 — observing a List<CatalogRow> via Compose pins
+    // every prior emission through SnapshotStateRecord). The fused
+    // [HomeViewModel.CatalogStructureSignal] carries the Boolean fields needed
+    // for gating decisions (.hasItems / .anyLoading / .nonEmpty); the typed
+    // surface authority owns the per-item rendering content.
+    val catalogStructure by viewModel.catalogStructure.collectAsStateWithLifecycle()
     val heroItemsNonEmpty by viewModel.heroItemsNonEmpty.collectAsStateWithLifecycle()
     val displayContinueWatchingItems by viewModel.displayContinueWatchingItems.collectAsStateWithLifecycle()
     val resolvedContinueWatchingItems by viewModel.resolvedContinueWatchingItems.collectAsStateWithLifecycle()
@@ -170,7 +174,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasRenderableContent = hasRenderableHomeContent(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, catalogStructure, heroItemsNonEmpty, displayContinueWatchingItems)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable(uiState.homeReadiness.sessionId) {
         mutableStateOf(false)
@@ -178,10 +182,10 @@ fun HomeScreen(
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
-    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut)
+    val shouldShowLoadingGate = shouldShowFullHomeLoadingGate(uiState, catalogStructure, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut)
     val shouldArmStartupTimeout = shouldShowFullHomeLoadingGate(
         uiState = uiState,
-        catalogRows = displayCatalogRows,
+        catalogStructure = catalogStructure,
         heroItemsNonEmpty = heroItemsNonEmpty,
         continueWatchingItems = displayContinueWatchingItems,
         startupContentGateTimedOut = false
@@ -308,7 +312,7 @@ fun HomeScreen(
                 )
             }
 
-            uiState.error == "No addons installed" && displayCatalogRows.isEmpty() -> {
+            uiState.error == "No addons installed" && !catalogStructure.nonEmpty -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -321,7 +325,7 @@ fun HomeScreen(
                 }
             }
 
-            uiState.error == "No catalog addons installed" && displayCatalogRows.isEmpty() -> {
+            uiState.error == "No catalog addons installed" && !catalogStructure.nonEmpty -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -334,7 +338,7 @@ fun HomeScreen(
                 }
             }
 
-            shouldShowHomeEmptyState(uiState, displayCatalogRows, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut) -> {
+            shouldShowHomeEmptyState(uiState, catalogStructure, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -347,7 +351,7 @@ fun HomeScreen(
                 }
             }
 
-            uiState.error != null && displayCatalogRows.isEmpty() -> {
+            uiState.error != null && !catalogStructure.nonEmpty -> {
                 ErrorState(
                     message = uiState.error ?: stringResource(R.string.error_generic),
                     onRetry = { viewModel.onEvent(HomeEvent.OnRetry) }

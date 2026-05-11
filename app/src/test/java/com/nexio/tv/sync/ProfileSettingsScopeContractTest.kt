@@ -859,7 +859,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
         assertTrue(homeViewModelSource.contains("homeReadiness = HomeInitialReadiness.started("))
         assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
-        assertTrue(homeScreenSource.contains("shouldShowFullHomeLoadingGate(uiState, displayCatalogRows, startupContentGateTimedOut)"))
+        assertTrue(homeScreenSource.contains("shouldShowFullHomeLoadingGate(uiState, catalogStructure, heroItemsNonEmpty, displayContinueWatchingItems, startupContentGateTimedOut)"))
         assertTrue(!homeScreenSource.contains("uiState.initialContinueWatchingResolved"))
     }
 
