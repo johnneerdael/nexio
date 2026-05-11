@@ -51,4 +51,43 @@ class GitHubReleaseIntegrationProvider @Inject constructor(
             )
         )
     }
+
+    suspend fun fetchReleases(
+        owner: String,
+        repo: String,
+        perPage: Int
+    ): IntegrationCallResult<List<GitHubReleaseDto>> {
+        return runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.GITHUB,
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.ProviderConfig("github:$owner:$repo"),
+                apiShapeId = GitHubApiShapes.LIST_RELEASES,
+                operationKey = "github.release.fetchReleases",
+                call = {
+                    try {
+                        val response = gitHubReleaseApi.getReleases(
+                            owner = owner,
+                            repo = repo,
+                            perPage = perPage
+                        )
+                        val body = response.body()
+                        if (!response.isSuccessful) {
+                            IntegrationCallResult.HttpError(
+                                statusCode = response.code(),
+                                reason = "github_list_releases_failed"
+                            )
+                        } else if (body == null) {
+                            IntegrationCallResult.Missing
+                        } else {
+                            IntegrationCallResult.Success(body)
+                        }
+                    } catch (exception: Exception) {
+                        if (exception is CancellationException) throw exception
+                        IntegrationCallResult.NetworkError(exception)
+                    }
+                }
+            )
+        )
+    }
 }
