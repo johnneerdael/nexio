@@ -28,6 +28,7 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.contentEquals
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -3046,11 +3047,34 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     }
 
     if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
+        val transientRails: List<com.nexio.tv.domain.model.Rail> = run {
+            // Mirror buildRailMemberships' row dedupe (fullRows wins; displayRows fills gaps).
+            val merged = linkedMapOf<String, com.nexio.tv.domain.model.CatalogRow>()
+            for (i in fullRowsFiltered.indices) {
+                val row = fullRowsFiltered[i]
+                merged[row.catalogId] = row
+            }
+            for (i in displayRows.indices) {
+                val row = displayRows[i]
+                merged.putIfAbsent(row.catalogId, row)
+            }
+            val out = ArrayList<com.nexio.tv.domain.model.Rail>(merged.size)
+            for (row in merged.values) out += row.toRail()
+            out
+        }
+        val transientHeroItemKeys = ArrayList<com.nexio.tv.domain.model.RailItemKey>(baseHeroItems.size).apply {
+            for (i in baseHeroItems.indices) {
+                val item = baseHeroItems[i]
+                add(com.nexio.tv.domain.model.RailItemKey(apiType = item.apiType, contentId = item.id))
+            }
+        }
         val transientSnapshot = com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = displayRows,
-            fullCatalogRows = fullRowsFiltered,
-            heroItems = baseHeroItems,
-            orderedGroupKeys = orderedGroupKeys
+            catalogRows = emptyList(),
+            fullCatalogRows = emptyList(),
+            heroItems = emptyList(),
+            orderedGroupKeys = orderedGroupKeys,
+            rails = transientRails,
+            heroItemKeys = transientHeroItemKeys
         )
         applyHomeSnapshotToUiPipeline(transientSnapshot)
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched(
