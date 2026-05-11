@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
@@ -25,7 +27,11 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class HydratedHomeOverlayStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
+        sink = NoopRuntimeTraceSink,
+        sessionId = { null }
+    )
 ) {
     private val gson = Gson()
     private val version = MutableStateFlow(0L)
@@ -148,6 +154,11 @@ class HydratedHomeOverlayStore @Inject constructor(
         if (!currentIds.strictlyContains(overlay.stableIdsSnapshot)) return
         if (trimmed in staleItemKeys.value) return  // already marked — avoid redundant version bump
         staleItemKeys.update { current -> if (trimmed in current) current else current + trimmed }
+        traceEvents.emitOverlayStaleMarked(
+            itemKey = trimmed,
+            reason = "cross_id_enriched",
+            oldState = overlay.state.name
+        )
         incrementVersion()
     }
 
@@ -158,7 +169,6 @@ class HydratedHomeOverlayStore @Inject constructor(
      *
      * Not persisted (matches markStaleIfWeakerIds semantics).
      */
-    @Suppress("UNUSED_PARAMETER")
     suspend fun markStaleAll(reason: String) {
         val itemKeys = withContext(Dispatchers.IO) {
             prefs().all.keys
@@ -169,6 +179,15 @@ class HydratedHomeOverlayStore @Inject constructor(
         }
         if (itemKeys.isEmpty()) return
         staleItemKeys.update { current -> current + itemKeys }
+        // Pragmatic compaction: one event for the entire batch rather than one per
+        // itemKey. markStaleAll fires on settings-signature changes, which can
+        // affect every persisted overlay (~hundreds), and the per-item detail isn't
+        // useful for the "popping watchdog" signal anyway.
+        traceEvents.emitOverlayStaleMarked(
+            itemKey = "<all:${itemKeys.size}>",
+            reason = reason.ifBlank { "settings_change" },
+            oldState = "CANONICAL_READY"
+        )
         incrementVersion()
     }
 

@@ -1137,6 +1137,80 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitArtworkResolverDecision(
+        itemKeyHash: String?,
+        artworkType: String,
+        contentType: String,
+        isAnime: Boolean,
+        explicit: String,
+        fellThroughTo: String?,
+        chosenProvider: String,
+        capabilitySupported: Boolean
+    ) {
+        emitTraceEvent(
+            eventType = "artwork.resolver.decision",
+            payload = mapOf(
+                "itemKeyHash" to optionalTraceValue(itemKeyHash),
+                "artworkType" to artworkType,
+                "contentType" to contentType,
+                "isAnime" to isAnime,
+                "explicit" to explicit,
+                "fellThroughTo" to optionalTraceValue(fellThroughTo),
+                "chosenProvider" to chosenProvider,
+                "capabilitySupported" to capabilitySupported
+            )
+        )
+    }
+
+    fun emitOverlayStaleMarked(
+        itemKey: String,
+        reason: String,
+        oldState: String
+    ) {
+        emitTraceEvent(
+            eventType = "overlay.stale_marked",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "reason" to reason,
+                "oldState" to oldState
+            )
+        )
+    }
+
+    fun emitOverlayRehydrationTriggered(
+        itemKey: String,
+        source: String,
+        priorState: String
+    ) {
+        emitTraceEvent(
+            eventType = "overlay.rehydration_triggered",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "source" to source,
+                "priorState" to priorState
+            )
+        )
+    }
+
+    fun emitSurfaceMergeTieBreakRejected(
+        itemKey: String,
+        slotType: String,
+        existingProvider: String?,
+        incomingProvider: String?,
+        preferredProvider: String
+    ) {
+        emitTraceEvent(
+            eventType = "surface.merge.tie_break_rejected_regression",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "slotType" to slotType,
+                "existingProvider" to optionalTraceValue(existingProvider),
+                "incomingProvider" to optionalTraceValue(incomingProvider),
+                "preferredProvider" to preferredProvider
+            )
+        )
+    }
+
     fun emitStreamAddonBucketed(
         addonIdHash: String,
         addonIsAnime: Boolean,

@@ -160,6 +160,14 @@ class HomeHydrationCoordinator @Inject constructor(
                 return existingOverlay
             }
 
+            if (existingOverlay?.state == HomeItemHydrationState.STALE_READY) {
+                traceEvents.emitOverlayRehydrationTriggered(
+                    itemKey = itemKey,
+                    source = priority.name,
+                    priorState = HomeItemHydrationState.STALE_READY.name
+                )
+            }
+
             overlayStore.upsert(
                 overlay = overlay,
                 aliases = overlayAliases(
