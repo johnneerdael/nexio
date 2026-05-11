@@ -219,9 +219,13 @@ class MetaDetailsTvdbAdvancedMetadataTest {
         assertTrue("HeroSection.kt must exist", heroFile.exists())
 
         val source = heroFile.readText()
+        // Detail hero must check `meta.localReleaseInfo` *first* so a TVDB local
+        // release date-time always wins over year-only fallbacks, regardless of
+        // whether the release/year fallback comes from `resolvedDetail.fields`
+        // (Plan B Surface 5 Task 23) or legacy `meta.releaseInfo`.
         assertTrue(
             "Detail hero must render TVDB local release date-time when it is available",
-            source.contains("meta.localReleaseInfo ?: meta.releaseInfo?.split(\"-\")?.firstOrNull() ?: meta.releaseInfo")
+            source.contains("meta.localReleaseInfo\n            ?: resolvedFields?.releaseDate?.split(\"-\")?.firstOrNull()")
         )
     }
 

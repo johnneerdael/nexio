@@ -235,7 +235,7 @@ class TrailerServiceTvdbTest {
         val playbackSource = TrailerPlaybackSource(
             videoUrl = "https://video.example/tvdb_trailer.m3u8"
         )
-        coEvery { inAppYouTubeExtractor.extractPlaybackSource(tvdbTrailerYouTubeUrl) } returns playbackSource
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(tvdbTrailerYouTubeUrl, any()) } returns playbackSource
 
         val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
         coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns

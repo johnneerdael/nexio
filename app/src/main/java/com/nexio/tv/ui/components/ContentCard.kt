@@ -1,7 +1,5 @@
 package com.nexio.tv.ui.components
 
-import android.content.Intent
-import android.net.Uri
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -172,7 +170,6 @@ fun ContentCard(
     var interactionNonce by remember { mutableIntStateOf(0) }
     var isBackdropExpanded by remember { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
-    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val navLifecycleOwner = LocalLifecycleOwner.current
     val lifecycleOwner = remember(context, navLifecycleOwner) {
@@ -305,23 +302,6 @@ fun ContentCard(
         }
         var logoLoadFailed by remember(displayLogo) { mutableStateOf(false) }
         val showExpandedLogo = logoModel != null && !logoLoadFailed
-        LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
-            if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
-            if (!isBackdropExpanded || !isFocused) return@LaunchedEffect
-            if (!trailerPreviewUrl.isNullOrBlank()) return@LaunchedEffect
-            val externalUrl = trailerPreviewExternalUrl ?: return@LaunchedEffect
-            val launchKey = "${item.id}|$externalUrl"
-            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
-            lastExternalTrailerLaunchKey = launchKey
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                )
-            }
-        }
-
         Card(
             onClick = {
                 if (longPressTriggered) {

@@ -357,7 +357,8 @@ class MetadataRouterFacade(
         type: String? = null,
         seasonNumber: Int? = null,
         contentId: String? = null,
-        fallbackYtIds: List<String> = emptyList()
+        fallbackYtIds: List<String> = emptyList(),
+        originalLanguage: String? = null
     ): TrailerResolutionResult? {
         val trailerRequest = metadataRequest.copy(
             depth = if (metadataRequest.depth == MetadataDepth.DETAIL_SECONDARY) {
@@ -388,7 +389,8 @@ class MetadataRouterFacade(
             trailerService?.resolvePlaybackSource(
                 ref = ref,
                 title = title,
-                year = year
+                year = year,
+                originalLanguage = originalLanguage
             )
         }
     }
@@ -496,7 +498,8 @@ class MetadataRouterFacade(
         tmdbId: String? = null,
         type: String? = null,
         seasonNumber: Int? = null,
-        contentId: String? = null
+        contentId: String? = null,
+        originalLanguage: String? = null
     ): TrailerPlaybackSource? {
         val service = trailerService
         val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
@@ -518,7 +521,7 @@ class MetadataRouterFacade(
                 providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs()
             )
         )
-        providerSelection.toFirstSeasonPlaybackSource(service, title, year)?.let { source ->
+        providerSelection.toFirstSeasonPlaybackSource(service, title, year, originalLanguage)?.let { source ->
             return source
         }
 
@@ -547,7 +550,7 @@ class MetadataRouterFacade(
                 itemKeySuffix = "season"
             )
         )
-        return seasonSelection.toFirstSeasonPlaybackSource(service, title, year)
+        return seasonSelection.toFirstSeasonPlaybackSource(service, title, year, originalLanguage)
     }
 
     /**
@@ -563,7 +566,8 @@ class MetadataRouterFacade(
         tmdbId: String? = null,
         type: String? = null,
         seasonNumber: Int? = null,
-        contentId: String? = null
+        contentId: String? = null,
+        originalLanguage: String? = null
     ): TrailerPlaybackSource? {
         val service = trailerService
         val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
@@ -598,7 +602,7 @@ class MetadataRouterFacade(
                 itemKeySuffix = "recap"
             )
         )
-        return recapSelection.toFirstSeasonPlaybackSource(service, title, year)
+        return recapSelection.toFirstSeasonPlaybackSource(service, title, year, originalLanguage)
     }
 
     private fun seasonRefRequest(
@@ -1416,7 +1420,8 @@ class MetadataRouterFacade(
     private suspend fun TrailerPlaybackRef.toSeasonPlaybackSource(
         service: TrailerService?,
         title: String,
-        year: String?
+        year: String?,
+        originalLanguage: String?
     ): TrailerPlaybackSource? {
         if (this is TrailerPlaybackRef.InAppSource) {
             return toInlinePlaybackSource()
@@ -1424,7 +1429,8 @@ class MetadataRouterFacade(
         val transported = service?.resolvePlaybackSource(
             ref = this,
             title = title,
-            year = year
+            year = year,
+            originalLanguage = originalLanguage
         )
         return when (transported) {
             is TrailerResolutionResult.Playback -> transported.source
@@ -1436,10 +1442,11 @@ class MetadataRouterFacade(
     private suspend fun TrailerResolution.toFirstSeasonPlaybackSource(
         service: TrailerService?,
         title: String,
-        year: String?
+        year: String?,
+        originalLanguage: String?
     ): TrailerPlaybackSource? {
         for (candidate in candidates) {
-            candidate.toSeasonPlaybackSource(service, title, year)?.let { return it }
+            candidate.toSeasonPlaybackSource(service, title, year, originalLanguage)?.let { return it }
         }
         return null
     }

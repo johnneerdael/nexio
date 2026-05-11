@@ -2,8 +2,6 @@
 
 package com.nexio.tv.ui.screens.home
 
-import android.content.Intent
-import android.net.Uri
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
@@ -891,7 +889,6 @@ private fun ModernCarouselCard(
     }
     var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
-    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     val hasImage = coilModel != null
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
@@ -916,22 +913,6 @@ private fun ModernCarouselCard(
         modifier = modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
-            if (!playTrailerInExpandedCard) return@LaunchedEffect
-            if (!isBackdropExpanded || !isFocused) return@LaunchedEffect
-            if (!trailerPreviewUrl.isNullOrBlank()) return@LaunchedEffect
-            val externalUrl = trailerPreviewExternalUrl ?: return@LaunchedEffect
-            val launchKey = "${item.key}|$externalUrl"
-            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
-            lastExternalTrailerLaunchKey = launchKey
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                )
-            }
-        }
         Card(
             onClick = {
                 if (longPressTriggered) {

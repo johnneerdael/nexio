@@ -61,6 +61,27 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `isYouTubeTrailerLanguageAcceptable allows english regardless of original language`() {
+        assertTrue(isYouTubeTrailerLanguageAcceptable("en", null))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("en-US", "ko"))
+    }
+
+    @Test
+    fun `isYouTubeTrailerLanguageAcceptable allows trailers matching original language`() {
+        assertTrue(isYouTubeTrailerLanguageAcceptable("ko", "ko"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("ko-KR", "ko"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("ko", "KO-KR"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("ja_JP", "ja"))
+    }
+
+    @Test
+    fun `isYouTubeTrailerLanguageAcceptable rejects mismatched non-english trailers`() {
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", "ja"))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", null))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", ""))
+    }
+
+    @Test
     fun `selectPreferredCombinedTrailerUrl prefers manifest for playback compatibility`() {
         val selected = selectPreferredCombinedTrailerUrl(
             manifestUrl = "https://example.com/trailer/master.m3u8",
