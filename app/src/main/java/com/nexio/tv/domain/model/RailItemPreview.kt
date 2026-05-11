@@ -237,3 +237,35 @@ private fun ProviderId?.toTitleRatingSource(): TitleRatingSource? = when (this) 
     ProviderId.TMDB -> TitleRatingSource.TMDB
     else -> null
 }
+
+fun ProviderIds.strictlyContains(other: ProviderIds): Boolean {
+    val gainedImdb    = imdb    != null && other.imdb    == null
+    val gainedTmdb    = tmdb    != null && other.tmdb    == null
+    val gainedTvdb    = tvdb    != null && other.tvdb    == null
+    val gainedTrakt   = trakt   != null && other.trakt   == null
+    val gainedSimkl   = simkl   != null && other.simkl   == null
+    val gainedKitsu   = kitsu   != null && other.kitsu   == null
+    val gainedSlug    = slug    != null && other.slug    == null
+    val gainedMal     = mal     != null && other.mal     == null
+    val gainedAnilist = anilist != null && other.anilist == null
+    val gainedAnidb   = anidb   != null && other.anidb   == null
+    val anyGain = gainedImdb || gainedTmdb || gainedTvdb || gainedTrakt ||
+        gainedSimkl || gainedKitsu || gainedSlug || gainedMal ||
+        gainedAnilist || gainedAnidb
+    if (!anyGain) return false
+
+    val lostImdb    = imdb    == null && other.imdb    != null
+    val lostTmdb    = tmdb    == null && other.tmdb    != null
+    val lostTvdb    = tvdb    == null && other.tvdb    != null
+    val lostTrakt   = trakt   == null && other.trakt   != null
+    val lostSimkl   = simkl   == null && other.simkl   != null
+    val lostKitsu   = kitsu   == null && other.kitsu   != null
+    val lostSlug    = slug    == null && other.slug    != null
+    val lostMal     = mal     == null && other.mal     != null
+    val lostAnilist = anilist == null && other.anilist != null
+    val lostAnidb   = anidb   == null && other.anidb   != null
+    val anyLoss = lostImdb || lostTmdb || lostTvdb || lostTrakt ||
+        lostSimkl || lostKitsu || lostSlug || lostMal ||
+        lostAnilist || lostAnidb
+    return !anyLoss
+}
