@@ -300,6 +300,52 @@ internal fun HomeViewModel.observeClassicHomePresentationPipeline() {
     }
 }
 
+/**
+ * Plan B Task 5b — drives [HomeUiState.gridHomePresentation] from the
+ * typed-surface-derived [HomeUiState.resolvedRailRows]. Mirrors
+ * [observeClassicHomePresentationPipeline].
+ *
+ * Grid Home consumes the resulting [GridHomePresentationState] directly
+ * instead of re-walking [HomeUiState.resolvedRailRows] inside Compose on
+ * every emission. With Classic (5a) and Grid (5b) both off the legacy
+ * `_displayCatalogRows` consumption path for resolved-item lookup,
+ * Plan B Task 5e can retire `_displayCatalogRows` next.
+ *
+ * Reference stability is preserved by [buildGridHomePresentation]'s outer-map
+ * memoization; the `_uiState.update { ... }` short-circuit below avoids
+ * Compose recomposition when the presentation is `===` to the previous state.
+ */
+@OptIn(FlowPreview::class)
+internal fun HomeViewModel.observeGridHomePresentationPipeline() {
+    viewModelScope.launch {
+        _uiState
+            .map { state ->
+                GridHomePresentationInput(
+                    resolvedRailRows = state.resolvedRailRows
+                )
+            }
+            .distinctUntilChanged()
+            .debounce(80)
+            .collectLatest { input ->
+                val capturedGeneration = homeProfileGeneration
+                val presentation = withContext(Dispatchers.Default) {
+                    buildGridHomePresentation(
+                        input = input,
+                        cache = gridHomePresentationBuildCache
+                    )
+                }
+                if (!isCurrentHomeProfileGeneration(capturedGeneration)) return@collectLatest
+                _uiState.update { current ->
+                    if (current.gridHomePresentation === presentation) {
+                        current
+                    } else {
+                        current.copy(gridHomePresentation = presentation)
+                    }
+                }
+            }
+    }
+}
+
 internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.preferExternalMetaAddonDetail

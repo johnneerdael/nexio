@@ -742,6 +742,7 @@ private fun GridHomeRoute(
     val gridFocusState by viewModel.gridFocusState.collectAsStateWithLifecycle()
     GridHomeContent(
         uiState = uiState,
+        presentation = uiState.gridHomePresentation,
         continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,

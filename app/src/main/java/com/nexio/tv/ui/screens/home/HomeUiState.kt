@@ -16,6 +16,7 @@ data class HomeUiState(
     val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
     val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
     val classicHomePresentation: ClassicHomePresentationState = ClassicHomePresentationState(),
+    val gridHomePresentation: GridHomePresentationState = GridHomePresentationState(),
     val homeReadiness: HomeInitialReadiness = HomeInitialReadiness.started(
         sessionId = "profile:1:initial",
         profileId = 1
