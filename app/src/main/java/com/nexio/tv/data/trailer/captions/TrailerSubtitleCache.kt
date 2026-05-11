@@ -31,7 +31,9 @@ private const val TAG = "TrailerSubtitleCache"
  */
 @Singleton
 class TrailerSubtitleCache @Inject constructor(
-    @ApplicationContext private val applicationContext: Context
+    @ApplicationContext private val applicationContext: Context,
+    private val subtitleTranslationService: com.nexio.tv.data.repository.SubtitleTranslationService,
+    private val subtitleTranslationSettingsDataStore: com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 ) {
 
     private val mutex = Mutex()
