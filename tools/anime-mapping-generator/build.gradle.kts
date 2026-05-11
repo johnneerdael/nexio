@@ -14,6 +14,7 @@ application {
 
 dependencies {
     implementation(libs.moshi)
+    implementation(libs.okio)
     ksp(libs.moshi.codegen)
     testImplementation("junit:junit:4.13.2")
 }

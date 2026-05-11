@@ -10,6 +10,7 @@ plugins {
 
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import java.io.File
 import java.net.URI
 import java.time.Instant
 import java.util.Properties
@@ -38,8 +39,60 @@ tasks.register<JavaExec>("checkAnimeMappingAsset") {
     inputs.file(animeMappingAsset)
 }
 
+val animeMappingBinaryAsset = layout.projectDirectory.file(
+    "src/main/assets/anime/nexio-anime-map-v1.bin"
+)
+
+tasks.register<JavaExec>("generateAnimeIdMapBinary") {
+    group = "anime-mapping"
+    description = "Encode nexio-anime-map-v1.json into nexio-anime-map-v1.bin. " +
+        "Explicit-invocation only — re-run after the JSON asset is regenerated."
+    val genProject = project(":tools:anime-mapping-generator")
+    classpath = genProject.extensions.getByType<SourceSetContainer>()["main"].runtimeClasspath
+    mainClass.set("com.nexio.animemap.binary.EncodeMain")
+    args = listOf(
+        animeMappingAsset.asFile.absolutePath,
+        animeMappingBinaryAsset.asFile.absolutePath,
+    )
+    inputs.file(animeMappingAsset)
+    outputs.file(animeMappingBinaryAsset)
+}
+
+tasks.register("checkAnimeIdMapBinary") {
+    group = "anime-mapping"
+    description = "Verify the committed nexio-anime-map-v1.bin matches a fresh re-encode of the JSON."
+    val genProject = project(":tools:anime-mapping-generator")
+    val genClasspath = genProject.extensions.getByType<SourceSetContainer>()["main"].runtimeClasspath
+    val jsonAssetFile = animeMappingAsset.asFile
+    val binAssetFile = animeMappingBinaryAsset.asFile
+    inputs.file(animeMappingAsset)
+    inputs.file(animeMappingBinaryAsset)
+    doLast {
+        val tmp = File.createTempFile("anime-id-map-check", ".bin")
+        try {
+            project.javaexec {
+                classpath = genClasspath
+                mainClass.set("com.nexio.animemap.binary.EncodeMain")
+                args = listOf(jsonAssetFile.absolutePath, tmp.absolutePath)
+            }
+            val committed = binAssetFile.readBytes()
+            val fresh = tmp.readBytes()
+            if (!committed.contentEquals(fresh)) {
+                throw GradleException(
+                    "nexio-anime-map-v1.bin is out of date. Run " +
+                        "`./gradlew :app:generateAnimeIdMapBinary` and commit the result."
+                )
+            }
+            println("checkAnimeIdMapBinary OK (${committed.size} bytes)")
+        } finally {
+            tmp.delete()
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn("checkAnimeMappingAsset")
+    dependsOn("checkAnimeIdMapBinary")
 }
 
 fun parseBooleanProperty(value: String?): Boolean {
