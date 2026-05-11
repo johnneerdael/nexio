@@ -1,0 +1,58 @@
+package com.nexio.tv.core.anime.binary
+
+import android.content.Context
+import android.content.res.AssetManager
+import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+import java.io.File
+import java.io.FileInputStream
+import java.nio.file.Files
+
+class AnimeIdMapBinaryReaderTest {
+    private lateinit var workDir: File
+    private lateinit var fakeFilesDir: File
+    private lateinit var context: Context
+
+    @Before
+    fun setUp() {
+        workDir = Files.createTempDirectory("animeidmap-test").toFile()
+        fakeFilesDir = File(workDir, "files").apply { mkdirs() }
+        context = mock(Context::class.java)
+        `when`(context.filesDir).thenReturn(fakeFilesDir)
+        val assets = mock(AssetManager::class.java)
+        `when`(context.assets).thenReturn(assets)
+        val fixture = File("app/src/test/resources/anime/nexio-anime-map-v1-test.bin")
+        require(fixture.exists()) { "fixture missing — run :app:generateAnimeIdMapBinaryFixture" }
+        `when`(assets.open("anime/nexio-anime-map-v1.bin")).thenAnswer { FileInputStream(fixture) }
+    }
+
+    @After
+    fun tearDown() {
+        workDir.deleteRecursively()
+    }
+
+    @Test
+    fun `ensureOpen copies asset to filesDir and maps successfully`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertTrue(reader.isOpen())
+        val onDisk = File(fakeFilesDir, "anime-id-map/fmt1.bin")
+        assertTrue("expected on-disk copy at $onDisk", onDisk.exists())
+        assertTrue(onDisk.length() > 0)
+    }
+
+    @Test
+    fun `ensureOpen degrades to Failed when asset missing`() {
+        `when`(context.assets.open("anime/nexio-anime-map-v1.bin"))
+            .thenThrow(java.io.FileNotFoundException("missing"))
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertFalse(reader.isOpen())
+        assertTrue(reader.isFailed())
+    }
+}
