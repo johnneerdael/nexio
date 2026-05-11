@@ -22,7 +22,12 @@ import javax.inject.Singleton
 
 private const val TAG = "InAppYouTubeExtractor"
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
-private const val PREFERRED_SEPARATE_CLIENT = "ios"
+// Android-client-signed direct `/videoplayback` URLs do not require a
+// poToken; iOS-client-signed direct URLs do (NewPipeExtractor notes the
+// poToken requirement specifically excludes HLS formats). We use the
+// Android client for split adaptive video+audio playback, and keep iOS
+// as the HLS manifest source (which does not need a poToken either).
+private const val PREFERRED_SEPARATE_CLIENT = "android"
 // Cap concurrent in-flight YouTube watch-page extractions. Heap dumps showed up
 // to 3 simultaneous 1.26 MiB HTML char[] allocations + 271 KiB InnerTube JSON
 // responses (each fetch holds the body String for the duration of the regex
@@ -396,7 +401,12 @@ class InAppYouTubeExtractor @Inject constructor(
             manifestUrl = bestManifest?.manifestUrl,
             progressiveUrl = bestProgressive?.url
         )
+        // Must mirror the priority order in selectPreferredTrailerPlaybackSource:
+        // 1) split adaptive video+audio (uses bestVideo.client)
+        // 2) combined manifest/progressive (uses bestManifest/bestProgressive.client)
+        // 3) video-only adaptive (uses bestVideo.client)
         val resolvedClientKey = when {
+            bestVideo != null && bestAudio != null -> bestVideo.client
             combinedUrl != null && combinedUrl == bestManifest?.manifestUrl -> bestManifest.client
             combinedUrl != null && combinedUrl == bestProgressive?.url -> bestProgressive.client
             bestVideo != null -> bestVideo.client
