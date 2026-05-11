@@ -19,7 +19,10 @@ import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.profile.ProfileSettingsDomain
 import com.nexio.tv.data.local.ProfileDataStoreFactory
+import com.nexio.tv.data.local.SyncWatermarkDataStore
 import com.nexio.tv.data.remote.supabase.ProfileSettingsBlobResponse
+import com.nexio.tv.data.remote.supabase.V10ProfileSettingsEnvelope
+import com.nexio.tv.data.remote.supabase.V10PushResult
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +72,8 @@ class ProfileSettingsSyncService @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileDataStoreFactory: ProfileDataStoreFactory,
     private val profileModeRouter: ProfileModeRouter,
-    private val profileBoundary: ProfileBoundary
+    private val profileBoundary: ProfileBoundary,
+    private val syncWatermarkStore: SyncWatermarkDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val syncMutex = Mutex()
@@ -154,17 +158,32 @@ class ProfileSettingsSyncService @Inject constructor(
                     return@withLock Result.success(Unit)
                 }
 
-                withJwtRefreshRetry {
-                    postgrest.rpc(
-                        "sync_push_profile_settings_blob",
-                        buildJsonObject {
-                            put("p_profile_id", scopedProfileId)
-                            put("p_settings_json", blob.toString())
-                            put("p_platform", "tv")
-                        }
-                    )
+                val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = scopedProfileId)
+                val outcome = runV10Push {
+                    withJwtRefreshRetry {
+                        postgrest.rpc(
+                            "sync_push_profile_settings_blob_v10",
+                            buildJsonObject {
+                                put("p_base_updated_at_ms", baseMs)
+                                put("p_profile_id", scopedProfileId)
+                                put("p_settings_json", blob.toString())
+                                put("p_platform", "tv")
+                            }
+                        ).decodeAs<V10PushResult>()
+                    }
                 }
-                Log.d(TAG, "Pushed settings blob for profile $scopedProfileId")
+                when (outcome) {
+                    is V10PushOutcome.Applied -> {
+                        syncWatermarkStore.set(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = scopedProfileId, ms = outcome.currentUpdatedAtMs)
+                        Log.d(TAG, "Pushed settings blob for profile $scopedProfileId (watermark=${outcome.currentUpdatedAtMs})")
+                    }
+                    is V10PushOutcome.StaleBase -> {
+                        Log.w(TAG, "Profile blob push stale for profile $scopedProfileId (server=${outcome.currentUpdatedAtMs}, base=$baseMs); pulling")
+                        pullBlobForProfile(scopedProfileId)
+                    }
+                    is V10PushOutcome.Failed -> throw outcome.cause
+                    is V10PushOutcome.FieldConflict -> Unit
+                }
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to push settings blob for profile $scopedProfileId", e)
@@ -189,16 +208,17 @@ class ProfileSettingsSyncService @Inject constructor(
 
         syncMutex.withLock {
             try {
-                val response = withJwtRefreshRetry {
+                val envelope = withJwtRefreshRetry {
                     postgrest.rpc(
-                        "sync_pull_profile_settings_blob",
+                        "sync_pull_profile_settings_blob_v10",
                         buildJsonObject {
                             put("p_profile_id", scopedProfileId)
                             put("p_platform", "tv")
                         }
-                    ).decodeAs<ProfileSettingsBlobResponse>()
+                    ).decodeAs<V10ProfileSettingsEnvelope>()
                 }
-                val rawBlob = decodeSettingsJson(response.settingsJson)
+                syncWatermarkStore.set(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = scopedProfileId, ms = envelope.updatedAtMs)
+                val rawBlob = decodeSettingsJson(envelope.settingsJson)
                 val normalizedBlob = normalizeSettingsBlob(rawBlob)
 
                 applyingRemoteBlob = true
