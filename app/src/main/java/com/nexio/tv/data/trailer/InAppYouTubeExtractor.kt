@@ -818,14 +818,28 @@ internal fun extractYouTubeCaptionTracks(playerResponse: Map<*, *>): List<YouTub
     return rawTracks.mapNotNull { track ->
         val baseUrl = track.stringValue("baseUrl")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val languageCode = track.stringValue("languageCode")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        // Mirror NewPipe: strip any pre-existing fmt/tlang from the baseUrl so we
+        // don't end up with duplicate params after `buildTrailerSubtitleVttUrl`
+        // appends its own. Also detect auto-generated tracks via vssId (a.*)
+        // rather than the `kind` field — both signal ASR but `vssId` is the
+        // more reliable indicator in observed responses.
+        val cleanedBaseUrl = baseUrl
+            .replace(Regex("&fmt=[^&]*"), "")
+            .replace(Regex("&tlang=[^&]*"), "")
+        val vssId = track.stringValue("vssId")?.trim().orEmpty()
         val kind = track.stringValue("kind")?.takeIf { it.isNotBlank() }
+        val effectiveKind = when {
+            kind != null -> kind
+            vssId.startsWith("a.") -> "asr"
+            else -> null
+        }
         val name = track.mapValue("name")?.stringValue("simpleText")
         val isTranslatable = (track["isTranslatable"] as? Boolean) ?: false
         YouTubeCaptionTrack(
-            baseUrl = baseUrl,
+            baseUrl = cleanedBaseUrl,
             languageCode = languageCode,
             languageName = name,
-            kind = kind,
+            kind = effectiveKind,
             isTranslatable = isTranslatable
         )
     }

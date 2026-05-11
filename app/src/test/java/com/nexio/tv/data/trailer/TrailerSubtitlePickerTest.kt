@@ -86,6 +86,54 @@ class TrailerSubtitlePickerTest {
     }
 
     @Test
+    fun `extract caption tracks strips existing fmt and tlang from baseUrl`() {
+        val playerResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf(
+                            "baseUrl" to "https://yt.example/timedtext?v=1&fmt=srt&tlang=es&lang=en",
+                            "languageCode" to "en",
+                            "isTranslatable" to true
+                        )
+                    )
+                )
+            )
+        )
+        val tracks = extractYouTubeCaptionTracks(playerResponse)
+        assertEquals(1, tracks.size)
+        assertEquals("https://yt.example/timedtext?v=1&lang=en", tracks[0].baseUrl)
+    }
+
+    @Test
+    fun `extract caption tracks detects ASR via vssId when kind is absent`() {
+        val playerResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf(
+                            "baseUrl" to "https://yt.example/timedtext?lang=en",
+                            "languageCode" to "en",
+                            "vssId" to "a.en",
+                            "isTranslatable" to true
+                        ),
+                        mapOf(
+                            "baseUrl" to "https://yt.example/timedtext?lang=fr",
+                            "languageCode" to "fr",
+                            "vssId" to ".fr",
+                            "isTranslatable" to true
+                        )
+                    )
+                )
+            )
+        )
+        val tracks = extractYouTubeCaptionTracks(playerResponse)
+        assertEquals(2, tracks.size)
+        assertEquals("asr", tracks[0].kind)
+        assertEquals(null, tracks[1].kind)
+    }
+
+    @Test
     fun `extract caption tracks reads baseUrl and translatable flag`() {
         val playerResponse = mapOf(
             "captions" to mapOf(
