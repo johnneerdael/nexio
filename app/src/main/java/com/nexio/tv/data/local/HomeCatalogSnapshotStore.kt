@@ -8,18 +8,6 @@ import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
-import com.nexio.tv.core.artwork.ArtworkDecisionCache
-import com.nexio.tv.core.artwork.ArtworkDecisionCacheDiagnostics
-import com.nexio.tv.core.artwork.ArtworkDecisionCacheSnapshotDiagnostics
-import com.nexio.tv.core.artwork.ArtworkDecisionKey
-import com.nexio.tv.core.artwork.ArtworkDecisionLookupResult
-import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityResult
-import com.nexio.tv.core.artwork.ArtworkReferenceIntegrityValidator
-import com.nexio.tv.core.artwork.ArtworkType
-import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
-import com.nexio.tv.core.artwork.NoopArtworkReferenceIntegrityValidator
-import com.nexio.tv.core.artwork.emptyOrNull
-import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
@@ -44,11 +32,9 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-import java.net.URI
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,8 +44,6 @@ class HomeCatalogSnapshotStore private constructor(
     @ApplicationContext private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val artworkDecisionCache: ArtworkDecisionCache,
-    private val artworkReferenceIntegrityValidator: ArtworkReferenceIntegrityValidator,
     private val activeProfileId: () -> Int,
     private val identityResolver: RailMediaIdentityResolver,
     private val traceSink: RuntimeTraceSink
@@ -69,8 +53,6 @@ class HomeCatalogSnapshotStore private constructor(
         @ApplicationContext context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        artworkDecisionCache: ArtworkDecisionCache,
-        artworkReferenceIntegrityValidator: ArtworkReferenceIntegrityValidator,
         profileManager: ProfileManager,
         identityResolver: RailMediaIdentityResolver,
         traceSink: RuntimeTraceSink
@@ -78,8 +60,6 @@ class HomeCatalogSnapshotStore private constructor(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
-        artworkDecisionCache = artworkDecisionCache,
-        artworkReferenceIntegrityValidator = artworkReferenceIntegrityValidator,
         activeProfileId = { profileManager.activeProfileId.value },
         identityResolver = identityResolver,
         traceSink = traceSink
@@ -89,15 +69,11 @@ class HomeCatalogSnapshotStore private constructor(
         context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        artworkDecisionCache: ArtworkDecisionCache = InMemoryArtworkDecisionCache(),
-        artworkReferenceIntegrityValidator: ArtworkReferenceIntegrityValidator = NoopArtworkReferenceIntegrityValidator,
         traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
-        artworkDecisionCache = artworkDecisionCache,
-        artworkReferenceIntegrityValidator = artworkReferenceIntegrityValidator,
         activeProfileId = { 1 },
         identityResolver = RailMediaIdentityResolver(),
         traceSink = traceSink
@@ -111,12 +87,12 @@ class HomeCatalogSnapshotStore private constructor(
         // persisted fields [Snapshot.rails] + [Snapshot.heroItemKeys] alongside the
         // legacy denormalized [Snapshot.catalogRows]/[Snapshot.heroItems]/
         // [Snapshot.fullCatalogRows] fields. v4 snapshots are discarded on read
-        // (no projector); next write produces v5 which includes both shapes for
-        // backward compat. Task 6e (next) will retire the legacy fields and gut
-        // the ~920 LOC MetaPreview-content sanitization subsystem that operates
-        // on them. Typed item content is persisted separately by
-        // [ResolvedDisplaySnapshotStore] (Phase 3.7 narrowed `f705ad049`); the
-        // home pipeline reads both stores at cold-start to seed first paint.
+        // (no projector); v5 writes carry both shapes for backward compat. Plan B
+        // Task 6e gutted the ~920 LOC MetaPreview-content sanitization subsystem
+        // (no schema bump needed — the on-disk shape didn't change). Typed item
+        // content is persisted separately by [ResolvedDisplaySnapshotStore]
+        // (Phase 3.7 narrowed `f705ad049`); the home pipeline reads both stores
+        // at cold-start to seed first paint.
         private const val SCHEMA_VERSION = 5
         // Persisted-snapshot bounds. The on-disk JSON is restored at startup as a
         // first-paint cache; the network refresh that follows replaces it. The
@@ -127,28 +103,7 @@ class HomeCatalogSnapshotStore private constructor(
         private const val MAX_PERSISTED_CATALOG_ROWS = 200
         private const val MAX_PERSISTED_ITEMS_PER_ROW = 100
         private const val MAX_HERO_ITEMS = 50
-        private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
-        private const val ARTWORK_ASSET_PREFIX = "nexio-artwork://asset/"
-        private const val ARTWORK_REF_SCHEME = "nexio-artwork:"
-        private const val LEGACY_INTEGRATION_POSTER_PREFIX = "integration-poster://"
         private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
-        private const val REDACTED_VALIDATOR_REASON = "validator_reason_redacted"
-        private val PREMIUM_PROVIDER_HOSTS = setOf(
-            "api.ratingposterdb.com",
-            "api.top-posters.com"
-        )
-        private val SAFE_VALIDATOR_REASONS = setOf(
-            "missing_authoritative_no_asset",
-            "decision_cache_not_authoritative",
-            "lookup_failed",
-            "invalid_asset_key",
-            "invalid_decision_key",
-            "invalid_artwork_key_ref",
-            "missing_or_unreadable_asset",
-            "asset_lookup_failed",
-            "asset_read_failed",
-            "unsupported_artwork_ref"
-        )
     }
 
     private val gson = Gson()
@@ -174,12 +129,18 @@ class HomeCatalogSnapshotStore private constructor(
      * round-trip through the persisted JSON. They have empty defaults so
      * existing in-memory constructor call sites stay source-compatible.
      *
-     * Task 6e will retire the denormalized [catalogRows]/[fullCatalogRows]/
-     * [heroItems] fields and the ~920 LOC sanitization subsystem that
-     * operates on them; consumers will move to the [rails]/[heroItemKeys]
-     * pair plus typed item lookup via
-     * [com.nexio.tv.data.local.ResolvedDisplaySnapshotStore] /
-     * [com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository].
+     * Plan B Task 6e gutted the ~920 LOC MetaPreview-content sanitization
+     * subsystem that previously ran on every read/write: premium-URL clearing,
+     * provider-tag mismatch detection, decision/asset ref repair, artwork-type
+     * boundary enforcement. The typed authority
+     * ([com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository]) is now
+     * the sole owner of MetaPreview content correctness upstream of write.
+     * The legacy denormalized [catalogRows]/[fullCatalogRows]/[heroItems]
+     * fields remain on this data class as transition support for pipeline
+     * filter helpers and the search corpus; a follow-up task will retire them
+     * once consumers consume rails + typed surface directly. Persistence still
+     * applies bounded caps via [capForPersist] so the on-disk file cannot grow
+     * unbounded across sessions.
      */
     data class Snapshot(
         val catalogRows: List<CatalogRow>,
@@ -225,32 +186,27 @@ class HomeCatalogSnapshotStore private constructor(
                 )
                 return null
             }
-            val requiredPosterProviderTag = requiredPosterProviderTag(posterProviderToken)
-            val sanitizeResult = decoded.sanitizeForSnapshot()
-            val sanitized = sanitizeResult.snapshot
-            val providerTagMismatches = sanitized.posterProviderTagMismatches(
-                requiredTag = requiredPosterProviderTag,
-                providerTagMismatchExemptPosterRefs = sanitizeResult.providerTagMismatchExemptPosterRefs
-            )
-            traceIgnoredPosterProviderTagMismatches(
-                mismatches = providerTagMismatches,
-                requiredTag = requiredPosterProviderTag
-            )
+            // Plan B Task 6e: MetaPreview-content sanitization subsystem removed.
+            // The typed authority ([ResolvedDisplaySurfaceRepository]) is now the
+            // sole owner of MetaPreview content correctness — premium URLs, provider
+            // tags, decision/asset ref repairs, and poster-type invariants are all
+            // enforced upstream of write. The home snapshot persists structure-only
+            // [rails] + [heroItemKeys] (schema v5, Task 6d) and the legacy
+            // denormalized fields ride along for transition consumers; on read we
+            // simply return what was written.
             traceSnapshot(
                 eventType = "home.snapshot_read",
                 payload = mapOf(
                     "success" to true,
                     "profileId" to profileId,
                     "snapshotFound" to true,
-                    "catalogRowCount" to sanitized.catalogRows.size,
-                    "fullCatalogRowCount" to sanitized.fullCatalogRows.size,
-                    "heroItemCount" to sanitized.heroItems.size,
-                    "requiredPosterProviderTag" to requiredPosterProviderTag,
-                    "ignoredPosterProviderTagMismatchCount" to providerTagMismatches.size,
+                    "catalogRowCount" to decoded.catalogRows.size,
+                    "fullCatalogRowCount" to decoded.fullCatalogRows.size,
+                    "heroItemCount" to decoded.heroItems.size,
                     "reason" to null
                 )
             )
-            sanitized
+            decoded
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
             traceSnapshot(
@@ -277,10 +233,16 @@ class HomeCatalogSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ) {
         runCatching {
-            val sanitizedSnapshot = snapshot.sanitize().repairArtworkWriteInvariants()
+            // Plan B Task 6e: MetaPreview-content sanitization subsystem removed.
+            // The typed authority ([ResolvedDisplaySurfaceRepository]) enforces
+            // content correctness upstream of write; the persisted snapshot only
+            // needs structure-only [rails] + [heroItemKeys] (schema v5) plus
+            // bounded denormalized fields as transition support. Apply hard caps
+            // inline so the on-disk file cannot grow unbounded across sessions.
+            val capped = snapshot.capForPersist()
             val success = runCatching {
                 streamSnapshotToFile(
-                    snapshot = sanitizedSnapshot,
+                    snapshot = capped,
                     schemaVersion = SCHEMA_VERSION,
                     languageEpoch = metadataDiskCacheStore.currentLanguageEpoch(),
                     languageTag = currentLanguageTag(),
@@ -297,9 +259,9 @@ class HomeCatalogSnapshotStore private constructor(
                 payload = mapOf(
                     "success" to success,
                     "profileId" to profileId,
-                    "catalogRowCount" to sanitizedSnapshot.catalogRows.size,
-                    "fullCatalogRowCount" to sanitizedSnapshot.fullCatalogRows.size,
-                    "heroItemCount" to sanitizedSnapshot.heroItems.size
+                    "catalogRowCount" to capped.catalogRows.size,
+                    "fullCatalogRowCount" to capped.fullCatalogRows.size,
+                    "heroItemCount" to capped.heroItems.size
                 )
             )
         }.onFailure { error ->
@@ -667,443 +629,40 @@ class HomeCatalogSnapshotStore private constructor(
     private fun snapshotKey(profileId: Int = activeProfileId()): String {
         return "$SNAPSHOT_KEY:p$profileId:${currentLanguageTag()}"
     }
-
-    private fun requiredPosterProviderTag(posterProviderToken: String): String? {
-        val provider = posterProviderToken.substringBefore(':').trim()
-        return provider
-            .takeIf { it.isNotBlank() && !it.equals("native", ignoreCase = true) }
-            ?.lowercase()
-    }
-
-    private fun Snapshot.posterProviderTagMismatches(
-        requiredTag: String?,
-        providerTagMismatchExemptPosterRefs: Set<String> = emptySet()
-    ): List<PosterProviderTagMismatch> {
-        if (requiredTag == null) return emptyList()
-        return buildList {
-            catalogRows.forEachIndexed { rowIndex, row ->
-                row.items.forEachIndexed { itemIndex, item ->
-                    recordPosterProviderTagMismatch(
-                        scope = "catalogRows[$rowIndex].items[$itemIndex]",
-                        item = item,
-                        requiredTag = requiredTag,
-                        providerTagMismatchExemptPosterRefs = providerTagMismatchExemptPosterRefs
-                    )
-                }
-            }
-            fullCatalogRows.forEachIndexed { rowIndex, row ->
-                row.items.forEachIndexed { itemIndex, item ->
-                    recordPosterProviderTagMismatch(
-                        scope = "fullCatalogRows[$rowIndex].items[$itemIndex]",
-                        item = item,
-                        requiredTag = requiredTag,
-                        providerTagMismatchExemptPosterRefs = providerTagMismatchExemptPosterRefs
-                    )
-                }
-            }
-            heroItems.forEachIndexed { itemIndex, item ->
-                recordPosterProviderTagMismatch(
-                    scope = "heroItems[$itemIndex]",
-                    item = item,
-                    requiredTag = requiredTag,
-                    providerTagMismatchExemptPosterRefs = providerTagMismatchExemptPosterRefs
-                )
-            }
-        }
-    }
-
-    private fun MutableList<PosterProviderTagMismatch>.recordPosterProviderTagMismatch(
-        scope: String,
-        item: MetaPreview,
-        requiredTag: String,
-        providerTagMismatchExemptPosterRefs: Set<String>
-    ) {
-        val providerTag = item.posterProviderTag ?: return
-        if (providerTag == requiredTag) return
-        val posterRef = item.poster?.trim().orEmpty()
-        if (posterRef in providerTagMismatchExemptPosterRefs) return
-        add(
-            PosterProviderTagMismatch(
-                scope = scope,
-                providerTag = providerTag,
-                posterKind = posterKind(posterRef),
-                decisionKeyHash = decisionKeyHashForRef(posterRef)
-            )
-        )
-    }
-
-    private fun traceIgnoredPosterProviderTagMismatches(
-        mismatches: List<PosterProviderTagMismatch>,
-        requiredTag: String?
-    ) {
-        if (mismatches.isEmpty()) return
-        traceSnapshot(
-            eventType = "home.snapshot_provider_tag_mismatch_ignored",
-            payload = mapOf(
-                "scope" to "snapshot",
-                "mismatchCount" to mismatches.size,
-                "requiredPosterProviderTag" to requiredTag,
-                "providerTags" to mismatches.countSummary { it.providerTag },
-                "posterKinds" to mismatches.countSummary { it.posterKind }
-            )
-        )
-        mismatches.forEach { mismatch ->
-            traceSnapshot(
-                eventType = "home.snapshot_artwork_rehydrate_requested",
-                payload = mapOf(
-                    "scope" to mismatch.scope,
-                    "reason" to "poster_provider_tag_mismatch",
-                    "posterKind" to mismatch.posterKind,
-                    "providerTag" to mismatch.providerTag,
-                    "requiredProviderTag" to requiredTag,
-                    "decisionKeyHash" to mismatch.decisionKeyHash
-                )
-            )
-        }
-    }
-
-    private fun <T> List<T>.countSummary(selector: (T) -> String): String {
-        return groupingBy(selector)
-            .eachCount()
-            .entries
-            .sortedBy { it.key }
-            .joinToString("|") { (value, count) -> "$value=$count" }
-    }
-
-    private fun Snapshot.sanitize(): Snapshot = sanitizeForSnapshot().snapshot
-
-    private fun Snapshot.repairArtworkWriteInvariants(): Snapshot {
-        return Snapshot(
-            catalogRows = catalogRows.mapIndexed { rowIndex, row ->
-                row.copy(
-                    items = row.items.mapIndexed { itemIndex, item ->
-                        item.repairArtworkWriteInvariant("catalogRows[$rowIndex].items[$itemIndex]")
-                    }
-                )
-            },
-            fullCatalogRows = fullCatalogRows.mapIndexed { rowIndex, row ->
-                row.copy(
-                    items = row.items.mapIndexed { itemIndex, item ->
-                        item.repairArtworkWriteInvariant("fullCatalogRows[$rowIndex].items[$itemIndex]")
-                    }
-                )
-            },
-            heroItems = heroItems.mapIndexed { itemIndex, item ->
-                item.repairArtworkWriteInvariant("heroItems[$itemIndex]")
-            },
-            orderedGroupKeys = orderedGroupKeys,
-            // Plan B Task 6d schema v5: preserve structure-only fields; the
-            // sanitization subsystem operates only on the denormalized
-            // MetaPreview content, not on opaque keys.
-            rails = rails,
-            heroItemKeys = heroItemKeys
-        )
-    }
-
-    private fun MetaPreview.repairArtworkWriteInvariant(scope: String): MetaPreview {
-        val withTypeSafeArtwork = if (artwork == null) {
-            this
+    /**
+     * Plan B Task 6e: applies the hard caps that previously lived inside the
+     * sanitization subsystem ([List<CatalogRow>.capRowsAndItems] + [MAX_HERO_ITEMS]
+     * subList) directly during write. Keeps the on-disk file bounded across
+     * sessions without re-introducing MetaPreview-content sanitization. The
+     * structure-only [Snapshot.rails] + [Snapshot.heroItemKeys] pass through
+     * unchanged; the legacy denormalized fields are only bounded.
+     */
+    private fun Snapshot.capForPersist(): Snapshot {
+        val cappedCatalogRows = catalogRows.capRowsAndItems()
+        val cappedFullCatalogRows = fullCatalogRows.capRowsAndItems()
+        val cappedHeroItems = if (heroItems.size > MAX_HERO_ITEMS) {
+            heroItems.subList(0, MAX_HERO_ITEMS)
         } else {
-            copy(artwork = artwork.enforceArtworkTypeBoundaries().emptyOrNull())
+            heroItems
         }
-        return withTypeSafeArtwork
-            .repairPosterWriteInvariant(scope)
-            .repairScalarArtworkWriteInvariant(scope, fieldName = "background", expectedType = ArtworkType.BACKDROP)
-            .repairScalarArtworkWriteInvariant(scope, fieldName = "logo", expectedType = ArtworkType.LOGO)
-    }
-
-    private fun MetaPreview.repairPosterWriteInvariant(scope: String): MetaPreview {
-        val posterRef = poster?.trim().orEmpty()
-        val typeRepair = artworkTypeRepairForRef(
-            ref = posterRef,
-            expectedType = ArtworkType.POSTER,
-            clearReasonForUnknownType = null
-        )
-        if (typeRepair != null) {
-            traceWriteBarrierRepair(
-                scope = scope,
-                fieldName = "poster",
-                action = "clear_poster_ref",
-                reason = typeRepair.reason,
-                decisionKeyHash = decisionKeyHashForRef(posterRef),
-                assetKeyHash = assetKeyHashForRef(posterRef),
-                destructive = true,
-                posterProviderTagAction = "clear"
-            )
-            return copy(poster = null, posterProviderTag = null)
-        }
-
-        val validation = artworkReferenceIntegrityValidator.validate(posterRef)
-        return when (validation) {
-            ArtworkReferenceIntegrityResult.Empty ->
-                if (posterProviderTag == null) this else copy(posterProviderTag = null)
-
-            is ArtworkReferenceIntegrityResult.ValidDecision,
-            is ArtworkReferenceIntegrityResult.ValidAsset ->
-                this
-
-            is ArtworkReferenceIntegrityResult.RecoverableAssetForDecision -> {
-                val assetRef = "$ARTWORK_ASSET_PREFIX${validation.assetKey.value}"
-                traceWriteBarrierRepair(
-                    scope = scope,
-                    fieldName = "poster",
-                    action = "replace_decision_with_asset",
-                    reason = "recoverable_asset_for_decision",
-                    decisionKeyHash = validation.decisionKey.value.sha256Short(),
-                    assetKeyHash = validation.assetKey.value.sha256Short(),
-                    destructive = false,
-                    posterProviderTagAction = "preserve"
-                )
-                copy(poster = assetRef)
-            }
-
-            is ArtworkReferenceIntegrityResult.OrphanedDecisionRef -> {
-                val safeReason = validation.reason.safeValidatorTraceReason()
-                traceWriteBarrierRepair(
-                    scope = scope,
-                    fieldName = "poster",
-                    action = "preserve_orphaned_decision_ref",
-                    reason = safeReason,
-                    decisionKeyHash = validation.decisionKey.value.sha256Short(),
-                    assetKeyHash = null,
-                    destructive = false,
-                    posterProviderTagAction = "preserve"
-                )
-                traceSnapshot(
-                    eventType = "home.snapshot_artwork_rehydrate_requested",
-                    payload = mapOf(
-                        "scope" to scope,
-                        "reason" to safeReason,
-                        "posterKind" to "decision",
-                        "providerTag" to posterProviderTag,
-                        "decisionKeyHash" to validation.decisionKey.value.sha256Short(),
-                        "lookupResultType" to "orphaned_decision_ref"
-                    )
-                )
-                this
-            }
-
-            is ArtworkReferenceIntegrityResult.UnknownDecisionRef -> {
-                traceSnapshot(
-                    eventType = "home.snapshot_artwork_rehydrate_requested",
-                    payload = mapOf(
-                        "scope" to scope,
-                        "reason" to validation.reason.safeValidatorTraceReason(),
-                        "posterKind" to "decision",
-                        "providerTag" to posterProviderTag,
-                        "decisionKeyHash" to validation.decisionKey.value.sha256Short(),
-                        "lookupResultType" to "unknown_decision_ref"
-                    )
-                )
-                this
-            }
-
-            is ArtworkReferenceIntegrityResult.Invalid ->
-                if (isInvalidArtworkRefClearedAtWrite(posterRef)) {
-                    // Validators may flag a freshly-materialized decision as Invalid
-                    // before its asset bytes are linked. Before nulling, ask the
-                    // decision cache directly: if it still resolves to Found, the ref
-                    // is recoverable and we keep it. This prevents the empty-poster
-                    // (Trakt) and addon-poster-flicker (TMDB) regressions where a
-                    // transient validator miss caused poster=null to be persisted.
-                    if (decisionRefStillResolvesInCache(posterRef)) {
-                        traceWriteBarrierRepair(
-                            scope = scope,
-                            fieldName = "poster",
-                            action = "preserve_invalid_decision_with_cache_hit",
-                            reason = validation.reason.safeValidatorTraceReason(),
-                            decisionKeyHash = decisionKeyHashForRef(posterRef),
-                            assetKeyHash = assetKeyHashForRef(posterRef),
-                            destructive = false,
-                            posterProviderTagAction = "preserve"
-                        )
-                        this
-                    } else {
-                        traceWriteBarrierRepair(
-                            scope = scope,
-                            fieldName = "poster",
-                            action = "clear_poster_ref",
-                            reason = validation.reason.safeValidatorTraceReason(),
-                            decisionKeyHash = decisionKeyHashForRef(posterRef),
-                            assetKeyHash = assetKeyHashForRef(posterRef),
-                            destructive = true,
-                            posterProviderTagAction = "clear"
-                        )
-                        copy(poster = null, posterProviderTag = null)
-                    }
-                } else {
-                    this
-                }
-        }
-    }
-
-    private fun MetaPreview.repairScalarArtworkWriteInvariant(
-        scope: String,
-        fieldName: String,
-        expectedType: ArtworkType
-    ): MetaPreview {
-        val ref = when (fieldName) {
-            "background" -> background
-            "logo" -> logo
-            else -> null
-        }?.trim().orEmpty()
-        val typeRepair = artworkTypeRepairForRef(
-            ref = ref,
-            expectedType = expectedType,
-            clearReasonForUnknownType = "invalid_artwork_ref"
-        ) ?: return this
-
-        traceWriteBarrierRepair(
-            scope = scope,
-            fieldName = fieldName,
-            action = "clear_${fieldName}_ref",
-            reason = typeRepair.reason,
-            decisionKeyHash = decisionKeyHashForRef(ref),
-            assetKeyHash = assetKeyHashForRef(ref),
-            destructive = true,
-            posterProviderTagAction = null
-        )
-        return when (fieldName) {
-            "background" -> copy(background = null)
-            "logo" -> copy(logo = null)
-            else -> this
-        }
-    }
-
-    private fun artworkTypeRepairForRef(
-        ref: String,
-        expectedType: ArtworkType,
-        clearReasonForUnknownType: String?
-    ): ArtworkTypeRepair? {
-        if (!isDurableArtworkRef(ref)) return null
-        val inferredType = artworkTypeForDurableRef(ref)
-        return when {
-            inferredType == null && clearReasonForUnknownType != null ->
-                ArtworkTypeRepair(clearReasonForUnknownType)
-            inferredType != null && inferredType != expectedType ->
-                ArtworkTypeRepair("wrong_artwork_type")
-            else ->
-                null
-        }
-    }
-
-    private data class ArtworkTypeRepair(val reason: String)
-
-    private fun String.safeValidatorTraceReason(): String =
-        if (this in SAFE_VALIDATOR_REASONS) this else REDACTED_VALIDATOR_REASON
-
-    private fun decisionRefStillResolvesInCache(ref: String): Boolean {
-        if (!isDecisionRef(ref)) return false
-        val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
-            .takeIf { it.isNotBlank() } ?: return false
-        val result = runCatching {
-            artworkDecisionCache.lookup(ArtworkDecisionKey(keyValue), requiredContext = null)
-        }.getOrNull()
-        return result is ArtworkDecisionLookupResult.Found
-    }
-
-    private fun isInvalidArtworkRefClearedAtWrite(ref: String): Boolean {
-        if (ref.isBlank()) return false
-        if (!ref.startsWith(ARTWORK_REF_SCHEME)) return false
-        if (artworkReferenceIntegrityValidator !is NoopArtworkReferenceIntegrityValidator) return true
-        if (!isDecisionRef(ref)) return true
-
-        val decisionKey = ref.removePrefix(ARTWORK_DECISION_PREFIX)
-        return decisionKey.isBlank() ||
-            "/" in decisionKey ||
-            decisionKey.startsWith("artwork-decision:")
-    }
-
-    private fun traceWriteBarrierRepair(
-        scope: String,
-        fieldName: String,
-        action: String,
-        reason: String,
-        decisionKeyHash: String?,
-        assetKeyHash: String?,
-        destructive: Boolean,
-        posterProviderTagAction: String?
-    ) {
-        val payload = buildMap<String, Any?> {
-            put("scope", scope)
-            put("field", fieldName)
-            put("action", action)
-            put("reason", reason)
-            put("decisionKeyHash", decisionKeyHash)
-            put("assetKeyHash", assetKeyHash)
-            put("destructive", destructive)
-            if (posterProviderTagAction != null) {
-                put("posterProviderTagAction", posterProviderTagAction)
-            }
-        }
-        traceSnapshot(
-            eventType = "home.snapshot_write_barrier_repaired",
-            payload = payload
-        )
-    }
-
-    private fun Snapshot.sanitizeForSnapshot(): SnapshotSanitizeResult {
-        val traceState = SnapshotSanitizeTraceState()
-        val sanitizedCatalogRows = sanitizeCatalogRows(catalogRows as List<*>, "catalogRows", traceState)
-        val sanitizedFullCatalogRows = sanitizeCatalogRows(fullCatalogRows as List<*>, "fullCatalogRows", traceState)
-        val sanitizedHeroItems = sanitizeMetaPreviews(heroItems as List<*>, "heroItems", traceState)
-
-        val droppedCatalogRows = (catalogRows as List<*>).size - sanitizedCatalogRows.size
-        val droppedFullCatalogRows = (fullCatalogRows as List<*>).size - sanitizedFullCatalogRows.size
-        val droppedHeroItems = (heroItems as List<*>).size - sanitizedHeroItems.size
-
-        if (droppedCatalogRows > 0 || droppedFullCatalogRows > 0 || droppedHeroItems > 0) {
-            Log.w(
-                TAG,
-                "Discarded malformed cached home snapshot entries: " +
-                    "catalogRows=$droppedCatalogRows fullCatalogRows=$droppedFullCatalogRows heroItems=$droppedHeroItems"
-            )
-        }
-        // Hard caps to keep the persisted snapshot bounded. Without them the file
-        // grows monotonically across sessions: each run inflates whatever was
-        // written last time and re-persists at least that much (often more, after
-        // pagination loads / discovery refreshes), and the next read inflates the
-        // bigger file. Heap dump on PID 29380 caught the file at 145.97 MB on disk
-        // — 9,260 CatalogRow + 184,907 MetaPreview live instances after load,
-        // driving 134 MB/GC AllocSpace churn. The user-facing rails normally show
-        // tens of items per rail; the durable cache only needs enough to seed a
-        // first paint while the network refresh runs.
-        val cappedCatalogRows = sanitizedCatalogRows.capRowsAndItems()
-        val cappedFullCatalogRows = sanitizedFullCatalogRows.capRowsAndItems()
-        val cappedHeroItems = if (sanitizedHeroItems.size > MAX_HERO_ITEMS) {
-            sanitizedHeroItems.subList(0, MAX_HERO_ITEMS)
-        } else {
-            sanitizedHeroItems
-        }
-        if (sanitizedCatalogRows.size != cappedCatalogRows.size ||
-            sanitizedFullCatalogRows.size != cappedFullCatalogRows.size ||
-            sanitizedHeroItems.size != cappedHeroItems.size
+        if (
+            cappedCatalogRows === catalogRows &&
+            cappedFullCatalogRows === fullCatalogRows &&
+            cappedHeroItems === heroItems
         ) {
-            Log.w(
-                TAG,
-                "Capped persisted home snapshot: " +
-                    "catalogRows ${sanitizedCatalogRows.size} -> ${cappedCatalogRows.size}, " +
-                    "fullCatalogRows ${sanitizedFullCatalogRows.size} -> ${cappedFullCatalogRows.size}, " +
-                    "heroItems ${sanitizedHeroItems.size} -> ${cappedHeroItems.size}"
-            )
+            return this
         }
-        traceState.emitIfNeeded()
-
-        return SnapshotSanitizeResult(
-            snapshot = Snapshot(
-                catalogRows = cappedCatalogRows,
-                fullCatalogRows = cappedFullCatalogRows,
-                heroItems = cappedHeroItems,
-                orderedGroupKeys = orderedGroupKeys.distinct(),
-                // Plan B Task 6d schema v5: preserve structure-only fields if
-                // already populated upstream. The persisted write path also
-                // derives them from the legacy fields when empty, so callers
-                // that have not been updated to populate these still produce
-                // a valid v5 snapshot on disk.
-                rails = rails,
-                heroItemKeys = heroItemKeys
-            ),
-            providerTagMismatchExemptPosterRefs = traceState.providerTagMismatchExemptPosterRefs.toSet()
+        Log.w(
+            TAG,
+            "Capped persisted home snapshot: " +
+                "catalogRows ${catalogRows.size} -> ${cappedCatalogRows.size}, " +
+                "fullCatalogRows ${fullCatalogRows.size} -> ${cappedFullCatalogRows.size}, " +
+                "heroItems ${heroItems.size} -> ${cappedHeroItems.size}"
+        )
+        return copy(
+            catalogRows = cappedCatalogRows,
+            fullCatalogRows = cappedFullCatalogRows,
+            heroItems = cappedHeroItems
         )
     }
 
@@ -1127,436 +686,6 @@ class HomeCatalogSnapshotStore private constructor(
         return out
     }
 
-    private fun sanitizeCatalogRows(
-        values: List<*>,
-        label: String,
-        traceState: SnapshotSanitizeTraceState
-    ): List<CatalogRow> {
-        return values.mapIndexedNotNull { index, value ->
-            val row = value as? CatalogRow
-            if (row == null) {
-                Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
-                return@mapIndexedNotNull null
-            }
-
-            val sanitizedItems = sanitizeMetaPreviews(row.items as List<*>, "$label[$index].items", traceState)
-            if (sanitizedItems.size != (row.items as List<*>).size) {
-                Log.w(
-                    TAG,
-                    "Dropping malformed cached items from $label[$index] for catalogId=${row.catalogId}"
-                )
-            }
-            row.copy(items = sanitizedItems)
-        }
-    }
-
-    private fun sanitizeMetaPreviews(
-        values: List<*>,
-        label: String,
-        traceState: SnapshotSanitizeTraceState
-    ): List<MetaPreview> {
-        return values.mapIndexedNotNull { index, value ->
-            val item = value as? MetaPreview
-            if (item == null) {
-                Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
-            }
-            item
-                ?.sanitizedForSnapshot()
-                ?.sanitizePremiumArtworkForSnapshot("$label[$index]", traceState)
-        }
-    }
-
-    private fun MetaPreview.sanitizedForSnapshot(): MetaPreview {
-        val sanitized = sanitizedForCache()
-        val originalPoster = poster?.trim()?.takeIf { it.isNotBlank() }
-        return if (
-            originalPoster != null &&
-            sanitized.poster == originalPoster &&
-            sanitized.posterProviderTag == null &&
-            posterProviderTag != null
-        ) {
-            sanitized.copy(posterProviderTag = posterProviderTag)
-        } else {
-            sanitized
-        }
-    }
-
-    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(
-        scope: String,
-        traceState: SnapshotSanitizeTraceState
-    ): MetaPreview {
-        val posterRef = poster?.trim().orEmpty()
-        val posterKind = posterKind(posterRef)
-        val decisionLookup = if (isDecisionRef(posterRef)) {
-            lookupDurableDecision(
-                ref = posterRef,
-                scope = scope,
-                posterKind = posterKind,
-                posterProviderTag = posterProviderTag,
-                traceState = traceState
-            )
-        } else {
-            null
-        }
-        if (decisionLookup?.preserveNonAuthoritativeRef == true) {
-            traceState.recordProviderTagMismatchExemptPosterRef(posterRef)
-        }
-        val reason = clearReasonForPosterRef(posterRef, decisionLookup?.clearMissingDecisionRef)
-        if (posterRef.isBlank() || reason == null) {
-            return this
-        }
-        traceState.recordSanitized(
-            scope = scope,
-            reason = reason,
-            posterKind = posterKind,
-            posterProviderTag = posterProviderTag,
-            lookupResultType = decisionLookup?.lookupResultType
-        )
-        return copy(poster = null, posterProviderTag = null)
-    }
-
-    private fun clearReasonForPosterRef(ref: String, clearMissingDecisionRef: Boolean?): String? {
-        return when {
-            isRawPremiumProviderUrl(ref) -> "raw_premium_url"
-            isLegacyIntegrationPosterRef(ref) -> "legacy_integration_ref"
-            isMissingDecisionRef(ref, clearMissingDecisionRef) -> "missing_decision"
-            else -> null
-        }
-    }
-
-    private fun isRawPremiumProviderUrl(ref: String): Boolean {
-        val uri = runCatching { URI(ref.trim()) }.getOrNull() ?: return false
-        val scheme = uri.scheme?.lowercase() ?: return false
-        if (scheme != "http" && scheme != "https") return false
-        val host = uri.host?.lowercase() ?: return false
-        return host in PREMIUM_PROVIDER_HOSTS
-    }
-
-    private fun isLegacyIntegrationPosterRef(ref: String): Boolean {
-        return ref.startsWith(LEGACY_INTEGRATION_POSTER_PREFIX, ignoreCase = true)
-    }
-
-    private fun isMissingDecisionRef(ref: String, clearMissingDecisionRef: Boolean?): Boolean {
-        return isDecisionRef(ref) && clearMissingDecisionRef == true
-    }
-
-    private fun isDecisionRef(ref: String): Boolean {
-        return ref.startsWith(ARTWORK_DECISION_PREFIX)
-    }
-
-    private fun isAssetRef(ref: String): Boolean {
-        return ref.startsWith(ARTWORK_ASSET_PREFIX)
-    }
-
-    private fun isDurableArtworkRef(ref: String): Boolean {
-        return isDecisionRef(ref) || isAssetRef(ref)
-    }
-
-    private fun artworkTypeForDurableRef(ref: String): ArtworkType? {
-        val key = when {
-            isDecisionRef(ref) -> ref.removePrefix(ARTWORK_DECISION_PREFIX)
-            isAssetRef(ref) -> ref.removePrefix(ARTWORK_ASSET_PREFIX)
-            else -> return null
-        }
-        val parts = key.split(":")
-        val typeValue = when (parts.firstOrNull()) {
-            "artwork-decision" -> parts.getOrNull(1)
-            "artwork-asset" -> parts.getOrNull(2)
-            else -> null
-        } ?: return null
-        return ArtworkType.entries.firstOrNull { type ->
-            type.name.equals(typeValue, ignoreCase = true)
-        }
-    }
-
-    private fun decisionKeyHashForRef(ref: String): String? {
-        return ref
-            .takeIf { isDecisionRef(it) }
-            ?.removePrefix(ARTWORK_DECISION_PREFIX)
-            ?.takeIf { it.isNotBlank() }
-            ?.sha256Short()
-    }
-
-    private fun assetKeyHashForRef(ref: String): String? {
-        return ref
-            .takeIf { isAssetRef(it) }
-            ?.removePrefix(ARTWORK_ASSET_PREFIX)
-            ?.takeIf { it.isNotBlank() }
-            ?.sha256Short()
-    }
-
-    private fun posterKind(ref: String): String {
-        return when {
-            isDecisionRef(ref) -> "decision"
-            isRawPremiumProviderUrl(ref) -> "raw_premium"
-            isLegacyIntegrationPosterRef(ref) -> "legacy_integration"
-            ref.startsWith("http://", ignoreCase = true) || ref.startsWith("https://", ignoreCase = true) -> "remote"
-            else -> "other"
-        }
-    }
-
-    private fun lookupDurableDecision(
-        ref: String,
-        scope: String,
-        posterKind: String,
-        posterProviderTag: String?,
-        traceState: SnapshotSanitizeTraceState
-    ): DecisionLookupProof {
-        val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
-            .takeIf { it.isNotBlank() }
-            ?: return DecisionLookupProof(
-                decisionFound = false,
-                clearMissingDecisionRef = true,
-                preserveNonAuthoritativeRef = false,
-                decisionKeyHash = null,
-                lookupResultType = "blank_decision_key",
-                diagnostics = cacheDiagnostics()
-            ).also { proof ->
-                traceState.recordDecisionLookup(
-                    scope = scope,
-                    posterKind = posterKind,
-                    posterProviderTag = posterProviderTag,
-                    proof = proof,
-                    lookupErrorClass = "BlankDecisionKey"
-                )
-            }
-
-        val decisionKey = ArtworkDecisionKey(keyValue)
-        val decisionKeyHash = keyValue.sha256Short()
-        val lookupResult = runCatching {
-            artworkDecisionCache.lookup(decisionKey, requiredContext = null)
-        }.getOrElse { error ->
-            ArtworkDecisionLookupResult.LookupFailed(
-                decisionKey = decisionKey,
-                errorClass = error.javaClass.simpleName,
-                messageHash = error.message?.sha256Short()
-            )
-        }
-        val lookupErrorClass = when (lookupResult) {
-            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> lookupResult.errorClass
-            is ArtworkDecisionLookupResult.LookupFailed -> lookupResult.errorClass
-            else -> null
-        }
-        val rehydrateReason = when (lookupResult) {
-            is ArtworkDecisionLookupResult.MissingAuthoritative -> "missing_decision_authoritative"
-            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> "decision_cache_not_authoritative"
-            is ArtworkDecisionLookupResult.LookupFailed -> "lookup_failed"
-            else -> null
-        }
-
-        return DecisionLookupProof(
-            decisionFound = lookupResult is ArtworkDecisionLookupResult.Found,
-            clearMissingDecisionRef = false,
-            preserveNonAuthoritativeRef = lookupResult is ArtworkDecisionLookupResult.CacheNotAuthoritative ||
-                lookupResult is ArtworkDecisionLookupResult.LookupFailed,
-            decisionKeyHash = decisionKeyHash,
-            lookupResultType = lookupResult.lookupResultType(),
-            diagnostics = cacheDiagnostics()
-        ).also { proof ->
-            traceState.recordDecisionLookup(
-                scope = scope,
-                posterKind = posterKind,
-                posterProviderTag = posterProviderTag,
-                proof = proof,
-                lookupErrorClass = lookupErrorClass
-            )
-            if (rehydrateReason != null) {
-                traceState.recordRehydrateRequest()
-                traceSnapshot(
-                    eventType = "home.snapshot_artwork_rehydrate_requested",
-                    payload = mapOf(
-                        "scope" to scope,
-                        "reason" to rehydrateReason,
-                        "posterKind" to posterKind,
-                        "providerTag" to posterProviderTag,
-                        "decisionKeyHash" to decisionKeyHash,
-                        "lookupResultType" to proof.lookupResultType
-                    )
-                )
-            }
-        }
-    }
-
-    private fun ArtworkDecisionLookupResult.lookupResultType(): String =
-        when (this) {
-            is ArtworkDecisionLookupResult.Found -> "found"
-            is ArtworkDecisionLookupResult.MissingAuthoritative -> "missing_authoritative"
-            is ArtworkDecisionLookupResult.CacheNotAuthoritative -> "cache_not_authoritative"
-            is ArtworkDecisionLookupResult.LookupFailed -> "lookup_failed"
-        }
-
-    private fun cacheDiagnostics(): ArtworkDecisionCacheSnapshotDiagnostics? =
-        (artworkDecisionCache as? ArtworkDecisionCacheDiagnostics)?.snapshotDiagnostics()
-
-    private fun String.sha256Short(): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { byte -> "%02x".format(byte) }.take(16)
-    }
-
-    private data class DecisionLookupProof(
-        val decisionFound: Boolean,
-        val clearMissingDecisionRef: Boolean,
-        val preserveNonAuthoritativeRef: Boolean,
-        val decisionKeyHash: String?,
-        val lookupResultType: String,
-        val diagnostics: ArtworkDecisionCacheSnapshotDiagnostics?
-    )
-
-    private data class SnapshotSanitizeResult(
-        val snapshot: Snapshot,
-        val providerTagMismatchExemptPosterRefs: Set<String>
-    )
-
-    private data class PosterProviderTagMismatch(
-        val scope: String,
-        val providerTag: String,
-        val posterKind: String,
-        val decisionKeyHash: String?
-    )
-
-    private inner class SnapshotSanitizeTraceState {
-        var decisionLookupCount: Int = 0
-            private set
-        var decisionFoundCount: Int = 0
-            private set
-        var missingDecisionCount: Int = 0
-            private set
-        var cacheNotAuthoritativeCount: Int = 0
-            private set
-        var lookupFailedCount: Int = 0
-            private set
-        var lookupErrorCount: Int = 0
-            private set
-        var sanitizedCount: Int = 0
-            private set
-        var rawPremiumCount: Int = 0
-            private set
-        var legacyIntegrationCount: Int = 0
-            private set
-        var rehydrateRequestCount: Int = 0
-            private set
-        private var latestDiagnostics: ArtworkDecisionCacheSnapshotDiagnostics? = null
-        private val mutableProviderTagMismatchExemptPosterRefs = mutableSetOf<String>()
-        val providerTagMismatchExemptPosterRefs: Set<String>
-            get() = mutableProviderTagMismatchExemptPosterRefs
-        private val sanitizedSamples = mutableListOf<String>()
-        private val missingDecisionSamples = mutableListOf<String>()
-        private val sanitizeReasonCounts = linkedMapOf<String, Int>()
-
-        fun recordProviderTagMismatchExemptPosterRef(ref: String) {
-            mutableProviderTagMismatchExemptPosterRefs += ref
-        }
-
-        fun recordDecisionLookup(
-            scope: String,
-            posterKind: String,
-            posterProviderTag: String?,
-            proof: DecisionLookupProof,
-            lookupErrorClass: String?
-        ) {
-            decisionLookupCount += 1
-            latestDiagnostics = proof.diagnostics
-            if (proof.decisionFound) {
-                decisionFoundCount += 1
-            } else if (proof.lookupResultType == "missing_authoritative") {
-                missingDecisionCount += 1
-                rememberSample(missingDecisionSamples, "$scope:$posterKind:${posterProviderTag.orEmpty()}")
-            }
-            if (proof.lookupResultType == "cache_not_authoritative") {
-                cacheNotAuthoritativeCount += 1
-            }
-            if (proof.lookupResultType == "lookup_failed") {
-                lookupFailedCount += 1
-            }
-            if (lookupErrorClass != null) {
-                lookupErrorCount += 1
-            }
-        }
-
-        fun recordRehydrateRequest() {
-            rehydrateRequestCount += 1
-        }
-
-        fun recordSanitized(
-            scope: String,
-            reason: String,
-            posterKind: String,
-            posterProviderTag: String?,
-            lookupResultType: String?
-        ) {
-            sanitizedCount += 1
-            when (reason) {
-                "raw_premium_url" -> rawPremiumCount += 1
-                "legacy_integration_ref" -> legacyIntegrationCount += 1
-            }
-            sanitizeReasonCounts[reason] = (sanitizeReasonCounts[reason] ?: 0) + 1
-            rememberSample(sanitizedSamples, "$scope:$reason:$posterKind:${posterProviderTag.orEmpty()}:$lookupResultType")
-        }
-
-        fun emitIfNeeded() {
-            if (decisionLookupCount == 0 && sanitizedCount == 0) return
-            val diagnostics = latestDiagnostics
-            traceSnapshot(
-                eventType = "home.snapshot_decision_lookup",
-                payload = mapOf(
-                    "scope" to "snapshot",
-                    "decisionLookupCount" to decisionLookupCount,
-                    "decisionFoundCount" to decisionFoundCount,
-                    "missingDecisionCount" to missingDecisionCount,
-                    "cacheNotAuthoritativeCount" to cacheNotAuthoritativeCount,
-                    "lookupFailedCount" to lookupFailedCount,
-                    "lookupErrorCount" to lookupErrorCount,
-                    "lookupResultTypes" to listOf(
-                        "found=$decisionFoundCount",
-                        "missing_authoritative=$missingDecisionCount",
-                        "cache_not_authoritative=$cacheNotAuthoritativeCount",
-                        "lookup_failed=$lookupFailedCount"
-                    ).joinToString("|"),
-                    "cacheLoaded" to diagnostics?.loaded,
-                    "cacheDecisionCount" to diagnostics?.decisionCount,
-                    "cacheLinkCount" to diagnostics?.linkCount,
-                    "storeFilePresent" to diagnostics?.storeFilePresent,
-                    "storeFileReadable" to diagnostics?.storeFileReadable,
-                    "storeFileBytes" to diagnostics?.storeFileBytes,
-                    "lastLoadSuccess" to diagnostics?.lastLoadSuccess,
-                    "lastLoadReason" to diagnostics?.lastLoadReason,
-                    "lastLoadErrorClass" to diagnostics?.lastLoadErrorClass,
-                    "droppedDecisionCount" to diagnostics?.droppedDecisionCount,
-                    "authoritative" to diagnostics?.authoritative,
-                    "loadState" to diagnostics?.loadStateName,
-                    "quarantinedDecisionCount" to diagnostics?.quarantinedDecisionCount,
-                    "errorTopFrame" to diagnostics?.errorTopFrame,
-                    "rehydrateRequestCount" to rehydrateRequestCount,
-                    "missingDecisionSamples" to missingDecisionSamples.joinToString("|")
-                )
-            )
-            if (sanitizedCount > 0) {
-                traceSnapshot(
-                    eventType = "home.snapshot_sanitize_artwork",
-                    payload = mapOf(
-                        "scope" to "snapshot",
-                        "sanitizedCount" to sanitizedCount,
-                        "rawPremiumCount" to rawPremiumCount,
-                        "legacyIntegrationCount" to legacyIntegrationCount,
-                        "missingDecisionCount" to missingDecisionCount,
-                        "action" to "clear_poster_ref",
-                        "reasons" to sanitizeReasonCounts.entries.joinToString("|") { (reason, count) -> "$reason=$count" },
-                        "destructive" to true,
-                        "writeBackAllowed" to false,
-                        "posterProviderTagAction" to "clear",
-                        "samples" to sanitizedSamples.joinToString("|")
-                    )
-                )
-            }
-        }
-
-        private fun rememberSample(samples: MutableList<String>, sample: String) {
-            if (samples.size < 5) {
-                samples += sample
-            }
-        }
-    }
 
     private fun traceSnapshot(
         eventType: String,

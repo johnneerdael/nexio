@@ -460,12 +460,13 @@ class RawRemoteArtworkUrlBoundaryTest {
         private const val CONTEXT_RADIUS = 3
         private const val RAW_BOUNDARY_TEST_PATH =
             "app/src/test/java/com/nexio/tv/architecture/RawRemoteArtworkUrlBoundaryTest.kt"
-        private val expectedSnapshotSanitizerAllowlist = listOf(
-            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:102" to
-                "\"api.ratingposterdb.com\",",
-            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:103" to
-                "\"api.top-posters.com\""
-        )
+        // Plan B Task 6e: HomeCatalogSnapshotStore's MetaPreview-content
+        // sanitization subsystem (which carried the PREMIUM_PROVIDER_HOSTS
+        // allowlist constants) was deleted. The typed authority
+        // (ResolvedDisplaySurfaceRepository) now owns content correctness
+        // upstream of write, so production snapshot writers no longer need
+        // raw-premium-URL prefix constants. Allowlist is empty.
+        private val expectedSnapshotSanitizerAllowlist = emptyList<Pair<String, String>>()
         private val expectedSnapshotSanitizerPrefixLocations =
             expectedSnapshotSanitizerAllowlist.map { it.first }
 
