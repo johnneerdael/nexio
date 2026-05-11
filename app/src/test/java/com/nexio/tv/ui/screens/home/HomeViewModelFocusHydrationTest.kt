@@ -1315,6 +1315,7 @@ class HomeViewModelFocusHydrationTest {
             accountSyncRefreshNotifier = accountSyncRefreshNotifier,
             catalogPriorityHydrationNotifier = catalogPriorityHydrationNotifier,
             homeCatalogSnapshotStore = mockk(relaxed = true),
+            resolvedDisplaySnapshotStore = mockk(relaxed = true),
             homeCatalogRefreshCoordinator = mockk(relaxed = true),
             debugSettingsDataStore = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),

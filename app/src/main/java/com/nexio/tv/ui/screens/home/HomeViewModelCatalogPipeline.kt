@@ -149,6 +149,19 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         val profileId = profileManager.activeProfileId.value
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
         val snapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId)
+        // Phase 3.7 — restore the typed authority's state from disk so the
+        // post-3.6.5 typed surfaces (ModernHomeRowItem / HeroDisplayItem)
+        // render with hydrated content immediately on cold-start. The legacy
+        // snapshot.catalogRows path continues to drive _displayCatalogRows
+        // for now; the typed cache provides the rule #1-compliant overlay.
+        runCatching {
+            val typedCache = resolvedDisplaySnapshotStore.read(profileId)
+            if (typedCache.isNotEmpty()) {
+                resolvedDisplaySurfaceRepository.restoreFromDisk(items = typedCache, profileId = profileId)
+            }
+        }.onFailure { error ->
+            android.util.Log.w(HomeViewModel.TAG, "Failed to restore typed cache from disk", error)
+        }
         if (snapshot == null) {
             Log.d(HomeViewModel.TAG, "Restored merged home snapshot null")
             return@launch
@@ -3542,6 +3555,14 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         )
         ensureActive()
         homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
+        runCatching {
+            resolvedDisplaySnapshotStore.write(
+                items = resolvedDisplaySurfaceRepository.snapshotNow(profileId).associateBy { it.itemKey },
+                profileId = profileId,
+            )
+        }.onFailure { error ->
+            android.util.Log.w(HomeViewModel.TAG, "Failed to flush typed cache alongside home snapshot", error)
+        }
         ensureActive()
         // Use the in-memory snapshot directly. The atomic-rename file write is strongly
         // consistent, so re-reading + re-parsing 7.65 MB of JSON would only verify what
