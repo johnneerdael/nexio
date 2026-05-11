@@ -92,6 +92,15 @@ internal data class FocusedTrailerSelection(
 @Immutable
 data class ModernCarouselItem(
     val key: String,
+    /**
+     * Authority lookup key for surface-level `Map<String, MetaPreview>` plumbing.
+     *
+     * Catalog items use [homeDisplayItemKey] of (apiType, id). Continue Watching
+     * items use the CW resolved item's own itemKey (a different keyspace —
+     * `metaByItemKey` lookups for CW will return null, which is fine because the
+     * CW render path doesn't consult MetaPreview anyway).
+     */
+    val itemKey: String,
     val title: String,
     val subtitle: String?,
     val imageUrl: String?,
@@ -533,6 +542,7 @@ internal fun buildContinueWatchingItem(
 
     return ModernCarouselItem(
         key = continueWatchingItemKey(item),
+        itemKey = resolved.itemKey,
         title = when (item) {
             is ContinueWatchingItem.InProgress -> resolvedTitle ?: item.progress.name
             is ContinueWatchingItem.NextUp -> resolvedTitle ?: item.info.name
@@ -700,6 +710,7 @@ internal fun buildCatalogItem(
 
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${itemId}_${occurrence}",
+        itemKey = com.nexio.tv.domain.model.homeDisplayItemKey(itemType, itemId),
         title = resolvedTitle,
         subtitle = trailerReleaseInfo,
         imageUrl = heroImageUrl,
