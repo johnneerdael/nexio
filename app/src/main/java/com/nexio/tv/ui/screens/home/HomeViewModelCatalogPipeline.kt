@@ -3069,9 +3069,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             }
         }
         val transientSnapshot = com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = emptyList(),
-            fullCatalogRows = emptyList(),
-            heroItems = emptyList(),
             orderedGroupKeys = orderedGroupKeys,
             rails = transientRails,
             heroItemKeys = transientHeroItemKeys
@@ -3132,8 +3129,18 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
                 if (!isCurrentHomeHydrationScope(expectedHeroGeneration, expectedHeroLanguageTag, profileSessionForSurface)) {
                     return@launch
                 }
+                // Plan B Task 6f.5: snapshot is structure-only; the enriched
+                // MetaPreview content lives in the typed authority. Persist
+                // only the hero item KEY ordering so cold-start reconstruction
+                // can recover the hero slate.
+                val cachedKeys = ArrayList<com.nexio.tv.domain.model.RailItemKey>(cached.size).apply {
+                    for (i in cached.indices) {
+                        val item = cached[i]
+                        add(com.nexio.tv.domain.model.RailItemKey(apiType = item.apiType, contentId = item.id))
+                    }
+                }
                 updateInMemoryHomeSnapshotPipeline { snapshot ->
-                    snapshot.copy(heroItems = cached)
+                    snapshot.copy(heroItemKeys = cachedKeys)
                 }
             } else {
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
@@ -3150,8 +3157,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 lastHeroEnrichmentSignature = enrichmentSignature
                 lastHeroEnrichedItems = enrichedItems
+                val enrichedKeys = ArrayList<com.nexio.tv.domain.model.RailItemKey>(enrichedItems.size).apply {
+                    for (i in enrichedItems.indices) {
+                        val item = enrichedItems[i]
+                        add(com.nexio.tv.domain.model.RailItemKey(apiType = item.apiType, contentId = item.id))
+                    }
+                }
                 updateInMemoryHomeSnapshotPipeline { snapshot ->
-                    snapshot.copy(heroItems = enrichedItems)
+                    snapshot.copy(heroItemKeys = enrichedKeys)
                 }
             }
         }
