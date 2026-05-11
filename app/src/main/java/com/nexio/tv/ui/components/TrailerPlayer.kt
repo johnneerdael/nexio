@@ -51,9 +51,6 @@ import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
-import com.nexio.tv.domain.model.SubtitleTranslationSettings
-import com.nexio.tv.ui.screens.player.BuiltInSubtitleCueTranslator
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.util.concurrent.atomic.AtomicBoolean
@@ -133,51 +130,12 @@ fun TrailerPlayer(
     val preferredSubtitleLanguage = playerSettingsSnapshot?.subtitleStyle?.preferredLanguage
     val subtitleStyleForView = playerSettingsSnapshot?.subtitleStyle
     val subtitleCache = remember(context) { TrailerSubtitleCacheAccess.from(context) }
-
-    // Cue-replacement pipeline (same as streams): plug a
-    // BuiltInSubtitleCueTranslator into ExoPlayer's TextRenderer below so
-    // source-language SRT renders instantly and cues swap to translated
-    // text as Media3 hands them to the translator. The trailer never
-    // blocks on a full-file translation.
-    val cueTranslatorAccess = remember(context) { TrailerCueTranslatorAccess.from(context) }
-    val translationSettings by cueTranslatorAccess
-        .subtitleTranslationSettingsDataStore()
-        .settings
-        .collectAsStateWithLifecycle(initialValue = SubtitleTranslationSettings())
-    val cueTranslatorScope = rememberCoroutineScope()
-    val currentTranslationSettings by rememberUpdatedState(translationSettings)
-    val currentTargetLanguage by rememberUpdatedState(
-        preferredSubtitleLanguage
-            ?.takeIf { it.isNotBlank() && !it.equals("off", true) && !it.equals("none", true) }
-    )
-    val cueGroupTranslator = remember(cueTranslatorAccess, cueTranslatorScope) {
-        BuiltInSubtitleCueTranslator(
-            scope = cueTranslatorScope,
-            translationService = cueTranslatorAccess.subtitleTranslationService(),
-            isEnabledProvider = {
-                currentTranslationSettings.enabled &&
-                    currentTranslationSettings.apiKey.isNotBlank() &&
-                    !currentTargetLanguage.isNullOrBlank()
-            },
-            settingsProvider = { currentTranslationSettings },
-            targetLanguageProvider = { currentTargetLanguage },
-            onTranslatingChanged = { /* no-op for trailers */ },
-            onTranslationError = { msg ->
-                if (msg != null) Log.d(TAG, "cue translator: $msg")
-            }
-        )
-    }
-
     var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage) {
         mutableStateOf<MediaItem.SubtitleConfiguration?>(null)
     }
     LaunchedEffect(trailerCaptions, preferredSubtitleLanguage) {
         subtitleConfig = null
-        // Always select WITHOUT translateTo — the SubtitleConfiguration
-        // gets the source SRT; the cue translator handles target-language
-        // substitution on-demand as Media3 reads cues.
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
-            ?.copy(translateTo = null)
             ?: return@LaunchedEffect
         val cachedUri = subtitleCache.ensure(selected) ?: return@LaunchedEffect
         Log.d(TAG, "subtitle ready lang=${selected.languageCode} uri=$cachedUri")
@@ -208,7 +166,7 @@ fun TrailerPlayer(
         label = "trailerFirstFrameAlpha"
     )
 
-    val trailerPlayer = remember(trailerUrl, trailerAudioUrl, cueGroupTranslator) {
+    val trailerPlayer = remember(trailerUrl, trailerAudioUrl) {
         if (trailerUrl != null) {
             // Trailers are short (~30s–2min) and rarely seek; the previous
             // 30s/120s/5s/10s defaults caused DefaultAllocator to preallocate
@@ -227,10 +185,8 @@ fun TrailerPlayer(
                 .setTargetBufferBytes(2 * 1024 * 1024)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
-            val renderersFactory = TrailerRenderersFactory(context, cueGroupTranslator)
             ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
-                .setRenderersFactory(renderersFactory)
                 .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                 .build()
                 .apply {

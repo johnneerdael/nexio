@@ -13,6 +13,7 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -31,7 +32,9 @@ private const val TAG = "TrailerSubtitleCache"
  */
 @Singleton
 class TrailerSubtitleCache @Inject constructor(
-    @ApplicationContext private val applicationContext: Context
+    @ApplicationContext private val applicationContext: Context,
+    private val subtitleTranslationService: com.nexio.tv.data.repository.SubtitleTranslationService,
+    private val subtitleTranslationSettingsDataStore: com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 ) {
 
     private val mutex = Mutex()
@@ -40,45 +43,101 @@ class TrailerSubtitleCache @Inject constructor(
     }
 
     /**
-     * Returns a `file://` URI to a source-language SRT file for the given
-     * track, fetching SRV3 and converting on cache miss. Returns `null` on
-     * network or parse failure.
+     * Returns a `file://` URI to an SRT file for the given track, fetching
+     * and caching on first call. Returns `null` on network or parse failure.
      *
-     * Translation is no longer performed here. AI translation now lives in
-     * the trailer ExoPlayer's CueGroupSubtitleTranslator plugin (see
-     * TrailerRenderersFactory + BuiltInSubtitleCueTranslator) which swaps
-     * cue text on-demand as Media3 reads cues during playback. The cache's
-     * single job is to provide the source SRT URI quickly so captions
-     * render from the first cue.
+     * When [SelectedTrailerCaptionTrack.translateTo] is set and AI translation
+     * is enabled in settings, the source SRT is fetched first (cached at
+     * `<hash>-<src>.srt`), then translated and cached at
+     * `<hash>-<src>-<tgt>.srt`. The translated URI is returned on success;
+     * all failure paths fall back to the source URI so caption rendering is
+     * never broken by a translation error.
      */
     suspend fun ensure(selected: SelectedTrailerCaptionTrack): String? =
         mutex.withLock {
-            val target = sourceCacheFileFor(selected)
-            if (target.exists() && target.length() > 0) {
-                return@withLock target.toURI().toString()
+            val sourceTarget = sourceCacheFileFor(selected)
+            val translatedTarget = translatedCacheFileFor(selected)
+
+            // 1. Translated cache hit?
+            if (selected.translateTo != null && translatedTarget != null &&
+                translatedTarget.exists() && translatedTarget.length() > 0
+            ) {
+                return@withLock translatedTarget.toURI().toString()
             }
-            val srv3Url = buildSrv3Url(selected.copy(translateTo = null))
-            Log.d(TAG, "fetching srv3 url=$srv3Url")
-            val xml = fetchSrv3(srv3Url)
-            if (xml == null) {
-                Log.d(TAG, "fetch returned null (HTTP failure)")
-                return@withLock null
+
+            // 2. Source cache hit OR fetch + parse + write source.
+            val sourceUri = if (sourceTarget.exists() && sourceTarget.length() > 0) {
+                sourceTarget.toURI().toString()
+            } else {
+                val srv3Url = buildSrv3Url(selected.copy(translateTo = null))
+                Log.d(TAG, "fetching srv3 url=$srv3Url")
+                val xml = fetchSrv3(srv3Url)
+                if (xml == null) {
+                    Log.d(TAG, "fetch returned null (HTTP failure)")
+                    return@withLock null
+                }
+                Log.d(TAG, "fetch ok bytes=${xml.length} preview=${xml.take(200).replace('\n', ' ')}")
+                val lines = SrvCaptionParser.parse(xml)
+                if (lines.isEmpty()) {
+                    Log.d(TAG, "parse produced zero caption lines")
+                    return@withLock null
+                }
+                Log.d(TAG, "parsed lines=${lines.size}")
+                val srt = SrtSerializer.serialize(lines)
+                try {
+                    sourceTarget.writeText(srt, Charsets.UTF_8)
+                } catch (e: IOException) {
+                    Log.d(TAG, "source SRT write failed ${e.message}")
+                    return@withLock null
+                }
+                sourceTarget.toURI().toString()
             }
-            Log.d(TAG, "fetch ok bytes=${xml.length} preview=${xml.take(200).replace('\n', ' ')}")
-            val lines = SrvCaptionParser.parse(xml)
-            if (lines.isEmpty()) {
-                Log.d(TAG, "parse produced zero caption lines")
-                return@withLock null
+
+            // 3. No translation requested → return source URI.
+            if (selected.translateTo == null || translatedTarget == null) {
+                return@withLock sourceUri
             }
-            Log.d(TAG, "parsed lines=${lines.size}")
-            val srt = SrtSerializer.serialize(lines)
-            try {
-                target.writeText(srt, Charsets.UTF_8)
+            if (selected.translateTo.equals(selected.languageCode, ignoreCase = true)) {
+                return@withLock sourceUri
+            }
+
+            // 4. AI translation gate.
+            val settings = currentTranslationSettings()
+            if (settings == null || !settings.enabled || settings.apiKey.isBlank()) {
+                Log.d(TAG, "AI translation disabled — serving source SRT")
+                return@withLock sourceUri
+            }
+
+            // 5. Translate.
+            val sourceSrt = try {
+                sourceTarget.readText(Charsets.UTF_8)
             } catch (e: IOException) {
-                Log.d(TAG, "source SRT write failed ${e.message}")
-                return@withLock null
+                Log.d(TAG, "source SRT read failed ${e.message}")
+                return@withLock sourceUri
             }
-            target.toURI().toString()
+            val translatedSrt = try {
+                subtitleTranslationService.translateSrtAtomically(
+                    srt = sourceSrt,
+                    sourceLanguageCode = selected.languageCode,
+                    targetLanguageCode = selected.translateTo,
+                    settings = settings
+                )
+            } catch (e: Throwable) {
+                Log.d(TAG, "translateSrtAtomically threw ${e.javaClass.simpleName}: ${e.message}")
+                null
+            }
+            if (translatedSrt.isNullOrBlank()) {
+                Log.d(TAG, "translation returned null/blank — serving source SRT")
+                return@withLock sourceUri
+            }
+            try {
+                translatedTarget.writeText(translatedSrt, Charsets.UTF_8)
+            } catch (e: IOException) {
+                Log.d(TAG, "translated SRT write failed ${e.message}")
+                return@withLock sourceUri
+            }
+            Log.d(TAG, "translated SRT cached at ${translatedTarget.absolutePath}")
+            translatedTarget.toURI().toString()
         }
 
     /**
@@ -86,6 +145,23 @@ class TrailerSubtitleCache @Inject constructor(
      */
     private fun sourceCacheFileFor(selected: SelectedTrailerCaptionTrack): File {
         return cacheFileFor(selected.copy(translateTo = null))
+    }
+
+    /**
+     * Cache file path for the translated SRT, or null when no translation
+     * is requested.
+     */
+    private fun translatedCacheFileFor(selected: SelectedTrailerCaptionTrack): File? {
+        if (selected.translateTo.isNullOrBlank()) return null
+        return cacheFileFor(selected)
+    }
+
+    /**
+     * Snapshot the current AI translation settings. Returns null when the
+     * datastore hasn't emitted yet.
+     */
+    private suspend fun currentTranslationSettings(): com.nexio.tv.domain.model.SubtitleTranslationSettings? {
+        return subtitleTranslationSettingsDataStore.settings.firstOrNull()
     }
 
     private fun cacheFileFor(selected: SelectedTrailerCaptionTrack): File {
