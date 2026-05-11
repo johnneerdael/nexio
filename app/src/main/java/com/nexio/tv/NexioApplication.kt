@@ -14,6 +14,7 @@ import com.nexio.tv.core.image.IntegrationPosterFetcher
 import com.nexio.tv.core.image.LegacyRemoteArtworkFetcher
 import com.nexio.tv.core.image.LegacyRemoteArtworkKeyer
 import com.nexio.tv.core.image.ImageCacheTtlWorker
+import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.image.NexioArtworkFetcher
 import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
 import com.nexio.tv.core.image.SearchSuggestionPosterKeyer
@@ -42,6 +43,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var nexioArtworkFetcherFactory: NexioArtworkFetcher.Factory
     @Inject lateinit var legacyRemoteArtworkFetcherFactory: LegacyRemoteArtworkFetcher.Factory
     @Inject lateinit var searchSuggestionPosterFetcherFactory: SearchSuggestionPosterFetcher.Factory
+    @Inject lateinit var animeIdMappingService: AnimeIdMappingService
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -55,6 +57,14 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
             retainPosterCacheOnStartup()
             ImageCacheTtlWorker.evictExpiredEntries(this@NexioApplication)
+        }
+
+        // Warm the anime-id-map asset on IO before any consumer (Trakt sync,
+        // metadata router, Kitsu service) touches it on a foreground thread.
+        // The lazy parse allocates ~318k moshi nodes and was the dominant
+        // cold-start ANR cause prior to this change.
+        appScope.launch {
+            runCatching { animeIdMappingService.warmUp() }
         }
 
         val ttlWorkRequest = PeriodicWorkRequestBuilder<ImageCacheTtlWorker>(
