@@ -145,6 +145,7 @@ fun ContentCard(
     trailerPreviewUrl: String? = null,
     trailerPreviewAudioUrl: String? = null,
     trailerPreviewUserAgent: String? = null,
+    trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack> = emptyList(),
     trailerPreviewExternalUrl: String? = null,
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     isWatched: Boolean = false,
@@ -422,6 +423,7 @@ fun ContentCard(
                         trailerUrl = trailerPreviewUrl,
                         trailerAudioUrl = trailerPreviewAudioUrl,
                         trailerUserAgent = trailerPreviewUserAgent,
+                        trailerCaptions = trailerPreviewCaptions,
                         isPlaying = true,
                         onEnded = {
                             trailerFirstFrameRendered = false

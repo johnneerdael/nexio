@@ -244,6 +244,7 @@ private fun ModernCatalogRowItem(
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
     trailerPreviewUserAgent: String?,
+    trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>,
     trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     onFocused: () -> Unit,
@@ -299,6 +300,7 @@ private fun ModernCatalogRowItem(
         trailerPreviewUrl = trailerPreviewUrl,
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         trailerPreviewUserAgent = trailerPreviewUserAgent,
+        trailerPreviewCaptions = trailerPreviewCaptions,
         trailerPreviewExternalUrl = trailerPreviewExternalUrl,
         isWatched = isWatched,
         focusRequester = requester,
@@ -344,6 +346,7 @@ internal fun ModernRowSection(
     trailerPreviewUrls: Map<String, String>,
     trailerPreviewAudioUrls: Map<String, String>,
     trailerPreviewUserAgents: Map<String, String>,
+    trailerPreviewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>,
     trailerPreviewExternalUrls: Map<String, String>,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
@@ -672,6 +675,11 @@ internal fun ModernRowSection(
                             } else {
                                 null
                             }
+                            val trailerPreviewCaptionsForItem = if (playTrailerInExpandedCard) {
+                                trailerPreviewCaptions[payload.itemId].orEmpty()
+                            } else {
+                                emptyList()
+                            }
                             val trailerPreviewExternalUrl = if (playTrailerInExpandedCard) {
                                 trailerPreviewExternalUrls[payload.itemId]
                             } else {
@@ -696,6 +704,7 @@ internal fun ModernRowSection(
                                 trailerPreviewUrl = trailerPreviewUrl,
                                 trailerPreviewAudioUrl = trailerPreviewAudioUrl,
                                 trailerPreviewUserAgent = trailerPreviewUserAgent,
+                                trailerPreviewCaptions = trailerPreviewCaptionsForItem,
                                 trailerPreviewExternalUrl = trailerPreviewExternalUrl,
                                 isWatched = isWatched,
                                 onFocused = onFocused,
@@ -766,6 +775,7 @@ private fun ModernCarouselCard(
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
     trailerPreviewUserAgent: String?,
+    trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>,
     trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     focusRequester: FocusRequester,
@@ -1030,6 +1040,7 @@ private fun ModernCarouselCard(
                             trailerUrl = trailerPreviewUrl,
                             trailerAudioUrl = trailerPreviewAudioUrl,
                             trailerUserAgent = trailerPreviewUserAgent,
+                            trailerCaptions = trailerPreviewCaptions,
                             isPlaying = true,
                             onEnded = {
                                 trailerFirstFrameRendered = false

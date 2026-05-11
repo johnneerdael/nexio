@@ -195,6 +195,7 @@ internal data class ModernHomeContentState(
     val trailerPreviewUrls: Map<String, String> = emptyMap(),
     val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
     val trailerPreviewUserAgents: Map<String, String> = emptyMap(),
+    val trailerPreviewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>> = emptyMap(),
     val trailerPreviewExternalUrls: Map<String, String> = emptyMap(),
     val trailerPreviewLoadingIds: Set<String> = emptySet(),
     val trailerPreviewNegativeCacheIds: Set<String> = emptySet(),
