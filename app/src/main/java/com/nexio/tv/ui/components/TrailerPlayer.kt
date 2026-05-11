@@ -117,16 +117,14 @@ fun TrailerPlayer(
         .collectAsStateWithLifecycle(initialValue = null)
     val preferredSubtitleLanguage = playerSettingsSnapshot?.subtitleStyle?.preferredLanguage
     val subtitleCache = remember(context) { TrailerSubtitleCacheAccess.from(context) }
-    val videoIdForSubtitles = trailerUrl?.let { extractYouTubeVideoIdForSubtitles(it) }
-    var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage, videoIdForSubtitles) {
+    var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage) {
         mutableStateOf<MediaItem.SubtitleConfiguration?>(null)
     }
-    LaunchedEffect(trailerCaptions, preferredSubtitleLanguage, videoIdForSubtitles) {
+    LaunchedEffect(trailerCaptions, preferredSubtitleLanguage) {
         subtitleConfig = null
-        val videoId = videoIdForSubtitles ?: return@LaunchedEffect
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
             ?: return@LaunchedEffect
-        val cachedUri = subtitleCache.ensure(videoId, selected) ?: return@LaunchedEffect
+        val cachedUri = subtitleCache.ensure(selected) ?: return@LaunchedEffect
         subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(cachedUri))
             .setMimeType(MimeTypes.APPLICATION_SUBRIP)
             .setLanguage(selected.languageCode)
@@ -509,10 +507,3 @@ fun TrailerPlayer(
     }
 }
 
-private val YOUTUBE_VIDEO_ID_QUERY_REGEX = Regex("""[?&]v=([a-zA-Z0-9_-]{11})""")
-private val YOUTUBE_VIDEO_ID_SHORT_REGEX = Regex("""youtu\.be/([a-zA-Z0-9_-]{11})""")
-
-private fun extractYouTubeVideoIdForSubtitles(youtubeUrl: String): String? {
-    YOUTUBE_VIDEO_ID_QUERY_REGEX.find(youtubeUrl)?.groupValues?.getOrNull(1)?.let { return it }
-    return YOUTUBE_VIDEO_ID_SHORT_REGEX.find(youtubeUrl)?.groupValues?.getOrNull(1)
-}
