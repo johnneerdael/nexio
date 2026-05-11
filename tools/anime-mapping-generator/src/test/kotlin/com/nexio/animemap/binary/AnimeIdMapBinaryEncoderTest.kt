@@ -54,6 +54,33 @@ class AnimeIdMapBinaryEncoderTest {
         // 99999 = 0x1869F -> varint: 0x9F 0x8D 0x06 (3 bytes)
         assertEquals(6, bytesWritten)
     }
+
+    @Test
+    fun `episode record round-trips`() {
+        val pool = StringPoolBuilder()
+        val out = ByteArrayOutputStream()
+        val rec = WireAnimeEpisodeMappingRecord(
+            anidb = "69",
+            name = "One Piece",
+            tvdbSeriesId = "81797",
+            tmdbTvId = "37854",
+            ranges = listOf(
+                WireAnimeRangeRule(1, 1, 8, "TVDB", 1, 0),
+                WireAnimeRangeRule(1, 892, 1085, "TVDB", 21, -891)
+            ),
+            explicitMaps = listOf(
+                WireAnimeExplicitMap(0, 1, "TVDB", 0, 27)
+            ),
+            evidence = listOf("scudlee.one-piece")
+        )
+        val written = AnimeIdMapBinaryEncoder.writeEpisodeRecord(out, rec, pool)
+        val bytes = out.toByteArray()
+        assertEquals(written, bytes.size)
+        assertEquals(BinaryFormat.RECORD_KIND_EPISODE, bytes[0])
+
+        val decoded = TestEpisodeDecoder(bytes, pool.toByteArray()).decodeAt(0)
+        assertEquals(rec, decoded)
+    }
 }
 
 /** Test-only decoder mirroring what AnimeIdMapBinaryReader will implement. */
@@ -109,6 +136,103 @@ private class TestRecordDecoder(private val records: ByteArray, private val stri
         val (raw, next) = readVarintNumeric(b, off)
         val v = ((raw ushr 1).toInt()) xor (-(raw.toInt() and 1))
         return v to next
+    }
+    private fun readI32(b: ByteArray, off: Int): Int =
+        (b[off].toInt() and 0xFF) or
+        ((b[off + 1].toInt() and 0xFF) shl 8) or
+        ((b[off + 2].toInt() and 0xFF) shl 16) or
+        ((b[off + 3].toInt() and 0xFF) shl 24)
+    private fun readPoolString(off: Int): String? {
+        if (off == -1) return null
+        val (len, after) = readVarintNumeric(stringPool, off)
+        return String(stringPool, after, len.toInt(), Charsets.UTF_8)
+    }
+}
+
+/** Test-only decoder for episode records. */
+private class TestEpisodeDecoder(private val records: ByteArray, private val stringPool: ByteArray) {
+    fun decodeAt(offset: Int): WireAnimeEpisodeMappingRecord {
+        var p = offset
+        check(records[p].toInt() == BinaryFormat.RECORD_KIND_EPISODE.toInt()) { "expected episode record at $p" }
+        p += 1
+        val presence = records[p].toInt() and 0xFF; p += 1
+        val (anidb, n0) = readVarintNumeric(records, p); p = n0
+        val name = if (presence and 0x01 != 0) { val off = readI32(records, p); p += 4; readPoolString(off) } else null
+        val tvdbSeriesId = if (presence and 0x02 != 0) { val (v, n) = readVarintNumeric(records, p); p = n; v } else null
+        val tmdbTvId = if (presence and 0x04 != 0) { val (v, n) = readVarintNumeric(records, p); p = n; v } else null
+        val (rangesCount, n1) = readVarintNumeric(records, p); p = n1
+        val ranges = ArrayList<WireAnimeRangeRule>(rangesCount.toInt())
+        repeat(rangesCount.toInt()) {
+            val srcSeason = records[p].toInt() and 0xFF; p += 1
+            val startEp = readU16(records, p); p += 2
+            val endEpRaw = readU16(records, p); p += 2
+            val provByte = records[p].toInt() and 0xFF; p += 1
+            val tgtSeason = records[p].toInt() and 0xFF; p += 1
+            val off = readI16(records, p); p += 2
+            val hasEnd = records[p].toInt() and 0xFF; p += 1
+            ranges.add(
+                WireAnimeRangeRule(
+                    sourceSeason = srcSeason,
+                    startEpisode = startEp,
+                    endEpisode = if (hasEnd == 0) null else endEpRaw,
+                    targetProvider = BinaryFormat.PROVIDER_TABLE[provByte],
+                    targetSeason = tgtSeason,
+                    offset = off,
+                )
+            )
+        }
+        val (explicitCount, n2) = readVarintNumeric(records, p); p = n2
+        val explicits = ArrayList<WireAnimeExplicitMap>(explicitCount.toInt())
+        repeat(explicitCount.toInt()) {
+            val srcSeason = records[p].toInt() and 0xFF; p += 1
+            val srcEp = readU16(records, p); p += 2
+            val provByte = records[p].toInt() and 0xFF; p += 1
+            val tgtSeason = records[p].toInt() and 0xFF; p += 1
+            val tgtEp = readU16(records, p); p += 2
+            explicits.add(
+                WireAnimeExplicitMap(
+                    sourceSeason = srcSeason,
+                    sourceEpisode = srcEp,
+                    targetProvider = BinaryFormat.PROVIDER_TABLE[provByte],
+                    targetSeason = tgtSeason,
+                    targetEpisode = tgtEp,
+                )
+            )
+        }
+        val evidence = if (presence and 0x08 != 0) {
+            val (count, n3) = readVarintNumeric(records, p); p = n3
+            val list = ArrayList<String>(count.toInt())
+            repeat(count.toInt()) {
+                val off = readI32(records, p); p += 4
+                list.add(readPoolString(off)!!)
+            }
+            list
+        } else emptyList()
+        return WireAnimeEpisodeMappingRecord(
+            anidb = anidb.toString(),
+            name = name,
+            tvdbSeriesId = tvdbSeriesId?.toString(),
+            tmdbTvId = tmdbTvId?.toString(),
+            ranges = ranges,
+            explicitMaps = explicits,
+            evidence = evidence,
+        )
+    }
+
+    private fun readVarintNumeric(b: ByteArray, off: Int): Pair<Long, Int> {
+        var result = 0L; var shift = 0; var i = off
+        while (true) {
+            val byte = b[i].toInt() and 0xFF; i++
+            result = result or ((byte and 0x7F).toLong() shl shift)
+            if (byte and 0x80 == 0) return result to i
+            shift += 7
+        }
+    }
+    private fun readU16(b: ByteArray, off: Int): Int =
+        (b[off].toInt() and 0xFF) or ((b[off + 1].toInt() and 0xFF) shl 8)
+    private fun readI16(b: ByteArray, off: Int): Int {
+        val raw = readU16(b, off)
+        return if (raw and 0x8000 != 0) raw or 0xFFFF.inv() else raw  // sign extend
     }
     private fun readI32(b: ByteArray, off: Int): Int =
         (b[off].toInt() and 0xFF) or
