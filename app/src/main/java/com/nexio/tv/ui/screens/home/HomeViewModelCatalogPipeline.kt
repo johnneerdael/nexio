@@ -3200,7 +3200,7 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
         rows = sourceRows,
         overlaysByItemKey = overlaysByItemKey,
-        resolveTrailer = null
+        resolveTrailer = { request -> metadataRouterFacade.resolveTrailer(request) }
     )
     val published = resolvedDisplaySurfaceRepository.publishResolvedItems(
         surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
