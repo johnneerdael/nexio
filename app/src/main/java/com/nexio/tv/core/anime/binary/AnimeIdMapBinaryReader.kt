@@ -240,6 +240,85 @@ class AnimeIdMapBinaryReader @Inject constructor(
         return r.value.toString()
     }
 
+    fun recordForKitsu(rawKitsuId: String): com.nexio.tv.core.anime.AnimeIdMapRecord? {
+        val open = state as? State.Open ?: return null
+        val key = rawKitsuId.removePrefix("kitsu:").toLongOrNull() ?: return null
+        val entryIndex = findSingleEntry(open, IndexKind.BY_KITSU, key)
+        if (entryIndex < 0) return null
+        val d = readDescriptor(open, IndexKind.BY_KITSU.slot)
+        val entryStart = d.offset.toInt() + entryIndex * BinaryFormat.STRIDE_U64_SINGLE
+        val recordOffset = open.parent.getInt(entryStart + 8)
+        return recordAt(recordOffset)
+    }
+
+    fun recordAt(recordOffset: Int): com.nexio.tv.core.anime.AnimeIdMapRecord? {
+        val open = state as? State.Open ?: return null
+        val records = open.records
+        if (records.get(recordOffset) != BinaryFormat.RECORD_KIND_IDENTITY) return null
+        var p = recordOffset + 1
+        val presence = records.get(p).toInt() and 0xFF; p += 1
+        val presence2 = records.get(p).toInt() and 0xFF; p += 1
+        val r = LongRef()
+        p = VarintReader.readULong(records, p, r); val kitsu = r.value.toString()
+        val mal = if (presence and BinaryFormat.P_MAL != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val anilist = if (presence and BinaryFormat.P_ANILIST != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val anidb = if (presence and BinaryFormat.P_ANIDB != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val tmdb = if (presence and BinaryFormat.P_TMDB != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val tvdb = if (presence and BinaryFormat.P_TVDB != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val imdb = if (presence and BinaryFormat.P_IMDB != 0) {
+            val off = records.getInt(p); p += 4
+            readPoolString(open, off)
+        } else null
+        val mediaType = if (presence and BinaryFormat.P_MEDIA_TYPE != 0) {
+            val b = records.get(p).toInt(); p += 1
+            BinaryFormat.MEDIA_TYPE_TABLE[b]
+        } else null
+        val sourceType = if (presence and BinaryFormat.P_SOURCE_TYPE != 0) {
+            val b = records.get(p).toInt(); p += 1
+            BinaryFormat.SOURCE_TYPE_TABLE[b]
+        } else null
+        val tvdbSeason = if (presence2 and BinaryFormat.P2_TVDB_SEASON != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val tmdbSeason = if (presence2 and BinaryFormat.P2_TMDB_SEASON != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val tvdbEpOff = if (presence2 and BinaryFormat.P2_TVDB_EP_OFFSET != 0) { p = VarintReader.readSInt(records, p, r); r.value.toInt() } else null
+        val tmdbEpOff = if (presence2 and BinaryFormat.P2_TMDB_EP_OFFSET != 0) { p = VarintReader.readSInt(records, p, r); r.value.toInt() } else null
+        val hasMappingRules = presence2 and BinaryFormat.P2_HAS_MAPPING_RULES != 0
+        val evidenceOffsets: IntArray? = if (presence2 and BinaryFormat.P2_HAS_EVIDENCE != 0) {
+            p = VarintReader.readULong(records, p, r)
+            val count = r.value.toInt()
+            val arr = IntArray(count)
+            for (i in 0 until count) { arr[i] = records.getInt(p); p += 4 }
+            arr
+        } else null
+
+        return com.nexio.tv.core.anime.AnimeIdMapRecord(
+            kitsu = kitsu, mal = mal, anilist = anilist, anidb = anidb,
+            tmdb = tmdb, tvdb = tvdb, imdb = imdb,
+            mediaType = mediaType, sourceType = sourceType,
+            tvdbSeason = tvdbSeason, tmdbSeason = tmdbSeason,
+            tvdbEpisodeOffset = tvdbEpOff, tmdbEpisodeOffset = tmdbEpOff,
+            hasMappingRules = hasMappingRules,
+            evidence = if (evidenceOffsets == null) emptyList() else LazyEvidenceList(this, open, evidenceOffsets),
+        )
+    }
+
+    /** Inflates evidence strings on first read, then caches. */
+    private class LazyEvidenceList(
+        private val reader: AnimeIdMapBinaryReader,
+        private val open: State.Open,
+        private val offsets: IntArray,
+    ) : AbstractList<String>() {
+        private var resolved: List<String>? = null
+        override val size: Int get() = offsets.size
+        override fun get(index: Int): String {
+            val cached = resolved
+            if (cached != null) return cached[index]
+            val list = ArrayList<String>(offsets.size)
+            for (i in offsets.indices) list.add(reader.readPoolString(open, offsets[i]) ?: "")
+            resolved = list
+            return list[index]
+        }
+    }
+
     private fun ensureBinaryOnDisk(): File? {
         val dir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
         val target = File(dir, "fmt$BINARY_FORMAT_VERSION.bin")

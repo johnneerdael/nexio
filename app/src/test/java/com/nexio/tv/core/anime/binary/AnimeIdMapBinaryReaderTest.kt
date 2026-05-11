@@ -5,6 +5,7 @@ import android.content.res.AssetManager
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -106,5 +107,36 @@ class AnimeIdMapBinaryReaderTest {
         val reader = AnimeIdMapBinaryReader(context)
         reader.ensureOpen()
         assertEquals(0, reader.recordOffsetsForImdb("tt9999999").size)
+    }
+
+    @Test
+    fun `recordAt returns full identity record with all fields populated`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        // Fixture: kitsu "11469" -> anidb 11739, tvdb 305074, tmdb 65930, imdb tt5626028, mediaType series, sourceType TV
+        val offsets = reader.recordOffsetsForMultiKey(IndexKind.BY_TVDB, "305074")
+        val rec = reader.recordAt(offsets[0])
+        assertNotNull(rec)
+        assertEquals("11469", rec!!.kitsu)
+        assertEquals("11739", rec.anidb)
+        assertEquals("305074", rec.tvdb)
+        assertEquals("65930", rec.tmdb)
+        assertEquals("tt5626028", rec.imdb)
+        assertEquals("series", rec.mediaType)
+        assertEquals("tv", rec.sourceType?.lowercase())
+    }
+
+    @Test
+    fun `recordForKitsu returns null for unknown kitsu id`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertNull(reader.recordForKitsu("999999999"))
+    }
+
+    @Test
+    fun `recordForKitsu strips kitsu prefix`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertNotNull(reader.recordForKitsu("kitsu:11469"))
     }
 }
