@@ -30,7 +30,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -40,11 +39,12 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
+import com.nexio.tv.data.trailer.TrailerSubtitleFormat
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YouTubeCaptionTrack
 import com.nexio.tv.data.trailer.YouTubeWireProfile
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
-import com.nexio.tv.data.trailer.buildTrailerSubtitleVttUrl
+import com.nexio.tv.data.trailer.buildTrailerSubtitleUrl
 import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
@@ -119,9 +119,10 @@ fun TrailerPlayer(
     val subtitleConfig = remember(trailerCaptions, preferredSubtitleLanguage) {
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
             ?: return@remember null
-        val vttUrl = buildTrailerSubtitleVttUrl(selected)
-        MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
-            .setMimeType(MimeTypes.TEXT_VTT)
+        val format = TrailerSubtitleFormat.TTML
+        val subtitleUrl = buildTrailerSubtitleUrl(selected, format)
+        MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
+            .setMimeType(format.mimeType)
             .setLanguage(selected.languageCode)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
