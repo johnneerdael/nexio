@@ -45,6 +45,7 @@ internal object TestHomeRows {
         )
         return ModernCarouselItem(
             key = "item",
+            itemKey = com.nexio.tv.domain.model.homeDisplayItemKey(itemType, "tt123"),
             title = "Title",
             subtitle = null,
             imageUrl = null,

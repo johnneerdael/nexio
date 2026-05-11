@@ -943,7 +943,11 @@ internal fun ModernHomeContent(
         val activeCarouselItem = remember(activeRow, clampedActiveItemIndex) {
             activeRow?.items?.getOrNull(clampedActiveItemIndex)
         }
-        val activeItemId = activeCarouselItem?.metaPreview?.id
+        // activeItemId drives hero enrichment matching. For catalog items it comes
+        // from MetaPreview.id (looked up via the surface metaByItemKey map). For
+        // Continue Watching items the map miss is harmless — CW rows don't trigger
+        // catalog hero enrichment.
+        val activeItemId = activeCarouselItem?.let { presentation.metaByItemKey[it.itemKey]?.id }
         val liveActiveHeroPreview = remember(activeRow, clampedActiveItemIndex) {
             resolveActiveHeroPreview(activeRow, clampedActiveItemIndex)
         }
@@ -1393,6 +1397,7 @@ internal fun ModernHomeContent(
                     ) { _, row ->
                         ModernRowSection(
                             row = row,
+                            metaByItemKey = presentation.metaByItemKey,
                             isActiveRow = activeRowKey == row.key,
                             isVerticalRowsScrolling = isVerticalRowsScrolling,
                             rowTitleBottom = rowTitleBottom,

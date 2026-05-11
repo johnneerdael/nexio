@@ -30,6 +30,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = true,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -50,6 +51,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = true,
             isBackdropExpanded = true,
@@ -70,6 +72,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -91,6 +94,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -117,6 +121,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -138,6 +143,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = true,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -160,6 +166,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val model = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -191,6 +198,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val primary = resolveModernCarouselCardArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false,
@@ -198,6 +206,7 @@ class ModernHomeRowsArtworkModelTest {
         )
         val fallback = resolveModernCarouselCardFallbackArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false
@@ -220,6 +229,7 @@ class ModernHomeRowsArtworkModelTest {
 
         val fallback = resolveModernCarouselCardFallbackArtworkModel(
             item = item,
+            metaPreview = item.metaPreview!!,
             useLandscapePosters = false,
             focusedPosterBackdropExpandEnabled = false,
             isBackdropExpanded = false
@@ -254,6 +264,7 @@ class ModernHomeRowsArtworkModelTest {
         )
         return ModernCarouselItem(
             key = "item",
+            itemKey = com.nexio.tv.domain.model.homeDisplayItemKey(preview.apiType, preview.id),
             title = preview.name,
             subtitle = null,
             imageUrl = preview.displayBackground,

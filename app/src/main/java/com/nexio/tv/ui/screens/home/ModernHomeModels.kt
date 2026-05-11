@@ -147,7 +147,20 @@ internal data class ModernHomePresentationInput(
 @Immutable
 data class ModernHomePresentationState(
     val rows: List<HeroCarouselRow> = emptyList(),
-    val lookups: CarouselRowLookups = buildCarouselRowLookups(emptyList())
+    val lookups: CarouselRowLookups = buildCarouselRowLookups(emptyList()),
+    /**
+     * Catalog-row MetaPreview lookup keyed by [ModernCarouselItem.itemKey]
+     * (`homeDisplayItemKey(apiType, id)`). Built once per presentation rebuild
+     * in [buildModernHomePresentation]; the carousel render path consults this
+     * map at the call site instead of storing a per-item MetaPreview field on
+     * ModernCarouselItem — eliminating ~430 retained MetaPreview references
+     * through the carousel chain.
+     *
+     * Continue Watching items use a different keyspace (the CW resolved
+     * itemKey); their renderer doesn't consult MetaPreview, so misses against
+     * this map are expected and harmless.
+     */
+    val metaByItemKey: Map<String, MetaPreview> = emptyMap()
 )
 
 internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): CarouselRowLookups {
