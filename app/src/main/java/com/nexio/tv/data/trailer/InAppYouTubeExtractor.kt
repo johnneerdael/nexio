@@ -131,6 +131,24 @@ private fun trailerContainerPreference(ext: String): Int {
 internal val CLIENTS_FOR_TEST: List<YouTubeClient> get() = CLIENTS
 
 private val CLIENTS = listOf(
+    // TVHTML5 (Cobalt) — returns high-quality adaptive formats (1080p+
+    // commonly, 4K on supported videos) with no PO Token requirement.
+    // URLs ship as signatureCipher fields, so playback depends on the
+    // SignatureCipherDecoder wired in Task 6b. Reference: yt-dlp PR
+    // #14693 _DEFAULT_CLIENTS, _base.py 'tv' entry.
+    YouTubeClient(
+        key = "tv",
+        id = "7",
+        version = "7.20260114.12.00",
+        userAgent = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+        context = mapOf(
+            "clientName" to "TVHTML5",
+            "clientVersion" to "7.20260114.12.00",
+            "hl" to "en",
+            "gl" to "US"
+        ),
+        priority = 0
+    ),
     // NewPipe prefers iOS for HLS: non-iOS clients do not reliably return hlsManifestUrl.
     YouTubeClient(
         key = "ios",
@@ -154,7 +172,7 @@ private val CLIENTS = listOf(
             "hl" to "en",
             "gl" to "US"
         ),
-        priority = 0
+        priority = 1
     ),
     YouTubeClient(
         key = "android",
@@ -171,7 +189,7 @@ private val CLIENTS = listOf(
             "hl" to "en",
             "gl" to "US"
         ),
-        priority = 1
+        priority = 2
     )
 )
 

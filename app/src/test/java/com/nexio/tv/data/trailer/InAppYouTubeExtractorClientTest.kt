@@ -6,8 +6,8 @@ import org.junit.Test
 
 class InAppYouTubeExtractorClientTest {
     @Test
-    fun `client list contains ios then android`() {
-        assertEquals(listOf("ios", "android"), CLIENTS_FOR_TEST.sortedBy { it.priority }.map { it.key })
+    fun `client list contains tv then ios then android`() {
+        assertEquals(listOf("tv", "ios", "android"), CLIENTS_FOR_TEST.sortedBy { it.priority }.map { it.key })
     }
 
     @Test
