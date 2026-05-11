@@ -3254,7 +3254,8 @@ private fun com.nexio.tv.domain.model.ResolvedDisplayItem.hasScreensaverTrailerR
 private fun HomeViewModel.applyHomeResolvedRowsToUiPipeline(
     displayRows: List<com.nexio.tv.domain.model.CatalogRow>,
     fullRows: List<com.nexio.tv.domain.model.CatalogRow>,
-    heroItems: List<com.nexio.tv.domain.model.MetaPreview>
+    heroItems: List<com.nexio.tv.domain.model.MetaPreview>,
+    publishResolvedSurface: Boolean = true
 ) {
     val composedSnapshot = composeHydratedHomeOverlaySnapshot(
         displayRows = displayRows,
@@ -3274,16 +3275,26 @@ private fun HomeViewModel.applyHomeResolvedRowsToUiPipeline(
     // overlay-derived projections would only appear after the producer flips. By
     // publishing here we make snapshot-restore the first-paint authority on cold
     // start (Plan B Task 6c).
-    val resolvedItemsForSnapshotSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
-        rows = composedSnapshot.displayRows,
-        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
-        resolveTrailer = null
-    )
-    resolvedDisplaySurfaceRepository.publishResolvedItems(
-        surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
-        profileSession = profileManager.activeProfileSession.value,
-        items = resolvedItemsForSnapshotSurface
-    )
+    //
+    // Producer emission path passes publishResolvedSurface = false. It immediately
+    // overwrites HOME_SURFACE_KEY with the cross-provider-enriched mapper output
+    // (HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched at the call site
+    // in updateCatalogRowsPipeline), so the non-enriched publish here is wasted
+    // work — N ResolvedDisplayItem allocations + a publishResolvedItems call
+    // discarded within microseconds. Gating it lets the producer be the single
+    // authoritative writer per producer emission.
+    if (publishResolvedSurface) {
+        val resolvedItemsForSnapshotSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = composedSnapshot.displayRows,
+            overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
+            resolveTrailer = null
+        )
+        resolvedDisplaySurfaceRepository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = profileManager.activeProfileSession.value,
+            items = resolvedItemsForSnapshotSurface
+        )
+    }
     // Plan B Task 5f.4 — grid items are now sinked into [_displayGridItems]
     // directly (off HomeUiState; CLAUDE.md rule #2). Compute outside the
     // _uiState.update lambda to avoid redundant allocations on contention retries.
@@ -3389,10 +3400,17 @@ internal fun HomeViewModel.applyHomeProducerEmissionToUiPipeline(
     fullRows: List<com.nexio.tv.domain.model.CatalogRow>,
     heroItems: List<com.nexio.tv.domain.model.MetaPreview>
 ) {
+    // Plan B Task 6f.5 follow-up — producer path skips the core's HOME_SURFACE_KEY
+    // publish. The producer's own publishResolvedItems call (immediately after
+    // this returns, with toResolvedDisplayItemsEnriched and cross-provider ID
+    // enrichment) overwrites the surface for the same (HOME_SURFACE_KEY,
+    // profileId). The core's non-enriched publish would be discarded within
+    // microseconds — gate it off here.
     applyHomeResolvedRowsToUiPipeline(
         displayRows = displayRows,
         fullRows = fullRows,
-        heroItems = heroItems
+        heroItems = heroItems,
+        publishResolvedSurface = false
     )
 }
 
