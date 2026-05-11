@@ -151,7 +151,7 @@ fun TrailerPlayer(
             ?.takeIf { it.isNotBlank() && !it.equals("off", true) && !it.equals("none", true) }
     )
     val cueGroupTranslator = remember(cueTranslatorAccess, cueTranslatorScope) {
-        BuiltInSubtitleCueTranslator(
+        val delegate = BuiltInSubtitleCueTranslator(
             scope = cueTranslatorScope,
             translationService = cueTranslatorAccess.subtitleTranslationService(),
             isEnabledProvider = {
@@ -166,6 +166,15 @@ fun TrailerPlayer(
                 if (msg != null) Log.d(TAG, "cue translator: $msg")
             }
         )
+        // Wrap with a short prefetch horizon so playback isn't blocked
+        // until every cue batch returns from the AI provider. Trailers
+        // sideload subtitles via SingleSampleMediaSource inside a
+        // MergingMediaSource that gates preparation on every child; with
+        // the unbounded default (Long.MAX_VALUE / 2) inherited from
+        // BuiltInSubtitleCueTranslator, that gate doesn't release until
+        // the entire SRT is translated. Streams don't hit this because
+        // their subtitle track is embedded, not sideloaded.
+        TrailerCueGroupTranslator(delegate, trailerPrefetchDurationUs = 0L)
     }
 
     var subtitleConfig by remember(trailerCaptions, preferredSubtitleLanguage) {
