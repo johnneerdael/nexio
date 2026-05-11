@@ -285,9 +285,18 @@ internal object HomeResolvedDisplayMapper {
     }
 }
 
-internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
+internal fun HydratedHomeOverlay.toResolvedDisplayItem(
+    nowMs: Long = System.currentTimeMillis()
+): ResolvedDisplayItem {
     val fields = this.fields
     val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
+    // Populate the typed `slots` bag so the ResolvedDisplaySurfaceRepository
+    // boundary's applyNonDowngradeMerge can rank-check this overlay-derived
+    // item against the previously-published state. Without slots, the boundary
+    // falls through to the legacy verbatim-replace path and drops any prior
+    // RESOLVED state — observed 2026-05-11 as a Trakt-rail ping-pong between
+    // hydrated and first-paint metadata on this exact code path.
+    val overlaySlots = toResolvedSlots(nowMs, isStale = isStale(nowMs))
 
     return ResolvedDisplayItem(
         itemKey = itemKey,
@@ -320,7 +329,8 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(): ResolvedDisplayItem {
             HydrationState.CANONICAL_READY
         },
         sourceTrace = fieldTrace,
-        updatedAtMs = updatedAtMs
+        updatedAtMs = updatedAtMs,
+        slots = overlaySlots
     )
 }
 
