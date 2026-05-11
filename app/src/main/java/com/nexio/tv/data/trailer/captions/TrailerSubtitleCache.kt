@@ -1,6 +1,7 @@
 package com.nexio.tv.data.trailer.captions
 
 import android.content.Context
+import android.util.Log
 import com.nexio.tv.data.trailer.SelectedTrailerCaptionTrack
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+private const val TAG = "TrailerSubtitleCache"
 
 /**
  * Fetches a YouTube SRV3 caption track, parses + converts to SRT, and
@@ -47,9 +50,19 @@ class TrailerSubtitleCache @Inject constructor(
                 return@withLock target.toURI().toString()
             }
             val srv3Url = buildSrv3Url(selected)
-            val xml = fetchSrv3(srv3Url) ?: return@withLock null
+            Log.d(TAG, "fetching srv3 url=$srv3Url")
+            val xml = fetchSrv3(srv3Url)
+            if (xml == null) {
+                Log.d(TAG, "fetch returned null (HTTP failure)")
+                return@withLock null
+            }
+            Log.d(TAG, "fetch ok bytes=${xml.length} preview=${xml.take(200).replace('\n', ' ')}")
             val lines = SrvCaptionParser.parse(xml)
-            if (lines.isEmpty()) return@withLock null
+            if (lines.isEmpty()) {
+                Log.d(TAG, "parse produced zero caption lines")
+                return@withLock null
+            }
+            Log.d(TAG, "parsed lines=${lines.size}")
             val srt = SrtSerializer.serialize(lines)
             try {
                 target.writeText(srt, Charsets.UTF_8)
@@ -107,11 +120,20 @@ class TrailerSubtitleCache @Inject constructor(
             setRequestProperty("Referer", "https://www.youtube.com/")
             setRequestProperty("Origin", "https://www.youtube.com")
             setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+            // SOCS GDPR-consent cookie — YoutubeHttpHandler.cs:36-41 pre-seeds
+            // its cookie container with this value to avoid being treated as a
+            // fresh anonymous client (which gets rate-limited harder).
+            setRequestProperty("Cookie", "SOCS=CAISEwgDEgk4MTM4MzYzNTIaAmVuIAEaBgiApPzGBg")
         }
         try {
-            if (conn.responseCode != 200) return@withContext null
+            val code = conn.responseCode
+            if (code != 200) {
+                Log.d(TAG, "fetchSrv3 non-200 code=$code")
+                return@withContext null
+            }
             conn.inputStream.bufferedReader().use { it.readText() }
         } catch (e: IOException) {
+            Log.d(TAG, "fetchSrv3 IOException ${e.message}")
             null
         } finally {
             conn.disconnect()
