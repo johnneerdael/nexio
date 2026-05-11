@@ -1,9 +1,13 @@
 package com.nexio.tv.data.repository
 
 import androidx.annotation.VisibleForTesting
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
 import javax.inject.Inject
@@ -289,11 +293,21 @@ private fun applyNonDowngradeMerge(
     val incomingSlots = incoming.slots ?: return incoming
     val existingSlots = existing.slots ?: return incoming
 
-    val mergedSlots = HomeRailProjectionReducer.reduce(
+    val reducerMerged = HomeRailProjectionReducer.reduce(
         firstPaint = incomingSlots,
         overlay = null,
         existing = existingSlots,
         profile = null
+    )
+
+    // Apply preferred-provider tie-break for artwork slots only.
+    // Reducer stays pure: settings/preferences are consulted only at this
+    // merge boundary, not inside pickHigherRanked. (Bug A — Task 12)
+    val mergedSlots = reducerMerged.copy(
+        poster    = preferredAwareSlot(incomingSlots.poster,    existingSlots.poster,    incoming.preferredArtworkProviders[ArtworkType.POSTER]),
+        backdrop  = preferredAwareSlot(incomingSlots.backdrop,  existingSlots.backdrop,  incoming.preferredArtworkProviders[ArtworkType.BACKDROP]),
+        logo      = preferredAwareSlot(incomingSlots.logo,      existingSlots.logo,      incoming.preferredArtworkProviders[ArtworkType.LOGO]),
+        thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL])
     )
 
     if (mergedSlots == existingSlots && incoming.slotDerivedFieldsMatch(existing)) {
@@ -317,6 +331,42 @@ private fun applyNonDowngradeMerge(
 
 private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayItem): Boolean =
     artwork == other.artwork && display == other.display && rating == other.rating
+
+/**
+ * Preferred-provider-aware tie-breaker for an artwork slot (Bug A — Task 12).
+ *
+ * Rank-priority is honoured first (RESOLVED beats FIRST_PAINT, etc). On a true
+ * rank tie, consult [preferred]:
+ * - if incoming matches preferred and existing does not → incoming wins (upgrade).
+ * - if existing matches preferred and incoming does not → existing wins
+ *   (REJECT REGRESSION — the cause of RPDB ↔ addon popping).
+ * - both match → incoming wins (newer side; "B" was the more recent decision).
+ * - neither matches → existing wins (avoids needless churn between equivalent
+ *   fallbacks; without this branch Bug A still manifests as addon-A ↔ addon-B
+ *   popping when the preferred provider is unreachable for the item).
+ *
+ * [preferred] is `null` when no preference is declared for this slot type
+ * (e.g. cold-start restore items publish with `emptyMap()`), in which case the
+ * function falls back to "incoming wins" on tie.
+ */
+private fun preferredAwareSlot(
+    incoming: ResolvedSlot<ArtworkDisplayRef>,
+    existing: ResolvedSlot<ArtworkDisplayRef>,
+    preferred: ArtworkProviderId?
+): ResolvedSlot<ArtworkDisplayRef> {
+    if (incoming.rank.ordinal > existing.rank.ordinal) return incoming
+    if (incoming.rank.ordinal < existing.rank.ordinal) return existing
+    // Rank tie. Consult preferred.
+    if (preferred == null) return incoming  // no preference declared → newer wins
+    val incomingMatches = incoming.provider == preferred.key
+    val existingMatches = existing.provider == preferred.key
+    return when {
+        incomingMatches && !existingMatches -> incoming   // upgrade
+        !incomingMatches && existingMatches -> existing   // REJECT REGRESSION (Bug A)
+        incomingMatches && existingMatches  -> incoming   // both preferred → newer wins
+        else                                -> existing   // neither preferred → existing stays
+    }
+}
 
 /**
  * Wholesale-replace path: the surface becomes exactly [incoming], but per-item
