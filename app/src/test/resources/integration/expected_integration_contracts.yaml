@@ -2059,6 +2059,30 @@ apiShapes:
     responseHeaders:
       capture: [Retry-After]
     bestPracticeRules: [runtime-contract-baseline]
+  github.list_releases:
+    provider: GITHUB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/repos/{owner}/{repo}/releases"
+    headerPolicy: github-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
   github.asset_download:
     provider: GITHUB
     lifecycleStatus: PLANNED_NOT_ACTIVE
