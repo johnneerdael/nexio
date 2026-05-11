@@ -29,6 +29,7 @@ import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
+import com.nexio.tv.data.local.SyncWatermarkDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
@@ -119,6 +120,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -218,6 +220,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileModeRouter: ProfileModeRouter,
     private val startupPushGate: AccountConfigStartupPushGate,
+    private val syncWatermarkStore: SyncWatermarkDataStore,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -555,12 +558,24 @@ class AccountSettingsSyncService @Inject constructor(
             }
             val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
             val switchGenAtPullStart = suppressPushForSwitchGeneration
-            val snapshot = withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_pull_account_snapshot",
-                    buildAccountConfigSyncPullParams()
-                ).decodeAs<AccountConfigSnapshotRpcResponse>()
+            val envelope = withJwtRefreshRetry {
+                postgrest.rpc("sync_pull_account_snapshot_v10")
+                    .decodeAs<V10AccountSnapshotEnvelope>()
             }
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+            val snapshot = AccountConfigSnapshotRpcResponse(
+                userId = null,
+                revision = envelope.settings.syncRevision,
+                settingsRevision = envelope.settings.syncRevision,
+                updatedAt = null,
+                settings = Json.decodeFromJsonElement(
+                    AccountConfigSyncPayload.serializer(),
+                    envelope.settings.payload
+                ),
+                addons = envelope.addons.items
+            )
             val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)
 
             var appliedRemoteSettings = false
