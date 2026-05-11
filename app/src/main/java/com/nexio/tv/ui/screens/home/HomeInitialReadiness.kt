@@ -54,12 +54,12 @@ data class HomeInitialReadiness(
 fun shouldShowFullHomeLoadingGate(
     uiState: HomeUiState,
     catalogRows: List<com.nexio.tv.domain.model.CatalogRow>,
-    heroItems: List<com.nexio.tv.domain.model.MetaPreview>,
+    heroItemsNonEmpty: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>,
     startupContentGateTimedOut: Boolean
 ): Boolean {
     if (uiState.error != null || startupContentGateTimedOut) return false
-    val hasRenderableContent = hasRenderableHomeContent(uiState, catalogRows, heroItems, continueWatchingItems)
+    val hasRenderableContent = hasRenderableHomeContent(uiState, catalogRows, heroItemsNonEmpty, continueWatchingItems)
     if (!hasRenderableContent) {
         return uiState.isLoading ||
             (

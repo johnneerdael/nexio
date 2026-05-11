@@ -46,7 +46,6 @@ internal fun catalogRowContentType(row: com.nexio.tv.domain.model.CatalogRow): S
 fun ClassicHomeContent(
     uiState: HomeUiState,
     presentation: ClassicHomePresentationState,
-    heroItems: List<MetaPreview>,
     continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
