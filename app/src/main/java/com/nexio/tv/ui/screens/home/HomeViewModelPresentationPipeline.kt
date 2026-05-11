@@ -217,12 +217,14 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
         combine(
             _uiState,
             _displayCatalogRows,
+            _metaByItemKey,
             _resolvedContinueWatchingItems
-        ) { state, catalogRows, continueWatchingItems ->
+        ) { state, catalogRows, metaByItemKey, continueWatchingItems ->
             ModernHomePresentationInput(
                 catalogRows = catalogRows,
                 resolvedRailRows = state.resolvedRailRows,
                 continueWatchingItems = continueWatchingItems,
+                metaByItemKey = metaByItemKey,
                 useLandscapePosters = state.modernLandscapePostersEnabled,
                 showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                 continueWatchingTitle = appContext.getString(R.string.continue_watching),

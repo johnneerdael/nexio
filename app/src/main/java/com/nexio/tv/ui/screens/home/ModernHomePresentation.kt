@@ -1,7 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.homeDisplayItemKey
 
 internal fun buildModernHomePresentation(
     input: ModernHomePresentationInput,
@@ -9,16 +8,18 @@ internal fun buildModernHomePresentation(
 ): ModernHomePresentationState {
     val visibleCatalogRows = modernVisibleCatalogRows(input.catalogRows)
     // Index catalog rows by catalogId so each ResolvedRailRow can locate its parallel
-    // CatalogRow (for addonBaseUrl, addonId, focus key context, and the per-item
-    // MetaPreview lookup used to populate ModernCarouselItem.metaPreview for callbacks).
+    // CatalogRow (for addonBaseUrl, addonId, focus key context). Per-item MetaPreview
+    // lookups now consult [input.metaByItemKey] — the producer publishes that map at
+    // the same site that publishes _displayCatalogRows (Plan B Task 5e-pre, 2026-05-11),
+    // so the build no longer walks `sourceRow.items` to construct it.
     val catalogRowByCatalogId = LinkedHashMap<String, CatalogRow_>(visibleCatalogRows.size).also { map ->
         visibleCatalogRows.forEach { row -> map[row.catalogId] = row }
     }
-    // Surface-level MetaPreview lookup keyed by homeDisplayItemKey(apiType, id),
-    // exposed via ModernHomePresentationState.metaByItemKey so the carousel render
-    // path can consult it instead of holding a per-item MetaPreview field on
-    // ModernCarouselItem. Built across ALL visible catalog rows in one pass.
-    val metaByItemKey = HashMap<String, MetaPreview>()
+    // Surface-level MetaPreview lookup is supplied by the producer (Plan B
+    // Task 5e-pre). Reference-stable when content is unchanged so downstream
+    // === guards (state.modernHomePresentation == presentation in the
+    // pipeline) keep short-circuiting.
+    val metaByItemKey = input.metaByItemKey
     val rows = buildList {
         val activeCatalogKeys = LinkedHashSet<String>(visibleCatalogRows.size)
 
@@ -75,13 +76,8 @@ internal fun buildModernHomePresentation(
             if (rowKey in activeCatalogKeys) return@forEach
             activeCatalogKeys += rowKey
 
-            // Populate the surface-level MetaPreview lookup for this rail. Done
-            // unconditionally (before the cache-reuse branch below) so the map
-            // is correct even when the mapped row is reused from cache and the
-            // per-rail iteration body is skipped.
-            sourceRow.items.forEach { meta ->
-                metaByItemKey[homeDisplayItemKey(meta.apiType, meta.id)] = meta
-            }
+            // Surface-level MetaPreview lookup is already populated by the
+            // producer (input.metaByItemKey); no per-rail population pass here.
 
             val cached = cache.catalogRows[rowKey]
             // Resolved authority gates cache reuse: the rail row instance returned by

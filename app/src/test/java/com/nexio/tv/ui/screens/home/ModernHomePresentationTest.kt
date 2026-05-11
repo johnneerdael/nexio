@@ -283,10 +283,21 @@ class ModernHomePresentationTest {
                 items = resolvedItems
             )
         }
+        // Plan B Task 5e-pre — the surface-level MetaPreview lookup is now an
+        // explicit input to the build function (produced by HomeViewModel at the
+        // same site that publishes _displayCatalogRows). Mirror that behavior here
+        // by building the map from the synthetic catalog rows the test supplies.
+        val metaByItemKey = HashMap<String, MetaPreview>()
+        catalogRows.forEach { row ->
+            row.items.forEach { meta ->
+                metaByItemKey[homeDisplayItemKey(meta.apiType, meta.id)] = meta
+            }
+        }
         return ModernHomePresentationInput(
             catalogRows = catalogRows,
             resolvedRailRows = resolvedByCatalogId.values.toList(),
             continueWatchingItems = continueWatchingItems,
+            metaByItemKey = metaByItemKey,
             useLandscapePosters = useLandscapePosters,
             showCatalogTypeSuffix = showCatalogTypeSuffix,
             continueWatchingTitle = continueWatchingTitle,
