@@ -335,6 +335,19 @@ class HomeViewModel @Inject constructor(
     // StateFlow directly; do not re-introduce a continueWatchingItems field on HomeUiState.
     internal val _displayContinueWatchingItems = MutableStateFlow<List<ContinueWatchingItem>>(emptyList())
     val displayContinueWatchingItems: StateFlow<List<ContinueWatchingItem>> = _displayContinueWatchingItems.asStateFlow()
+    /**
+     * Plan B Task 5f — grid-variant rendering items. Held off [HomeUiState]
+     * (which is Compose-observed; CLAUDE.md rule #2 — `SnapshotMutableStateImpl`
+     * pins prior versions of every observed state). `GridItem.Hero.items` +
+     * `GridItem.Content.item` carry `MetaPreview` references; observing them
+     * through `HomeUiState.gridItems` retained ~357 MetaPreview instances via
+     * `ArrayList$Itr` continuation chains in the 2026-05-11 final heap check.
+     *
+     * `GridHomeContent` collects this StateFlow directly via
+     * `viewModel.displayGridItems.collectAsStateWithLifecycle()`.
+     */
+    internal val _displayGridItems = MutableStateFlow<List<GridItem>>(emptyList())
+    val displayGridItems: StateFlow<List<GridItem>> = _displayGridItems.asStateFlow()
     // Resolved hero projection (Plan B Task 9). Held outside [HomeUiState] for the
     // same reason as [_displayCatalogRows] — Compose's SnapshotStateRecord chain
     // pins prior versions of every observed list field (CLAUDE.md hard rule #2).
