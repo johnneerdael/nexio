@@ -82,6 +82,52 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `iOS profile headers omit web origin and referer`() {
+        val headers = buildYouTubeRequestHeaders(
+            profile = YouTubeRequestProfile.IOS,
+            userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)"
+        )
+        assertEquals(false, headers.containsKey("origin"))
+        assertEquals(false, headers.containsKey("referer"))
+        assertEquals(false, headers.containsKey("accept-language"))
+        assertEquals(
+            "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
+            headers["user-agent"]
+        )
+        assertEquals("2", headers["x-goog-api-format-version"])
+    }
+
+    @Test
+    fun `Android profile headers omit web origin and referer`() {
+        val headers = buildYouTubeRequestHeaders(
+            profile = YouTubeRequestProfile.ANDROID,
+            userAgent = "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip"
+        )
+        assertEquals(false, headers.containsKey("origin"))
+        assertEquals(false, headers.containsKey("referer"))
+        assertEquals("2", headers["x-goog-api-format-version"])
+    }
+
+    @Test
+    fun `Web profile headers preserve existing web fingerprint`() {
+        val headers = buildYouTubeRequestHeaders(profile = YouTubeRequestProfile.WEB)
+        assertEquals("https://www.youtube.com", headers["origin"])
+        assertEquals("https://www.youtube.com/", headers["referer"])
+        assertEquals("en-US,en;q=0.9", headers["accept-language"])
+        assertEquals(false, headers.containsKey("x-goog-api-format-version"))
+    }
+
+    @Test
+    fun `Profile headers include cookie when provided`() {
+        val headers = buildYouTubeRequestHeaders(
+            profile = YouTubeRequestProfile.IOS,
+            userAgent = "ios-ua",
+            cookieHeader = "SID=abc; HSID=def"
+        )
+        assertEquals("SID=abc; HSID=def", headers["Cookie"])
+    }
+
+    @Test
     fun `selectPreferredCombinedTrailerUrl prefers manifest for playback compatibility`() {
         val selected = selectPreferredCombinedTrailerUrl(
             manifestUrl = "https://example.com/trailer/master.m3u8",
