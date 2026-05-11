@@ -125,13 +125,22 @@ fun TrailerPlayer(
 
     val trailerPlayer = remember(trailerUrl, trailerAudioUrl) {
         if (trailerUrl != null) {
+            // Trailers are short (~30s–2min) and rarely seek; the previous
+            // 30s/120s/5s/10s defaults caused DefaultAllocator to preallocate
+            // ~10 MiB of upstream byte[] buffers per ExoPlayer instance. With
+            // 2 concurrent trailer composables on home (hero + focused card),
+            // that's ~20 MiB on the home screen (heap-confirmed 2026-05-11).
+            // Tighter durations + an explicit 2 MiB target buffer cap drop
+            // per-player preallocation to <2 MiB without affecting trailer UX.
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    /* minBufferMs = */ 30_000,
-                    /* maxBufferMs = */ 120_000,
-                    /* bufferForPlaybackMs = */ 5_000,
-                    /* bufferForPlaybackAfterRebufferMs = */ 10_000
+                    /* minBufferMs = */ 5_000,
+                    /* maxBufferMs = */ 15_000,
+                    /* bufferForPlaybackMs = */ 1_500,
+                    /* bufferForPlaybackAfterRebufferMs = */ 3_000
                 )
+                .setTargetBufferBytes(2 * 1024 * 1024)
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
             ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
