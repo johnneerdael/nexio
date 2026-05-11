@@ -11,6 +11,7 @@ import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
+import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.data.remote.supabase.requireValidV1Secret
 import com.nexio.tv.data.remote.supabase.requireValidV2Transport
 import io.github.jan.supabase.postgrest.Postgrest
@@ -124,7 +125,9 @@ class AddonSyncService @Inject constructor(
                 }
             }
 
+            val baseUpdatedAtMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null)
             val params = buildJsonObject {
+                put("p_base_updated_at_ms", baseUpdatedAtMs)
                 put("p_addons", buildJsonArray {
                     parsedAddons.forEachIndexed { index, addon ->
                         val (parsedAddon, parserPreset, isAnime) = addon
@@ -145,12 +148,25 @@ class AddonSyncService @Inject constructor(
                 })
                 put("p_source", "app")
             }
-            Log.d(TAG, "pushToRemote: calling RPC sync_push_account_addons")
-            withJwtRefreshRetry {
-                postgrest.rpc("sync_push_account_addons", params).decodeList<AccountSyncMutationResult>()
+            Log.d(TAG, "pushToRemote: calling RPC sync_push_account_addons_v10 with base=$baseUpdatedAtMs")
+            val outcome = runV10Push {
+                withJwtRefreshRetry {
+                    postgrest.rpc("sync_push_account_addons_v10", params).decodeAs<V10PushResult>()
+                }
             }
-
-            Log.d(TAG, "Pushed ${localAddons.size} addons to remote")
+            when (outcome) {
+                is V10PushOutcome.Applied -> {
+                    syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = outcome.currentUpdatedAtMs)
+                    Log.d(TAG, "Pushed ${localAddons.size} addons to remote, new watermark=${outcome.currentUpdatedAtMs}")
+                }
+                is V10PushOutcome.StaleBase -> {
+                    Log.w(TAG, "Addon push rejected as stale (server=${outcome.currentUpdatedAtMs}, base=$baseUpdatedAtMs); next startup pull will reconcile")
+                    return@withContext Result.success(Unit)
+                }
+                is V10PushOutcome.FieldConflict ->
+                    Log.w(TAG, "Unexpected field_conflict on addon push: ${outcome.conflictPaths}")
+                is V10PushOutcome.Failed -> throw outcome.cause
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push addons to remote", e)
