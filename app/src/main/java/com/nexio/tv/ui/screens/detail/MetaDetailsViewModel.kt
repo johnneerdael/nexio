@@ -190,6 +190,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val animeSeasonDetailRepository: AnimeSeasonDetailRepository,
+    private val resolvedDisplaySurfaceRepository: com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -240,7 +241,40 @@ class MetaDetailsViewModel @Inject constructor(
         observeWatchedEpisodes()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
+        observeResolvedDetailFields()
         loadMeta()
+    }
+
+    /**
+     * Plan B Surface 5 — observes [resolvedDisplaySurfaceRepository] for the
+     * current meta's itemKey and projects each emission into
+     * [MetaDetailsResolvedFields]. Pushes the typed projection into
+     * [MetaDetailsUiState.resolvedDetailFields]. Detail composables prefer
+     * this over [MetaDetailsUiState.meta] for hero / overview / rating reads.
+     */
+    private fun observeResolvedDetailFields() {
+        viewModelScope.launch {
+            val profileId = profileManager.activeProfileId.value
+            _uiState
+                .map { state ->
+                    val meta = state.meta ?: return@map null
+                    com.nexio.tv.domain.model.homeDisplayItemKey(meta.type.toApiString(), meta.id)
+                }
+                .distinctUntilChanged()
+                .collectLatest { itemKey ->
+                    if (itemKey == null) {
+                        _uiState.update { it.copy(resolvedDetailFields = null) }
+                        return@collectLatest
+                    }
+                    resolvedDisplaySurfaceRepository
+                        .observeItem(profileId, itemKey)
+                        .collect { resolved ->
+                            _uiState.update {
+                                it.copy(resolvedDetailFields = resolved?.let(MetaDetailsResolvedFields::from))
+                            }
+                        }
+                }
+        }
     }
 
     private fun observeDeterministicAutoplaySetting() {

@@ -153,6 +153,7 @@ fun buildMetaDetailsViewModel(
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
         animeSeasonDetailRepository = animeSeasonDetailRepository,
+        resolvedDisplaySurfaceRepository = mockk(relaxed = true),
         savedStateHandle = SavedStateHandle(
             mapOf(
                 "itemId" to itemId,
