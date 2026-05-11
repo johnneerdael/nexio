@@ -290,12 +290,22 @@ class InAppYouTubeExtractor @Inject constructor(
 
         for (client in CLIENTS) {
             try {
+                // TVHTML5 ships signatureCipher fields — the player API
+                // wants the matching signatureTimestamp on the request so
+                // the response cipher version aligns with the manifest we
+                // already fetched. Non-cipher clients (iOS, ANDROID) omit
+                // it (passing it doesn't hurt but adds an unnecessary
+                // await on the cipher manifest async branch).
+                val sigTimestampForClient = if (client.key == "tv") {
+                    cipherManifestDeferred.await()?.signatureTimestamp
+                } else null
                 val playerResponse = fetchPlayerResponse(
                     apiKey = apiKey,
                     videoId = videoId,
                     client = client,
                     visitorData = watchConfig.visitorData,
-                    cookieHeader = null
+                    cookieHeader = null,
+                    signatureTimestamp = sigTimestampForClient
                 )
 
                 if (resolvedTrailerTitle.isNullOrBlank()) {
@@ -569,7 +579,8 @@ class InAppYouTubeExtractor @Inject constructor(
         videoId: String,
         client: YouTubeClient,
         visitorData: String?,
-        cookieHeader: String?
+        cookieHeader: String?,
+        signatureTimestamp: String? = null
     ): Map<*, *> {
         // Use the www.youtube.com player endpoint with the InnerTube
         // API key for all clients. The youtubei.googleapis.com endpoint
@@ -608,15 +619,20 @@ class InAppYouTubeExtractor @Inject constructor(
         // No `cpn` in the body: NewPipe sends it to youtubei.googleapis.com,
         // but the www.youtube.com player endpoint we use returns empty
         // streamingData when cpn is present in some video requests.
+        // contentPlaybackContext binds the response to a specific player
+        // version when cipher fields are involved (YoutubeExplode
+        // StreamClient.cs:289). For non-cipher clients html5Preference
+        // alone is sufficient.
+        val contentPlaybackContext = buildMap<String, Any> {
+            put("html5Preference", "HTML5_PREF_WANTS")
+            signatureTimestamp?.toIntOrNull()?.let { put("signatureTimestamp", it) }
+        }
         val payload = buildMap<String, Any> {
             put("videoId", videoId)
             put("contentCheckOk", true)
             put("racyCheckOk", true)
             put("context", mapOf("client" to client.context))
-            put(
-                "playbackContext",
-                mapOf("contentPlaybackContext" to mapOf("html5Preference" to "HTML5_PREF_WANTS"))
-            )
+            put("playbackContext", mapOf("contentPlaybackContext" to contentPlaybackContext))
         }
 
         val response = fetchTransport(
