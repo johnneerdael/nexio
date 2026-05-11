@@ -128,6 +128,25 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `cpn generator produces 16 character nonces from the YouTube alphabet`() {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        repeat(50) {
+            val cpn = generateContentPlaybackNonce()
+            assertEquals(16, cpn.length)
+            cpn.forEach { c ->
+                assertTrue("nonce char '$c' not in YouTube alphabet", c in alphabet)
+            }
+        }
+    }
+
+    @Test
+    fun `cpn generator is non-deterministic across calls`() {
+        val a = generateContentPlaybackNonce()
+        val b = generateContentPlaybackNonce()
+        assertTrue("expected two distinct nonces, got $a == $b", a != b)
+    }
+
+    @Test
     fun `selectPreferredCombinedTrailerUrl prefers manifest for playback compatibility`() {
         val selected = selectPreferredCombinedTrailerUrl(
             manifestUrl = "https://example.com/trailer/master.m3u8",
