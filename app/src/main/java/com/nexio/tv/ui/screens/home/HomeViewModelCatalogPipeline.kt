@@ -3295,11 +3295,17 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
         return row.addonId != TMDB_RAIL_ADDON_ID || row.catalogId in currentTmdbCatalogIds
     }
 
+    fun isRetainedRail(rail: com.nexio.tv.domain.model.Rail): Boolean {
+        return rail.addonId != TMDB_RAIL_ADDON_ID || rail.catalogId in currentTmdbCatalogIds
+    }
+
     val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
     val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
+    val filteredRails = snapshot.rails.filter(::isRetainedRail)
     if (
         filteredFullRows.size == snapshot.fullCatalogRows.size &&
-        filteredDisplayRows.size == snapshot.catalogRows.size
+        filteredDisplayRows.size == snapshot.catalogRows.size &&
+        filteredRails.size == snapshot.rails.size
     ) {
         return snapshot
     }
@@ -3308,10 +3314,14 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
         .filterNot(::isRetained)
         .filter { row -> row.addonId == TMDB_RAIL_ADDON_ID }
         .toList()
-    val removedTmdbKeys = removedTmdbRows
-        .asSequence()
-        .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) }
-        .toSet()
+    val removedTmdbKeys = (
+        removedTmdbRows.asSequence()
+            .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) } +
+        snapshot.rails.asSequence()
+            .filterNot(::isRetainedRail)
+            .filter { rail -> rail.addonId == TMDB_RAIL_ADDON_ID }
+            .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
+    ).toSet()
     val removedTmdbItemKeys = removedTmdbRows
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
@@ -3328,15 +3338,26 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
+
+    fun heroKeyPredicate(key: String): Boolean =
+        key in retainedItemKeys &&
+            (key !in removedTmdbItemKeys || key in retainedCurrentTmdbItemKeys)
+
     return snapshot.copy(
         catalogRows = filteredDisplayRows,
         fullCatalogRows = filteredFullRows,
         heroItems = snapshot.heroItems.filter { item ->
-            val key = "${item.apiType}:${item.id}"
-            key in retainedItemKeys &&
-                (key !in removedTmdbItemKeys || key in retainedCurrentTmdbItemKeys)
+            heroKeyPredicate("${item.apiType}:${item.id}")
         },
-        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys }
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys },
+        // Plan B Task 6f.2 — rails + heroItemKeys filtered alongside the
+        // legacy fields. Same predicate (addonId/catalogId) applies; same
+        // hero membership computation. Task 6f.5 drops the legacy fields
+        // and makes these the sole representation.
+        rails = filteredRails,
+        heroItemKeys = snapshot.heroItemKeys.filter { key ->
+            heroKeyPredicate("${key.apiType}:${key.contentId}")
+        }
     )
 }
 
@@ -3356,11 +3377,17 @@ internal fun filterRestoredHomeSnapshotKitsuRows(
         return row.addonId != KITSU_HOME_ADDON_ID || row.catalogId in currentKitsuCatalogIds
     }
 
+    fun isRetainedRail(rail: com.nexio.tv.domain.model.Rail): Boolean {
+        return rail.addonId != KITSU_HOME_ADDON_ID || rail.catalogId in currentKitsuCatalogIds
+    }
+
     val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
     val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
+    val filteredRails = snapshot.rails.filter(::isRetainedRail)
     if (
         filteredFullRows.size == snapshot.fullCatalogRows.size &&
-        filteredDisplayRows.size == snapshot.catalogRows.size
+        filteredDisplayRows.size == snapshot.catalogRows.size &&
+        filteredRails.size == snapshot.rails.size
     ) {
         return snapshot
     }
@@ -3369,10 +3396,14 @@ internal fun filterRestoredHomeSnapshotKitsuRows(
         .filterNot(::isRetained)
         .filter { row -> row.addonId == KITSU_HOME_ADDON_ID }
         .toList()
-    val removedKitsuKeys = removedKitsuRows
-        .asSequence()
-        .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) }
-        .toSet()
+    val removedKitsuKeys = (
+        removedKitsuRows.asSequence()
+            .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) } +
+        snapshot.rails.asSequence()
+            .filterNot(::isRetainedRail)
+            .filter { rail -> rail.addonId == KITSU_HOME_ADDON_ID }
+            .flatMap { rail -> sequenceOf(rail.catalogId, homeCatalogGlobalKey(rail)) }
+    ).toSet()
     val removedKitsuItemKeys = removedKitsuRows
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
@@ -3389,15 +3420,26 @@ internal fun filterRestoredHomeSnapshotKitsuRows(
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
+
+    fun heroKeyPredicate(key: String): Boolean =
+        key in retainedItemKeys &&
+            (key !in removedKitsuItemKeys || key in retainedCurrentKitsuItemKeys)
+
     return snapshot.copy(
         catalogRows = filteredDisplayRows,
         fullCatalogRows = filteredFullRows,
         heroItems = snapshot.heroItems.filter { item ->
-            val key = "${item.apiType}:${item.id}"
-            key in retainedItemKeys &&
-                (key !in removedKitsuItemKeys || key in retainedCurrentKitsuItemKeys)
+            heroKeyPredicate("${item.apiType}:${item.id}")
         },
-        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedKitsuKeys }
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedKitsuKeys },
+        // Plan B Task 6f.2 — rails + heroItemKeys filtered alongside the
+        // legacy fields. Same predicate (addonId/catalogId) applies; same
+        // hero membership computation. Task 6f.5 drops the legacy fields
+        // and makes these the sole representation.
+        rails = filteredRails,
+        heroItemKeys = snapshot.heroItemKeys.filter { key ->
+            heroKeyPredicate("${key.apiType}:${key.contentId}")
+        }
     )
 }
 
