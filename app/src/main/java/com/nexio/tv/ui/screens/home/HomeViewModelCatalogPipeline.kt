@@ -724,23 +724,33 @@ internal fun HomeViewModel.startCrossIdResolutionObserverPipeline() {
 
 /**
  * Fires [CatalogItemCrossIdEnricher.enrichResolving] for every item in [rows]
- * that is still missing an imdb id. Runs on [Dispatchers.IO] in a fire-and-forget
- * coroutine so the caller's producer hot path is unblocked.
+ * that is still missing an imdb id. Runs in a fire-and-forget coroutine so the
+ * caller's producer hot path is unblocked. Each [enrichResolving] call is a
+ * suspending network operation; cooperative cancellation is respected via
+ * [ensureActive] per item and by re-throwing [CancellationException].
  *
  * Indexed-for loops are used throughout (CLAUDE.md rule #4 — no suspending
  * forEach on lists; iterator allocation pinned across suspension points).
  *
- * Each call is wrapped in [runCatching] so resolver errors don't cancel the launch.
- * The next emission retries via the cache-miss path automatically.
+ * Non-[CancellationException] errors are caught per-item so a single network
+ * failure does not abort enrichment for the remaining items; the next emission
+ * retries via the cache-miss path automatically.
  */
 internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
-    viewModelScope.launch(Dispatchers.IO) {
+    viewModelScope.launch {
         for (rowIndex in rows.indices) {
             val row = rows[rowIndex]
             for (itemIndex in row.items.indices) {
+                ensureActive()
                 val item = row.items[itemIndex]
                 if (item.firstPaintStableIds.imdb.isNullOrBlank()) {
-                    runCatching { catalogItemCrossIdEnricher.enrichResolving(item) }
+                    try {
+                        catalogItemCrossIdEnricher.enrichResolving(item)
+                    } catch (cancel: kotlinx.coroutines.CancellationException) {
+                        throw cancel
+                    } catch (_: Exception) {
+                        // Non-fatal: cache miss on this item; the next emission will retry.
+                    }
                 }
             }
         }
