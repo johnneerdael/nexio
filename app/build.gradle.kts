@@ -407,6 +407,7 @@ android {
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"johnneerdael\"")
         buildConfigField("String", "GITHUB_REPO", "\"nexio\"")
+        buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
     }
 
     externalNativeBuild {
@@ -451,6 +452,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "false")
+            buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
 
             // Production environment (from local.properties)
             buildConfigField("String", "SUPABASE_URL", "\"${localProperties.getProperty("SUPABASE_URL", "")}\"")
@@ -474,6 +476,7 @@ android {
             applicationIdSuffix = ".earlyaccess"
             versionNameSuffix = "-earlyaccess"
             matchingFallbacks += listOf("release")
+            buildConfigField("String", "UPDATE_CHANNEL", "\"earlyAccess\"")
         }
     }
 
