@@ -90,6 +90,27 @@ tasks.register("checkAnimeIdMapBinary") {
     }
 }
 
+val animeMapFixtureJson = layout.projectDirectory.file(
+    "src/test/resources/fixtures/nexio-anime-map-v1-test.json"
+)
+val animeMapFixtureBin = layout.projectDirectory.file(
+    "src/test/resources/anime/nexio-anime-map-v1-test.bin"
+)
+
+tasks.register<JavaExec>("generateAnimeIdMapBinaryFixture") {
+    group = "anime-mapping"
+    description = "Encode the test fixture JSON into a test fixture .bin for reader tests."
+    val genProject = project(":tools:anime-mapping-generator")
+    classpath = genProject.extensions.getByType<SourceSetContainer>()["main"].runtimeClasspath
+    mainClass.set("com.nexio.animemap.binary.EncodeMain")
+    args = listOf(
+        animeMapFixtureJson.asFile.absolutePath,
+        animeMapFixtureBin.asFile.absolutePath,
+    )
+    inputs.file(animeMapFixtureJson)
+    outputs.file(animeMapFixtureBin)
+}
+
 tasks.named("check") {
     dependsOn("checkAnimeMappingAsset")
     dependsOn("checkAnimeIdMapBinary")
