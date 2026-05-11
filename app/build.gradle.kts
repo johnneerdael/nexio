@@ -350,8 +350,8 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 73
-        versionName = "0.55"
+        versionCode = 74
+        versionName = "0.56"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "INTRODB_API_URL", "\"${resolveProperty(localProperties, localProperties, "TIDB_API_URL").ifBlank { localProperties.getProperty("INTRODB_API_URL", "") }}\"")
