@@ -217,6 +217,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val profileManager: ProfileManager,
     private val profileModeRouter: ProfileModeRouter,
+    private val startupPushGate: AccountConfigStartupPushGate,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -233,7 +234,6 @@ class AccountSettingsSyncService @Inject constructor(
     @Volatile private var suppressPushForSwitchGeneration: Long = 0L
     private var currentSwitchGeneration: Long = 0L
 
-    private val startupPushGate = AccountConfigStartupPushGate()
     private val pendingChangedPaths = linkedSetOf<String>()
     private var pendingChangedPathsGeneration: Long = 0L
 

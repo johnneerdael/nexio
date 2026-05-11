@@ -31,7 +31,8 @@ private const val TAG = "AddonSyncService"
 class AddonSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val authManager: AuthManager,
-    private val addonPreferences: AddonPreferences
+    private val addonPreferences: AddonPreferences,
+    private val startupPushGate: AccountConfigStartupPushGate
 ) {
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
@@ -49,6 +50,11 @@ class AddonSyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (!hasLiveFullAccountSession()) {
+                return@withContext Result.success(Unit)
+            }
+            val userId = authManager.currentSessionUserId
+            if (!startupPushGate.canPush(userId)) {
+                Log.d(TAG, "Skipping addon push before startup remote pull completes")
                 return@withContext Result.success(Unit)
             }
             val localAddons = addonPreferences.installedAddons.first()
