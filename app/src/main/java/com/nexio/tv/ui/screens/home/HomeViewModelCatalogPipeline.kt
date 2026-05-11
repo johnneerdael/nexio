@@ -3073,7 +3073,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             rails = transientRails,
             heroItemKeys = transientHeroItemKeys
         )
-        applyHomeSnapshotToUiPipeline(transientSnapshot)
+        applyHomeProducerEmissionToUiPipeline(
+            displayRows = displayRows,
+            fullRows = fullRowsFiltered,
+            heroItems = baseHeroItems
+        )
         val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched(
             rows = _internalCatalogRows.value,
             overlaysByItemKey = currentHydratedHomeOverlays,
@@ -3224,51 +3228,38 @@ private fun com.nexio.tv.domain.model.ResolvedDisplayItem.hasScreensaverTrailerR
         stableIds.kitsu?.isNotBlank() == true ||
         contentId.isNotBlank()
 
-internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
-    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+/**
+ * Plan B Task 6f.5 T11.5 — shared apply core. Composes the typed-overlay snapshot,
+ * publishes to `_internalCatalogRows`, `catalogInventoryRepository`, the typed
+ * authority surface, hydrated overlays, grid items, and the screensaver surface,
+ * and kicks off downstream enrichment.
+ *
+ * Two entry points:
+ *
+ *   - [applyHomeSnapshotToUiPipeline] — cold-start restore from disk. Filters the
+ *     restored `Snapshot`, reconstructs `CatalogRow` content from `rails` via the
+ *     typed-surface lookup, then calls this core.
+ *
+ *   - [applyHomeProducerEmissionToUiPipeline] — producer-pipeline flush. Passes
+ *     freshly-computed `displayRows` / `fullRows` / `heroItems` directly to this
+ *     core. Skips the filter + reconstruction because the producer's data is
+ *     already fresh and filtered upstream.
+ *
+ * Routing producer emissions through the rails-reconstruction path was the
+ * 6f.5-introduced bug: the typed surface lags the producer's in-memory content,
+ * so reconstruction returned empty rows and decayed the surface emission by
+ * emission. Producer-path bypass keeps the in-memory MetaPreview content from
+ * being thrown away on every flush.
+ */
+private fun HomeViewModel.applyHomeResolvedRowsToUiPipeline(
+    displayRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    fullRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    heroItems: List<com.nexio.tv.domain.model.MetaPreview>
 ) {
-    val builtInSafeSnapshot = filterRestoredHomeSnapshotKitsuRows(
-        snapshot = filterRestoredHomeSnapshotTmdbRows(
-            snapshot = snapshot,
-            tmdbPrefs = tmdbCatalogPreferences,
-            tmdbSnapshot = tmdbDiscoverySnapshot,
-            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
-        ),
-        kitsuPrefs = kitsuCatalogPreferences,
-        kitsuSnapshot = kitsuDiscoverySnapshot,
-        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
-    )
-    val filteredSnapshot = builtInSafeSnapshot.filterDisabledHomeCatalogRows(
-        disabledHomeCatalogKeys = disabledHomeCatalogKeys,
-        isAddonRailDisabled = { rail ->
-            isCatalogDisabled(
-                addonBaseUrl = rail.addonBaseUrl,
-                addonId = rail.addonId,
-                type = rail.apiType,
-                catalogId = rail.catalogId,
-                catalogName = rail.catalogName
-            )
-        }
-    )
-
-    // Plan B Task 6f.5 — reconstruct CatalogRow content from rails via the
-    // typed surface lookup. The typed authority is populated synchronously
-    // before this function runs (restorePersistedCatalogSnapshotPipeline does
-    // `resolvedDisplaySurfaceRepository.restoreFromDisk(...)` immediately
-    // before `withContext(Main.immediate) { applyPending... }`). Empty
-    // reconstruction is acceptable degradation: home renders empty briefly,
-    // the next producer emission populates everything.
-    val typedItemsByKey = currentTypedItemsByKey()
-    val reconstructedDisplayRows = filteredSnapshot.rails.mapNotNull { rail ->
-        rail.toCatalogRowOrNull(typedItemsByKey)
-    }
-    val reconstructedFullRows = reconstructedDisplayRows  // 6f.5: no separate fullRows persisted
-    val reconstructedHeroItems = filteredSnapshot.reconstructHeroItems(typedItemsByKey)
-
     val composedSnapshot = composeHydratedHomeOverlaySnapshot(
-        displayRows = reconstructedDisplayRows,
-        fullRows = reconstructedFullRows,
-        heroItems = reconstructedHeroItems,
+        displayRows = displayRows,
+        fullRows = fullRows,
+        heroItems = heroItems,
         overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
         heroTmdbSettings = currentTmdbSettings
     )
@@ -3325,6 +3316,84 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     observeHydratedHomeOverlaysForRows(composedSnapshot.displayRows + composedSnapshot.fullRows + screensaverSourceRows)
     enrichCatalogRowItemsAsync(composedSnapshot.displayRows)
     refreshTrailerMetadataAvailabilityPipeline(composedSnapshot.displayRows)
+}
+
+internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+) {
+    val builtInSafeSnapshot = filterRestoredHomeSnapshotKitsuRows(
+        snapshot = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = snapshot,
+            tmdbPrefs = tmdbCatalogPreferences,
+            tmdbSnapshot = tmdbDiscoverySnapshot,
+            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+        ),
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = kitsuDiscoverySnapshot,
+        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
+    )
+    val filteredSnapshot = builtInSafeSnapshot.filterDisabledHomeCatalogRows(
+        disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        isAddonRailDisabled = { rail ->
+            isCatalogDisabled(
+                addonBaseUrl = rail.addonBaseUrl,
+                addonId = rail.addonId,
+                type = rail.apiType,
+                catalogId = rail.catalogId,
+                catalogName = rail.catalogName
+            )
+        }
+    )
+
+    // Plan B Task 6f.5 — reconstruct CatalogRow content from rails via the
+    // typed surface lookup. The typed authority is populated synchronously
+    // before this function runs (restorePersistedCatalogSnapshotPipeline does
+    // `resolvedDisplaySurfaceRepository.restoreFromDisk(...)` immediately
+    // before `withContext(Main.immediate) { applyPending... }`). Empty
+    // reconstruction is acceptable degradation: home renders empty briefly,
+    // the next producer emission populates everything.
+    //
+    // T11.5 — only the cold-start path goes through reconstruction. Producer
+    // emissions take applyHomeProducerEmissionToUiPipeline, which feeds
+    // applyHomeResolvedRowsToUiPipeline directly with their in-memory content
+    // (the prior round-trip through the typed surface decayed the surface
+    // emission-by-emission).
+    val typedItemsByKey = currentTypedItemsByKey()
+    val reconstructedDisplayRows = filteredSnapshot.rails.mapNotNull { rail ->
+        rail.toCatalogRowOrNull(typedItemsByKey)
+    }
+    val reconstructedFullRows = reconstructedDisplayRows  // 6f.5: no separate fullRows persisted
+    val reconstructedHeroItems = filteredSnapshot.reconstructHeroItems(typedItemsByKey)
+
+    applyHomeResolvedRowsToUiPipeline(
+        displayRows = reconstructedDisplayRows,
+        fullRows = reconstructedFullRows,
+        heroItems = reconstructedHeroItems
+    )
+}
+
+/**
+ * Plan B Task 6f.5 T11.5 — producer-pipeline emission entry. Bypasses
+ * the rails-reconstruction round-trip used by cold-start restore and
+ * feeds [applyHomeResolvedRowsToUiPipeline] the producer's in-memory
+ * CatalogRow content directly.
+ *
+ * Filtering: not applied here. The producer pipeline produces rows
+ * derived from current preferences (current addons, current Trakt/Simkl/
+ * MDB/TMDB/Kitsu enable state), so the Snapshot-style restore filters
+ * (filterRestoredHomeSnapshot*) — which exist to drop stale rows after
+ * preference changes between persist and restore — are not needed.
+ */
+internal fun HomeViewModel.applyHomeProducerEmissionToUiPipeline(
+    displayRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    fullRows: List<com.nexio.tv.domain.model.CatalogRow>,
+    heroItems: List<com.nexio.tv.domain.model.MetaPreview>
+) {
+    applyHomeResolvedRowsToUiPipeline(
+        displayRows = displayRows,
+        fullRows = fullRows,
+        heroItems = heroItems
+    )
 }
 
 internal fun filterRestoredHomeSnapshotTmdbRows(
