@@ -37,6 +37,7 @@ class UpdateRepository @Inject constructor(
             ?: error("Release has no tag")
         val asset = ChannelAssetSelector.choose(UpdateChannel.Stable, dto.assets)
             ?: error("Release $tag has no nexio-release.apk asset")
+        android.util.Log.i("UpdateRepository", "channel=stable winner=$tag")
         return Result.success(toAppUpdate(dto, tag, asset))
     }
 
@@ -106,6 +107,10 @@ class UpdateRepository @Inject constructor(
             ?: error("Release has no tag")
         val asset = ChannelAssetSelector.choose(UpdateChannel.EarlyAccess, winner.assets)
             ?: error("Release $tag has no nexio-earlyaccess.apk asset")
+        android.util.Log.i(
+            "UpdateRepository",
+            "channel=earlyAccess winner=$tag (stable=${stableCandidate?.tagName}, pre=${preCandidate?.tagName})"
+        )
 
         Result.success(toAppUpdate(winner, tag, asset))
     }
