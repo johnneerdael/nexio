@@ -313,6 +313,8 @@ class HomeCatalogSnapshotStore private constructor(
         var fullCatalogRows: List<CatalogRow> = emptyList()
         var heroItems: List<MetaPreview> = emptyList()
         var orderedGroupKeys: List<String> = emptyList()
+        var rails: List<Rail> = emptyList()
+        var heroItemKeys: List<RailItemKey> = emptyList()
 
         return runCatching {
             FileInputStream(file).use { fis ->
@@ -365,11 +367,14 @@ class HomeCatalogSnapshotStore private constructor(
                                     orderedGroupKeys = gson.fromJson<List<String>>(reader, stringListType)
                                         ?: emptyList()
                                 }
-                                // Plan B Task 6d schema v5 persisted these structure-only
-                                // fields, but no in-memory consumer has been wired yet
-                                // (Task 6e). Skip them to keep returned Snapshot
-                                // shape-equivalent to v4's behavior — see comment below.
-                                "rails", "heroItemKeys" -> reader.skipValue()
+                                "rails" -> {
+                                    rails = gson.fromJson<List<Rail>>(reader, railListType)
+                                        ?: emptyList()
+                                }
+                                "heroItemKeys" -> {
+                                    heroItemKeys = gson.fromJson<List<RailItemKey>>(reader, railItemKeyListType)
+                                        ?: emptyList()
+                                }
                                 else -> reader.skipValue()
                             }
                         }
@@ -377,19 +382,13 @@ class HomeCatalogSnapshotStore private constructor(
                     }
                 }
             }
-            // All gates passed; return the canonical Snapshot. Plan B Task 6d
-            // schema v5 introduces persisted `rails` + `heroItemKeys`, but no
-            // in-memory consumer has been wired to them yet — Task 6e moves
-            // consumers off the denormalized fields and onto these. Until
-            // then, drop them on read so the returned Snapshot stays
-            // shape-equivalent to v4's behavior and existing equality
-            // assertions/tests remain valid. The on-disk JSON still carries
-            // them; the writer always re-derives if absent.
             Snapshot(
                 catalogRows = catalogRows,
                 fullCatalogRows = fullCatalogRows,
                 heroItems = heroItems,
-                orderedGroupKeys = orderedGroupKeys
+                orderedGroupKeys = orderedGroupKeys,
+                rails = rails,
+                heroItemKeys = heroItemKeys
             )
         }.onFailure { error ->
             Log.w(TAG, "Failed to stream-read home snapshot from file", error)
