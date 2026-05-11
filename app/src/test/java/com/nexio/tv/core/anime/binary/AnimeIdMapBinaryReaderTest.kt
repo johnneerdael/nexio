@@ -139,4 +139,31 @@ class AnimeIdMapBinaryReaderTest {
         reader.ensureOpen()
         assertNotNull(reader.recordForKitsu("kitsu:11469"))
     }
+
+    @Test
+    fun `episodeMappingForAnidb returns record with ranges and explicit maps`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        // Fixture: episodeMappingsByAnidb { "69" -> One Piece, 5 ranges, 1 explicit map }
+        val ep = reader.episodeMappingForAnidb("69")
+        assertNotNull(ep)
+        assertEquals("69", ep!!.anidb)
+        assertEquals("One Piece", ep.name)
+        assertEquals("81797", ep.tvdbSeriesId)
+        assertEquals("37854", ep.tmdbTvId)
+        assertEquals(5, ep.ranges.size)
+        assertEquals(1, ep.explicitMaps.size)
+        val firstRange = ep.ranges[0]
+        assertEquals(1, firstRange.sourceSeason)
+        assertEquals(1, firstRange.startEpisode)
+        assertEquals(8, firstRange.endEpisode)
+        assertEquals("TVDB", firstRange.targetProvider)
+    }
+
+    @Test
+    fun `episodeMappingForAnidb returns null for unknown anidb id`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertNull(reader.episodeMappingForAnidb("9999999"))
+    }
 }

@@ -319,6 +319,73 @@ class AnimeIdMapBinaryReader @Inject constructor(
         }
     }
 
+    fun episodeMappingForAnidb(anidbId: String): com.nexio.tv.core.anime.AnimeEpisodeMappingRecord? {
+        val open = state as? State.Open ?: return null
+        val key = anidbId.toLongOrNull() ?: return null
+        val entryIndex = findSingleEntry(open, IndexKind.BY_ANIDB_EPISODE, key)
+        if (entryIndex < 0) return null
+        val d = readDescriptor(open, IndexKind.BY_ANIDB_EPISODE.slot)
+        val entryStart = d.offset.toInt() + entryIndex * BinaryFormat.STRIDE_U64_SINGLE
+        val recordOffset = open.parent.getInt(entryStart + 8)
+        return episodeRecordAt(open, recordOffset)
+    }
+
+    private fun episodeRecordAt(open: State.Open, offset: Int): com.nexio.tv.core.anime.AnimeEpisodeMappingRecord? {
+        val records = open.records
+        if (records.get(offset) != BinaryFormat.RECORD_KIND_EPISODE) return null
+        var p = offset + 1
+        val presence = records.get(p).toInt() and 0xFF; p += 1
+        val r = LongRef()
+        p = VarintReader.readULong(records, p, r); val anidb = r.value.toString()
+        val name = if (presence and 0x01 != 0) { val off = records.getInt(p); p += 4; readPoolString(open, off) } else null
+        val tvdbSeriesId = if (presence and 0x02 != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        val tmdbTvId = if (presence and 0x04 != 0) { p = VarintReader.readULong(records, p, r); r.value.toString() } else null
+        p = VarintReader.readULong(records, p, r); val rangesCount = r.value.toInt()
+        val ranges = ArrayList<com.nexio.tv.core.anime.AnimeRangeRule>(rangesCount)
+        for (i in 0 until rangesCount) {
+            val srcSeason = records.get(p).toInt() and 0xFF; p += 1
+            val startEp = records.getShort(p).toInt() and 0xFFFF; p += 2
+            val endEpRaw = records.getShort(p).toInt() and 0xFFFF; p += 2
+            val prov = records.get(p).toInt() and 0xFF; p += 1
+            val tgtSeason = records.get(p).toInt() and 0xFF; p += 1
+            val off = records.getShort(p).toInt(); p += 2
+            val hasEnd = records.get(p).toInt() and 0x01 == 1; p += 1
+            ranges.add(com.nexio.tv.core.anime.AnimeRangeRule(
+                sourceSeason = srcSeason,
+                startEpisode = startEp,
+                endEpisode = if (hasEnd) endEpRaw else null,
+                targetProvider = if (prov == 0) "TVDB" else "TMDB",
+                targetSeason = tgtSeason,
+                offset = off,
+            ))
+        }
+        p = VarintReader.readULong(records, p, r); val explicitCount = r.value.toInt()
+        val explicit = ArrayList<com.nexio.tv.core.anime.AnimeExplicitMap>(explicitCount)
+        for (i in 0 until explicitCount) {
+            val srcSeason = records.get(p).toInt() and 0xFF; p += 1
+            val srcEp = records.getShort(p).toInt() and 0xFFFF; p += 2
+            val prov = records.get(p).toInt() and 0xFF; p += 1
+            val tgtSeason = records.get(p).toInt() and 0xFF; p += 1
+            val tgtEp = records.getShort(p).toInt() and 0xFFFF; p += 2
+            explicit.add(com.nexio.tv.core.anime.AnimeExplicitMap(
+                sourceSeason = srcSeason, sourceEpisode = srcEp,
+                targetProvider = if (prov == 0) "TVDB" else "TMDB",
+                targetSeason = tgtSeason, targetEpisode = tgtEp,
+            ))
+        }
+        val evidence = if (presence and 0x08 != 0) {
+            p = VarintReader.readULong(records, p, r)
+            val count = r.value.toInt()
+            val list = ArrayList<String>(count)
+            for (i in 0 until count) { val off = records.getInt(p); p += 4; list.add(readPoolString(open, off) ?: "") }
+            list
+        } else emptyList()
+        return com.nexio.tv.core.anime.AnimeEpisodeMappingRecord(
+            anidb = anidb, name = name, tvdbSeriesId = tvdbSeriesId, tmdbTvId = tmdbTvId,
+            ranges = ranges, explicitMaps = explicit, evidence = evidence,
+        )
+    }
+
     private fun ensureBinaryOnDisk(): File? {
         val dir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
         val target = File(dir, "fmt$BINARY_FORMAT_VERSION.bin")
