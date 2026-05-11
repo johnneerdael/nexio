@@ -4,7 +4,14 @@ data class TrailerPlaybackSource(
     val videoUrl: String,
     val audioUrl: String? = null,
     val userAgent: String? = null,
-    val captions: List<YouTubeCaptionTrack> = emptyList()
+    val captions: List<YouTubeCaptionTrack> = emptyList(),
+    /**
+     * Identifier for the YouTube client that signed [videoUrl]. Downstream
+     * Media3 data sources use this to pick the matching HTTP wire profile
+     * (iOS-signed URLs need iOS-flavored properties, Android-signed need
+     * Android). `null` when unknown (e.g., backend-resolved sources).
+     */
+    val signingClientKey: String? = null
 )
 
 data class YouTubeCaptionTrack(

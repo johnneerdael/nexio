@@ -411,7 +411,10 @@ class InAppYouTubeExtractor @Inject constructor(
             adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
             adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
             userAgent = resolvedUserAgent
-        )?.copy(captions = resolvedCaptionTracks) ?: return null
+        )?.copy(
+            captions = resolvedCaptionTracks,
+            signingClientKey = resolvedClientKey
+        ) ?: return null
 
         if (BuildConfig.DEBUG) {
             Log.d(
