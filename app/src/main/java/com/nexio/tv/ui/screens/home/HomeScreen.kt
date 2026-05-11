@@ -741,9 +741,12 @@ private fun GridHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val gridFocusState by viewModel.gridFocusState.collectAsStateWithLifecycle()
+    // Plan B Task 5f.3 — collect grid items off-UiState (CLAUDE.md rule #2).
+    val displayGridItems by viewModel.displayGridItems.collectAsStateWithLifecycle()
     GridHomeContent(
         uiState = uiState,
         presentation = uiState.gridHomePresentation,
+        gridItems = displayGridItems,
         continueWatchingItems = resolvedContinueWatchingItems,
         resolvedHeroItems = resolvedHeroItems,
         posterCardStyle = posterCardStyle,
