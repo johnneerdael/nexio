@@ -5,6 +5,7 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TrailerDisplayState
+import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -96,14 +97,13 @@ class ResolvedDisplaySurfaceRepository(
         var published = false
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
+            val existingList = currentSurface[profileSession.profileId].orEmpty()
             val nextItems = if (replace) {
-                items
+                applyNonDowngradeMergeForReplace(existingList, items)
             } else {
-                val existing = currentSurface[profileSession.profileId].orEmpty()
-                mergeIncrementalItems(existing, items)
+                mergeIncrementalItems(existingList, items)
             }.distinctBy { item -> item.itemKey }
-            val existing = currentSurface[profileSession.profileId].orEmpty()
-            if (shouldSuppressSurfaceUpdate(surfaceKey, existing, nextItems)) {
+            if (shouldSuppressSurfaceUpdate(surfaceKey, existingList, nextItems)) {
                 current
             } else {
                 published = true
@@ -187,7 +187,9 @@ private fun mergeIncrementalItems(
     val incomingKeys = HashSet<String>(incoming.size)
     for (i in incoming.indices) {
         val item = incoming[i]
-        mergedIncoming += item.withPreservedTrailerState(existingByKey[item.itemKey])
+        val existingForKey = existingByKey[item.itemKey]
+        val rankProtected = applyNonDowngradeMerge(item, existingForKey)
+        mergedIncoming += rankProtected.withPreservedTrailerState(existingForKey)
         incomingKeys += item.itemKey
     }
     val out = ArrayList<ResolvedDisplayItem>(existing.size + mergedIncoming.size)
@@ -259,3 +261,97 @@ private fun ResolvedDisplayItem.screensaverStablePayload(): ResolvedDisplayItem 
         trailer = trailer.copy(lastResolvedAtMs = null),
         updatedAtMs = 0L
     )
+
+/**
+ * Non-downgrade per-itemKey merge — the load-bearing rule #1 enforcement point.
+ *
+ * For each [incoming] item that has a counterpart [existing] (matched by itemKey
+ * upstream), runs HomeRailProjectionReducer over (firstPaint=incoming.slots,
+ * existing=existing.slots) and rebuilds the incoming item with the rank-winning
+ * slots — preserving non-slot fields (trailer, hydrationState, etc.) from the
+ * incoming side, since the producer's view of those is more current than the
+ * repository's prior emission.
+ *
+ * Reference-stability: when the reducer's output equals the existing item's
+ * slots field-for-field AND incoming's slot-derived flat fields match existing,
+ * returns the existing instance so downstream `===` short-circuits hold.
+ *
+ * Slot-aware merge is skipped (incoming returned as-is) when either side has
+ * `slots == null` — that signals a legacy code path that hasn't migrated to
+ * the typed slot model. Once Phase 4 retires the legacy paths, this fallback
+ * becomes dead code and can be removed.
+ */
+private fun applyNonDowngradeMerge(
+    incoming: ResolvedDisplayItem,
+    existing: ResolvedDisplayItem?
+): ResolvedDisplayItem {
+    if (existing == null) return incoming
+    val incomingSlots = incoming.slots ?: return incoming
+    val existingSlots = existing.slots ?: return incoming
+
+    val mergedSlots = HomeRailProjectionReducer.reduce(
+        firstPaint = incomingSlots,
+        overlay = null,
+        existing = existingSlots,
+        profile = null
+    )
+
+    if (mergedSlots == existingSlots && incoming.slotDerivedFieldsMatch(existing)) {
+        return existing
+    }
+
+    val mergedArtwork = mergedSlots.toArtworkBundle()
+    val mergedDisplay = mergedSlots.toResolvedDisplayFields(
+        fallbackTitle = incoming.display.title.orEmpty(),
+        fallbackTomatoesRating = incoming.display.tomatoesRating ?: existing.display.tomatoesRating
+    )
+    val mergedRating = mergedSlots.toRating() ?: incoming.rating
+
+    return incoming.copy(
+        slots = mergedSlots,
+        artwork = mergedArtwork,
+        display = mergedDisplay,
+        rating = mergedRating
+    )
+}
+
+private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayItem): Boolean =
+    artwork == other.artwork && display == other.display && rating == other.rating
+
+/**
+ * Wholesale-replace path: the surface becomes exactly [incoming], but per-item
+ * slots that appear on both sides are rank-merged via [applyNonDowngradeMerge]
+ * so [incoming]'s FIRST_PAINT cannot overwrite a previously-published RESOLVED
+ * slot. Items in [existing] whose itemKey is NOT in [incoming] are dropped —
+ * that's still wholesale set replacement; only per-item slot data is rank-
+ * protected.
+ *
+ * Allocation-tuned: when [incoming] is element-wise reference-equal to
+ * [existing], returns [existing] unchanged.
+ */
+private fun applyNonDowngradeMergeForReplace(
+    existing: List<ResolvedDisplayItem>,
+    incoming: List<ResolvedDisplayItem>
+): List<ResolvedDisplayItem> {
+    if (existing.isEmpty()) return incoming
+    if (existing.size == incoming.size) {
+        var sameInPlace = true
+        for (i in existing.indices) {
+            if (existing[i] !== incoming[i]) { sameInPlace = false; break }
+        }
+        if (sameInPlace) return existing
+    }
+    val existingByKey = HashMap<String, ResolvedDisplayItem>(existing.size)
+    for (i in existing.indices) {
+        val item = existing[i]
+        existingByKey[item.itemKey] = item
+    }
+    val out = ArrayList<ResolvedDisplayItem>(incoming.size)
+    for (i in incoming.indices) {
+        val item = incoming[i]
+        val existingForKey = existingByKey[item.itemKey]
+        val rankProtected = applyNonDowngradeMerge(item, existingForKey)
+        out += rankProtected.withPreservedTrailerState(existingForKey)
+    }
+    return out
+}
