@@ -53,13 +53,14 @@ internal fun pickTrailerCaptionTrack(
         )
     }
 
-    // No native match for the user's preferred language. Fall back to a
-    // source-language track WITHOUT requesting YouTube's `&tlang=` server-side
-    // translation — that endpoint is aggressively rate-limited (429 even for
-    // single requests in steady state, confirmed 2026-05-11). Returning the
-    // source track unmodified keeps SubripParser fed with reliable captions;
-    // future AI translation can read the cached SRT and write a sibling file
-    // for the target language.
+    // No native match. Pick a source-language track (English preferred) and
+    // request AI translation downstream via translateTo. The cache layer
+    // decides whether to actually run translation: if AI translation isn't
+    // configured, translateTo is ignored and the source-language SRT is
+    // served as-is. This is the contract change in
+    // docs/superpowers/specs/2026-05-11-trailer-ai-translation-and-fullscreen-ux-design.md
+    // (Task A1) — translateTo no longer drives YouTube's `&tlang=` (banned
+    // since 6c73f702d due to WAF rate limits); it drives in-app translation.
     val sourceTrack = ordered.firstOrNull {
         it.languageCode.lowercase().startsWith("en") && (it.kind ?: "").lowercase() != "asr"
     }
@@ -71,7 +72,7 @@ internal fun pickTrailerCaptionTrack(
     return SelectedTrailerCaptionTrack(
         baseUrl = sourceTrack.baseUrl,
         languageCode = sourceTrack.languageCode,
-        translateTo = null
+        translateTo = normalized
     )
 }
 

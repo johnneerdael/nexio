@@ -50,8 +50,10 @@ class TrailerSubtitlePickerTest {
     fun `translates from english when target language is missing`() {
         val picked = pickTrailerCaptionTrack(listOf(englishManual), "nl")
         assertEquals(englishManual.baseUrl, picked?.baseUrl)
+        // translateTo signals the preferred language to the AI translation layer;
+        // languageCode stays as the source-track language (English in this case)
         assertEquals("nl", picked?.translateTo)
-        assertEquals("nl", picked?.languageCode)
+        assertEquals("en", picked?.languageCode)
     }
 
     @Test
