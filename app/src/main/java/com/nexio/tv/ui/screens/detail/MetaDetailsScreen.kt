@@ -2065,7 +2065,7 @@ private fun MetaDetailsContent(
                                     },
                                     onItemClick = { item ->
                                         markMoreLikeThisRestore(item.contentId)
-                                        onNavigateToDetail(item.contentId, item.source.apiType, null)
+                                        onNavigateToDetail(item.contentId, item.apiType, null)
                                     }
                                 )
                             }
@@ -2096,7 +2096,7 @@ private fun MetaDetailsContent(
                                     },
                                     onItemClick = { item ->
                                         markCollectionRestore(item.contentId)
-                                        onNavigateToDetail(item.contentId, item.source.apiType, null)
+                                        onNavigateToDetail(item.contentId, item.apiType, null)
                                     }
                                 )
                             }
