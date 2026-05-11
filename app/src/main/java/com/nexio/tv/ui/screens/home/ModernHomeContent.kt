@@ -1194,6 +1194,7 @@ internal fun ModernHomeContent(
             trailerMuted = resolveModernHomeHeroTrailerMuted(
                 fullscreenTrailerActive = fullscreenTrailerActive
             ),
+            fullscreenTrailerActive = fullscreenTrailerActive,
             onTrailerEnded = {
                 val (endedState, focusRestore) = handleModernHomeTrailerEnded(
                     focusedTrailerFocusKey = focusedTrailerSelection?.focusKey,
@@ -1533,6 +1534,7 @@ private fun ModernHeroSection(
     showFullscreenHint: Boolean,
     fullscreenHintText: String,
     trailerMuted: Boolean,
+    fullscreenTrailerActive: Boolean,
     onTrailerEnded: () -> Unit,
     onTrailerFirstFrameRendered: () -> Unit,
     preview: HeroPreview?,
@@ -1573,6 +1575,7 @@ private fun ModernHeroSection(
     )
     ModernHeroGradientLayer(
         bgColor = bgColor,
+        fullscreenTrailerActive = fullscreenTrailerActive,
         modifier = mediaModifier
     )
     if (showTextOverlay) {
