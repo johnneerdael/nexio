@@ -7,7 +7,7 @@ const val YOUTUBE_STABLE_ACCEPT_LANGUAGE: String = "en-US,en;q=0.9"
 const val YOUTUBE_STABLE_ORIGIN: String = "https://www.youtube.com"
 const val YOUTUBE_STABLE_REFERER: String = "https://www.youtube.com/"
 
-enum class YouTubeRequestProfile { WEB, IOS, ANDROID }
+enum class YouTubeWireProfile { WEB, IOS, ANDROID }
 
 /**
  * Build HTTP request headers matching the wire fingerprint YouTube expects for
@@ -17,20 +17,20 @@ enum class YouTubeRequestProfile { WEB, IOS, ANDROID }
  * `googlevideo.com` segment fetch can yield 403. iOS/Android profiles also
  * include `X-Goog-Api-Format-Version: 2`, which the native apps always send.
  */
-fun buildYouTubeRequestHeaders(
-    profile: YouTubeRequestProfile,
+fun buildYouTubeWireProperties(
+    profile: YouTubeWireProfile,
     userAgent: String? = null,
     cookieHeader: String? = null
 ): Map<String, String> = buildMap {
     when (profile) {
-        YouTubeRequestProfile.WEB -> {
+        YouTubeWireProfile.WEB -> {
             put("accept-language", YOUTUBE_STABLE_ACCEPT_LANGUAGE)
             put("user-agent", userAgent?.takeIf { it.isNotBlank() } ?: YOUTUBE_STABLE_WEB_USER_AGENT)
             put("origin", YOUTUBE_STABLE_ORIGIN)
             put("referer", YOUTUBE_STABLE_REFERER)
         }
-        YouTubeRequestProfile.IOS,
-        YouTubeRequestProfile.ANDROID -> {
+        YouTubeWireProfile.IOS,
+        YouTubeWireProfile.ANDROID -> {
             val ua = userAgent?.takeIf { it.isNotBlank() }
                 ?: error("userAgent required for $profile profile")
             put("user-agent", ua)
@@ -49,7 +49,7 @@ fun buildYouTubeRequestHeaders(
  */
 fun buildStableYouTubeRequestHeaders(
     cookieHeader: String? = null
-): Map<String, String> = buildYouTubeRequestHeaders(
-    profile = YouTubeRequestProfile.WEB,
+): Map<String, String> = buildYouTubeWireProperties(
+    profile = YouTubeWireProfile.WEB,
     cookieHeader = cookieHeader
 )

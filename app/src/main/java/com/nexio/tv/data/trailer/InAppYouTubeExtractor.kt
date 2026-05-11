@@ -481,28 +481,53 @@ class InAppYouTubeExtractor @Inject constructor(
         visitorData: String?,
         cookieHeader: String?
     ): Map<*, *> {
-        val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
-
-        val headers = buildMap {
-            putAll(DEFAULT_YOUTUBE_FIELDS)
-            put("content-type", "application/json")
-            put("origin", YOUTUBE_STABLE_ORIGIN)
-            put("x-youtube-client-name", client.id)
-            put("x-youtube-client-version", client.version)
-            put("user-agent", client.userAgent)
-            if (!visitorData.isNullOrBlank()) put("x-goog-visitor-id", visitorData)
-            if (!cookieHeader.isNullOrBlank()) put("cookie", cookieHeader)
+        val isMobileClient = client.key == "ios" || client.key == "android"
+        val endpoint = if (isMobileClient) {
+            // Mobile profile: NewPipeExtractor's `youtubei.googleapis.com`
+            // endpoint with prettyPrint=false&t=<random>&id=<videoId>.
+            // YouTube has been observed to return HLS manifests with
+            // restricted signing for iOS-shaped requests against the web
+            // endpoint; aligning with the native iOS app's fingerprint
+            // (gapis host + X-Goog-Api-Format-Version: 2 + cpn) yields
+            // unrestricted manifests.
+            "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false" +
+                "&t=${generateContentPlaybackNonce().take(12)}" +
+                "&id=${Uri.encode(videoId)}"
+        } else {
+            "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
         }
 
-        val payload = mapOf(
-            "videoId" to videoId,
-            "contentCheckOk" to true,
-            "racyCheckOk" to true,
-            "context" to mapOf("client" to client.context),
-            "playbackContext" to mapOf(
-                "contentPlaybackContext" to mapOf("html5Preference" to "HTML5_PREF_WANTS")
+        val requestProfile = when (client.key) {
+            "ios" -> YouTubeWireProfile.IOS
+            "android" -> YouTubeWireProfile.ANDROID
+            else -> YouTubeWireProfile.WEB
+        }
+        val headers = buildMap {
+            putAll(
+                buildYouTubeWireProperties(
+                    profile = requestProfile,
+                    userAgent = client.userAgent,
+                    cookieHeader = cookieHeader
+                )
             )
-        )
+            put("content-type", "application/json")
+            put("x-youtube-client-name", client.id)
+            put("x-youtube-client-version", client.version)
+            if (!visitorData.isNullOrBlank()) put("x-goog-visitor-id", visitorData)
+        }
+
+        val cpn = generateContentPlaybackNonce()
+        val payload = buildMap<String, Any> {
+            put("videoId", videoId)
+            put("cpn", cpn)
+            put("contentCheckOk", true)
+            put("racyCheckOk", true)
+            put("context", mapOf("client" to client.context))
+            put(
+                "playbackContext",
+                mapOf("contentPlaybackContext" to mapOf("html5Preference" to "HTML5_PREF_WANTS"))
+            )
+        }
 
         val response = fetchTransport(
             url = endpoint,

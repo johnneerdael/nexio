@@ -83,8 +83,8 @@ class TrailerSupportTest {
 
     @Test
     fun `iOS profile headers omit web origin and referer`() {
-        val headers = buildYouTubeRequestHeaders(
-            profile = YouTubeRequestProfile.IOS,
+        val headers = buildYouTubeWireProperties(
+            profile = YouTubeWireProfile.IOS,
             userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)"
         )
         assertEquals(false, headers.containsKey("origin"))
@@ -99,8 +99,8 @@ class TrailerSupportTest {
 
     @Test
     fun `Android profile headers omit web origin and referer`() {
-        val headers = buildYouTubeRequestHeaders(
-            profile = YouTubeRequestProfile.ANDROID,
+        val headers = buildYouTubeWireProperties(
+            profile = YouTubeWireProfile.ANDROID,
             userAgent = "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip"
         )
         assertEquals(false, headers.containsKey("origin"))
@@ -110,7 +110,7 @@ class TrailerSupportTest {
 
     @Test
     fun `Web profile headers preserve existing web fingerprint`() {
-        val headers = buildYouTubeRequestHeaders(profile = YouTubeRequestProfile.WEB)
+        val headers = buildYouTubeWireProperties(profile = YouTubeWireProfile.WEB)
         assertEquals("https://www.youtube.com", headers["origin"])
         assertEquals("https://www.youtube.com/", headers["referer"])
         assertEquals("en-US,en;q=0.9", headers["accept-language"])
@@ -119,8 +119,8 @@ class TrailerSupportTest {
 
     @Test
     fun `Profile headers include cookie when provided`() {
-        val headers = buildYouTubeRequestHeaders(
-            profile = YouTubeRequestProfile.IOS,
+        val headers = buildYouTubeWireProperties(
+            profile = YouTubeWireProfile.IOS,
             userAgent = "ios-ua",
             cookieHeader = "SID=abc; HSID=def"
         )
