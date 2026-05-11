@@ -1,6 +1,7 @@
 package com.nexio.tv.domain.model
 
 import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.DEFAULTS_TABLE_VERSION
 import com.nexio.tv.core.integration.IntegrationProvider
 
 enum class ArtworkTypeKey {
@@ -87,6 +88,13 @@ data class ArtworkProviderSettings(
     val topPostersCanProvideThumbnails: Boolean
         get() = hasTopPostersKey && topPostersEntitlement?.allowsEpisodeThumbnails == true
 }
+
+fun ArtworkProviderSettings.toSettingsSignature(): String =
+    "p=${selection.posterProvider.value};" +
+    "l=${selection.logoProvider.value};" +
+    "b=${selection.backdropProvider.value};" +
+    "t=${selection.thumbnailProvider.value};" +
+    "v=$DEFAULTS_TABLE_VERSION"
 
 fun ArtworkProviderChoiceKey.toRuntimeProviderId(): ArtworkProviderId =
     when (this) {
