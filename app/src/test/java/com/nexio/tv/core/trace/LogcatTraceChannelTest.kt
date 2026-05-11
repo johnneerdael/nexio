@@ -145,6 +145,25 @@ class LogcatTraceChannelTest {
     }
 
     @Test
+    fun `overlay lifecycle events map to META_ROUTE`() {
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("overlay.stale_marked"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("overlay.rehydration_triggered"))
+    }
+
+    @Test
+    fun `surface merge events map to META_ROUTE`() {
+        assertEquals(
+            LogcatTraceChannel.META_ROUTE,
+            LogcatTraceChannel.forEventType("surface.merge.tie_break_rejected_regression")
+        )
+    }
+
+    @Test
+    fun `artwork resolver decision maps to INT_RUNTIME`() {
+        assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("artwork.resolver.decision"))
+    }
+
+    @Test
     fun `unknown event types map to null`() {
         assertNull(LogcatTraceChannel.forEventType("something.unknown"))
     }

@@ -477,6 +477,33 @@ class LogcatRuntimeTraceSink(
             "provider" to payload["provider"],
             "byteCount" to payload["byteCount"]
         )
+        "artwork.resolver.decision" -> linkedMapOf(
+            "itemKeyHash" to payload["itemKeyHash"],
+            "artworkType" to payload["artworkType"],
+            "contentType" to payload["contentType"],
+            "isAnime" to payload["isAnime"],
+            "explicit" to payload["explicit"],
+            "fellThroughTo" to payload["fellThroughTo"],
+            "chosenProvider" to payload["chosenProvider"],
+            "capabilitySupported" to payload["capabilitySupported"]
+        )
+        "overlay.stale_marked" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "reason" to payload["reason"],
+            "oldState" to payload["oldState"]
+        )
+        "overlay.rehydration_triggered" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "source" to payload["source"],
+            "priorState" to payload["priorState"]
+        )
+        "surface.merge.tie_break_rejected_regression" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "slotType" to payload["slotType"],
+            "existingProvider" to payload["existingProvider"],
+            "incomingProvider" to payload["incomingProvider"],
+            "preferredProvider" to payload["preferredProvider"]
+        )
         else -> emptyMap()
     }
 
