@@ -144,6 +144,39 @@ class TrailerSubtitlePickerTest {
     }
 
     @Test
+    fun `extract caption tracks distinguishes Android and iOS payloads`() {
+        // Contract reminder for the extractor's per-client caption merge.
+        // The actual Android-first preference lives in
+        // extractPlaybackSourceInternal (captionsPerClient["android"]
+        // ?: captionsPerClient["ios"]). This test asserts the parser
+        // returns distinct sets when given distinct inputs.
+        val androidResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf("baseUrl" to "https://yt.example/a", "languageCode" to "en"),
+                        mapOf("baseUrl" to "https://yt.example/b", "languageCode" to "nl"),
+                        mapOf("baseUrl" to "https://yt.example/c", "languageCode" to "es")
+                    )
+                )
+            )
+        )
+        val iosResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf("baseUrl" to "https://yt.example/a", "languageCode" to "en")
+                    )
+                )
+            )
+        )
+        val androidTracks = extractYouTubeCaptionTracks(androidResponse)
+        val iosTracks = extractYouTubeCaptionTracks(iosResponse)
+        assertEquals(3, androidTracks.size)
+        assertEquals(1, iosTracks.size)
+    }
+
+    @Test
     fun `extract caption tracks reads baseUrl and translatable flag`() {
         val playerResponse = mapOf(
             "captions" to mapOf(
