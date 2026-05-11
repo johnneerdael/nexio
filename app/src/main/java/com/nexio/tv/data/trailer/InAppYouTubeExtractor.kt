@@ -499,21 +499,16 @@ class InAppYouTubeExtractor @Inject constructor(
         visitorData: String?,
         cookieHeader: String?
     ): Map<*, *> {
-        val isMobileClient = client.key == "ios" || client.key == "android"
-        val endpoint = if (isMobileClient) {
-            // Mobile profile: NewPipeExtractor's `youtubei.googleapis.com`
-            // endpoint with prettyPrint=false&t=<random>&id=<videoId>.
-            // YouTube has been observed to return HLS manifests with
-            // restricted signing for iOS-shaped requests against the web
-            // endpoint; aligning with the native iOS app's fingerprint
-            // (gapis host + X-Goog-Api-Format-Version: 2 + cpn) yields
-            // unrestricted manifests.
-            "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false" +
-                "&t=${generateContentPlaybackNonce().take(12)}" +
-                "&id=${Uri.encode(videoId)}"
-        } else {
-            "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
-        }
+        // Use the www.youtube.com player endpoint with the InnerTube
+        // API key for all clients. The youtubei.googleapis.com endpoint
+        // was attempted as an alignment with NewPipeExtractor but
+        // returned reduced streamingData (no HLS manifest URL for many
+        // videos, and outright empty responses for others) without a
+        // poToken — and we don't have a poToken implementation. The
+        // www.youtube.com endpoint accepts the iOS-shaped body shape
+        // and consistently returns full streamingData including the
+        // iOS HLS manifest URL.
+        val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
 
         val requestProfile = when (client.key) {
             "ios" -> YouTubeWireProfile.IOS
