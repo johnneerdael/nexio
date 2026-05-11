@@ -292,6 +292,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     lastCatalogOrderDiagnosticsSignature = null
     catalogInventoryRepository.clear()
     _displayCatalogRows.value = emptyList()
+    _metaByItemKey.value = emptyMap()
     _heroItemKeys.value = emptyList()
     _displayContinueWatchingItems.value = emptyList()
     _uiState.update { state ->
@@ -768,6 +769,11 @@ internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
         _displayCatalogRows.update { current ->
             applyEnrichedItemsToRows(current, enrichedByItemKey)
         }
+        // Plan B Task 5e-pre — re-publish the surface-level MetaPreview lookup
+        // so the presentation pipeline sees the resolver-enriched items
+        // (otherwise the metaByItemKey signal would be stale relative to
+        // _displayCatalogRows for one emission cycle).
+        publishMetaByItemKeyFromRows(_displayCatalogRows.value)
     }
 }
 
@@ -3231,6 +3237,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     )
     catalogInventoryRepository.publish(composedSnapshot.fullRows)
     _displayCatalogRows.value = composedSnapshot.displayRows
+    publishMetaByItemKeyFromRows(composedSnapshot.displayRows)
     publishHeroItemKeysFromMetas(composedSnapshot.heroItems)
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {

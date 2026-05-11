@@ -136,6 +136,15 @@ internal data class ModernHomePresentationInput(
     val catalogRows: List<CatalogRow>,
     val resolvedRailRows: List<ResolvedRailRow>,
     val continueWatchingItems: List<ContinueWatchingResolvedDisplayItem>,
+    /**
+     * Surface-level MetaPreview lookup keyed by
+     * [com.nexio.tv.domain.model.homeDisplayItemKey] (`"${apiType}_${id}"`).
+     * Built once by the producer at the same site that publishes
+     * [HomeViewModel._displayCatalogRows] (Plan B Task 5e-pre, 2026-05-11) and
+     * fed into [buildModernHomePresentation] instead of walking
+     * `sourceRow.items` inside the build to construct it per emission.
+     */
+    val metaByItemKey: Map<String, MetaPreview>,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
     val continueWatchingTitle: String,

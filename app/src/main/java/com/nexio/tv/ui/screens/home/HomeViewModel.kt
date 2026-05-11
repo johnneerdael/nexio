@@ -279,6 +279,26 @@ class HomeViewModel @Inject constructor(
     internal val heroItemsNonEmpty: StateFlow<Boolean> = _heroItemKeys
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Surface-level MetaPreview lookup keyed by
+     * [com.nexio.tv.domain.model.homeDisplayItemKey] (`"${apiType}_${id}"`).
+     * Driven by the catalog producer pipeline at the same site that publishes
+     * [_displayCatalogRows]; consumed by [observeModernHomePresentationPipeline]
+     * (and any future surface that needs the surface-level meta lookup) instead
+     * of walking [_displayCatalogRows].items inside the build function.
+     *
+     * Plan B Task 5e-pre (2026-05-11). Mirrors Task 5d's [_heroItemKeys]
+     * pattern: producer writes via [publishMetaByItemKeyFromRows] which
+     * memoizes by signature so a content-equal emission preserves the existing
+     * map reference, keeping downstream `===` short-circuits live
+     * (CLAUDE.md hard rule #5). This severs the LAST MetaPreview-content
+     * coupling between [_displayCatalogRows] and the home presentation
+     * pipelines, unblocking Task 5e (`_displayCatalogRows` retirement /
+     * structural reshape).
+     */
+    internal val _metaByItemKey = MutableStateFlow<Map<String, MetaPreview>>(emptyMap())
+    internal val metaByItemKey: StateFlow<Map<String, MetaPreview>> = _metaByItemKey.asStateFlow()
     // Continue watching items held outside [HomeUiState] (mirrors small Task 26 catalogRows
     // pattern + cb59c1a5e heroItems pattern) so Compose's SnapshotStateRecord history does not
     // pin prior `ContinueWatchingItem` lists alongside the current set. UI consumes this
@@ -796,6 +816,61 @@ class HomeViewModel @Inject constructor(
             out += RailItemKey(apiType = meta.apiType, contentId = meta.id)
         }
         _heroItemKeys.value = out
+    }
+
+    /**
+     * Producer-side writer for [_metaByItemKey]. Walks every visible row once
+     * to materialise the surface-level lookup, then memoises against the prior
+     * emission: when the new map has the same size, the same keys, and every
+     * value is `===` to the prior entry, the existing map reference is
+     * preserved so downstream `===` short-circuits in
+     * [observeModernHomePresentationPipeline] (and the build-cache reuse paths
+     * inside [buildModernHomePresentation]) keep working
+     * (CLAUDE.md hard rule #5).
+     *
+     * Plan B Task 5e-pre (2026-05-11). Replaces the per-build pass in
+     * `buildModernHomePresentation` that walked `sourceRow.items` to build the
+     * map every time the presentation re-built — the map is now built once at
+     * the producer, then handed to the presentation pipeline as input.
+     */
+    internal fun publishMetaByItemKeyFromRows(rows: List<CatalogRow>) {
+        // Build the new map by walking rows.items. Indexed-for over both
+        // dimensions (CLAUDE.md rule #4 — this method is not a suspend fun, but
+        // the producer site calls it in a coroutine context, so iterator
+        // allocations would still pin the rows list across any subsequent
+        // suspension downstream).
+        var totalItems = 0
+        for (i in rows.indices) totalItems += rows[i].items.size
+        if (totalItems == 0) {
+            if (_metaByItemKey.value.isNotEmpty()) {
+                _metaByItemKey.value = emptyMap()
+            }
+            return
+        }
+        val current = _metaByItemKey.value
+        val next = HashMap<String, MetaPreview>(totalItems)
+        for (i in rows.indices) {
+            val row = rows[i]
+            val items = row.items
+            for (j in items.indices) {
+                val meta = items[j]
+                next[homeDisplayItemKey(meta.apiType, meta.id)] = meta
+            }
+        }
+        // Reference-stability check: same size + every entry `===` to the
+        // existing map's value at the same key → keep the existing reference.
+        if (current.size == next.size) {
+            var same = true
+            for ((k, v) in next) {
+                val existing = current[k]
+                if (existing !== v) {
+                    same = false
+                    break
+                }
+            }
+            if (same) return
+        }
+        _metaByItemKey.value = next
     }
 
     // Plan B Surface 4 Phase 2 — collects [resolvedContinueWatchingItemsFlow]
