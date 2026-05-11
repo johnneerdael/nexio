@@ -83,6 +83,7 @@ private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
 private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
 internal const val AUTOPLAY_RESOLVE_BUDGET_MS = 4_000L
 private const val MAX_FALLBACK_CANDIDATES = 5
+private const val MAX_EXTENDED_FALLBACK_CANDIDATES = 10
 private const val DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER = "1winstudio"
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
@@ -1300,12 +1301,41 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
+    private fun toAutoPlayAlternative(candidate: StreamCardModel): AutoPlayStreamAlternative {
+        return AutoPlayStreamAlternative(
+            streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey,
+            url = candidate.stream.getStreamUrl(),
+            streamName = (candidate.stream.name ?: "").ifEmpty {
+                candidate.stream.addonName
+            },
+            headers = candidate.stream.behaviorHints?.proxyHeaders?.request,
+            filename = candidate.stream.behaviorHints?.filename,
+            videoHash = candidate.stream.behaviorHints?.videoHash,
+            videoSize = candidate.stream.behaviorHints?.videoSize,
+            isWebDl = candidate.parsed.quality.equals("WEB-DL", ignoreCase = true),
+            isDolbyVisionCandidate = candidate.parsed.visualTags.any { tag ->
+                val normalized = tag.lowercase()
+                normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+            },
+            addonBaseUrl = candidate.stream.addonBaseUrl ?: sourceAddonBaseUrl
+        )
+    }
+
     private fun buildStreamPlaybackInfo(
         item: StreamCardModel,
         fallbackCandidates: List<StreamCardModel> = emptyList()
     ): StreamPlaybackInfo {
         val stream = item.stream
         val selectedKey = stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey
+        val primaryFallbackCards = selectAutoplayFallbackCandidates(
+            selectedKey = selectedKey,
+            fallbackCandidates = fallbackCandidates
+        )
+        val extendedFallbackCards = selectExtendedAutoplayFallbackCandidates(
+            selectedKey = selectedKey,
+            fallbackCandidates = fallbackCandidates,
+            primaryCandidates = primaryFallbackCards
+        )
         val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
@@ -1347,29 +1377,8 @@ class StreamScreenViewModel @Inject constructor(
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
             },
             addonBaseUrl = stream.addonBaseUrl ?: sourceAddonBaseUrl,
-            autoPlayFallbackCandidates = selectAutoplayFallbackCandidates(
-                selectedKey = selectedKey,
-                fallbackCandidates = fallbackCandidates
-            )
-                .map { candidate ->
-                    AutoPlayStreamAlternative(
-                        streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey,
-                        url = candidate.stream.getStreamUrl(),
-                        streamName = (candidate.stream.name ?: "").ifEmpty {
-                            candidate.stream.addonName
-                        },
-                        headers = candidate.stream.behaviorHints?.proxyHeaders?.request,
-                        filename = candidate.stream.behaviorHints?.filename,
-                        videoHash = candidate.stream.behaviorHints?.videoHash,
-                        videoSize = candidate.stream.behaviorHints?.videoSize,
-                        isWebDl = candidate.parsed.quality.equals("WEB-DL", ignoreCase = true),
-                        isDolbyVisionCandidate = candidate.parsed.visualTags.any { tag ->
-                            val normalized = tag.lowercase()
-                            normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
-                        },
-                        addonBaseUrl = candidate.stream.addonBaseUrl ?: sourceAddonBaseUrl
-                    )
-                }
+            autoPlayFallbackCandidates = primaryFallbackCards.map { toAutoPlayAlternative(it) },
+            extendedAutoPlayFallbackCandidates = extendedFallbackCards.map { toAutoPlayAlternative(it) }
         )
 
         val url = playbackInfo.url
@@ -1535,6 +1544,20 @@ internal fun selectAutoplayFallbackCandidatesForTesting(
     )
 }
 
+internal fun selectExtendedAutoplayFallbackCandidatesForTesting(
+    selectedKey: String?,
+    fallbackCandidates: List<StreamCardModel>,
+    primaryCandidates: List<StreamCardModel>,
+    maxExtendedCandidates: Int = MAX_EXTENDED_FALLBACK_CANDIDATES
+): List<StreamCardModel> {
+    return selectExtendedAutoplayFallbackCandidates(
+        selectedKey = selectedKey,
+        fallbackCandidates = fallbackCandidates,
+        primaryCandidates = primaryCandidates,
+        maxExtendedCandidates = maxExtendedCandidates
+    )
+}
+
 private fun selectAutoplayFallbackCandidates(
     selectedKey: String?,
     fallbackCandidates: List<StreamCardModel>,
@@ -1548,6 +1571,32 @@ private fun selectAutoplayFallbackCandidates(
     return (candidates.take(maxFallbackCandidates) + nonDv.take(1)).distinctBy {
         it.stream.wrappedOriginalStreamKey ?: it.parsed.exactDuplicateKey
     }
+}
+
+/**
+ * Second-tier fallback pool. When the primary 5+1 set is exhausted without a viable
+ * stream, [DolbyVisionAutoPlayGate.findViableFallback] iterates this pool next,
+ * giving us up to 15 total candidates before surfacing NO_FALLBACK_AVAILABLE.
+ * Bounded at 10 to cap worst-case latency and avoid pathological iteration.
+ */
+private fun selectExtendedAutoplayFallbackCandidates(
+    selectedKey: String?,
+    fallbackCandidates: List<StreamCardModel>,
+    primaryCandidates: List<StreamCardModel>,
+    maxExtendedCandidates: Int = MAX_EXTENDED_FALLBACK_CANDIDATES
+): List<StreamCardModel> {
+    val primaryKeys = primaryCandidates.mapTo(HashSet()) {
+        it.stream.wrappedOriginalStreamKey ?: it.parsed.exactDuplicateKey
+    }
+    return fallbackCandidates
+        .asSequence()
+        .filter { candidate ->
+            val key = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
+            key != selectedKey && key !in primaryKeys
+        }
+        .distinctBy { it.stream.wrappedOriginalStreamKey ?: it.parsed.exactDuplicateKey }
+        .take(maxExtendedCandidates)
+        .toList()
 }
 
 private fun StreamCardModel.isDolbyVisionCandidateForAutoplay(): Boolean {
@@ -2147,7 +2196,14 @@ data class StreamPlaybackInfo(
     val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false,
     val addonBaseUrl: String? = null,
-    val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()
+    val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList(),
+    /**
+     * Second-tier fallback pool consumed by [DolbyVisionAutoPlayGate.findViableFallback]
+     * only after the primary [autoPlayFallbackCandidates] are exhausted. Not prewarmed
+     * by [CometProxyUrlResolver.prewarm] — that cost is paid lazily when the gate
+     * actually probes one of these entries.
+     */
+    val extendedAutoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()
 ) {
     val displayPoster: String?
         get() = poster

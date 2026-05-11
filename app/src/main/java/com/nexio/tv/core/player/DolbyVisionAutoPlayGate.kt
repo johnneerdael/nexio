@@ -270,7 +270,9 @@ class DolbyVisionAutoPlayGate(
         reason: DolbyVisionAutoPlayDecisionReason,
         probeResult: DolbyVisionProfileProbeResult
     ): DolbyVisionAutoPlayGateResult {
-        val candidates = playbackInfo.autoPlayFallbackCandidates
+        val primaryCandidates = playbackInfo.autoPlayFallbackCandidates
+        val extendedCandidates = playbackInfo.extendedAutoPlayFallbackCandidates
+        val candidates = primaryCandidates + extendedCandidates
         if (candidates.isEmpty()) {
             return finalizeResult(
                 playbackInfo = playbackInfo,
@@ -291,10 +293,17 @@ class DolbyVisionAutoPlayGate(
 
         logEvent(
             event = "FALLBACK_SEARCH_STARTED",
-            details = "candidateCount=${candidates.size} reason=$reason skipDvProbes=$skipDvCandidateProbes"
+            details = "primaryCount=${primaryCandidates.size} extendedCount=${extendedCandidates.size} reason=$reason skipDvProbes=$skipDvCandidateProbes"
         )
 
         for ((index, candidate) in candidates.withIndex()) {
+            if (index == primaryCandidates.size && extendedCandidates.isNotEmpty()) {
+                // Primary tier exhausted with no viable stream — open the second-tier batch.
+                logEvent(
+                    event = "FALLBACK_EXTENDED_BATCH_STARTED",
+                    details = "primaryExhausted=${primaryCandidates.size} extendedCount=${extendedCandidates.size}"
+                )
+            }
             val candidateKey = candidate.streamKey ?: "unknown"
 
             if (!candidate.isDolbyVisionCandidate) {
