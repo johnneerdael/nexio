@@ -14,12 +14,12 @@ import androidx.compose.runtime.Stable
  * when content is unchanged, so Compose stability skipping and the consumer's
  * `===` guard short-circuit unchanged updates (CLAUDE.md rule #5).
  *
- * Unlike Classic, Grid renders from [HomeUiState.gridItems] (the layout shape
- * built upstream by [HomeViewModel.buildGridItems]) rather than the
+ * Unlike Classic, Grid renders from [HomeViewModel.displayGridItems] (the layout
+ * shape built upstream by `buildGridItemsFromRowsPipeline`) rather than the
  * `CatalogRow` list, so this state intentionally exposes only the resolved-item
  * lookup needed by [GridHomeContent] to overlay typed art onto each
- * [GridItem.Content] card. The legacy `_displayCatalogRows` flow remains alive
- * until Plan B Task 5e (now unblocked since Classic + Grid no longer consume it).
+ * [GridItem.Content] card. Grid items were migrated off [HomeUiState] in Plan B
+ * Task 5f to keep the hot list off the Compose state-record chain (rule #2).
  */
 @Immutable
 data class GridHomePresentationState(

@@ -57,7 +57,6 @@ data class HomeUiState(
     val posterListPickerPending: Boolean = false,
     val posterListPickerError: String? = null,
     val traktRecommendationRefs: Map<String, TraktRecommendationRef> = emptyMap(),
-    val gridItems: List<GridItem> = emptyList(),
     val deterministicAutoplayEnabled: Boolean = false
 )
 

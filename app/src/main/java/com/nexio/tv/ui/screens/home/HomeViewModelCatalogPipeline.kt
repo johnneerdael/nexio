@@ -67,7 +67,6 @@ private fun collectPersistedSyntheticOrderKeys(
 private data class CatalogUpdateResult(
     val displayRows: List<CatalogRow>,
     val heroItems: List<com.nexio.tv.domain.model.MetaPreview>,
-    val gridItems: List<GridItem>,
     val fullRows: List<CatalogRow>,
     val orderedGroupKeys: List<String>,
     val truncatedCache: Map<String, HomeViewModel.TruncatedRowCacheEntry>,
@@ -309,7 +308,6 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
             ),
             initialContinueWatchingResolved = false,
             traktRecommendationRefs = emptyMap(),
-            gridItems = emptyList(),
             isLoading = true,
             error = null
         )
@@ -2565,7 +2563,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val heroCatalogKeys = currentHeroCatalogKeys
     val currentState = _uiState.value
     val currentLayout = currentState.homeLayout
-    val currentGridItems = currentState.gridItems
     val heroSectionEnabled = currentState.heroSectionEnabled
     val traktSnapshot = if (activeProfileTraktAuthenticated) {
         traktDiscoverySnapshot
@@ -2971,20 +2968,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             }
         }
 
-        val computedGridItems = if (currentLayout == HomeLayout.GRID) {
-            buildGridItemsFromRowsPipeline(
-                rows = computedDisplayRows,
-                heroItems = computedHeroItems,
-                heroSectionEnabled = heroSectionEnabled
-            )
-        } else {
-            currentGridItems
-        }
-
         CatalogUpdateResult(
             displayRows = computedDisplayRows,
             heroItems = computedHeroItems,
-            gridItems = computedGridItems,
             fullRows = effectiveOrderedRows,
             orderedGroupKeys = effectiveOrderKeys,
             truncatedCache = nextTruncatedCache,
@@ -3259,25 +3245,22 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         profileSession = profileManager.activeProfileSession.value,
         items = resolvedItemsForSnapshotSurface
     )
-    _uiState.update { state ->
-        val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
-            buildGridItemsFromRowsPipeline(
-                rows = composedSnapshot.displayRows,
-                heroItems = composedSnapshot.heroItems,
-                heroSectionEnabled = state.heroSectionEnabled
-            )
-        } else {
-            _displayGridItems.value
-        }
-        // Plan B Task 5f.2 — dual-write: keep UiState.gridItems updated for
-        // legacy readers while routing the new StateFlow consumer. Task 5f.4
-        // drops the UiState field once GridHomeContent collects displayGridItems.
+    // Plan B Task 5f.4 — grid items are now sinked into [_displayGridItems]
+    // directly (off HomeUiState; CLAUDE.md rule #2). Compute outside the
+    // _uiState.update lambda to avoid redundant allocations on contention retries.
+    val currentStateForGrid = _uiState.value
+    if (currentStateForGrid.homeLayout == HomeLayout.GRID) {
+        val snapshotGridItems = buildGridItemsFromRowsPipeline(
+            rows = composedSnapshot.displayRows,
+            heroItems = composedSnapshot.heroItems,
+            heroSectionEnabled = currentStateForGrid.heroSectionEnabled
+        )
         if (snapshotGridItems !== _displayGridItems.value) {
             _displayGridItems.value = snapshotGridItems
         }
-
+    }
+    _uiState.update { state ->
         state.copy(
-            gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
             isLoading = false,
             error = null
         )
