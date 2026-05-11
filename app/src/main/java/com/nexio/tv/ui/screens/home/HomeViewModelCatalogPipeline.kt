@@ -3242,6 +3242,22 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     publishCatalogStructureFromRows(composedSnapshot.displayRows)
     publishMetaByItemKeyFromRows(composedSnapshot.displayRows)
     publishHeroItemKeysFromMetas(composedSnapshot.heroItems)
+    // Restore the typed resolved-display authority from the snapshot. Without this,
+    // cold-start snapshot restore would leave HOME_SURFACE_KEY empty until the next
+    // updateCatalogRowsPipeline emission, so RPDB premium artwork and other
+    // overlay-derived projections would only appear after the producer flips. By
+    // publishing here we make snapshot-restore the first-paint authority on cold
+    // start (Plan B Task 6c).
+    val resolvedItemsForSnapshotSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+        rows = composedSnapshot.displayRows,
+        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
+        resolveTrailer = null
+    )
+    resolvedDisplaySurfaceRepository.publishResolvedItems(
+        surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+        profileSession = profileManager.activeProfileSession.value,
+        items = resolvedItemsForSnapshotSurface
+    )
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(
