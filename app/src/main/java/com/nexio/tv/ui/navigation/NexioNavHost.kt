@@ -176,22 +176,7 @@ fun NexioNavHost(
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onPlayWithManualStreamSelection = { item ->
-                    navController.navigate(
-                        buildManualSelectionStreamRoute(
-                            videoId = item.id,
-                            contentType = item.apiType,
-                            title = item.name,
-                            poster = item.displayPoster,
-                            backdrop = item.displayBackground,
-                            logo = item.displayLogo,
-                            contentId = item.id,
-                            contentName = item.name,
-                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
-                            runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = chooseNavOriginalLanguage(item),
-                            returnToDetailOnBack = false
-                        )
-                    )
+                    navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 },
                 onContinueWatchingClick = { item ->
                     homeScope.launch {
@@ -985,22 +970,7 @@ fun NexioNavHost(
                     )
                 },
                 onPlayWithManualStreamSelection = { item, _ ->
-                    navController.navigate(
-                        buildManualSelectionStreamRoute(
-                            videoId = item.id,
-                            contentType = item.apiType,
-                            title = item.name,
-                            poster = item.displayPoster,
-                            backdrop = item.displayBackground,
-                            logo = item.displayLogo,
-                            contentId = item.id,
-                            contentName = item.name,
-                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
-                            runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = chooseNavOriginalLanguage(item),
-                            returnToDetailOnBack = false
-                        )
-                    )
+                    navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 },
                 onNavigateToSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
@@ -1025,22 +995,7 @@ fun NexioNavHost(
                     )
                 },
                 onPlayWithManualStreamSelection = { item, _ ->
-                    navController.navigate(
-                        buildManualSelectionStreamRoute(
-                            videoId = item.id,
-                            contentType = item.apiType,
-                            title = item.name,
-                            poster = item.displayPoster,
-                            backdrop = item.displayBackground,
-                            logo = item.displayLogo,
-                            contentId = item.id,
-                            contentName = item.name,
-                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
-                            runtime = parseRuntimeMinutes(item.runtime),
-                            originalLanguage = chooseNavOriginalLanguage(item),
-                            returnToDetailOnBack = false
-                        )
-                    )
+                    navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 }
             )
         }
@@ -1313,6 +1268,29 @@ internal fun buildManualSelectionStreamRoute(
         resumeLastWatchedMs = resumeLastWatchedMs,
         resumeSource = resumeSource,
         addonBaseUrl = addonBaseUrl
+    )
+}
+
+internal fun buildManualSelectionStreamRouteForMetaPreview(
+    item: MetaPreview,
+    returnToDetailOnBack: Boolean = false
+): String {
+    val imdb = item.firstPaintStableIds.imdb?.takeIf { it.isNotBlank() }
+    return buildManualSelectionStreamRoute(
+        videoId = item.id,
+        streamVideoId = imdb,
+        contentType = item.apiType,
+        title = item.name,
+        poster = item.displayPoster,
+        backdrop = item.displayBackground,
+        logo = item.displayLogo,
+        contentId = item.id,
+        contentName = item.name,
+        genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+        runtime = parseRuntimeMinutes(item.runtime),
+        originalLanguage = chooseNavOriginalLanguage(item),
+        imdbId = imdb,
+        returnToDetailOnBack = returnToDetailOnBack
     )
 }
 
