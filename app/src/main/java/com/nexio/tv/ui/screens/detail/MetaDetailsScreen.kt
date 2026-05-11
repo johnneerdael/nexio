@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.detail
 import android.content.Intent
 import android.net.Uri
 import android.view.KeyEvent
+import com.nexio.tv.data.trailer.YouTubeCaptionTrack
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
@@ -759,6 +760,7 @@ fun MetaDetailsScreen(
                         trailerUrl = uiState.trailerUrl,
                         trailerAudioUrl = uiState.trailerAudioUrl,
                         trailerUserAgent = uiState.trailerUserAgent,
+                        trailerCaptions = uiState.trailerCaptions,
                         trailerExternalUrl = uiState.trailerExternalUrl,
                         isTrailerPlaying = uiState.isTrailerPlaying,
                         isTrailerLoading = uiState.isTrailerLoading,
@@ -1035,6 +1037,7 @@ private fun MetaDetailsContent(
     trailerUrl: String?,
     trailerAudioUrl: String?,
     trailerUserAgent: String?,
+    trailerCaptions: List<YouTubeCaptionTrack>,
     trailerExternalUrl: String?,
     isTrailerPlaying: Boolean,
     isTrailerLoading: Boolean,
@@ -2192,6 +2195,7 @@ private fun MetaDetailsContent(
                         trailerUrl = trailerUrl,
                         trailerAudioUrl = trailerAudioUrl,
                         trailerUserAgent = trailerUserAgent,
+                        trailerCaptions = trailerCaptions,
                         isPlaying = true,
                         onEnded = {
                             trailerFirstFrameRendered = false

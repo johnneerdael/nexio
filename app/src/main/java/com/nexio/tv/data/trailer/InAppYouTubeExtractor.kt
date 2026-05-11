@@ -241,6 +241,7 @@ class InAppYouTubeExtractor @Inject constructor(
         val adaptiveAudio = mutableListOf<StreamCandidate>()
         val manifestUrls = mutableListOf<Triple<String, Int, String>>()
         var resolvedTrailerTitle: String? = null
+        var resolvedCaptionTracks: List<YouTubeCaptionTrack> = emptyList()
 
         for (client in CLIENTS) {
             try {
@@ -254,6 +255,12 @@ class InAppYouTubeExtractor @Inject constructor(
 
                 if (resolvedTrailerTitle.isNullOrBlank()) {
                     resolvedTrailerTitle = extractYouTubeTrailerTitle(playerResponse)
+                }
+                if (resolvedCaptionTracks.isEmpty()) {
+                    val captions = extractYouTubeCaptionTracks(playerResponse)
+                    if (captions.isNotEmpty()) {
+                        resolvedCaptionTracks = captions
+                    }
                 }
                 extractDefaultYouTubeAudioLanguageCode(playerResponse)
                     ?.takeIf { code -> !isYouTubeTrailerLanguageAcceptable(code, originalLanguage) }
@@ -399,7 +406,7 @@ class InAppYouTubeExtractor @Inject constructor(
             adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
             adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
             userAgent = resolvedUserAgent
-        ) ?: return null
+        )?.copy(captions = resolvedCaptionTracks) ?: return null
 
         if (BuildConfig.DEBUG) {
             Log.d(
@@ -795,6 +802,28 @@ internal fun extractYouTubeTrailerTitle(playerResponse: Map<*, *>): String? {
         ?.stringValue("title")
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
+}
+
+internal fun extractYouTubeCaptionTracks(playerResponse: Map<*, *>): List<YouTubeCaptionTrack> {
+    val tracklist = playerResponse.mapValue("captions")
+        ?.mapValue("playerCaptionsTracklistRenderer")
+        ?: return emptyList()
+    val rawTracks = tracklist.listMapValue("captionTracks")
+    if (rawTracks.isEmpty()) return emptyList()
+    return rawTracks.mapNotNull { track ->
+        val baseUrl = track.stringValue("baseUrl")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val languageCode = track.stringValue("languageCode")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val kind = track.stringValue("kind")?.takeIf { it.isNotBlank() }
+        val name = track.mapValue("name")?.stringValue("simpleText")
+        val isTranslatable = (track["isTranslatable"] as? Boolean) ?: false
+        YouTubeCaptionTrack(
+            baseUrl = baseUrl,
+            languageCode = languageCode,
+            languageName = name,
+            kind = kind,
+            isTranslatable = isTranslatable
+        )
+    }
 }
 
 internal fun isEnglishYouTubeLanguageCode(languageCode: String?): Boolean {

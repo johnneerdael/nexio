@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.components
 
+import android.net.Uri
 import android.util.Log
 import android.view.LayoutInflater
 import com.nexio.tv.R
@@ -25,9 +26,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -38,8 +41,11 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
+import com.nexio.tv.data.trailer.YouTubeCaptionTrack
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import com.nexio.tv.data.trailer.buildStableYouTubeRequestHeaders
+import com.nexio.tv.data.trailer.buildTrailerSubtitleVttUrl
+import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -97,12 +103,28 @@ fun TrailerPlayer(
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
     trailerUserAgent: String? = null,
+    trailerCaptions: List<YouTubeCaptionTrack> = emptyList(),
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
 ) {
     val context = LocalContext.current
     val navLifecycleOwner = LocalLifecycleOwner.current
+    val playerSettingsDataStore = remember(context) { TrailerSubtitlePrefAccess.from(context) }
+    val playerSettingsSnapshot by playerSettingsDataStore.playerSettings
+        .collectAsStateWithLifecycle(initialValue = null)
+    val preferredSubtitleLanguage = playerSettingsSnapshot?.subtitleStyle?.preferredLanguage
+    val subtitleConfig = remember(trailerCaptions, preferredSubtitleLanguage) {
+        val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
+            ?: return@remember null
+        val vttUrl = buildTrailerSubtitleVttUrl(selected)
+        MediaItem.SubtitleConfiguration.Builder(Uri.parse(vttUrl))
+            .setMimeType(MimeTypes.TEXT_VTT)
+            .setLanguage(selected.languageCode)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+    }
+    val currentSubtitleConfig by rememberUpdatedState(subtitleConfig)
     val lifecycleOwner = remember(context, navLifecycleOwner) {
         context.findLifecycleOwner() ?: navLifecycleOwner
     }
@@ -198,28 +220,41 @@ fun TrailerPlayer(
         }
     }
 
+    fun buildVideoMediaItem(
+        videoUrl: String,
+        subtitleConfig: MediaItem.SubtitleConfiguration?
+    ): MediaItem {
+        val builder = MediaItem.Builder().setUri(videoUrl)
+        if (subtitleConfig != null) {
+            builder.setSubtitleConfigurations(listOf(subtitleConfig))
+        }
+        return builder.build()
+    }
+
     fun prepareTrailerMediaSource(
         player: ExoPlayer,
         videoUrl: String,
-        audioUrl: String?
+        audioUrl: String?,
+        subtitleConfig: MediaItem.SubtitleConfiguration?
     ) {
         val mediaSourceFactory = buildTrailerMediaSourceFactory(videoUrl, audioUrl)
+        val videoMediaItem = buildVideoMediaItem(videoUrl, subtitleConfig)
         if (!audioUrl.isNullOrBlank()) {
-            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl))
+            val videoSource = mediaSourceFactory.createMediaSource(videoMediaItem)
             val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))
             player.setMediaSource(MergingMediaSource(videoSource, audioSource))
         } else {
-            player.setMediaSource(mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl)))
+            player.setMediaSource(mediaSourceFactory.createMediaSource(videoMediaItem))
         }
     }
 
-    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted, lifecycleState) {
+    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted, lifecycleState, subtitleConfig) {
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
         if (shouldPrepareTrailerPlayback(lifecycleState, isPlaying, trailerUrl)) {
             FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
             hasRenderedFirstFrame = false
-            prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl)
+            prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl, subtitleConfig)
             player.prepare()
             player.playWhenReady = true
         } else {
@@ -236,6 +271,20 @@ fun TrailerPlayer(
         } else {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
+    }
+
+    LaunchedEffect(trailerPlayer, subtitleConfig) {
+        val player = trailerPlayer ?: return@LaunchedEffect
+        val builder = player.trackSelectionParameters.buildUpon()
+        if (subtitleConfig == null) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            builder.setPreferredTextLanguage(null)
+        } else {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            builder.setPreferredTextLanguage(subtitleConfig.language)
+            builder.setSelectUndeterminedTextLanguage(true)
+        }
+        player.trackSelectionParameters = builder.build()
     }
 
     LaunchedEffect(seekRequestToken, seekDeltaMs, trailerPlayer) {
@@ -295,7 +344,12 @@ fun TrailerPlayer(
                     ) {
                         FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
                         if (player.currentMediaItem == null) {
-                            prepareTrailerMediaSource(player, currentTrailerUrl!!, currentTrailerAudioUrl)
+                            prepareTrailerMediaSource(
+                                player,
+                                currentTrailerUrl!!,
+                                currentTrailerAudioUrl,
+                                currentSubtitleConfig
+                            )
                             player.prepare()
                         }
                         player.playWhenReady = true

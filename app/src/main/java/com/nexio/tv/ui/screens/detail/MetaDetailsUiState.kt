@@ -7,6 +7,7 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.MDBListRatings
+import com.nexio.tv.data.trailer.YouTubeCaptionTrack
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.TrailerDisplayState
 
@@ -27,6 +28,7 @@ data class MetaDetailsUiState(
     val trailerUrl: String? = null,
     val trailerAudioUrl: String? = null,
     val trailerUserAgent: String? = null,
+    val trailerCaptions: List<YouTubeCaptionTrack> = emptyList(),
     val trailerExternalUrl: String? = null,
     val pendingExternalTrailerUrl: String? = null,
     val titleHasPlayableTrailerMedia: Boolean = false,
@@ -158,6 +160,7 @@ internal fun MetaDetailsUiState.withFailedSeasonMediaPlaybackAttempt(
         trailerUrl = previousTrailerUrl,
         trailerAudioUrl = previousTrailerAudioUrl,
         trailerUserAgent = previousTrailerUserAgent,
+        trailerCaptions = emptyList(),
         trailerExternalUrl = previousTrailerExternalUrl,
         pendingExternalTrailerUrl = null,
         trailerResolutionStatus = TrailerResolutionStatus.FAILED,
