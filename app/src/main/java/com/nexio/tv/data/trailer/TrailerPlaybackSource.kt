@@ -28,17 +28,37 @@ internal fun selectPreferredTrailerPlaybackSource(
     adaptiveAudioUrl: String?,
     userAgent: String? = null
 ): TrailerPlaybackSource? {
+    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() }
+    val normalizedAdaptiveAudioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() }
+    // Prefer NewPipeExtractor's "DASH" pattern: split adaptive video-only +
+    // audio-only streams, merged at playback time. YouTube serves its
+    // highest-resolution variants (1080p+, 4K, 60fps) only via the
+    // adaptiveFormats path; the combined-format / HLS manifest path caps
+    // around 720p muxed and forces ABR ramp-up that never completes for
+    // short trailers. Direct selection of the best video + best audio
+    // bypasses ABR and gives us explicit quality control.
+    if (normalizedAdaptiveVideoUrl != null && normalizedAdaptiveAudioUrl != null) {
+        return TrailerPlaybackSource(
+            videoUrl = normalizedAdaptiveVideoUrl,
+            audioUrl = normalizedAdaptiveAudioUrl,
+            userAgent = userAgent
+        )
+    }
+    // Fall back to the combined source (HLS master playlist or muxed
+    // progressive) when a split pair isn't available.
     val normalizedCombinedUrl = combinedUrl?.takeIf { it.isNotBlank() }
     if (normalizedCombinedUrl != null) {
         return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl, userAgent = userAgent)
     }
-
-    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() } ?: return null
-    return TrailerPlaybackSource(
-        videoUrl = normalizedAdaptiveVideoUrl,
-        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() },
-        userAgent = userAgent
-    )
+    // Last resort: video-only adaptive without paired audio.
+    if (normalizedAdaptiveVideoUrl != null) {
+        return TrailerPlaybackSource(
+            videoUrl = normalizedAdaptiveVideoUrl,
+            audioUrl = null,
+            userAgent = userAgent
+        )
+    }
+    return null
 }
 
 sealed interface TrailerResolutionResult {
