@@ -5,13 +5,16 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
+import javax.inject.Inject
+import javax.inject.Singleton
 
 data class ArtworkProviderCapability(
     val supported: Boolean,
     val reason: String?
 )
 
-class ArtworkProviderCapabilityResolver {
+@Singleton
+class ArtworkProviderCapabilityResolver @Inject constructor() {
     fun supports(
         provider: ArtworkProviderId,
         imageType: ArtworkType,

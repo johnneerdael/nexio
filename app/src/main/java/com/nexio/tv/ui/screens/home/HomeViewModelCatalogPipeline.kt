@@ -3082,6 +3082,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             rows = _internalCatalogRows.value,
             overlaysByItemKey = currentHydratedHomeOverlays,
             idMappingStore = idMappingStore,
+            resolver = artworkProviderResolver,
+            currentSettings = currentArtworkProviderSettings.value,
             resolveTrailer = null
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
@@ -3200,6 +3202,8 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
         rows = sourceRows,
         overlaysByItemKey = overlaysByItemKey,
+        resolver = artworkProviderResolver,
+        currentSettings = currentArtworkProviderSettings.value,
         resolveTrailer = { request -> metadataRouterFacade.resolveTrailer(request) }
     )
     val published = resolvedDisplaySurfaceRepository.publishResolvedItems(
@@ -3287,6 +3291,8 @@ private fun HomeViewModel.applyHomeResolvedRowsToUiPipeline(
         val resolvedItemsForSnapshotSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
             rows = composedSnapshot.displayRows,
             overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
+            resolver = artworkProviderResolver,
+            currentSettings = currentArtworkProviderSettings.value,
             resolveTrailer = null
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
