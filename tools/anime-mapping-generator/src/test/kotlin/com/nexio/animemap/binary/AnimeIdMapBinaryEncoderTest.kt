@@ -1,8 +1,11 @@
 package com.nexio.animemap.binary
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class AnimeIdMapBinaryEncoderTest {
     @Test
@@ -80,6 +83,47 @@ class AnimeIdMapBinaryEncoderTest {
 
         val decoded = TestEpisodeDecoder(bytes, pool.toByteArray()).decodeAt(0)
         assertEquals(rec, decoded)
+    }
+
+    @Test
+    fun `encode produces deterministic byte-identical output for identical input`() {
+        val input = sampleAsset()
+        val a = AnimeIdMapBinaryEncoder.encode(input)
+        val b = AnimeIdMapBinaryEncoder.encode(input)
+        assertArrayEquals(a, b)
+    }
+
+    @Test
+    fun `encode header validates magic and schema version`() {
+        val bytes = AnimeIdMapBinaryEncoder.encode(sampleAsset())
+        assertEquals('N'.code.toByte(), bytes[0])
+        assertEquals('X'.code.toByte(), bytes[1])
+        assertEquals('A'.code.toByte(), bytes[2])
+        assertEquals('I'.code.toByte(), bytes[3])
+        // schemaVersion u32 LE
+        val schema = ByteBuffer.wrap(bytes, 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(BinaryFormat.SCHEMA_VERSION, schema)
+    }
+
+    private fun sampleAsset(): WireAnimeIdMapAsset {
+        val r1 = WireAnimeIdMapRecord(
+            kitsu = "265", mal = "290", anidb = "1", tvdb = "72025", imdb = "tt0286390",
+            mediaType = "series", sourceType = "TV"
+        )
+        val r2 = WireAnimeIdMapRecord(kitsu = "99999", mediaType = "series", sourceType = "TV")
+        return WireAnimeIdMapAsset(
+            generatedAt = "2026-05-06T00:00:00Z",
+            identityRecords = listOf(r1, r2),
+            episodeMappings = emptyList(),
+            byKitsu = mapOf("265" to "265", "99999" to "99999"),
+            byMal = mapOf("290" to "265"),
+            byAnilist = emptyMap(),
+            byAnidb = mapOf("1" to "265"),
+            byTmdbMovie = emptyMap(),
+            byTvdb = mapOf("72025" to listOf("265")),
+            byTmdbTv = emptyMap(),
+            byImdb = mapOf("tt0286390" to listOf("265")),
+        )
     }
 }
 

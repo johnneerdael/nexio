@@ -46,3 +46,17 @@ data class WireAnimeEpisodeMappingRecord(
     val explicitMaps: List<WireAnimeExplicitMap> = emptyList(),
     val evidence: List<String> = emptyList(),
 )
+
+data class WireAnimeIdMapAsset(
+    val generatedAt: String,
+    val identityRecords: List<WireAnimeIdMapRecord>,
+    val episodeMappings: List<WireAnimeEpisodeMappingRecord>,
+    val byKitsu: Map<String, String>,
+    val byMal: Map<String, String>,
+    val byAnilist: Map<String, String>,
+    val byAnidb: Map<String, String>,
+    val byTmdbMovie: Map<String, String>,
+    val byTvdb: Map<String, List<String>>,
+    val byTmdbTv: Map<String, List<String>>,
+    val byImdb: Map<String, List<String>>,
+)
