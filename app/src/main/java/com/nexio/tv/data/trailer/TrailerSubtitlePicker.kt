@@ -69,12 +69,34 @@ internal fun pickTrailerCaptionTrack(
     )
 }
 
-internal fun buildTrailerSubtitleVttUrl(selected: SelectedTrailerCaptionTrack): String {
+/**
+ * Subtitle formats YouTube serves over its timedtext endpoint. TTML is the
+ * native server-side format and works for every video that has captions.
+ * WebVTT (`&fmt=vtt`) is a server-side transcode that occasionally fails
+ * (5xx or malformed VTT) for videos with complex caption features. Default
+ * to TTML; allow WEBVTT for callers that want it explicitly.
+ */
+internal enum class TrailerSubtitleFormat(val queryValue: String, val mimeType: String) {
+    TTML(queryValue = "ttml", mimeType = "application/ttml+xml"),
+    WEBVTT(queryValue = "vtt", mimeType = "text/vtt")
+}
+
+internal fun buildTrailerSubtitleUrl(
+    selected: SelectedTrailerCaptionTrack,
+    format: TrailerSubtitleFormat = TrailerSubtitleFormat.TTML
+): String {
     val separator = if (selected.baseUrl.contains('?')) "&" else "?"
     val builder = StringBuilder(selected.baseUrl)
-    builder.append(separator).append("fmt=vtt")
+    builder.append(separator).append("fmt=").append(format.queryValue)
     selected.translateTo
         ?.takeIf { it.isNotBlank() }
         ?.let { builder.append("&tlang=").append(it) }
     return builder.toString()
 }
+
+@Deprecated(
+    "Use buildTrailerSubtitleUrl with TrailerSubtitleFormat",
+    ReplaceWith("buildTrailerSubtitleUrl(selected, TrailerSubtitleFormat.WEBVTT)")
+)
+internal fun buildTrailerSubtitleVttUrl(selected: SelectedTrailerCaptionTrack): String =
+    buildTrailerSubtitleUrl(selected, TrailerSubtitleFormat.WEBVTT)

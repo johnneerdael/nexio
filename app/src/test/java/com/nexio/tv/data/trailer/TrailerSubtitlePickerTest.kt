@@ -69,20 +69,30 @@ class TrailerSubtitlePickerTest {
     }
 
     @Test
-    fun `vtt url appends fmt and tlang correctly`() {
+    fun `subtitle url defaults to TTML format`() {
         val withQuery = SelectedTrailerCaptionTrack(
             baseUrl = "https://yt.example/timedtext?v=1",
             languageCode = "nl",
             translateTo = "nl"
         )
-        val url = buildTrailerSubtitleVttUrl(withQuery)
-        assertTrue(url.endsWith("&fmt=vtt&tlang=nl"))
+        val url = buildTrailerSubtitleUrl(withQuery)
+        assertTrue(url.endsWith("&fmt=ttml&tlang=nl"))
 
         val withoutQuery = SelectedTrailerCaptionTrack(
             baseUrl = "https://yt.example/timedtext",
             languageCode = "en"
         )
-        assertEquals("https://yt.example/timedtext?fmt=vtt", buildTrailerSubtitleVttUrl(withoutQuery))
+        assertEquals("https://yt.example/timedtext?fmt=ttml", buildTrailerSubtitleUrl(withoutQuery))
+    }
+
+    @Test
+    fun `subtitle url honors explicit WEBVTT override`() {
+        val track = SelectedTrailerCaptionTrack(
+            baseUrl = "https://yt.example/timedtext",
+            languageCode = "en"
+        )
+        val url = buildTrailerSubtitleUrl(track, TrailerSubtitleFormat.WEBVTT)
+        assertTrue(url.endsWith("?fmt=vtt"))
     }
 
     @Test
