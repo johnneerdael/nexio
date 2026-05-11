@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import com.nexio.tv.core.player.FrameRateUtils
@@ -125,6 +126,7 @@ fun TrailerPlayer(
         val selected = pickTrailerCaptionTrack(trailerCaptions, preferredSubtitleLanguage)
             ?: return@LaunchedEffect
         val cachedUri = subtitleCache.ensure(selected) ?: return@LaunchedEffect
+        Log.d(TAG, "subtitle ready lang=${selected.languageCode} uri=$cachedUri")
         subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(cachedUri))
             .setMimeType(MimeTypes.APPLICATION_SUBRIP)
             .setLanguage(selected.languageCode)
@@ -266,14 +268,24 @@ fun TrailerPlayer(
         // UA as the default (matches googlevideo.com expectations); the
         // resolver overrides per-host for non-googlevideo URIs.
         val effectiveUserAgent = signedClientUserAgent
+        // Sideloaded subtitles arrive as file:// URIs (TrailerSubtitleCache
+        // writes SRT files under cacheDir). DefaultHttpDataSource crashes
+        // with ClassCastException when handed a file:// URL because it casts
+        // unconditionally to HttpURLConnection. Wrap the upstream HTTP
+        // factory in DefaultDataSource.Factory so file://, asset://, and
+        // content:// dispatch to their own sources while https:// continues
+        // through the HTTP factory (+ our per-host resolver).
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
             DefaultMediaSourceFactory(
-                ResolvingDataSource.Factory(
-                    YoutubeChunkedDataSourceFactory(
-                        userAgent = effectiveUserAgent,
-                        requestProperties = signedClientProperties
-                    ),
-                    resolver
+                DefaultDataSource.Factory(
+                    context,
+                    ResolvingDataSource.Factory(
+                        YoutubeChunkedDataSourceFactory(
+                            userAgent = effectiveUserAgent,
+                            requestProperties = signedClientProperties
+                        ),
+                        resolver
+                    )
                 )
             )
         } else {
@@ -281,7 +293,10 @@ fun TrailerPlayer(
                 .setUserAgent(effectiveUserAgent)
                 .setAllowCrossProtocolRedirects(true)
             DefaultMediaSourceFactory(
-                ResolvingDataSource.Factory(httpFactory, resolver)
+                DefaultDataSource.Factory(
+                    context,
+                    ResolvingDataSource.Factory(httpFactory, resolver)
+                )
             )
         }
     }
