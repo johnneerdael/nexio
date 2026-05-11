@@ -329,6 +329,28 @@ class HomeViewModel @Inject constructor(
      */
     internal val _metaByItemKey = MutableStateFlow<Map<String, MetaPreview>>(emptyMap())
     internal val metaByItemKey: StateFlow<Map<String, MetaPreview>> = _metaByItemKey.asStateFlow()
+
+    /**
+     * Plan B Task 6f.5 — snapshot reconstruction lookup. Returns a content-keyed
+     * map of every item currently in the typed authority's home surface, projected
+     * back to MetaPreview shape. Used by snapshot apply + filter helpers to
+     * reconstruct CatalogRow.items from Rail.items.
+     *
+     * Reference-stability: callers should treat this as a per-call snapshot. It is
+     * not memoized; reconstructing once per apply is acceptable (apply is a
+     * low-frequency edge — cold-start restore + producer transient flush).
+     */
+    internal fun currentTypedItemsByKey(): Map<String, MetaPreview> {
+        val activeProfileId = profileManager.activeProfileId.value
+        val items = resolvedDisplaySurfaceRepository.snapshotNow(activeProfileId)
+        if (items.isEmpty()) return emptyMap()
+        val out = HashMap<String, MetaPreview>(items.size)
+        for (i in items.indices) {
+            val item = items[i]
+            out[item.itemKey] = item.toMetaPreview()
+        }
+        return out
+    }
     // Continue watching items held outside [HomeUiState] (mirrors small Task 26 catalogRows
     // pattern + cb59c1a5e heroItems pattern) so Compose's SnapshotStateRecord history does not
     // pin prior `ContinueWatchingItem` lists alongside the current set. UI consumes this
