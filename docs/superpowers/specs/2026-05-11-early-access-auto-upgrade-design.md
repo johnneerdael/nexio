@@ -514,15 +514,20 @@ No changes to:
   so the existing app-start trigger is unaffected by this rule. Manual
   smoke checklist above tests the updater path explicitly.
 
-## Open questions deferred to implementation
+## Implementation notes (post-build)
 
-- Exact AGP-compatible `outputFileName` override syntax (variant API
-  has shifted across AGP versions). If the deprecated
-  `applicationVariants.all { … }` form is unavailable on the current
-  AGP, fall back to a `Copy` task wired into `assembleUniversal*`
-  outputs.
-- Whether the existing `GitHubApiShapes.LATEST_RELEASE` constant lives
-  in a `core.integration` package or somewhere else (will confirm
-  during implementation by reading the file).
-
-Neither blocks the design.
+- **APK output rename** is wired via `applicationVariants.all` in
+  `app/build.gradle.kts`, scoped to the `universal` ABI flavor only.
+  Arm64 / armv7 flavor outputs keep their default filenames.
+- **`GitHubApiShapes.LIST_RELEASES`** lives alongside `LATEST_RELEASE`
+  in `app/src/main/java/com/nexio/tv/core/integration/IntegrationApiShapes.kt`.
+- **`UpdateChannel` Hilt binding** lives in
+  `app/src/main/java/com/nexio/tv/core/di/UpdaterModule.kt`, following
+  the existing `core/di` module convention.
+- **Stable-arm error policy in EA channel:** transient stable-arm
+  errors (5xx / NetworkError) propagate as failure even when the
+  prerelease arm succeeded. Only 404 on the stable arm is treated as a
+  soft miss (genuine "no stable release yet"). This is asymmetric with
+  the prerelease arm, which always soft-misses when the stable arm
+  succeeded — a deliberate choice so a transient outage cannot silently
+  hide a missed stable cut.
