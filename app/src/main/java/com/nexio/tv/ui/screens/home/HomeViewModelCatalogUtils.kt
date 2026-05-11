@@ -25,6 +25,7 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.Rail
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.toMetaPreview
@@ -95,14 +96,20 @@ internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: 
     return addonCatalogKey(addonId, type, catalogId)
 }
 
-internal fun homeCatalogGlobalKey(row: CatalogRow): String {
-    return when (row.addonId) {
-        TRAKT_HOME_ADDON_ID -> if (row.catalogId.startsWith(TRAKT_HOME_KEY_PREFIX)) row.catalogId else "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
-        SIMKL_HOME_ADDON_ID -> if (row.catalogId.startsWith(SIMKL_HOME_KEY_PREFIX)) row.catalogId else "$SIMKL_HOME_KEY_PREFIX${row.catalogId}"
-        MDBLIST_HOME_ADDON_ID -> if (row.catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) row.catalogId else "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
-        TMDB_HOME_ADDON_ID -> if (row.catalogId.startsWith(TMDB_HOME_KEY_PREFIX)) row.catalogId else "$TMDB_HOME_KEY_PREFIX${row.catalogId}"
-        KITSU_HOME_ADDON_ID -> if (row.catalogId.startsWith(KITSU_HOME_KEY_PREFIX)) row.catalogId else "$KITSU_HOME_KEY_PREFIX${row.catalogId}"
-        else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
+internal fun homeCatalogGlobalKey(row: CatalogRow): String =
+    homeCatalogGlobalKey(row.addonId, row.apiType, row.catalogId)
+
+internal fun homeCatalogGlobalKey(rail: Rail): String =
+    homeCatalogGlobalKey(rail.addonId, rail.apiType, rail.catalogId)
+
+private fun homeCatalogGlobalKey(addonId: String, apiType: String, catalogId: String): String {
+    return when (addonId) {
+        TRAKT_HOME_ADDON_ID -> if (catalogId.startsWith(TRAKT_HOME_KEY_PREFIX)) catalogId else "$TRAKT_HOME_KEY_PREFIX$catalogId"
+        SIMKL_HOME_ADDON_ID -> if (catalogId.startsWith(SIMKL_HOME_KEY_PREFIX)) catalogId else "$SIMKL_HOME_KEY_PREFIX$catalogId"
+        MDBLIST_HOME_ADDON_ID -> if (catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) catalogId else "$MDBLIST_HOME_KEY_PREFIX$catalogId"
+        TMDB_HOME_ADDON_ID -> if (catalogId.startsWith(TMDB_HOME_KEY_PREFIX)) catalogId else "$TMDB_HOME_KEY_PREFIX$catalogId"
+        KITSU_HOME_ADDON_ID -> if (catalogId.startsWith(KITSU_HOME_KEY_PREFIX)) catalogId else "$KITSU_HOME_KEY_PREFIX$catalogId"
+        else -> "${addonId}_${apiType}_${catalogId}"
     }
 }
 
