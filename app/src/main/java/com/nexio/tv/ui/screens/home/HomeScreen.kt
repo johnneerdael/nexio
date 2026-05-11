@@ -437,6 +437,7 @@ fun HomeScreen(
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
+            previewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
             previewCaptions = viewModel.trailerPreviewCaptions
         )
         HomePosterOptionsDialog(
@@ -512,6 +513,7 @@ fun HomeScreen(
         viewModel.trailerPreviewUrls,
         viewModel.trailerPreviewAudioUrls,
         viewModel.trailerPreviewUserAgents,
+        viewModel.trailerPreviewSigningClientKeys,
         viewModel.trailerPreviewCaptions,
         viewModel.trailerPreviewExternalUrls,
         viewModel.trailerPreviewLoadingItemIds,
@@ -525,6 +527,7 @@ fun HomeScreen(
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
+            previewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
             previewCaptions = viewModel.trailerPreviewCaptions
         )
         if (playback != null) {
@@ -579,6 +582,7 @@ fun HomeScreen(
                 trailerUrl = activePosterTrailerPlayback.videoUrl,
                 trailerAudioUrl = activePosterTrailerPlayback.audioUrl,
                 trailerUserAgent = activePosterTrailerPlayback.userAgent,
+                trailerSigningClientKey = activePosterTrailerPlayback.signingClientKey,
                 trailerCaptions = activePosterTrailerPlayback.captions,
                 isPlaying = true,
                 cropToFill = true,
@@ -689,6 +693,7 @@ private fun ClassicHomeRoute(
         trailerPreviewUrls = viewModel.trailerPreviewUrls,
         trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         trailerPreviewUserAgents = viewModel.trailerPreviewUserAgents,
+        trailerPreviewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
         trailerPreviewCaptions = viewModel.trailerPreviewCaptions,
         trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
         onNavigateToDetail = onNavigateToDetail,
@@ -811,6 +816,7 @@ private fun ModernHomeRoute(
         viewModel.trailerPreviewUrls,
         viewModel.trailerPreviewAudioUrls,
         viewModel.trailerPreviewUserAgents,
+        viewModel.trailerPreviewSigningClientKeys,
         viewModel.trailerPreviewCaptions,
         viewModel.trailerPreviewExternalUrls,
         viewModel.trailerPreviewLoadingItemIds,
@@ -837,6 +843,7 @@ private fun ModernHomeRoute(
             trailerPreviewUrls = viewModel.trailerPreviewUrls,
             trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
             trailerPreviewUserAgents = viewModel.trailerPreviewUserAgents,
+            trailerPreviewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
             trailerPreviewCaptions = viewModel.trailerPreviewCaptions,
             trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
             trailerPreviewLoadingIds = viewModel.trailerPreviewLoadingItemIds,

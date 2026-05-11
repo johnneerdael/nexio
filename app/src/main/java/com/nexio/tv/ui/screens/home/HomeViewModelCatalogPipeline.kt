@@ -706,6 +706,47 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
     }
 }
 
+/**
+ * Subscribes to [CatalogItemCrossIdEnricher.resolutionUpdates] and schedules a
+ * debounced catalog-row re-emit on each event. The next pipeline pass calls
+ * [CatalogMapper.toDomain] whose [CatalogItemCrossIdEnricher.enrichFromCache]
+ * (sync, cache-only) now hits the IdMappingStore entry written by the resolver,
+ * so the newly-enriched imdb id reaches the artwork pipeline without touching
+ * the producer hot path.
+ */
+internal fun HomeViewModel.startCrossIdResolutionObserverPipeline() {
+    viewModelScope.launch {
+        catalogItemCrossIdEnricher.resolutionUpdates.collect {
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
+/**
+ * Fires [CatalogItemCrossIdEnricher.enrichResolving] for every item in [rows]
+ * that is still missing an imdb id. Runs on [Dispatchers.IO] in a fire-and-forget
+ * coroutine so the caller's producer hot path is unblocked.
+ *
+ * Indexed-for loops are used throughout (CLAUDE.md rule #4 — no suspending
+ * forEach on lists; iterator allocation pinned across suspension points).
+ *
+ * Each call is wrapped in [runCatching] so resolver errors don't cancel the launch.
+ * The next emission retries via the cache-miss path automatically.
+ */
+internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
+    viewModelScope.launch(Dispatchers.IO) {
+        for (rowIndex in rows.indices) {
+            val row = rows[rowIndex]
+            for (itemIndex in row.items.indices) {
+                val item = row.items[itemIndex]
+                if (item.firstPaintStableIds.imdb.isNullOrBlank()) {
+                    runCatching { catalogItemCrossIdEnricher.enrichResolving(item) }
+                }
+            }
+        }
+    }
+}
+
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
         val profileId = profileManager.activeProfileId.value
@@ -2214,6 +2255,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
             trailerPreviewUserAgentsState.clear()
+            trailerPreviewSigningClientKeysState.clear()
             trailerPreviewCaptionsState.clear()
             trailerPreviewExternalUrlsState.clear()
             clearTrailerMetadataAvailabilityPipeline()
@@ -2257,6 +2299,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
             trailerPreviewUserAgentsState.clear()
+            trailerPreviewSigningClientKeysState.clear()
             trailerPreviewCaptionsState.clear()
             trailerPreviewExternalUrlsState.clear()
             clearTrailerMetadataAvailabilityPipeline()
@@ -2298,6 +2341,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         trailerPreviewUrlsState.clear()
         trailerPreviewAudioUrlsState.clear()
         trailerPreviewUserAgentsState.clear()
+        trailerPreviewSigningClientKeysState.clear()
         trailerPreviewCaptionsState.clear()
         trailerPreviewExternalUrlsState.clear()
         activeTrailerPreviewItemId = null
@@ -3163,6 +3207,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         sourceRows = screensaverSourceRows
     )
     observeHydratedHomeOverlaysForRows(composedSnapshot.displayRows + composedSnapshot.fullRows + screensaverSourceRows)
+    enrichCatalogRowItemsAsync(composedSnapshot.displayRows)
     refreshTrailerMetadataAvailabilityPipeline(composedSnapshot.displayRows)
 }
 

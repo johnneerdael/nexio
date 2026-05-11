@@ -42,9 +42,10 @@ import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YouTubeCaptionTrack
+import com.nexio.tv.data.trailer.YouTubeWireProfile
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
-import com.nexio.tv.data.trailer.buildStableYouTubeRequestHeaders
 import com.nexio.tv.data.trailer.buildTrailerSubtitleVttUrl
+import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -103,6 +104,7 @@ fun TrailerPlayer(
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
     trailerUserAgent: String? = null,
+    trailerSigningClientKey: String? = null,
     trailerCaptions: List<YouTubeCaptionTrack> = emptyList(),
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
@@ -208,13 +210,31 @@ fun TrailerPlayer(
         val effectiveUserAgent = trailerUserAgent
             ?.takeIf { it.isNotBlank() }
             ?: YOUTUBE_STABLE_WEB_USER_AGENT
+        // Pick the HTTP wire profile that matches the URL's signing client.
+        // iOS-signed `googlevideo.com` URLs must NOT carry the web origin/
+        // referer properties — YouTube's WAF reads that as a stolen-token
+        // signal and 403s segment fetches.
+        val wireProfile = when (trailerSigningClientKey) {
+            "ios" -> YouTubeWireProfile.IOS
+            "android" -> YouTubeWireProfile.ANDROID
+            else -> YouTubeWireProfile.WEB
+        }
+        val wireProperties = buildYouTubeWireProperties(
+            profile = wireProfile,
+            userAgent = effectiveUserAgent
+        )
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
-            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory(userAgent = effectiveUserAgent))
+            DefaultMediaSourceFactory(
+                YoutubeChunkedDataSourceFactory(
+                    userAgent = effectiveUserAgent,
+                    requestProperties = wireProperties
+                )
+            )
         } else {
             DefaultMediaSourceFactory(
                 DefaultHttpDataSource.Factory()
                     .setUserAgent(effectiveUserAgent)
-                    .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
+                    .setDefaultRequestProperties(wireProperties)
                     .setAllowCrossProtocolRedirects(true)
             )
         }

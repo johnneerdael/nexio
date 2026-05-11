@@ -160,6 +160,7 @@ class HomeViewModel @Inject constructor(
     internal val integrationOwnershipService: IntegrationOwnershipService,
     internal val homeRailHydrationExecutor: HomeRailHydrationExecutor = NoOpHomeRailHydrationExecutor,
     internal val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
+    internal val catalogItemCrossIdEnricher: com.nexio.tv.data.mapper.CatalogItemCrossIdEnricher,
     internal val homeHydrationCoordinator: HomeHydrationCoordinator,
     internal val traceEvents: TraceMetadataEvents,
     internal val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),
@@ -561,6 +562,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewUserAgentsState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewSigningClientKeysState = mutableStateMapOf<String, String>()
     internal val trailerPreviewCaptionsState = mutableStateMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
@@ -657,6 +659,8 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
     val trailerPreviewUserAgents: Map<String, String>
         get() = trailerPreviewUserAgentsState
+    val trailerPreviewSigningClientKeys: Map<String, String>
+        get() = trailerPreviewSigningClientKeysState
     val trailerPreviewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>
         get() = trailerPreviewCaptionsState
     val trailerPreviewExternalUrls: Map<String, String>
@@ -712,6 +716,7 @@ class HomeViewModel @Inject constructor(
         observeResolvedRailRows()
         observeResolvedHeroItems()
         observeResolvedContinueWatchingItems()
+        startCrossIdResolutionObserverPipeline()
     }
 
     private fun observeResolvedRailRows() {

@@ -295,6 +295,7 @@ internal fun IdleTrailerScreensaverOverlay(
             trailerUrl = currentPlayback.source.videoUrl,
             trailerAudioUrl = currentPlayback.source.audioUrl,
             trailerUserAgent = currentPlayback.source.userAgent,
+            trailerSigningClientKey = currentPlayback.source.signingClientKey,
             trailerCaptions = currentPlayback.source.captions,
             isPlaying = true,
             muted = sessionMuted,

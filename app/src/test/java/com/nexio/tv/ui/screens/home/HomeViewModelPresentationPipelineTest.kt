@@ -400,6 +400,7 @@ class HomeViewModelPresentationPipelineTest {
         val videoUrls = mutableMapOf<String, String>()
         val audioUrls = mutableMapOf<String, String>()
         val userAgents = mutableMapOf<String, String>()
+        val signingClientKeys = mutableMapOf<String, String>()
         val captions = mutableMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>()
         val externalUrls = mutableMapOf<String, String>()
         val negativeCache = mutableMapOf<String, Boolean>()
@@ -416,6 +417,7 @@ class HomeViewModelPresentationPipelineTest {
             trailerPreviewUrls = videoUrls,
             trailerPreviewAudioUrls = audioUrls,
             trailerPreviewUserAgents = userAgents,
+            trailerPreviewSigningClientKeys = signingClientKeys,
             trailerPreviewCaptions = captions,
             trailerPreviewExternalUrls = externalUrls,
             trailerPreviewNegativeCache = negativeCache
@@ -435,6 +437,7 @@ class HomeViewModelPresentationPipelineTest {
         val videoUrls = mutableMapOf("tt15940132" to "https://cdn.example/stale.m3u8")
         val audioUrls = mutableMapOf("tt15940132" to "https://cdn.example/stale-audio.m3u8")
         val userAgents = mutableMapOf("tt15940132" to "Stale")
+        val signingClientKeys = mutableMapOf("tt15940132" to "stale-signing-key")
         val captions = mutableMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>(
             "tt15940132" to listOf(
                 com.nexio.tv.data.trailer.YouTubeCaptionTrack(
@@ -452,6 +455,7 @@ class HomeViewModelPresentationPipelineTest {
             trailerPreviewUrls = videoUrls,
             trailerPreviewAudioUrls = audioUrls,
             trailerPreviewUserAgents = userAgents,
+            trailerPreviewSigningClientKeys = signingClientKeys,
             trailerPreviewCaptions = captions,
             trailerPreviewExternalUrls = externalUrls,
             trailerPreviewNegativeCache = negativeCache
@@ -461,6 +465,7 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals(false, videoUrls.containsKey("tt15940132"))
         assertEquals(false, audioUrls.containsKey("tt15940132"))
         assertEquals(false, userAgents.containsKey("tt15940132"))
+        assertEquals(false, signingClientKeys.containsKey("tt15940132"))
         assertEquals(false, captions.containsKey("tt15940132"))
         assertEquals("stremio:///detail/movie/tt15940132", externalUrls["tt15940132"])
         assertEquals(false, negativeCache.containsKey("tt15940132"))
