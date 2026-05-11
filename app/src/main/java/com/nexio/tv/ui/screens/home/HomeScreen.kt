@@ -594,6 +594,7 @@ fun HomeScreen(
             if (uiState.homeLayout != HomeLayout.MODERN && activePosterTrailerPlayback.heroPreview != null) {
                 ModernHeroGradientLayer(
                     bgColor = NexioColors.Background,
+                    fullscreenTrailerActive = false,
                     modifier = Modifier.fillMaxSize()
                 )
                 if (!modernPosterTrailerTextTimedOut) {
