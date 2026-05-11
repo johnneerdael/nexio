@@ -53,19 +53,25 @@ internal fun pickTrailerCaptionTrack(
         )
     }
 
-    val translatable = ordered.filter { it.isTranslatable }
-    val sourceTrack = translatable.firstOrNull {
+    // No native match for the user's preferred language. Fall back to a
+    // source-language track WITHOUT requesting YouTube's `&tlang=` server-side
+    // translation — that endpoint is aggressively rate-limited (429 even for
+    // single requests in steady state, confirmed 2026-05-11). Returning the
+    // source track unmodified keeps SubripParser fed with reliable captions;
+    // future AI translation can read the cached SRT and write a sibling file
+    // for the target language.
+    val sourceTrack = ordered.firstOrNull {
         it.languageCode.lowercase().startsWith("en") && (it.kind ?: "").lowercase() != "asr"
     }
-        ?: translatable.firstOrNull { it.languageCode.lowercase().startsWith("en") }
-        ?: translatable.firstOrNull { (it.kind ?: "").lowercase() != "asr" }
-        ?: translatable.firstOrNull()
+        ?: ordered.firstOrNull { it.languageCode.lowercase().startsWith("en") }
+        ?: ordered.firstOrNull { (it.kind ?: "").lowercase() != "asr" }
+        ?: ordered.firstOrNull()
         ?: return null
 
     return SelectedTrailerCaptionTrack(
         baseUrl = sourceTrack.baseUrl,
-        languageCode = normalized,
-        translateTo = normalized
+        languageCode = sourceTrack.languageCode,
+        translateTo = null
     )
 }
 
