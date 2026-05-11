@@ -1,5 +1,7 @@
 package com.nexio.tv.domain.model
 
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+
 enum class ContentType {
     MOVIE,
     SERIES,
@@ -31,3 +33,11 @@ enum class ContentType {
             ?: "movie"
     }
 }
+
+internal fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
+    when (this) {
+        ContentType.MOVIE -> MetadataMediaKind.MOVIE
+        ContentType.SERIES,
+        ContentType.TV -> MetadataMediaKind.SERIES
+        else -> MetadataMediaKind.UNKNOWN
+    }

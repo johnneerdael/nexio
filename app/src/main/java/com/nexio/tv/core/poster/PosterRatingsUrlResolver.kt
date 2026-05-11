@@ -41,6 +41,7 @@ import com.nexio.tv.core.util.toHexLowercase
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.toMetadataMediaKind
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -791,16 +792,6 @@ class PosterRatingsUrlResolver @Inject constructor(
             IdType.KITSU -> ProviderIds(kitsu = value)
             IdType.ANILIST -> ProviderIds(anilist = value)
             IdType.ANIDB -> ProviderIds(anidb = value)
-        }
-
-    private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
-        when (this) {
-            ContentType.MOVIE -> MetadataMediaKind.MOVIE
-            ContentType.SERIES,
-            ContentType.TV -> MetadataMediaKind.SERIES
-            ContentType.CHANNEL,
-            ContentType.PERSON,
-            ContentType.UNKNOWN -> MetadataMediaKind.UNKNOWN
         }
 
     private fun String.withTmdbMediaPrefix(contentType: ContentType): String =
