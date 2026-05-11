@@ -10,10 +10,14 @@ import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.core.metadata.router.StableIdBundleResolver
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
+import io.mockk.coVerify
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
@@ -74,10 +78,12 @@ class CatalogItemCrossIdEnricherTest {
                 )
             )
         )
+        val overlayStore = relaxedOverlayStore()
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = store,
             stableIdBundleResolver = throwingResolver(),
-            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+            overlayStore = overlayStore
         )
         val preview = tmdbMoviePreview()
 
@@ -86,16 +92,24 @@ class CatalogItemCrossIdEnricherTest {
         assertEquals("tt12345", enriched.firstPaintStableIds.imdb)
         assertEquals("202555", enriched.firstPaintStableIds.tmdb)
         assertNotSame(preview, enriched)
+        coVerify(exactly = 1) {
+            overlayStore.markStaleIfWeakerIds(
+                itemKey = "movie:tmdb:202555",
+                currentIds = enriched.firstPaintStableIds
+            )
+        }
     }
 
     @Test
     fun `tmdb movie with no cached mapping returns preview verbatim and does not query network`() = runTest {
         val emptyStore = InMemoryIdMappingStore()
         val resolverCalls = mutableListOf<Any>()
+        val overlayStore = relaxedOverlayStore()
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = emptyStore,
             stableIdBundleResolver = recordingResolver(resolverCalls),
-            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+            overlayStore = overlayStore
         )
         val preview = tmdbMoviePreview()
 
@@ -104,6 +118,7 @@ class CatalogItemCrossIdEnricherTest {
         assertNull(enriched.firstPaintStableIds.imdb)
         assertSame("cache miss must return the same MetaPreview reference", preview, enriched)
         assertEquals("enrichFromCache must not call the resolver (network)", 0, resolverCalls.size)
+        coVerify(exactly = 0) { overlayStore.markStaleIfWeakerIds(any(), any()) }
     }
 
     @Test
@@ -126,10 +141,12 @@ class CatalogItemCrossIdEnricherTest {
                 )
             )
         }
+        val overlayStore = relaxedOverlayStore()
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = InMemoryIdMappingStore(),
             stableIdBundleResolver = throwingResolver(),
-            animeIdMappingService = animeMap
+            animeIdMappingService = animeMap,
+            overlayStore = overlayStore
         )
         val preview = kitsuPreview()
 
@@ -138,6 +155,12 @@ class CatalogItemCrossIdEnricherTest {
         assertEquals("tt99999", enriched.firstPaintStableIds.imdb)
         assertEquals("555", enriched.firstPaintStableIds.tvdb)
         assertEquals("12345", enriched.firstPaintStableIds.kitsu)
+        coVerify(exactly = 1) {
+            overlayStore.markStaleIfWeakerIds(
+                itemKey = "series:kitsu:12345",
+                currentIds = enriched.firstPaintStableIds
+            )
+        }
     }
 
     @Test
@@ -145,7 +168,8 @@ class CatalogItemCrossIdEnricherTest {
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = InMemoryIdMappingStore(),
             stableIdBundleResolver = throwingResolver(),
-            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+            overlayStore = relaxedOverlayStore()
         )
         val preview = tmdbMoviePreview().copy(
             id = "tt12345",
@@ -163,7 +187,8 @@ class CatalogItemCrossIdEnricherTest {
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = InMemoryIdMappingStore(),
             stableIdBundleResolver = recordingResolver(resolverCalls),
-            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+            animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) },
+            overlayStore = relaxedOverlayStore()
         )
         val preview = tmdbMoviePreview().copy(
             id = "mystery:abc",
@@ -174,6 +199,15 @@ class CatalogItemCrossIdEnricherTest {
 
         assertSame(preview, enriched)
         assertEquals(0, resolverCalls.size)
+    }
+
+    private fun relaxedOverlayStore(): HydratedHomeOverlayStore {
+        // Tests construct the enricher with a relaxed mock so we don't need
+        // Robolectric / a real Context for SharedPreferences. Verifies the push
+        // happens (coVerify) without exercising disk I/O.
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        coEvery { store.markStaleIfWeakerIds(any(), any()) } returns Unit
+        return store
     }
 
     private fun throwingResolver(): StableIdBundleResolver =

@@ -10,10 +10,12 @@ import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.core.metadata.router.StableIdBundleRequest
 import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -41,7 +43,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 class CatalogItemCrossIdEnricher @Inject constructor(
     private val idMappingStore: IdMappingStore,
     private val stableIdBundleResolver: StableIdBundleResolver,
-    private val animeIdMappingService: AnimeIdMappingService
+    private val animeIdMappingService: AnimeIdMappingService,
+    private val overlayStore: HydratedHomeOverlayStore
 ) {
     private val _resolutionUpdates = MutableSharedFlow<CrossIdResolutionEvent>(
         replay = 0,
@@ -108,6 +111,10 @@ class CatalogItemCrossIdEnricher @Inject constructor(
         if (enrichedIds == current) return preview
 
         val enriched = preview.copy(firstPaintStableIds = enrichedIds)
+        overlayStore.markStaleIfWeakerIds(
+            itemKey = homeDisplayItemKey(preview.apiType, preview.id),
+            currentIds = enrichedIds
+        )
         _resolutionUpdates.tryEmit(
             CrossIdResolutionEvent(
                 itemKey = "${preview.apiType}:${preview.id}",
@@ -140,7 +147,12 @@ class CatalogItemCrossIdEnricher @Inject constructor(
             imdb = imdbMapping.providerId,
             tvdb = current.tvdb ?: tvdbMapping?.providerId
         )
-        return if (enrichedIds == current) preview else preview.copy(firstPaintStableIds = enrichedIds)
+        if (enrichedIds == current) return preview
+        overlayStore.markStaleIfWeakerIds(
+            itemKey = homeDisplayItemKey(preview.apiType, preview.id),
+            currentIds = enrichedIds
+        )
+        return preview.copy(firstPaintStableIds = enrichedIds)
     }
 
     private suspend fun enrichTvdbFromStore(
@@ -153,10 +165,15 @@ class CatalogItemCrossIdEnricher @Inject constructor(
         val imdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId) ?: return preview
         val current = preview.firstPaintStableIds
         val enrichedIds = current.copy(imdb = imdbMapping.providerId)
-        return if (enrichedIds == current) preview else preview.copy(firstPaintStableIds = enrichedIds)
+        if (enrichedIds == current) return preview
+        overlayStore.markStaleIfWeakerIds(
+            itemKey = homeDisplayItemKey(preview.apiType, preview.id),
+            currentIds = enrichedIds
+        )
+        return preview.copy(firstPaintStableIds = enrichedIds)
     }
 
-    private fun enrichFromAnimeMap(preview: MetaPreview, parsed: ParsedMetadataId): MetaPreview {
+    private suspend fun enrichFromAnimeMap(preview: MetaPreview, parsed: ParsedMetadataId): MetaPreview {
         val record = animeIdMappingService.recordForKitsuId(parsed.value) ?: return preview
         val ids = preview.firstPaintStableIds
         val enriched = ids.copy(
@@ -168,7 +185,12 @@ class CatalogItemCrossIdEnricher @Inject constructor(
             anidb = ids.anidb ?: record.anidb,
             kitsu = ids.kitsu ?: record.kitsu
         )
-        return if (enriched == ids) preview else preview.copy(firstPaintStableIds = enriched)
+        if (enriched == ids) return preview
+        overlayStore.markStaleIfWeakerIds(
+            itemKey = homeDisplayItemKey(preview.apiType, preview.id),
+            currentIds = enriched
+        )
+        return preview.copy(firstPaintStableIds = enriched)
     }
 
     private fun ContentType.toMediaKind(): ContentMediaKind? = when (this) {
