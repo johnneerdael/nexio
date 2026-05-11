@@ -10,6 +10,7 @@ plugins {
 
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 import java.io.File
 import java.net.URI
 import java.time.Instant
@@ -557,6 +558,21 @@ android {
                 "lib/*/libswscale.so",
                 "lib/*/libswresample.so"
             )
+        }
+    }
+
+    applicationVariants.all {
+        val abiFlavor = productFlavors
+            .firstOrNull { it.dimension == "abiPackaging" }
+            ?.name
+        if (abiFlavor != "universal") return@all
+        val target = when (buildType.name) {
+            "release" -> "nexio-release.apk"
+            "releaseEarlyAccess" -> "nexio-earlyaccess.apk"
+            else -> null
+        } ?: return@all
+        outputs.all {
+            (this as BaseVariantOutputImpl).outputFileName = target
         }
     }
 }
