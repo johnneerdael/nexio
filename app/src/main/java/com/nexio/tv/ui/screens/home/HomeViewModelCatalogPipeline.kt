@@ -738,6 +738,7 @@ internal fun HomeViewModel.startCrossIdResolutionObserverPipeline() {
  */
 internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
     viewModelScope.launch {
+        val enrichedByItemKey = mutableMapOf<String, com.nexio.tv.domain.model.MetaPreview>()
         for (rowIndex in rows.indices) {
             val row = rows[rowIndex]
             for (itemIndex in row.items.indices) {
@@ -745,7 +746,10 @@ internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
                 val item = row.items[itemIndex]
                 if (item.firstPaintStableIds.imdb.isNullOrBlank()) {
                     try {
-                        catalogItemCrossIdEnricher.enrichResolving(item)
+                        val enriched = catalogItemCrossIdEnricher.enrichResolving(item)
+                        if (enriched !== item) {
+                            enrichedByItemKey[com.nexio.tv.domain.model.homeDisplayItemKey(item.apiType, item.id)] = enriched
+                        }
                     } catch (cancel: kotlinx.coroutines.CancellationException) {
                         throw cancel
                     } catch (_: Exception) {
@@ -754,7 +758,44 @@ internal fun HomeViewModel.enrichCatalogRowItemsAsync(rows: List<CatalogRow>) {
                 }
             }
         }
+        if (enrichedByItemKey.isEmpty()) return@launch
+        // Apply enriched MetaPreviews back to _displayCatalogRows so the next
+        // catalog-pipeline emission carries the resolver-populated imdb id into
+        // the artwork pipeline (which queries RPDB). Without this re-apply, the
+        // resolver populates the IdMappingStore but the in-memory rail items
+        // stay frozen with `firstPaintStableIds.imdb = null`, the artwork
+        // pipeline never gets the imdb it needs, and RPDB never queries.
+        _displayCatalogRows.update { current ->
+            applyEnrichedItemsToRows(current, enrichedByItemKey)
+        }
     }
+}
+
+private fun applyEnrichedItemsToRows(
+    rows: List<CatalogRow>,
+    enrichedByItemKey: Map<String, com.nexio.tv.domain.model.MetaPreview>
+): List<CatalogRow> {
+    var anyChanged = false
+    val updated = ArrayList<CatalogRow>(rows.size)
+    for (rowIndex in rows.indices) {
+        val row = rows[rowIndex]
+        var rowChanged = false
+        val newItems = ArrayList<com.nexio.tv.domain.model.MetaPreview>(row.items.size)
+        for (itemIndex in row.items.indices) {
+            val item = row.items[itemIndex]
+            val key = com.nexio.tv.domain.model.homeDisplayItemKey(item.apiType, item.id)
+            val enriched = enrichedByItemKey[key]
+            if (enriched != null && enriched !== item) {
+                newItems += enriched
+                rowChanged = true
+                anyChanged = true
+            } else {
+                newItems += item
+            }
+        }
+        updated += if (rowChanged) row.copy(items = newItems) else row
+    }
+    return if (anyChanged) updated else rows
 }
 
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
