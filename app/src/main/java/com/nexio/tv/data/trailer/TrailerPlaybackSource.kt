@@ -28,37 +28,24 @@ internal fun selectPreferredTrailerPlaybackSource(
     adaptiveAudioUrl: String?,
     userAgent: String? = null
 ): TrailerPlaybackSource? {
-    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() }
-    val normalizedAdaptiveAudioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() }
-    // Prefer NewPipeExtractor's "DASH" pattern: split adaptive video-only +
-    // audio-only streams, merged at playback time. YouTube serves its
-    // highest-resolution variants (1080p+, 4K, 60fps) only via the
-    // adaptiveFormats path; the combined-format / HLS manifest path caps
-    // around 720p muxed and forces ABR ramp-up that never completes for
-    // short trailers. Direct selection of the best video + best audio
-    // bypasses ABR and gives us explicit quality control.
-    if (normalizedAdaptiveVideoUrl != null && normalizedAdaptiveAudioUrl != null) {
-        return TrailerPlaybackSource(
-            videoUrl = normalizedAdaptiveVideoUrl,
-            audioUrl = normalizedAdaptiveAudioUrl,
-            userAgent = userAgent
-        )
-    }
-    // Fall back to the combined source (HLS master playlist or muxed
-    // progressive) when a split pair isn't available.
+    // Prefer the combined source (iOS HLS master playlist or progressive
+    // muxed) over split adaptive video+audio. Direct adaptive `/videoplayback`
+    // URLs require a poToken — without one YouTube 403s the segment fetch.
+    // iOS HLS manifest URLs work without a poToken (per NewPipeExtractor's
+    // own note in YoutubeStreamExtractor.getHlsUrl) and `tts_caps/1` text
+    // alternate-rendition fetches are avoided by leaving Media3's text-
+    // track parameters at their defaults.
     val normalizedCombinedUrl = combinedUrl?.takeIf { it.isNotBlank() }
     if (normalizedCombinedUrl != null) {
         return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl, userAgent = userAgent)
     }
-    // Last resort: video-only adaptive without paired audio.
-    if (normalizedAdaptiveVideoUrl != null) {
-        return TrailerPlaybackSource(
-            videoUrl = normalizedAdaptiveVideoUrl,
-            audioUrl = null,
-            userAgent = userAgent
-        )
-    }
-    return null
+
+    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() } ?: return null
+    return TrailerPlaybackSource(
+        videoUrl = normalizedAdaptiveVideoUrl,
+        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() },
+        userAgent = userAgent
+    )
 }
 
 sealed interface TrailerResolutionResult {
