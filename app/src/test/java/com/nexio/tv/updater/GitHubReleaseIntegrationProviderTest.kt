@@ -173,4 +173,101 @@ class GitHubReleaseIntegrationProviderTest {
             gitHubReleaseApi.getLatestRelease("owner", "repo")
         }
     }
+
+    @Test
+    fun `fetchReleases routes through runtime and maps successful GitHub releases response`() = runTest {
+        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val gitHubReleaseApi = mockk<GitHubReleaseApi>()
+        val specSlot = slot<IntegrationCallSpec<List<GitHubReleaseDto>>>()
+        var runtimeResult: IntegrationCallResult<List<GitHubReleaseDto>>? = null
+
+        coEvery { runtime.call(capture(specSlot)) } coAnswers {
+            val result = firstArg<IntegrationCallSpec<List<GitHubReleaseDto>>>().call()
+            runtimeResult = result
+            result
+        }
+
+        val releases = listOf(
+            GitHubReleaseDto(tagName = "v1.2.4", prerelease = false),
+            GitHubReleaseDto(tagName = "v1.2.4-ea1", prerelease = true)
+        )
+        coEvery {
+            gitHubReleaseApi.getReleases(owner = "owner", repo = "repo", perPage = 10)
+        } returns Response.success(releases)
+
+        val provider = GitHubReleaseIntegrationProvider(runtime, gitHubReleaseApi)
+        val result = provider.fetchReleases(owner = "owner", repo = "repo", perPage = 10)
+
+        assertTrue(result is IntegrationCallResult.Success)
+        assertEquals(2, (result as IntegrationCallResult.Success).value.size)
+        assertTrue(runtimeResult is IntegrationCallResult.Success)
+
+        assertTrue(specSlot.isCaptured)
+        val spec = specSlot.captured
+        assertEquals(IntegrationProvider.GITHUB, spec.provider)
+        assertEquals(IntegrationWorkClass.USER_VISIBLE, spec.workClass)
+        assertEquals(IntegrationScope.ProviderConfig("github:owner:repo"), spec.scope)
+
+        coVerify(exactly = 1) {
+            runtime.call(any<IntegrationCallSpec<List<GitHubReleaseDto>>>())
+            gitHubReleaseApi.getReleases("owner", "repo", 10)
+        }
+    }
+
+    @Test
+    fun `fetchReleases converts GitHub HTTP error into unavailable API failure`() = runTest {
+        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val gitHubReleaseApi = mockk<GitHubReleaseApi>()
+        val specSlot = slot<IntegrationCallSpec<List<GitHubReleaseDto>>>()
+        var runtimeResult: IntegrationCallResult<List<GitHubReleaseDto>>? = null
+
+        coEvery { runtime.call(capture(specSlot)) } coAnswers {
+            val result = firstArg<IntegrationCallSpec<List<GitHubReleaseDto>>>().call()
+            runtimeResult = result
+            result
+        }
+
+        val errorResponse = Response.error<List<GitHubReleaseDto>>(
+            404,
+            ByteArray(0).toResponseBody("text/plain".toMediaType())
+        )
+        coEvery {
+            gitHubReleaseApi.getReleases(owner = "owner", repo = "repo", perPage = 10)
+        } returns errorResponse
+
+        val provider = GitHubReleaseIntegrationProvider(runtime, gitHubReleaseApi)
+        val result = provider.fetchReleases(owner = "owner", repo = "repo", perPage = 10)
+
+        assertTrue(result is IntegrationCallResult.HttpError)
+        assertEquals(404, (result as IntegrationCallResult.HttpError).statusCode)
+        assertTrue(runtimeResult is IntegrationCallResult.HttpError)
+    }
+
+    @Test
+    fun `fetchReleases converts network failures into contact failure`() = runTest {
+        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val gitHubReleaseApi = mockk<GitHubReleaseApi>()
+        val specSlot = slot<IntegrationCallSpec<List<GitHubReleaseDto>>>()
+        var runtimeResult: IntegrationCallResult<List<GitHubReleaseDto>>? = null
+
+        coEvery { runtime.call(capture(specSlot)) } coAnswers {
+            val result = firstArg<IntegrationCallSpec<List<GitHubReleaseDto>>>().call()
+            runtimeResult = result
+            result
+        }
+
+        coEvery {
+            gitHubReleaseApi.getReleases(owner = "owner", repo = "repo", perPage = 10)
+        } throws IOException("unable to reach github")
+
+        val provider = GitHubReleaseIntegrationProvider(runtime, gitHubReleaseApi)
+        val result = provider.fetchReleases(owner = "owner", repo = "repo", perPage = 10)
+
+        assertTrue(result is IntegrationCallResult.NetworkError)
+        assertEquals(
+            "unable to reach github",
+            (result as IntegrationCallResult.NetworkError).throwable.message
+        )
+        assertTrue(runtimeResult is IntegrationCallResult.NetworkError)
+    }
 }

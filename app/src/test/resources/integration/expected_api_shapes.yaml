@@ -854,6 +854,17 @@ github.latest_release:
   expectedRuntimePolicy:
     default: Disabled
 
+github.list_releases:
+  provider: GITHUB
+  headerPolicy: github-json-v1
+  method: GET
+  path: "/repos/{owner}/{repo}/releases"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
 github.asset_download:
   provider: GITHUB
   headerPolicy: github-json-v1
