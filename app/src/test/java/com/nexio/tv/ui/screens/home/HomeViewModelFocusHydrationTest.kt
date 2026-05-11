@@ -47,6 +47,7 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
+import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -568,7 +569,10 @@ class HomeViewModelFocusHydrationTest {
                 .none { it.display.title == "Old Profile Canonical Hero" }
         )
         assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 2).isEmpty())
-        assertTrue(viewModel.inMemoryHomeSnapshot?.heroItems.orEmpty().none { it.name == "Old Profile Canonical Hero" })
+        // Plan B Task 6f.5 — content (`name`) lives in ResolvedDisplaySurfaceRepository
+        // now. Snapshot only carries structure (rails + heroItemKeys). Original
+        // assertion: `viewModel.inMemoryHomeSnapshot?.heroItems.orEmpty().none { it.name == "Old Profile Canonical Hero" }`
+        // is covered by the typed-surface check above.
     }
 
     @Test
@@ -652,7 +656,10 @@ class HomeViewModelFocusHydrationTest {
         viewModel.updateCatalogRowsPipeline(activeSession.value)
         advanceUntilIdle()
 
-        assertTrue(viewModel.inMemoryHomeSnapshot?.heroItems.orEmpty().none { it.name == "Old Profile Cached Hero" })
+        // Plan B Task 6f.5 — content (`name`) lives in ResolvedDisplaySurfaceRepository
+        // now. Snapshot only carries structure (rails + heroItemKeys). Original
+        // assertion: `viewModel.inMemoryHomeSnapshot?.heroItems.orEmpty().none { it.name == "Old Profile Cached Hero" }`
+        // is structurally covered by the _uiState check below.
         assertTrue(viewModel._uiState.value.heroItems.none { it.name == "Old Profile Cached Hero" })
     }
 
@@ -1160,10 +1167,9 @@ class HomeViewModelFocusHydrationTest {
 
         viewModel.applyHomeSnapshotToUiPipeline(
             HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = listOf(kitsuRow),
-                fullCatalogRows = listOf(kitsuRow),
-                heroItems = emptyList(),
-                orderedGroupKeys = listOf(KitsuCatalogIds.TRENDING_ANIME)
+                orderedGroupKeys = listOf(KitsuCatalogIds.TRENDING_ANIME),
+                rails = listOf(kitsuRow.toRail()),
+                heroItemKeys = emptyList()
             )
         )
 
