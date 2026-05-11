@@ -605,6 +605,7 @@ fun MetaDetailsScreen(
                     MetaDetailsContent(
                         meta = meta,
                         resolvedDetail = uiState.resolvedDetail,
+                        resolvedDetailFields = uiState.resolvedDetailFields,
                         detailReturnEpisodeFocusRequest = detailReturnFocusResolution.request,
                         seasons = uiState.seasons,
                         selectedSeason = uiState.selectedSeason,
@@ -990,6 +991,7 @@ private fun ImmediateDetailTrailerTakeoverOverlay(
 private fun MetaDetailsContent(
     meta: Meta,
     resolvedDetail: ResolvedDetailDisplayDocument?,
+    resolvedDetailFields: MetaDetailsResolvedFields?,
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
     selectedSeason: Int,
@@ -1794,6 +1796,7 @@ private fun MetaDetailsContent(
             HeroContentSection(
                 meta = displayMeta,
                 resolvedDetail = resolvedDetail,
+                resolvedDetailFields = resolvedDetailFields,
                 nextEpisode = nextEpisode,
                 nextToWatch = nextToWatch,
                 onPlayClick = heroPlayClick,

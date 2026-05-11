@@ -78,6 +78,7 @@ private const val HERO_DESCRIPTION_MAX_LINES = 6
 internal fun HeroContentSection(
     meta: Meta,
     resolvedDetail: ResolvedDetailDisplayDocument?,
+    resolvedDetailFields: MetaDetailsResolvedFields? = null,
     nextEpisode: Video?,
     nextToWatch: NextToWatch?,
     onPlayClick: () -> Unit,
@@ -107,11 +108,15 @@ internal fun HeroContentSection(
     // document) when present; fall back to meta on the legacy route. Per-field
     // derivation is memoized so reference-fresh resolvedDetail emissions don't
     // re-allocate downstream values when the content is unchanged.
-    val displayTitle = remember(resolvedDetail?.fields?.title, meta.name) {
-        resolvedDetail?.fields?.title?.takeIf { it.isNotBlank() } ?: meta.name
+    val displayTitle = remember(resolvedDetailFields?.title, resolvedDetail?.fields?.title, meta.name) {
+        resolvedDetailFields?.title?.takeIf { it.isNotBlank() }
+            ?: resolvedDetail?.fields?.title?.takeIf { it.isNotBlank() }
+            ?: meta.name
     }
-    val displayDescription = remember(resolvedDetail?.fields?.overview, meta.description) {
-        resolvedDetail?.fields?.overview?.takeIf { it.isNotBlank() } ?: meta.description
+    val displayDescription = remember(resolvedDetailFields?.overview, resolvedDetail?.fields?.overview, meta.description) {
+        resolvedDetailFields?.overview?.takeIf { it.isNotBlank() }
+            ?: resolvedDetail?.fields?.overview?.takeIf { it.isNotBlank() }
+            ?: meta.description
     }
     // Logo selection: typed-only first (resolvedDetail then meta.artwork), with
     // the legacy meta.logo String fallback only when both typed refs are null.
