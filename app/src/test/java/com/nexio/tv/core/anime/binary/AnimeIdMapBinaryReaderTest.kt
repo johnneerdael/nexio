@@ -91,4 +91,20 @@ class AnimeIdMapBinaryReaderTest {
         val offsets = reader.recordOffsetsForMultiKey(IndexKind.BY_TVDB, "305074")
         assertEquals(2, offsets.size)
     }
+
+    @Test
+    fun `recordOffsetsForImdb returns list for known imdb id`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        // Fixture: byImdb { "tt5626028" -> ["11469","13881"] }
+        val offsets = reader.recordOffsetsForImdb("tt5626028")
+        assertEquals(2, offsets.size)
+    }
+
+    @Test
+    fun `recordOffsetsForImdb returns empty for unknown imdb id`() {
+        val reader = AnimeIdMapBinaryReader(context)
+        reader.ensureOpen()
+        assertEquals(0, reader.recordOffsetsForImdb("tt9999999").size)
+    }
 }

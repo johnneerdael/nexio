@@ -157,6 +157,45 @@ class AnimeIdMapBinaryReader @Inject constructor(
         return result
     }
 
+    fun recordOffsetsForImdb(imdbId: String): IntArray {
+        val open = state as? State.Open ?: return IntArray(0)
+        val hash = StringHash.hash64(imdbId)
+        val d = readDescriptor(open, IndexKind.BY_IMDB.slot)
+        require(d.kind == BinaryFormat.KIND_IMDB) {
+            "expected KIND_IMDB for BY_IMDB, got ${d.kind}"
+        }
+        var idx = binarySearchU64(open.parent, d.offset.toInt(), BinaryFormat.STRIDE_IMDB, d.count.toInt(), hash)
+        if (idx < 0) return IntArray(0)
+        // Walk backwards while hash equal (sort was stable on key string within
+        // hash-equal runs, but binary search lands anywhere within the run).
+        while (idx > 0 && open.parent.getLong(d.offset.toInt() + (idx - 1) * BinaryFormat.STRIDE_IMDB) == hash) idx--
+        // Linear-probe forward, comparing the actual string at strOffset.
+        while (idx < d.count.toInt()) {
+            val entryStart = d.offset.toInt() + idx * BinaryFormat.STRIDE_IMDB
+            if (open.parent.getLong(entryStart) != hash) break
+            val strOff = open.parent.getInt(entryStart + 8)
+            if (readPoolString(open, strOff) == imdbId) {
+                val listOffset = open.parent.getInt(entryStart + 12)
+                val listLen = open.parent.getInt(entryStart + 16)
+                val result = IntArray(listLen)
+                for (i in 0 until listLen) result[i] = open.parent.getInt(listOffset + i * 4)
+                return result
+            }
+            idx++
+        }
+        return IntArray(0)
+    }
+
+    internal fun readPoolString(open: State.Open, stringPoolOffset: Int): String? {
+        if (stringPoolOffset == BinaryFormat.NULL_STRING_OFFSET) return null
+        val r = LongRef()
+        val after = VarintReader.readULong(open.stringPool, stringPoolOffset, r)
+        val len = r.value.toInt()
+        val bytes = ByteArray(len)
+        for (i in 0 until len) bytes[i] = open.stringPool.get(after + i)
+        return String(bytes, Charsets.UTF_8)
+    }
+
     private data class Descriptor(val kind: Int, val stride: Int, val offset: Long, val count: Long)
 
     private fun readDescriptor(open: State.Open, slot: Int): Descriptor {
