@@ -510,15 +510,19 @@ class InAppYouTubeExtractor @Inject constructor(
         // iOS HLS manifest URL.
         val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
 
-        val requestProfile = when (client.key) {
-            "ios" -> YouTubeWireProfile.IOS
-            "android" -> YouTubeWireProfile.ANDROID
-            else -> YouTubeWireProfile.WEB
-        }
+        // The www.youtube.com player endpoint needs the WEB wire fingerprint
+        // (origin, referer, accept-language) to return full streamingData
+        // even when the body's `context.client` is IOS — without it,
+        // iOS-shaped requests get a reduced response that omits the
+        // HLS manifest URL, and we fall back to a 360p progressive
+        // mp4. We override the User-Agent to the iOS app's UA so the
+        // returned URLs are still signed for iOS (which we need for
+        // the iOS HLS path). Per-host header dispatch in TrailerPlayer
+        // handles the iOS-flavored properties on segment fetches.
         val headers = buildMap {
             putAll(
                 buildYouTubeWireProperties(
-                    profile = requestProfile,
+                    profile = YouTubeWireProfile.WEB,
                     userAgent = client.userAgent,
                     cookieHeader = cookieHeader
                 )

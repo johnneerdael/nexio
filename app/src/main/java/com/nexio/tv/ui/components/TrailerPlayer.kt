@@ -222,7 +222,15 @@ fun TrailerPlayer(
         videoUrl: String,
         audioUrl: String?
     ): DefaultMediaSourceFactory {
-        val effectiveUserAgent = trailerUserAgent
+        // The trailer source's userAgent matches the client that signed the
+        // video URL (iOS app UA when the HLS manifest came from the iOS
+        // player response). We need this UA on googlevideo.com segment
+        // fetches — but NOT on youtube.com/api/timedtext fetches. The
+        // timedtext endpoint sees web origin/referer paired with the iOS
+        // app UA as a contradictory fingerprint and returns 429 (the iOS
+        // app never fetches timedtext, so a web-shaped request with an
+        // iOS UA is anti-abuse-suspicious).
+        val signedClientUserAgent = trailerUserAgent
             ?.takeIf { it.isNotBlank() }
             ?: YOUTUBE_STABLE_WEB_USER_AGENT
         val signedClientProfile = when (trailerSigningClientKey) {
@@ -232,18 +240,16 @@ fun TrailerPlayer(
         }
         val signedClientProperties = buildYouTubeWireProperties(
             profile = signedClientProfile,
-            userAgent = effectiveUserAgent
+            userAgent = signedClientUserAgent
         )
+        // For non-googlevideo.com hosts (timedtext, other youtube.com
+        // endpoints), use a clean web fingerprint: web profile (origin/
+        // referer/accept-language) paired with the stable web Chrome UA.
+        // No carryover of the iOS app UA.
         val webProperties = buildYouTubeWireProperties(
             profile = YouTubeWireProfile.WEB,
-            userAgent = effectiveUserAgent
+            userAgent = YOUTUBE_STABLE_WEB_USER_AGENT
         )
-        // Per-host dispatch: `googlevideo.com` (HLS video + audio segments)
-        // gets the signing-client profile — iOS-signed URLs need iOS-flavored
-        // properties or YouTube's WAF 403s them. Everything else, including
-        // `youtube.com/api/timedtext` (sideloaded subtitle TTML/VTT), gets
-        // the web profile — the iOS app never fetches timedtext, so YouTube
-        // rate-limits (429) iOS-shaped requests to that endpoint.
         val resolver = ResolvingDataSource.Resolver { dataSpec ->
             val host = dataSpec.uri.host.orEmpty()
             val properties = if (host.contains("googlevideo.com")) {
@@ -253,6 +259,10 @@ fun TrailerPlayer(
             }
             dataSpec.withRequestHeaders(properties)
         }
+        // Pass-through for the upstream HTTP factory: use the signed-client
+        // UA as the default (matches googlevideo.com expectations); the
+        // resolver overrides per-host for non-googlevideo URIs.
+        val effectiveUserAgent = signedClientUserAgent
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
             DefaultMediaSourceFactory(
                 ResolvingDataSource.Factory(
