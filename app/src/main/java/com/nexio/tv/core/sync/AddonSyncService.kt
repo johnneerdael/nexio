@@ -4,6 +4,8 @@ import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.data.local.AddonPreferences
+import com.nexio.tv.data.local.SyncWatermarkDataStore
+import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
@@ -32,7 +34,8 @@ class AddonSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val authManager: AuthManager,
     private val addonPreferences: AddonPreferences,
-    private val startupPushGate: AccountConfigStartupPushGate
+    private val startupPushGate: AccountConfigStartupPushGate,
+    private val syncWatermarkStore: SyncWatermarkDataStore
 ) {
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
@@ -157,12 +160,16 @@ class AddonSyncService @Inject constructor(
 
     suspend fun getRemoteAddonConfigs(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
-            val snapshot = withJwtRefreshRetry {
-                postgrest.rpc("sync_pull_account_snapshot").decodeAs<AccountSnapshotRpcResponse>()
+            val envelope = withJwtRefreshRetry {
+                postgrest.rpc("sync_pull_account_snapshot_v10")
+                    .decodeAs<V10AccountSnapshotEnvelope>()
             }
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
 
             Result.success(
-                snapshot.addons
+                envelope.addons.items
                     .sortedBy { it.sortOrder }
                     .mapNotNull { addon ->
                         val resolvedUrl = resolveRemoteAddonUrl(addon)
