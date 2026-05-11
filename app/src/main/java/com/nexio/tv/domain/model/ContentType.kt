@@ -39,5 +39,7 @@ internal fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
         ContentType.MOVIE -> MetadataMediaKind.MOVIE
         ContentType.SERIES,
         ContentType.TV -> MetadataMediaKind.SERIES
-        else -> MetadataMediaKind.UNKNOWN
+        ContentType.CHANNEL,
+        ContentType.PERSON,
+        ContentType.UNKNOWN -> MetadataMediaKind.UNKNOWN
     }
