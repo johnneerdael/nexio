@@ -2,6 +2,8 @@ package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 
@@ -28,7 +30,8 @@ data class ResolvedDisplayItem(
      * when the item was constructed by legacy paths that haven't migrated yet.
      * Consumers must tolerate null and fall back to the flat fields above.
      */
-    val slots: ResolvedDisplayFieldSlots? = null
+    val slots: ResolvedDisplayFieldSlots? = null,
+    val preferredArtworkProviders: Map<ArtworkType, ArtworkProviderId> = emptyMap()
 )
 
 @Immutable
