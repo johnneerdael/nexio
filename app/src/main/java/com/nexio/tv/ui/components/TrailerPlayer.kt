@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.TrailerSubtitleFormat
@@ -179,6 +180,19 @@ fun TrailerPlayer(
                     } else {
                         C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                     }
+                    // Trailers are short (~30s). The default ABR estimator
+                    // (DefaultBandwidthMeter) starts conservatively (~700
+                    // kbps) and ramps up over time — for a short trailer
+                    // it never reaches a high variant before playback ends.
+                    // Force the highest available video variant up front;
+                    // the 2 MiB target buffer cap on the LoadControl above
+                    // bounds memory. This is video-only and doesn't affect
+                    // text-track selection (so the HLS `tts_caps/1`
+                    // alternate-rendition concern from prior fixes still
+                    // doesn't apply).
+                    trackSelectionParameters = trackSelectionParameters.buildUpon()
+                        .setForceHighestSupportedBitrate(true)
+                        .build()
                 }
         } else {
             null
@@ -211,32 +225,50 @@ fun TrailerPlayer(
         val effectiveUserAgent = trailerUserAgent
             ?.takeIf { it.isNotBlank() }
             ?: YOUTUBE_STABLE_WEB_USER_AGENT
-        // Pick the HTTP wire profile that matches the URL's signing client.
-        // iOS-signed `googlevideo.com` URLs must NOT carry the web origin/
-        // referer properties — YouTube's WAF reads that as a stolen-token
-        // signal and 403s segment fetches.
-        val wireProfile = when (trailerSigningClientKey) {
+        val signedClientProfile = when (trailerSigningClientKey) {
             "ios" -> YouTubeWireProfile.IOS
             "android" -> YouTubeWireProfile.ANDROID
             else -> YouTubeWireProfile.WEB
         }
-        val wireProperties = buildYouTubeWireProperties(
-            profile = wireProfile,
+        val signedClientProperties = buildYouTubeWireProperties(
+            profile = signedClientProfile,
             userAgent = effectiveUserAgent
         )
+        val webProperties = buildYouTubeWireProperties(
+            profile = YouTubeWireProfile.WEB,
+            userAgent = effectiveUserAgent
+        )
+        // Per-host dispatch: `googlevideo.com` (HLS video + audio segments)
+        // gets the signing-client profile — iOS-signed URLs need iOS-flavored
+        // properties or YouTube's WAF 403s them. Everything else, including
+        // `youtube.com/api/timedtext` (sideloaded subtitle TTML/VTT), gets
+        // the web profile — the iOS app never fetches timedtext, so YouTube
+        // rate-limits (429) iOS-shaped requests to that endpoint.
+        val resolver = ResolvingDataSource.Resolver { dataSpec ->
+            val host = dataSpec.uri.host.orEmpty()
+            val properties = if (host.contains("googlevideo.com")) {
+                signedClientProperties
+            } else {
+                webProperties
+            }
+            dataSpec.withRequestHeaders(properties)
+        }
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
             DefaultMediaSourceFactory(
-                YoutubeChunkedDataSourceFactory(
-                    userAgent = effectiveUserAgent,
-                    requestProperties = wireProperties
+                ResolvingDataSource.Factory(
+                    YoutubeChunkedDataSourceFactory(
+                        userAgent = effectiveUserAgent,
+                        requestProperties = signedClientProperties
+                    ),
+                    resolver
                 )
             )
         } else {
+            val httpFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent(effectiveUserAgent)
+                .setAllowCrossProtocolRedirects(true)
             DefaultMediaSourceFactory(
-                DefaultHttpDataSource.Factory()
-                    .setUserAgent(effectiveUserAgent)
-                    .setDefaultRequestProperties(wireProperties)
-                    .setAllowCrossProtocolRedirects(true)
+                ResolvingDataSource.Factory(httpFactory, resolver)
             )
         }
     }
