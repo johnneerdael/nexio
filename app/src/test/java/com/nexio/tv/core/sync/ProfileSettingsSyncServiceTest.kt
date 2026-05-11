@@ -58,7 +58,8 @@ class ProfileSettingsSyncServiceTest {
             profileManager = profileManager,
             profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true),
             profileModeRouter = ProfileModeRouter(),
-            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" }),
+            syncWatermarkStore = mockk<com.nexio.tv.data.local.SyncWatermarkDataStore>(relaxed = true)
         )
     }
 
@@ -70,7 +71,8 @@ class ProfileSettingsSyncServiceTest {
             profileManager = profileManager,
             profileDataStoreFactory = realProfileDataStoreFactory,
             profileModeRouter = ProfileModeRouter(),
-            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" }),
+            syncWatermarkStore = mockk<com.nexio.tv.data.local.SyncWatermarkDataStore>(relaxed = true)
         )
     }
 
