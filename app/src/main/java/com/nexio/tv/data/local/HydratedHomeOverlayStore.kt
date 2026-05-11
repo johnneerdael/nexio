@@ -5,10 +5,13 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
+import com.nexio.tv.domain.model.strictlyContains
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,6 +29,7 @@ class HydratedHomeOverlayStore @Inject constructor(
 ) {
     private val gson = Gson()
     private val version = MutableStateFlow(0L)
+    private val staleItemKeys = MutableStateFlow<Set<String>>(emptySet())
 
     fun observeForItemKeys(
         itemKeys: Set<String>,
@@ -75,6 +79,12 @@ class HydratedHomeOverlayStore @Inject constructor(
         }
 
         editor.apply()
+        // Upsert replaces stale state — clear all alias itemKeys we just persisted.
+        if (staleItemKeys.value.isNotEmpty()) {
+            staleItemKeys.update { current ->
+                if (current.isEmpty()) current else current - normalizedAliases
+            }
+        }
         incrementVersion()
     }
 
@@ -84,7 +94,8 @@ class HydratedHomeOverlayStore @Inject constructor(
         policyVersion: Int
     ) {
         val editor = prefs().edit()
-        itemKeys.normalizedItemKeys().forEach { itemKey ->
+        val normalized = itemKeys.normalizedItemKeys()
+        normalized.forEach { itemKey ->
             editor.remove(
                 aliasPrefsKey(
                     itemKey = itemKey,
@@ -94,6 +105,11 @@ class HydratedHomeOverlayStore @Inject constructor(
             )
         }
         editor.apply()
+        if (staleItemKeys.value.isNotEmpty()) {
+            staleItemKeys.update { current ->
+                if (current.isEmpty()) current else current - normalized
+            }
+        }
         incrementVersion()
     }
 
@@ -107,8 +123,52 @@ class HydratedHomeOverlayStore @Inject constructor(
             val editor = sharedPreferences.edit()
             overlayKeys.forEach(editor::remove)
             editor.apply()
+            staleItemKeys.value = emptySet()
             incrementVersion()
         }
+    }
+
+    /**
+     * In-memory mark-stale. If the overlay for [itemKey] has a stable-IDs snapshot
+     * that [currentIds] strictly contains (i.e., current has at least one ID the
+     * snapshot lacked and lost none of the IDs the snapshot had), the next read
+     * for this itemKey returns the overlay with state = STALE_READY.
+     *
+     * Not persisted. Cold-start re-loads overlays in their persisted state; the
+     * cross-id enricher (Task 13) re-fires markStaleIfWeakerIds for any item whose
+     * current IDs are still strictly broader than the snapshot, naturally
+     * re-marking it.
+     */
+    suspend fun markStaleIfWeakerIds(itemKey: String, currentIds: ProviderIds) {
+        val trimmed = itemKey.trim().takeIf { it.isNotEmpty() } ?: return
+        val overlay = withContext(Dispatchers.IO) {
+            readOverlayForItemKey(itemKey = trimmed)
+        } ?: return
+        if (overlay.state == HomeItemHydrationState.STALE_READY) return
+        if (!currentIds.strictlyContains(overlay.stableIdsSnapshot)) return
+        staleItemKeys.update { current -> current + trimmed }
+        incrementVersion()
+    }
+
+    /**
+     * In-memory mark-all-stale. Every overlay alias currently persisted to
+     * SharedPreferences is added to staleItemKeys. Used by
+     * ArtworkSettingsInvalidator (Task 14) when the settings signature changes.
+     *
+     * Not persisted (matches markStaleIfWeakerIds semantics).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun markStaleAll(reason: String) {
+        val itemKeys = withContext(Dispatchers.IO) {
+            prefs().all.keys
+                .asSequence()
+                .filter { it.startsWith(ALIAS_PREFIX) }
+                .mapNotNull { extractItemKeyFromAliasPrefsKey(it) }
+                .toSet()
+        }
+        if (itemKeys.isEmpty()) return
+        staleItemKeys.update { current -> current + itemKeys }
+        incrementVersion()
     }
 
     fun readForItemKeys(
@@ -134,7 +194,7 @@ class HydratedHomeOverlayStore @Inject constructor(
                 nowMs = nowMs
             ) ?: return@mapNotNull null
 
-            itemKey to overlay
+            itemKey to overlay.applyInMemoryStaleness(itemKey)
         }.toMap()
     }
 
@@ -153,7 +213,7 @@ class HydratedHomeOverlayStore @Inject constructor(
             languageTag = languageTag,
             policyVersion = policyVersion
         )
-        return readOverlayByKey(
+        val overlay = readOverlayByKey(
             overlayKey = overlayKey,
             expectedCanonicalProvider = canonicalProvider,
             expectedCanonicalId = canonicalId,
@@ -161,7 +221,16 @@ class HydratedHomeOverlayStore @Inject constructor(
             expectedLanguageTag = languageTag,
             expectedPolicyVersion = policyVersion,
             nowMs = nowMs
-        )
+        ) ?: return null
+        // Stale-state lookup keyed by the row item key isn't possible here (we have the
+        // canonical identity, not the row alias), so we walk the staleItemKeys set looking
+        // for ANY itemKey whose stored alias resolves to this overlayKey. Cheap when set
+        // is empty (common steady state) or small (typical post-invalidation).
+        val stale = staleItemKeys.value.any { staleKey ->
+            prefs().getString(aliasPrefsKey(staleKey, languageTag, policyVersion), null) ==
+                overlay.overlayKey
+        }
+        return if (stale) overlay.copy(state = HomeItemHydrationState.STALE_READY) else overlay
     }
 
     private fun readOverlayByKey(
@@ -212,6 +281,48 @@ class HydratedHomeOverlayStore @Inject constructor(
         languageTag: String,
         policyVersion: Int
     ): String = "$ALIAS_PREFIX${languageTag.trim()}::policy:$policyVersion::${itemKey.trim()}"
+
+    /**
+     * Inverse of [aliasPrefsKey]. Returns the original itemKey component for the
+     * stored alias key, or null if the key doesn't match the expected shape.
+     *
+     * Stored shape: "alias::$languageTag::policy:$policyVersion::$itemKey"
+     */
+    private fun extractItemKeyFromAliasPrefsKey(prefsKey: String): String? {
+        if (!prefsKey.startsWith(ALIAS_PREFIX)) return null
+        // The itemKey itself can contain colons (e.g. "movie:tmdb:550") but never the
+        // "::" double-colon used as our delimiter, so we walk by "::" separators.
+        val withoutPrefix = prefsKey.substring(ALIAS_PREFIX.length)
+        val firstSep = withoutPrefix.indexOf("::").takeIf { it >= 0 } ?: return null
+        val afterLanguage = withoutPrefix.substring(firstSep + 2)
+        if (!afterLanguage.startsWith("policy:")) return null
+        val secondSep = afterLanguage.indexOf("::").takeIf { it >= 0 } ?: return null
+        val itemKey = afterLanguage.substring(secondSep + 2)
+        return itemKey.trim().takeIf { it.isNotEmpty() }
+    }
+
+    private fun readOverlayForItemKey(
+        itemKey: String,
+        nowMs: Long = System.currentTimeMillis()
+    ): HydratedHomeOverlay? {
+        val sharedPreferences = prefs()
+        // Try matching across all stored language tags + policy versions for this
+        // itemKey. In practice the store currently only ever holds languageTag=current
+        // AND policyVersion=DEFAULT_HOME_OVERLAY_POLICY_VERSION, but we don't have
+        // those values here — walk the keyspace to find any alias for this itemKey.
+        val trimmedItemKey = itemKey.trim()
+        val matchingAliasKey = sharedPreferences.all.keys.firstOrNull { key ->
+            key.startsWith(ALIAS_PREFIX) && key.endsWith("::$trimmedItemKey")
+        } ?: return null
+        val overlayKey = sharedPreferences.getString(matchingAliasKey, null) ?: return null
+        return readOverlayByKey(overlayKey = overlayKey, nowMs = nowMs)
+    }
+
+    private fun HydratedHomeOverlay.applyInMemoryStaleness(itemKey: String): HydratedHomeOverlay {
+        if (state == HomeItemHydrationState.STALE_READY) return this
+        if (itemKey.trim() !in staleItemKeys.value) return this
+        return copy(state = HomeItemHydrationState.STALE_READY)
+    }
 
     private fun Set<String>.normalizedItemKeys(): Set<String> =
         mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
