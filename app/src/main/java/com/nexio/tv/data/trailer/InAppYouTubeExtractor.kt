@@ -137,21 +137,22 @@ private val CLIENTS = listOf(
         id = "5",
         version = "21.03.2",
         userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
-        // Mirrors NewPipeExtractor's iOS Innertube client info: osName="iOS"
-        // (not "iPhone") and the matching 22H124 build, deviceMake="Apple",
-        // platform="MOBILE". YouTube cross-checks these context fields against
-        // the UA when signing HLS manifest URLs.
+        // iOS Innertube context shape that the www.youtube.com player
+        // endpoint accepts (returns full streamingData with HLS manifest
+        // URL). NewPipeExtractor uses a slightly different shape
+        // (osName="iOS", osVersion="18.7.2.22H124", +utcOffsetMinutes)
+        // because it targets youtubei.googleapis.com — that shape
+        // returns empty streamingData when sent to www.youtube.com.
         context = mapOf(
             "clientName" to "IOS",
             "clientVersion" to "21.03.2",
             "deviceMake" to "Apple",
             "deviceModel" to "iPhone16,2",
-            "osName" to "iOS",
-            "osVersion" to "18.7.2.22H124",
+            "osName" to "iPhone",
+            "osVersion" to "18.7.2.22G100",
             "platform" to "MOBILE",
             "hl" to "en",
-            "gl" to "US",
-            "utcOffsetMinutes" to 0
+            "gl" to "US"
         ),
         priority = 0
     ),
@@ -533,10 +534,11 @@ class InAppYouTubeExtractor @Inject constructor(
             if (!visitorData.isNullOrBlank()) put("x-goog-visitor-id", visitorData)
         }
 
-        val cpn = generateContentPlaybackNonce()
+        // No `cpn` in the body: NewPipe sends it to youtubei.googleapis.com,
+        // but the www.youtube.com player endpoint we use returns empty
+        // streamingData when cpn is present in some video requests.
         val payload = buildMap<String, Any> {
             put("videoId", videoId)
-            put("cpn", cpn)
             put("contentCheckOk", true)
             put("racyCheckOk", true)
             put("context", mapOf("client" to client.context))
