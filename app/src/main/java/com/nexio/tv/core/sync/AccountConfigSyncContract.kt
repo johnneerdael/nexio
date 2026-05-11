@@ -51,6 +51,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import javax.inject.Inject
+import javax.inject.Singleton
 
 internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 9
 
@@ -173,7 +175,8 @@ internal fun observeAccountConfigSyncChangedPaths(
     )
 }
 
-internal class AccountConfigStartupPushGate {
+@Singleton
+class AccountConfigStartupPushGate @Inject constructor() {
     private val lock = Any()
     private var sessionUserId: String? = null
     private var remotePulledUserId: String? = null
