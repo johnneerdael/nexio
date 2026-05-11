@@ -358,13 +358,24 @@ class InAppYouTubeExtractor @Inject constructor(
                 val adaptiveFormats = streamingData.listMapValue("adaptiveFormats")
                 for (i in adaptiveFormats.indices) {
                     val format = adaptiveFormats[i]
-                    val url = format.stringValue("url") ?: run {
+                    val directUrl = format.stringValue("url")
+                    val resolvedUrl = directUrl ?: run {
                         val signatureCipher = format.stringValue("signatureCipher")
                             ?: format.stringValue("cipher")
                             ?: return@run null
                         val manifest = cipherManifestDeferred.await() ?: return@run null
                         SignatureCipherDecoder.decode(signatureCipher, manifest)
                     } ?: continue
+                    // Verify cipher-resolved URLs against HEAD + tail byte.
+                    // Direct iOS/ANDROID URLs skip the round trip (low
+                    // historical 404 rate; the extra latency would hurt
+                    // startup with no benefit).
+                    val url = if (directUrl == null) {
+                        verifyContentLength(resolvedUrl, signedClientUserAgent = client.userAgent)
+                            ?.let { resolvedUrl } ?: continue
+                    } else {
+                        resolvedUrl
+                    }
                     val mimeType = format.stringValue("mimeType").orEmpty()
                     val hasVideo = mimeType.contains("video/")
                     val hasAudio = mimeType.contains("audio/") || mimeType.startsWith("audio/")
