@@ -113,6 +113,32 @@ class ResolvedDisplaySurfaceRepository(
         return published
     }
 
+    /**
+     * Phase 3.7 — cold-start restore. Seeds the home-surface in-memory state
+     * for [profileId] with [items] previously persisted by
+     * [com.nexio.tv.data.local.ResolvedDisplaySnapshotStore]. Bypasses the
+     * `shouldSuppressSurfaceUpdate` gate: restore IS authoritative (we're
+     * recovering the typed authority's last-known state from disk), not a
+     * competing fresh emission.
+     *
+     * Idempotent — restored items never overwrite items already in memory
+     * (e.g. if the producer beat us to it). Only fills gaps.
+     */
+    @Synchronized
+    fun restoreFromDisk(items: Map<String, ResolvedDisplayItem>, profileId: Int) {
+        if (items.isEmpty()) return
+        val itemsList = items.values.toList()
+        surfaces.update { current ->
+            val currentSurface = current[HOME_SURFACE_KEY].orEmpty()
+            val existing = currentSurface[profileId].orEmpty()
+            val existingKeys = existing.map { it.itemKey }.toSet()
+            val newItems = itemsList.filter { it.itemKey !in existingKeys }
+            if (newItems.isEmpty()) return@update current
+            val merged = existing + newItems
+            current + (HOME_SURFACE_KEY to (currentSurface + (profileId to merged)))
+        }
+    }
+
     // Test-only seed path for repository projection tests that provide final display items directly.
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun replaceForTest(

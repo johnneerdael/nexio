@@ -139,6 +139,7 @@ class HomeViewModel @Inject constructor(
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
     internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    internal val resolvedDisplaySnapshotStore: com.nexio.tv.data.local.ResolvedDisplaySnapshotStore,
     internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val metadataDiskCacheStore: MetadataDiskCacheStore,
