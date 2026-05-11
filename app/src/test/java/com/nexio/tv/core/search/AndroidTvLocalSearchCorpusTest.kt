@@ -8,6 +8,9 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemKey
+import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.coEvery
 import io.mockk.every
@@ -21,15 +24,29 @@ class AndroidTvLocalSearchCorpusTest {
 
     @Test
     fun `corpus returns routeable candidates from home snapshot rows`() = runTest {
+        // Plan B Task 6f.5 — snapshot is structure-only (rails + heroItemKeys).
+        // The corpus resolves per-item content via MetadataDiskCacheStore, so
+        // titles/descriptions are stubbed via the home-display-metadata path.
         val snapshotStore = snapshotStore(
             HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = listOf(row(ContentType.MOVIE, "movie-1", "The Matrix")),
-                fullCatalogRows = listOf(row(ContentType.SERIES, "series-1", "Daredevil: Born Again")),
-                heroItems = emptyList()
+                orderedGroupKeys = emptyList(),
+                rails = listOf(
+                    row(ContentType.MOVIE, "movie-1", "The Matrix").toRail(),
+                    row(ContentType.SERIES, "series-1", "Daredevil: Born Again").toRail()
+                ),
+                heroItemKeys = emptyList()
             )
         )
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.readCurrentMetaForItem(any(), any()) } returns null
+        every {
+            metadataStore.readCurrentHomeDisplayMetadataForItem(homeDisplayItemKey("movie", "movie-1"), "en")
+        } returns HomeDisplayMetadata(title = "The Matrix")
+        every {
+            metadataStore.readCurrentHomeDisplayMetadataForItem(homeDisplayItemKey("series", "series-1"), "en")
+        } returns HomeDisplayMetadata(title = "Daredevil: Born Again")
 
-        val candidates = corpus(snapshotStore).candidates()
+        val candidates = corpus(snapshotStore, metadataStore, stubMetadataStore = false).candidates()
 
         assertEquals(listOf("The Matrix", "Daredevil: Born Again"), candidates.map { it.title })
         assertEquals(setOf(AndroidTvSearchCandidateSource.LOCAL_HOME), candidates.map { it.source }.toSet())
@@ -37,18 +54,29 @@ class AndroidTvLocalSearchCorpusTest {
     }
 
     @Test
-    fun `hero item dedupes with routeable row item and keeps richer metadata`() = runTest {
+    fun `hero item dedupes with routeable row item`() = runTest {
+        // Plan B Task 6f.5 — snapshot is structure-only. The hero and row entries
+        // for the same itemKey resolve to the same content via the metadata store;
+        // the legacy "hero carries richer metadata than row" path no longer exists
+        // (content lives in ResolvedDisplaySurfaceRepository / metadata cache, not
+        // duplicated per-source on the snapshot). This test now asserts only the
+        // structural dedup contract.
         val rowItem = preview(ContentType.MOVIE, "movie-1", "The Matrix", runtime = null)
-        val heroItem = rowItem.copy(runtime = "136 min", description = "Rich")
+        val itemKey = RailItemKey(apiType = rowItem.apiType, contentId = rowItem.id)
         val snapshotStore = snapshotStore(
             HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = listOf(row(ContentType.MOVIE, rowItem)),
-                fullCatalogRows = emptyList(),
-                heroItems = listOf(heroItem)
+                orderedGroupKeys = emptyList(),
+                rails = listOf(row(ContentType.MOVIE, rowItem).toRail()),
+                heroItemKeys = listOf(itemKey)
             )
         )
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.readCurrentMetaForItem(any(), any()) } returns null
+        every {
+            metadataStore.readCurrentHomeDisplayMetadataForItem(homeDisplayItemKey("movie", "movie-1"), "en")
+        } returns HomeDisplayMetadata(title = "The Matrix", runtime = "136 min")
 
-        val candidate = corpus(snapshotStore).candidates().single()
+        val candidate = corpus(snapshotStore, metadataStore, stubMetadataStore = false).candidates().single()
 
         assertEquals("136 min", candidate.runtime)
         assertEquals("https://example.com", candidate.addonBaseUrl)
@@ -58,9 +86,9 @@ class AndroidTvLocalSearchCorpusTest {
     fun `corpus prefers home display metadata over row first paint fields`() = runTest {
         val snapshotStore = snapshotStore(
             HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = listOf(row(ContentType.SERIES, "series-1", "Addon Title")),
-                fullCatalogRows = emptyList(),
-                heroItems = emptyList()
+                orderedGroupKeys = emptyList(),
+                rails = listOf(row(ContentType.SERIES, "series-1", "Addon Title").toRail()),
+                heroItemKeys = emptyList()
             )
         )
         val metadataStore = mockk<MetadataDiskCacheStore>()

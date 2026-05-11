@@ -24,7 +24,9 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemKey
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.toRail
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -1107,16 +1109,14 @@ class HomeCatalogStartupReadinessTest {
         val trendingItem = samplePreview("tmdb:1", ContentType.MOVIE, "Trending TMDB Movie")
         val popularItem = samplePreview("tmdb:2", ContentType.MOVIE, "Popular TMDB Movie")
         val restored = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)),
-                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem))
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            rails = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)).toRail(),
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem)).toRail()
             ),
-            fullCatalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)),
-                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem))
-            ),
-            heroItems = listOf(trendingItem, popularItem),
-            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+            heroItemKeys = listOf(trendingItem, popularItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
@@ -1144,9 +1144,8 @@ class HomeCatalogStartupReadinessTest {
             tmdbSnapshot = currentTmdbSnapshot
         )
 
-        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.catalogRows.map { it.catalogId })
-        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.fullCatalogRows.map { it.catalogId })
-        assertEquals(listOf("tmdb:1"), filtered.heroItems.map { it.id })
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.rails.map { it.catalogId })
+        assertEquals(listOf("tmdb:1"), filtered.heroItemKeys.map { it.contentId })
         assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.orderedGroupKeys)
     }
 
@@ -1155,16 +1154,14 @@ class HomeCatalogStartupReadinessTest {
         val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Stale TMDB Movie")
         val addonItem = samplePreview("tt0000001", ContentType.MOVIE, "Addon Movie")
         val restored = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)),
-                addonRow("cinemeta", "popular", listOf(addonItem))
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, "cinemeta_movie_popular"),
+            rails = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)).toRail(),
+                addonRow("cinemeta", "popular", listOf(addonItem)).toRail()
             ),
-            fullCatalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)),
-                addonRow("cinemeta", "popular", listOf(addonItem))
-            ),
-            heroItems = listOf(tmdbItem, addonItem),
-            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, "cinemeta_movie_popular")
+            heroItemKeys = listOf(tmdbItem, addonItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
@@ -1191,9 +1188,8 @@ class HomeCatalogStartupReadinessTest {
             tmdbSnapshot = mismatchedSnapshot
         )
 
-        assertEquals(listOf("cinemeta"), filtered.catalogRows.map { it.addonId })
-        assertEquals(listOf("cinemeta"), filtered.fullCatalogRows.map { it.addonId })
-        assertEquals(listOf("tt0000001"), filtered.heroItems.map { it.id })
+        assertEquals(listOf("cinemeta"), filtered.rails.map { it.addonId })
+        assertEquals(listOf("tt0000001"), filtered.heroItemKeys.map { it.contentId })
         assertEquals(listOf("cinemeta_movie_popular"), filtered.orderedGroupKeys)
     }
 
@@ -1203,16 +1199,14 @@ class HomeCatalogStartupReadinessTest {
         val staleTmdbItem = samplePreview(sharedId, ContentType.MOVIE, "Stale TMDB Movie")
         val addonItem = samplePreview(sharedId, ContentType.MOVIE, "Addon Movie")
         val restored = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(staleTmdbItem)),
-                addonRow("cinemeta", "popular", listOf(addonItem))
+            orderedGroupKeys = listOf(TmdbCatalogIds.POPULAR_MOVIES, "cinemeta_movie_popular"),
+            rails = listOf(
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(staleTmdbItem)).toRail(),
+                addonRow("cinemeta", "popular", listOf(addonItem)).toRail()
             ),
-            fullCatalogRows = listOf(
-                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(staleTmdbItem)),
-                addonRow("cinemeta", "popular", listOf(addonItem))
-            ),
-            heroItems = listOf(staleTmdbItem),
-            orderedGroupKeys = listOf(TmdbCatalogIds.POPULAR_MOVIES, "cinemeta_movie_popular")
+            heroItemKeys = listOf(staleTmdbItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
@@ -1239,9 +1233,8 @@ class HomeCatalogStartupReadinessTest {
             tmdbSnapshot = currentTmdbSnapshot
         )
 
-        assertEquals(listOf("cinemeta"), filtered.catalogRows.map { it.addonId })
-        assertEquals(listOf("cinemeta"), filtered.fullCatalogRows.map { it.addonId })
-        assertTrue(filtered.heroItems.isEmpty())
+        assertEquals(listOf("cinemeta"), filtered.rails.map { it.addonId })
+        assertTrue(filtered.heroItemKeys.isEmpty())
         assertEquals(listOf("cinemeta_movie_popular"), filtered.orderedGroupKeys)
     }
 
@@ -1300,10 +1293,11 @@ class HomeCatalogStartupReadinessTest {
     fun `current authoritative empty tmdb snapshot removes old persisted tmdb rows from restored snapshot`() {
         val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Stale TMDB Movie")
         val restored = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem))),
-            fullCatalogRows = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem))),
-            heroItems = listOf(tmdbItem),
-            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            rails = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)).toRail()),
+            heroItemKeys = listOf(tmdbItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
@@ -1325,9 +1319,8 @@ class HomeCatalogStartupReadinessTest {
             currentSyntheticTmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES))
         )
 
-        assertTrue(filtered.catalogRows.isEmpty())
-        assertTrue(filtered.fullCatalogRows.isEmpty())
-        assertTrue(filtered.heroItems.isEmpty())
+        assertTrue(filtered.rails.isEmpty())
+        assertTrue(filtered.heroItemKeys.isEmpty())
         assertTrue(filtered.orderedGroupKeys.isEmpty())
     }
 

@@ -6,6 +6,8 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemKey
+import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -80,11 +82,13 @@ class HomeCatalogSnapshotStoreTest {
             posterRatingsUrlResolver = posterResolver
         )
         val englishSnapshot = sampleSnapshot()
+        val dutchRow = sampleRow("addon", "dutch")
         val dutchSnapshot = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(sampleRow("addon", "dutch")),
-            fullCatalogRows = listOf(sampleRow("addon", "dutch")),
-            heroItems = sampleRow("addon", "dutch").items,
-            orderedGroupKeys = listOf("addon_movie_dutch")
+            orderedGroupKeys = listOf("addon_movie_dutch"),
+            rails = listOf(dutchRow.toRail()),
+            heroItemKeys = dutchRow.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
 
         store.write(englishSnapshot, testPosterToken)
@@ -111,14 +115,15 @@ class HomeCatalogSnapshotStoreTest {
 
         val row = sampleRow("simkl", "simkl_tv_trending_today")
         val snapshot = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(row),
-            fullCatalogRows = listOf(row),
-            heroItems = row.items,
             orderedGroupKeys = listOf(
                 "trakt_trending_movies",
                 "simkl_tv_trending_today",
                 "cinemeta_movie_popular"
-            )
+            ),
+            rails = listOf(row.toRail()),
+            heroItemKeys = row.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
 
         store.write(snapshot, testPosterToken)
@@ -139,11 +144,13 @@ class HomeCatalogSnapshotStoreTest {
             posterRatingsUrlResolver = posterResolver
         )
         val profileOneSnapshot = sampleSnapshot()
+        val profileTwoRow = sampleRow("simkl", "trending")
         val profileTwoSnapshot = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(sampleRow("simkl", "trending")),
-            fullCatalogRows = listOf(sampleRow("simkl", "trending")),
-            heroItems = sampleRow("simkl", "trending").items,
-            orderedGroupKeys = listOf("simkl_trending")
+            orderedGroupKeys = listOf("simkl_trending"),
+            rails = listOf(profileTwoRow.toRail()),
+            heroItemKeys = profileTwoRow.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
 
         store.write(profileOneSnapshot, testPosterToken, profileId = 1)
@@ -185,10 +192,11 @@ class HomeCatalogSnapshotStoreTest {
         )
         val row = sampleRow("addon", "movies", posterProviderTag = "rpdb")
         val snapshot = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(row),
-            fullCatalogRows = listOf(row),
-            heroItems = row.items,
-            orderedGroupKeys = listOf("addon_movie_movies")
+            orderedGroupKeys = listOf("addon_movie_movies"),
+            rails = listOf(row.toRail()),
+            heroItemKeys = row.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
 
         store.write(snapshot, "RPDB:12345")
@@ -210,10 +218,11 @@ class HomeCatalogSnapshotStoreTest {
         )
         val row = sampleRow("addon", "tmdb:popular:movies")
         val snapshot = HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(row),
-            fullCatalogRows = listOf(row),
-            heroItems = row.items,
-            orderedGroupKeys = listOf("tmdb:popular:movies")
+            orderedGroupKeys = listOf("tmdb:popular:movies"),
+            rails = listOf(row.toRail()),
+            heroItemKeys = row.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
 
         val membership = store.buildRailMemberships(snapshot, testPosterToken, profileId = 7).single()
@@ -226,10 +235,11 @@ class HomeCatalogSnapshotStoreTest {
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies")
         return HomeCatalogSnapshotStore.Snapshot(
-            catalogRows = listOf(row),
-            fullCatalogRows = listOf(row),
-            heroItems = row.items,
-            orderedGroupKeys = listOf("addon_movie_movies")
+            orderedGroupKeys = listOf("addon_movie_movies"),
+            rails = listOf(row.toRail()),
+            heroItemKeys = row.items.map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
         )
     }
 
