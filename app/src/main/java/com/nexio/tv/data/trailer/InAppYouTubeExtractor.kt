@@ -321,7 +321,9 @@ class InAppYouTubeExtractor @Inject constructor(
                     manifestUrls += Triple(client.key, client.priority, hlsManifestUrl)
                 }
 
-                for (format in streamingData.listMapValue("formats")) {
+                val formats = streamingData.listMapValue("formats")
+                for (i in formats.indices) {
+                    val format = formats[i]
                     val url = format.stringValue("url") ?: run {
                         val signatureCipher = format.stringValue("signatureCipher")
                             ?: format.stringValue("cipher")
@@ -353,7 +355,9 @@ class InAppYouTubeExtractor @Inject constructor(
                     )
                 }
 
-                for (format in streamingData.listMapValue("adaptiveFormats")) {
+                val adaptiveFormats = streamingData.listMapValue("adaptiveFormats")
+                for (i in adaptiveFormats.indices) {
+                    val format = adaptiveFormats[i]
                     val url = format.stringValue("url") ?: run {
                         val signatureCipher = format.stringValue("signatureCipher")
                             ?: format.stringValue("cipher")
