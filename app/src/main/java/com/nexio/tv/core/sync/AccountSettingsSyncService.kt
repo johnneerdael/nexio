@@ -778,6 +778,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     private data class ResolvedRemoteSimklSecrets(
         val accessPayload: AccountSimklAccessSecretPayload?,
+        val preserveLocalTokens: Boolean,
         val remote: SimklAuthSyncSettings
     )
 
@@ -2040,6 +2041,9 @@ class AccountSettingsSyncService @Inject constructor(
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH) && resolvedSimkl == null) {
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
+        } else if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH) && resolvedSimkl?.preserveLocalTokens == true) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+            followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
         }
         val resolvedKitsu = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
             resolveRemoteKitsuSecrets(settings.integrations.kitsuAuth)
@@ -2186,10 +2190,14 @@ class AccountSettingsSyncService @Inject constructor(
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         if (accessToken.isBlank() || refreshToken.isBlank()) {
+            val localState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
+            val localHasTokens = !localState.accessToken.isNullOrBlank() &&
+                !localState.refreshToken.isNullOrBlank()
+            val preserveLocalTokens = localHasTokens && (remote.connected || remote.pending)
             return ResolvedRemoteTraktSecrets(
                 accessPayload = accessPayload,
                 refreshPayload = refreshPayload,
-                preserveLocalTokens = false,
+                preserveLocalTokens = preserveLocalTokens,
                 remote = remote
             )
         }
@@ -2290,8 +2298,16 @@ class AccountSettingsSyncService @Inject constructor(
             return null
         }
 
+        val accessPayload = accessResult.getOrNull()
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val localState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
+        val preserveLocalTokens = accessToken.isBlank() &&
+            !localState.accessToken.isNullOrBlank() &&
+            (remote.connected || remote.pending)
+
         return ResolvedRemoteSimklSecrets(
-            accessPayload = accessResult.getOrNull(),
+            accessPayload = accessPayload,
+            preserveLocalTokens = preserveLocalTokens,
             remote = remote
         )
     }
@@ -2300,6 +2316,18 @@ class AccountSettingsSyncService @Inject constructor(
         val accessToken = secrets.accessPayload?.accessToken?.trim().orEmpty()
         if (accessToken.isBlank()) {
             val remote = secrets.remote
+            if (secrets.preserveLocalTokens) {
+                simklAuthDataStore.saveUser(
+                    username = remote.username.takeIf { it.isNotBlank() },
+                    accountId = remote.accountId,
+                    accountType = remote.accountType.takeIf { it.isNotBlank() },
+                    profileId = profileModeRouter.defaultLegacyProfileId()
+                )
+                if (!remote.pending) {
+                    simklAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
+                }
+                return
+            }
             if (!remote.connected && !remote.pending) {
                 simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
             }
@@ -2358,10 +2386,12 @@ class AccountSettingsSyncService @Inject constructor(
         val localExpiresAt = localState.expiresAtEpochSeconds ?: 0L
         val localHasTokens = !localState.accessToken.isNullOrBlank() &&
             !localState.refreshToken.isNullOrBlank()
-        val preserveLocalTokens = accessToken.isNotBlank() &&
-            refreshToken.isNotBlank() &&
-            localHasTokens &&
-            localExpiresAt >= remoteExpiresAt
+        val remoteHasTokens = accessToken.isNotBlank() && refreshToken.isNotBlank()
+        val preserveLocalTokens = localHasTokens &&
+            (
+                (remoteHasTokens && localExpiresAt >= remoteExpiresAt) ||
+                    (!remoteHasTokens && remote.connected)
+                )
         if (preserveLocalTokens) {
             Log.w(
                 TAG,
