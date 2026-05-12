@@ -53,6 +53,15 @@
 -keep class com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket { *; }
 -keep class com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState { *; }
 -keep class com.nexio.tv.data.repository.ContinueWatchingSnapshotService$EpisodeRollbackState { *; }
+# CW metadata snapshot — written by default Gson reflection in
+# ContinueWatchingSnapshotStore.writeSnapshotToFile and read back by
+# ContinueWatchingMetadataSnapshotTypeAdapter which keys on literal field
+# names ("routingVersion", "parentId", "primaryProvider", "decisionReason",
+# "clickTimeSlots"). Without this rule, R8 renames the fields to a/b/c/d/e
+# at write time and the read-side .asInt on a missing JsonElement throws
+# NPE that sinks the entire snapshot read (CW rail vanishes after rebuild
+# with a fresh obfuscation seed).
+-keep class com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot { *; }
 -keep class com.nexio.tv.data.repository.TrackingNextUpEntry { *; }
 -keep class com.nexio.tv.data.repository.TraktLibraryService$LibraryRollbackState { *; }
 -keep class com.nexio.tv.data.repository.SimklLibraryService$LibraryRollbackState { *; }
