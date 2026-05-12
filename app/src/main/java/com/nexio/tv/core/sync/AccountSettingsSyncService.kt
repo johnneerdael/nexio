@@ -255,9 +255,9 @@ internal fun dirtyAccountSecretSectionKeys(
     current: AccountSecretPushSnapshot,
     baseline: AccountSecretPushSnapshot?
 ): Set<AccountSettingsSectionKey> {
-    if (baseline == null) return emptySet()
-
     val normalizedCurrent = current.normalizedForPush()
+    if (baseline == null) return configuredAccountSecretSectionKeys(normalizedCurrent)
+
     val normalizedBaseline = baseline.normalizedForPush()
     return linkedSetOf<AccountSettingsSectionKey>().apply {
         if (normalizedCurrent.mdbListApiKey != normalizedBaseline.mdbListApiKey) {
@@ -302,6 +302,47 @@ internal fun dirtyAccountSecretSectionKeys(
     }
 }
 
+internal fun configuredAccountSecretSectionKeys(
+    current: AccountSecretPushSnapshot
+): Set<AccountSettingsSectionKey> {
+    val normalized = current.normalizedForPush()
+    return linkedSetOf<AccountSettingsSectionKey>().apply {
+        if (normalized.mdbListApiKey.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)
+        if (normalized.omdbApiKey.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_OMDB)
+        if (
+            normalized.subtitleTranslationApiKey.isNotBlank() ||
+            normalized.legacyGeminiApiKey?.isNotBlank() == true
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)
+        }
+        if (normalized.animeSkipClientId.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)
+        if (
+            normalized.rpdbApiKey.isNotBlank() ||
+            normalized.topPostersApiKey.isNotBlank()
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)
+        }
+        if (normalized.premiumizeApiKey.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)
+        if (normalized.torBoxApiKey.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)
+        if (normalized.easyDebridApiKey.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)
+        if (
+            normalized.realDebrid.accessToken.isNotBlank() ||
+            normalized.realDebrid.refreshToken.isNotBlank() ||
+            normalized.realDebrid.userClientId.isNotBlank() ||
+            normalized.realDebrid.userClientSecret.isNotBlank()
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)
+        }
+        if (
+            normalized.trakt.accessToken.isNotBlank() ||
+            normalized.trakt.refreshToken.isNotBlank()
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
+        }
+        if (normalized.simkl.accessToken.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
+    }
+}
+
 private fun AccountSecretPushSnapshot.normalizedForPush(): AccountSecretPushSnapshot {
     return copy(
         mdbListApiKey = mdbListApiKey.trim(),
@@ -326,6 +367,49 @@ private fun AccountSecretPushSnapshot.normalizedForPush(): AccountSecretPushSnap
         ),
         simkl = simkl.copy(accessToken = simkl.accessToken.trim())
     )
+}
+
+internal fun emptyAccountSecretPushSnapshot(): AccountSecretPushSnapshot {
+    return AccountSecretPushSnapshot(
+        mdbListApiKey = "",
+        omdbApiKey = "",
+        subtitleTranslationApiKey = "",
+        legacyGeminiApiKey = null,
+        animeSkipClientId = "",
+        rpdbApiKey = "",
+        topPostersApiKey = "",
+        premiumizeApiKey = "",
+        torBoxApiKey = "",
+        easyDebridApiKey = "",
+        realDebrid = RealDebridSecretPushSnapshot(
+            accessToken = "",
+            refreshToken = "",
+            tokenType = "Bearer",
+            expiresIn = 0,
+            userClientId = "",
+            userClientSecret = ""
+        ),
+        trakt = TraktSecretPushSnapshot(
+            accessToken = "",
+            refreshToken = "",
+            tokenType = "bearer",
+            createdAt = 0L,
+            expiresIn = 0
+        ),
+        simkl = SimklSecretPushSnapshot(accessToken = "")
+    )
+}
+
+internal fun accountSecretBaselineAfterPull(
+    current: AccountSecretPushSnapshot,
+    existing: AccountSecretPushSnapshot?,
+    appliedSectionKeys: Set<AccountSettingsSectionKey>,
+    preserveLocalSectionKeys: Set<AccountSettingsSectionKey>
+): AccountSecretPushSnapshot? {
+    val syncedSectionKeys = appliedSectionKeys - preserveLocalSectionKeys
+    if (syncedSectionKeys.isEmpty()) return existing
+    val base = existing ?: emptyAccountSecretPushSnapshot()
+    return base.withSectionsFrom(current.normalizedForPush(), syncedSectionKeys)
 }
 
 private fun AccountSecretPushSnapshot.withSectionsFrom(
@@ -622,7 +706,8 @@ class AccountSettingsSyncService @Inject constructor(
         val easyDebridApiKey: String?,
         val realDebrid: ResolvedRemoteRealDebridSecrets?,
         val trakt: ResolvedRemoteTraktSecrets?,
-        val simkl: ResolvedRemoteSimklSecrets?
+        val simkl: ResolvedRemoteSimklSecrets?,
+        val preservedLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
     )
 
     private data class ResolvedRemoteRealDebridSecrets(
@@ -822,6 +907,7 @@ class AccountSettingsSyncService @Inject constructor(
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
             val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
             val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)
+            val secretBaselinePreserveSectionKeys = preserveLocalSectionKeys + resolvedSecrets.preservedLocalSectionKeys
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -838,7 +924,7 @@ class AccountSettingsSyncService @Inject constructor(
                     updateLastSyncedAccountSecretBaselineAfterPull(
                         current = buildAccountSecretPushSnapshot(),
                         appliedSectionKeys = sectionKeysToApply,
-                        preserveLocalSectionKeys = preserveLocalSectionKeys
+                        preserveLocalSectionKeys = secretBaselinePreserveSectionKeys
                     )
                     lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)
@@ -911,16 +997,12 @@ class AccountSettingsSyncService @Inject constructor(
         appliedSectionKeys: Set<AccountSettingsSectionKey>,
         preserveLocalSectionKeys: Set<AccountSettingsSectionKey>
     ) {
-        val normalizedCurrent = current.normalizedForPush()
-        val existing = lastSyncedAccountSecretSnapshot
-        lastSyncedAccountSecretSnapshot = when {
-            preserveLocalSectionKeys.isEmpty() -> normalizedCurrent
-            existing != null -> existing.withSectionsFrom(normalizedCurrent, appliedSectionKeys)
-            else -> {
-                Log.w(TAG, "Skipping partial account-secret baseline update without an existing baseline")
-                null
-            }
-        }
+        lastSyncedAccountSecretSnapshot = accountSecretBaselineAfterPull(
+            current = current,
+            existing = lastSyncedAccountSecretSnapshot,
+            appliedSectionKeys = appliedSectionKeys,
+            preserveLocalSectionKeys = preserveLocalSectionKeys
+        )
     }
 
     private suspend fun buildLocalPayload(): AccountConfigSyncPayload {
@@ -1692,6 +1774,21 @@ class AccountSettingsSyncService @Inject constructor(
         } else {
             null
         }
+        val resolvedRealDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
+            resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
+        } else {
+            null
+        }
+        val resolvedTrakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
+            resolveRemoteTraktSecrets(settings.integrations.traktAuth)
+        } else {
+            null
+        }
+        val resolvedSimkl = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
+            resolveRemoteSimklSecrets(settings.integrations.simklAuth)
+        } else {
+            null
+        }
         return ResolvedRemoteSecretsForApply(
             mdbListApiKey = mdbListApiKey,
             omdbApiKey = omdbApiKey,
@@ -1730,20 +1827,13 @@ class AccountSettingsSyncService @Inject constructor(
             } else {
                 null
             },
-            realDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
-                resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
-            } else {
-                null
-            },
-            trakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
-                resolveRemoteTraktSecrets(settings.integrations.traktAuth)
-            } else {
-                null
-            },
-            simkl = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
-                resolveRemoteSimklSecrets(settings.integrations.simklAuth)
-            } else {
-                null
+            realDebrid = resolvedRealDebrid,
+            trakt = resolvedTrakt,
+            simkl = resolvedSimkl,
+            preservedLocalSectionKeys = buildSet {
+                if (resolvedTrakt?.preserveLocalTokens == true) {
+                    add(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
+                }
             }
         )
     }
