@@ -29,7 +29,10 @@ data class SimklIdsDto(
     @Json(name = "imdb") val imdb: String? = null,
     @Json(name = "tmdb") val tmdb: String? = null,
     @Json(name = "tvdb") val tvdb: String? = null,
-    @Json(name = "mal") val mal: String? = null
+    @Json(name = "mal") val mal: String? = null,
+    @Json(name = "anilist") val anilist: String? = null,
+    @Json(name = "kitsu") val kitsu: String? = null,
+    @Json(name = "anidb") val anidb: String? = null
 )
 
 data class SimklEpisodeDto(
