@@ -1306,9 +1306,15 @@ internal fun buildContinueWatchingStreamRoute(
 ): String {
     return when (item) {
         is ContinueWatchingItem.InProgress -> {
+            val imdbHint = continueWatchingImdbHint(item.displayMetadata().imdbId, item.progress.contentId)
             Screen.Stream.createRoute(
                 videoId = item.progress.videoId,
-                streamVideoId = item.streamFetchVideoId,
+                streamVideoId = streamFetchVideoIdForCw(
+                    persisted = item.streamFetchVideoId,
+                    imdbHint = imdbHint,
+                    season = item.progress.season,
+                    episode = item.progress.episode,
+                ),
                 contentType = item.progress.contentType,
                 title = item.progress.name,
                 poster = item.displayMetadata().displayPoster,
@@ -1323,7 +1329,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = item.progress.name,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = item.displayMetadata().originalLanguage,
-                imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.progress.contentId),
+                imdbId = imdbHint,
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.progress.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1338,9 +1344,15 @@ internal fun buildContinueWatchingStreamRoute(
         }
 
         is ContinueWatchingItem.NextUp -> {
+            val imdbHint = continueWatchingImdbHint(item.displayMetadata().imdbId, item.info.contentId)
             Screen.Stream.createRoute(
                 videoId = item.info.videoId,
-                streamVideoId = item.info.streamFetchVideoId,
+                streamVideoId = streamFetchVideoIdForCw(
+                    persisted = item.info.streamFetchVideoId,
+                    imdbHint = imdbHint,
+                    season = item.info.season,
+                    episode = item.info.episode,
+                ),
                 contentType = item.info.contentType,
                 title = item.info.name,
                 poster = item.displayMetadata().displayPoster,
@@ -1355,7 +1367,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = item.info.name,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = item.displayMetadata().originalLanguage,
-                imdbId = continueWatchingImdbHint(item.displayMetadata().imdbId, item.info.contentId),
+                imdbId = imdbHint,
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.info.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1363,6 +1375,35 @@ internal fun buildContinueWatchingStreamRoute(
             )
         }
     }
+}
+
+/**
+ * Resolve the streamVideoId to pass to the addon query for a Continue Watching click.
+ *
+ * Stremio-style addons expect:
+ * - movies → `tt0903747`
+ * - episodes → `tt0903747:season:episode`
+ *
+ * The ContinueWatchingRecord stores a pre-resolved streamFetchIdentity.videoId in this
+ * exact shape (resolved by StreamFetchIdentityResolver during the Phase 2 identity flow).
+ * Prefer that when present. If it is somehow missing — e.g. the record was built before
+ * the IMDB sidecar was hydrated, or the Phase 2 resolver returned null because the IMDB
+ * id wasn't known at the time — fall back to constructing it on the fly from the
+ * displayIdentity-backstopped imdbHint plus the season/episode that ARE on the record.
+ *
+ * Returns null only when we have no IMDB at all; in that case the caller's downstream
+ * fallback `streamFetchVideoId = videoId` (the tvdb:N:s:e resume form) takes over —
+ * which is the legacy "no eligible links" path that motivated this fix.
+ */
+private fun streamFetchVideoIdForCw(
+    persisted: String?,
+    imdbHint: String?,
+    season: Int?,
+    episode: Int?,
+): String? {
+    persisted?.takeIf { it.isNotBlank() }?.let { return it }
+    val imdb = imdbHint?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) } ?: return null
+    return if (season != null && episode != null) "$imdb:$season:$episode" else imdb
 }
 
 /**
