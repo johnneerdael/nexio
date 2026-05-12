@@ -360,15 +360,39 @@ private fun <T> encodeSection(
     section: T
 ): JsonElement = AccountConfigSyncPayloadJson.encodeToJsonElement(serializer, section)
 
+internal fun accountSettingsSectionBaselinePayloads(
+    payload: AccountConfigSyncPayload
+): Map<AccountSettingsSectionKey, String> {
+    return AccountSettingsSectionKey.entries.mapNotNull { sectionKey ->
+        payload.sectionPayload(sectionKey)?.let { sectionPayload ->
+            sectionKey to accountSettingsSectionBaselineValue(sectionPayload)
+        }
+    }.toMap()
+}
+
+internal fun accountSettingsSectionBaselineValue(sectionPayload: JsonElement): String {
+    return AccountConfigSyncPayloadJson.encodeToString(JsonElement.serializer(), sectionPayload)
+}
+
+internal fun dirtyAccountSettingsSectionKeys(
+    current: AccountConfigSyncPayload,
+    baseline: Map<AccountSettingsSectionKey, String>
+): Set<AccountSettingsSectionKey> {
+    val currentBaselines = accountSettingsSectionBaselinePayloads(current)
+    return linkedSetOf<AccountSettingsSectionKey>().apply {
+        currentBaselines.forEach { (sectionKey, payloadBaseline) ->
+            if (baseline[sectionKey] != payloadBaseline) {
+                add(sectionKey)
+            }
+        }
+    }
+}
+
 internal suspend fun buildAccountSettingsSectionsPushParamsV13(
     payload: AccountConfigSyncPayload,
-    changedPaths: List<String>,
+    sectionKeys: Set<AccountSettingsSectionKey>,
     watermarkStore: SyncWatermarkDataStore
 ): JsonObject {
-    val sectionKeys = changedPaths
-        .mapNotNull(AccountSettingsSectionKey::fromChangedPath)
-        .distinct()
-
     return buildJsonObject {
         put(
             "p_sections",

@@ -230,10 +230,12 @@ internal fun clearAppliedChangedPathsForGeneration(
 
 internal fun buildStaleRecoveryPreserveLocalSectionKeys(
     pendingChangedPaths: Set<String>,
+    dirtySettingsSectionKeys: Set<AccountSettingsSectionKey>,
     dirtySecretSectionKeys: Set<AccountSettingsSectionKey>
 ): Set<AccountSettingsSectionKey> {
     return linkedSetOf<AccountSettingsSectionKey>().apply {
         pendingChangedPaths.mapNotNullTo(this, AccountSettingsSectionKey::fromChangedPath)
+        addAll(dirtySettingsSectionKeys)
         addAll(dirtySecretSectionKeys)
     }
 }
@@ -808,9 +810,13 @@ class AccountSettingsSyncService @Inject constructor(
             } ?: return@withContext Result.success(Unit)
 
             var scheduleFollowUpPush = false
+            val dirtySettingsSectionKeys = dirtyAccountSettingsSectionKeys(
+                current = snapshot.payload,
+                baseline = syncWatermarkStore.getAccountSettingsSectionBaselines()
+            )
             val dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)
 
-            if (snapshot.changedPaths.isNotEmpty()) {
+            if (dirtySettingsSectionKeys.isNotEmpty()) {
                 if (!hasLiveFullAccountSession()) return@withContext Result.success(Unit)
                 val changedPathsBySection = snapshot.changedPaths
                     .mapNotNull { changedPath ->
@@ -824,10 +830,14 @@ class AccountSettingsSyncService @Inject constructor(
                 val pushableChangedPathsBySection = changedPathsBySection
                     .filterKeys { sectionKey -> snapshot.payload.sectionPayload(sectionKey) != null }
 
-                if (pushableChangedPathsBySection.isNotEmpty()) {
+                val pushableDirtySectionKeys = dirtySettingsSectionKeys
+                    .filter { sectionKey -> snapshot.payload.sectionPayload(sectionKey) != null }
+                    .toSet()
+
+                if (pushableDirtySectionKeys.isNotEmpty()) {
                     val params = buildAccountSettingsSectionsPushParamsV13(
                         payload = snapshot.payload,
-                        changedPaths = snapshot.changedPaths,
+                        sectionKeys = pushableDirtySectionKeys,
                         watermarkStore = syncWatermarkStore
                     )
 
@@ -857,6 +867,11 @@ class AccountSettingsSyncService @Inject constructor(
                         }
                     }
 
+                    syncWatermarkStore.setAccountSettingsSectionBaselines(
+                        accountSettingsSectionBaselinePayloads(snapshot.payload)
+                            .filterKeys { sectionKey -> sectionKey in appliedSectionKeys }
+                    )
+
                     if (appliedChangedPaths.isNotEmpty()) {
                         applyingRemoteMutex.withLock {
                             if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
@@ -884,6 +899,7 @@ class AccountSettingsSyncService @Inject constructor(
                             }
                             buildStaleRecoveryPreserveLocalSectionKeys(
                                 pendingChangedPaths = pendingChangedPaths.toSet(),
+                                dirtySettingsSectionKeys = dirtySettingsSectionKeys - appliedSectionKeys,
                                 dirtySecretSectionKeys = dirtySecretSectionKeys
                             )
                         }
@@ -916,11 +932,28 @@ class AccountSettingsSyncService @Inject constructor(
                 if (dirtySecretSectionKeys.isNotEmpty()) {
                     lastSyncedAccountSecretSnapshot = snapshot.secrets.normalizedForPush()
                 }
+                if (snapshot.changedPaths.isNotEmpty()) {
+                    applyingRemoteMutex.withLock {
+                        if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
+                        synchronized(pendingChangedPaths) {
+                            if (!clearAppliedChangedPathsForGeneration(
+                                    pendingChangedPaths = pendingChangedPaths,
+                                    pendingChangedPathsGeneration = pendingChangedPathsGeneration,
+                                    snapshotChangedPathsGeneration = snapshot.changedPathsGeneration,
+                                    appliedChangedPaths = snapshot.changedPaths.toSet()
+                                )
+                            ) {
+                                scheduleFollowUpPush = true
+                            }
+                        }
+                    }
+                }
             } else {
                 val baseBeforeRecovery = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
                 val preserveLocalSectionKeys = synchronized(pendingChangedPaths) {
                     buildStaleRecoveryPreserveLocalSectionKeys(
                         pendingChangedPaths = pendingChangedPaths.toSet(),
+                        dirtySettingsSectionKeys = dirtySettingsSectionKeys,
                         dirtySecretSectionKeys = dirtySecretSectionKeys
                     )
                 }
@@ -1017,6 +1050,10 @@ class AccountSettingsSyncService @Inject constructor(
                         current = buildAccountSecretPushSnapshot(),
                         appliedSectionKeys = sectionKeysToApply,
                         preserveLocalSectionKeys = secretBaselinePreserveSectionKeys
+                    )
+                    syncWatermarkStore.setAccountSettingsSectionBaselines(
+                        accountSettingsSectionBaselinePayloads(buildLocalPayload())
+                            .filterKeys { sectionKey -> sectionKey !in preserveLocalSectionKeys }
                     )
                     lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)

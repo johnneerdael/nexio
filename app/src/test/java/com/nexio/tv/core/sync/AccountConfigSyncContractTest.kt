@@ -621,7 +621,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `buildAccountSettingsSectionsPushParamsV13 groups dirty paths into distinct serializable sections`() = runTest {
+    fun `buildAccountSettingsSectionsPushParamsV13 serializes dirty baseline sections`() = runTest {
         val payload = AccountConfigSyncPayload(
             schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
             integrations = IntegrationSettings(
@@ -647,13 +647,11 @@ class AccountConfigSyncContractTest {
 
         val params = buildAccountSettingsSectionsPushParamsV13(
             payload = payload,
-            changedPaths = listOf(
-                "integrations.tmdb.useArtwork",
-                "integrations.tmdb.useDetails",
-                "catalogs.home.heroCatalogKeys",
-                "integrations.kitsu.enabled",
-                "playback.streamSelection.trackingProvider",
-                "integrations.tvdb.apiKey"
+            sectionKeys = linkedSetOf(
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB,
+                AccountSettingsSectionKey.CATALOGS_HOME,
+                AccountSettingsSectionKey.INTEGRATIONS_KITSU,
+                AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
             ),
             watermarkStore = watermarkStore
         )
@@ -678,6 +676,46 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `dirty account settings sections are derived from section baselines`() {
+        val baselinePayload = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            integrations = IntegrationSettings(
+                tmdb = TmdbSyncSettings(useArtwork = true, useDetails = false)
+            ),
+            catalogs = CatalogSyncSettings(
+                home = HomeCatalogSyncSettings(
+                    heroCatalogKeys = listOf("hero-a"),
+                    homeCatalogOrderKeys = listOf("row-a"),
+                    disabledHomeCatalogKeys = emptyList()
+                )
+            )
+        )
+        val baseline = accountSettingsSectionBaselinePayloads(baselinePayload)
+
+        assertEquals(
+            emptySet<AccountSettingsSectionKey>(),
+            dirtyAccountSettingsSectionKeys(baselinePayload, baseline)
+        )
+
+        val current = baselinePayload.copy(
+            integrations = baselinePayload.integrations.copy(
+                tmdb = baselinePayload.integrations.tmdb.copy(useArtwork = false)
+            ),
+            catalogs = baselinePayload.catalogs.copy(
+                home = baselinePayload.catalogs.home?.copy(homeCatalogOrderKeys = listOf("row-b"))
+            )
+        )
+
+        assertEquals(
+            setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB,
+                AccountSettingsSectionKey.CATALOGS_HOME
+            ),
+            dirtyAccountSettingsSectionKeys(current, baseline)
+        )
+    }
+
+    @Test
     fun `account settings push routes through v13 section batch rpc and handles partial outcomes`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pushStart = source.indexOf("suspend fun pushToRemote")
@@ -690,6 +728,9 @@ class AccountConfigSyncContractTest {
         assertTrue(pushBlock.contains("preserveLocalSectionKeys = preserveLocalSectionKeys"))
         assertTrue(pushBlock.contains("currentUpdatedAtMs != null"))
         assertTrue(pushBlock.contains("setAccountSettingsSection(sectionKey, result.currentUpdatedAtMs)"))
+        assertTrue(pushBlock.contains("dirtySettingsSectionKeys = dirtyAccountSettingsSectionKeys("))
+        assertTrue(pushBlock.contains("getAccountSettingsSectionBaselines()"))
+        assertTrue(pushBlock.contains("setAccountSettingsSectionBaselines("))
         assertTrue(pushBlock.contains("changedPathsBySection"))
         assertTrue(pushBlock.contains("clearAppliedChangedPathsForGeneration("))
         assertTrue(pushBlock.contains("appliedChangedPaths = appliedChangedPaths"))
@@ -715,7 +756,8 @@ class AccountConfigSyncContractTest {
         assertTrue("generation races and stale sections must schedule a follow-up after stale recovery", staleFollowUpIndex > stalePullIndex)
         assertTrue("stale recovery must pull without clearing stale pending paths", stalePullIndex > staleIndex)
         assertTrue(
-            "stale recovery must preserve only dirty secret-backed sections, not every applied section",
+            "stale recovery must preserve dirty value sections and dirty secret-backed sections, not every applied section",
+            pushBlock.contains("dirtySettingsSectionKeys = dirtyAccountSettingsSectionKeys(") &&
             pushBlock.contains("dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)")
         )
         assertFalse(
@@ -1022,6 +1064,9 @@ class AccountConfigSyncContractTest {
                 "integrations.tmdb.useArtwork",
                 "unknown.path"
             ),
+            dirtySettingsSectionKeys = setOf(
+                AccountSettingsSectionKey.FORMATTER
+            ),
             dirtySecretSectionKeys = setOf(
                 AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
                 AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
@@ -1032,6 +1077,7 @@ class AccountConfigSyncContractTest {
             setOf(
                 AccountSettingsSectionKey.CATALOGS_HOME,
                 AccountSettingsSectionKey.INTEGRATIONS_TMDB,
+                AccountSettingsSectionKey.FORMATTER,
                 AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
                 AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
             ),

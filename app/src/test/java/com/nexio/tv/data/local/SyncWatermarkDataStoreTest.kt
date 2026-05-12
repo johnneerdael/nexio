@@ -75,14 +75,39 @@ class SyncWatermarkDataStoreTest {
     }
 
     @Test
+    fun `account settings section baselines persist by section`() = runTest {
+        val store = newStore()
+        store.clearAll()
+
+        store.setAccountSettingsSectionBaselines(
+            mapOf(
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB to """{"useArtwork":true}""",
+                AccountSettingsSectionKey.CATALOGS_HOME to """{"homeCatalogOrderKeys":[]}"""
+            )
+        )
+
+        assertEquals(
+            mapOf(
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB to """{"useArtwork":true}""",
+                AccountSettingsSectionKey.CATALOGS_HOME to """{"homeCatalogOrderKeys":[]}"""
+            ),
+            store.getAccountSettingsSectionBaselines()
+        )
+    }
+
+    @Test
     fun `clearAll wipes every watermark`() = runTest {
         val store = newStore()
         store.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = 1L)
         store.set(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = 1, ms = 2L)
         store.setAccountSettingsSection(AccountSettingsSectionKey.CATALOGS_HOME, ms = 3L)
+        store.setAccountSettingsSectionBaselines(
+            mapOf(AccountSettingsSectionKey.CATALOGS_HOME to """{"homeCatalogOrderKeys":[]}""")
+        )
         store.clearAll()
         assertEquals(0L, store.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null))
         assertEquals(0L, store.get(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = 1))
         assertEquals(0L, store.getAccountSettingsSection(AccountSettingsSectionKey.CATALOGS_HOME))
+        assertEquals(emptyMap<AccountSettingsSectionKey, String>(), store.getAccountSettingsSectionBaselines())
     }
 }
