@@ -191,8 +191,8 @@ class AccountConfigSyncContractTest {
     fun `v13 pull applies sparse account settings with section presence markers`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
-        val liveSessionStart = source.indexOf("private fun hasLiveFullAccountSession", startIndex = pullStart)
-        val pullBlock = source.substring(pullStart, liveSessionStart)
+        val debridRefreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, debridRefreshStart)
 
         assertTrue(
             "v13 pull must derive known present section keys from the snapshot rows",
@@ -209,6 +209,58 @@ class AccountConfigSyncContractTest {
         assertFalse(
             "v13 pull must not apply the default-backed sparse payload as a complete payload",
             pullBlock.contains("applySharedAccountConfigSyncSettings(settings)")
+        )
+    }
+
+    @Test
+    fun `v13 pull refreshes debrid account state only for present sparse sections`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val debridRefreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
+        val liveSessionStart = source.indexOf("private fun hasLiveFullAccountSession", startIndex = debridRefreshStart)
+        val pullBlock = source.substring(pullStart, debridRefreshStart)
+        val refreshBlock = source.substring(debridRefreshStart, liveSessionStart)
+
+        fun assertRefreshGated(sectionKey: String, refreshCall: String, message: String) {
+            assertTrue(
+                message,
+                refreshBlock.contains(
+                    "if (sectionKeys.includesSection(AccountSettingsSectionKey.$sectionKey)) {\n" +
+                        "            $refreshCall"
+                )
+            )
+        }
+
+        assertTrue(
+            "v13 pull must pass sparse section presence to debrid account refreshes",
+            pullBlock.contains("refreshDebridAccountStatesForAppliedSections(appliedSectionKeys)")
+        )
+        assertFalse(
+            "v13 pull must not refresh Premiumize unconditionally after sparse apply",
+            pullBlock.contains("premiumizeService.refreshAccountState()")
+        )
+        assertFalse(
+            "v13 pull must not refresh TorBox unconditionally after sparse apply",
+            pullBlock.contains("torBoxService.refreshAccountState()")
+        )
+        assertFalse(
+            "v13 pull must not refresh EasyDebrid unconditionally after sparse apply",
+            pullBlock.contains("easyDebridService.refreshAccountState()")
+        )
+        assertRefreshGated(
+            sectionKey = "INTEGRATIONS_DEBRID_PREMIUMIZE",
+            refreshCall = "premiumizeService.refreshAccountState()",
+            message = "Premiumize refresh must be gated by the Premiumize debrid section key",
+        )
+        assertRefreshGated(
+            sectionKey = "INTEGRATIONS_DEBRID_TOR_BOX",
+            refreshCall = "torBoxService.refreshAccountState()",
+            message = "TorBox refresh must be gated by the TorBox debrid section key",
+        )
+        assertRefreshGated(
+            sectionKey = "INTEGRATIONS_DEBRID_EASY_DEBRID",
+            refreshCall = "easyDebridService.refreshAccountState()",
+            message = "EasyDebrid refresh must be gated by the EasyDebrid debrid section key",
         )
     }
 
