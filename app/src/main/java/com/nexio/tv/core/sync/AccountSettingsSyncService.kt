@@ -179,7 +179,8 @@ private val ACCOUNT_SECRET_SECTION_KEYS = setOf(
     AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
     AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
     AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
-    AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+    AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH,
+    AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
 )
 
 private val SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS = setOf(
@@ -992,7 +993,8 @@ class AccountSettingsSyncService @Inject constructor(
                 )
             }
             val secretBaselinePreserveSectionKeys = preserveLocalSectionKeys + resolvedSecrets.preservedLocalSectionKeys
-            val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty()
+            val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty() &&
+                resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
