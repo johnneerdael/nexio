@@ -66,6 +66,62 @@ class V10ContractModelsTest {
     }
 
     @Test
+    fun `account settings payload preserves subtitle translation model when web sends newer fields`() {
+        val raw = """
+            {
+              "contract_version": 10,
+              "settings": {
+                "payload": {
+                  "schemaVersion": 10,
+                  "integrations": {
+                    "subtitleTranslation": {
+                      "enabled": true,
+                      "provider": "OPENAI",
+                      "model": "openai/gpt-5.5",
+                      "baseUrl": "https://openrouter.ai/api/v1"
+                    },
+                    "traktAuth": {
+                      "connected": true,
+                      "connectedAt": "2026-05-12T10:00:00Z"
+                    }
+                  },
+                  "playback": {
+                    "streamSelection": {
+                      "trackingProvider": "SIMKL"
+                    },
+                    "general": {
+                      "loadingOverlayEnabled": true
+                    }
+                  },
+                  "localOnlyWebPanel": {
+                    "expanded": true
+                  }
+                },
+                "sync_revision": 18,
+                "updated_at_ms": 1747000001000
+              },
+              "addons": {
+                "items": [],
+                "updated_at_ms": 1746999000000
+              },
+              "secrets": {
+                "items": [],
+                "updated_at_ms": 1746998000000
+              }
+            }
+        """.trimIndent()
+
+        val envelope = json.decodeFromString(V10AccountSnapshotEnvelope.serializer(), raw)
+        val payload = AccountConfigSyncPayloadJson.decodeFromJsonElement(
+            AccountConfigSyncPayload.serializer(),
+            envelope.settings.payload
+        )
+
+        assertEquals("openai/gpt-5.5", payload.integrations.subtitleTranslation.model)
+        assertEquals("SIMKL", payload.playback.streamSelection.trackingProvider)
+    }
+
+    @Test
     fun `profile settings envelope decodes from server-shape JSON`() {
         val raw = """
             {
