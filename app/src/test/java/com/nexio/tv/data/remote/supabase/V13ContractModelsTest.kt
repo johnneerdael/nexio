@@ -29,9 +29,16 @@ class V13ContractModelsTest {
                     "schema_version": 1,
                     "sync_revision": 18,
                     "updated_at_ms": 1747000001000
+                  },
+                  {
+                    "section_key": "integrations.futureProvider",
+                    "payload": { "enabled": true, "futureField": "kept" },
+                    "schema_version": 2,
+                    "sync_revision": 19,
+                    "updated_at_ms": 1747000002000
                   }
                 ],
-                "updated_at_ms": 1747000001000
+                "updated_at_ms": 1747000002000
               },
               "addons": {
                 "items": [
@@ -64,12 +71,14 @@ class V13ContractModelsTest {
         val envelope = json.decodeFromString(V13AccountSnapshotEnvelope.serializer(), raw)
 
         assertEquals(13, envelope.contractVersion)
-        assertEquals(1747000001000L, envelope.settings.updatedAtMs)
-        assertEquals(2, envelope.settings.sections.size)
+        assertEquals(1747000002000L, envelope.settings.updatedAtMs)
+        assertEquals(3, envelope.settings.sections.size)
         assertEquals("integrations.tmdb", envelope.settings.sections[0].sectionKey)
         assertEquals(17L, envelope.settings.sections[0].syncRevision)
         assertEquals(1, envelope.settings.sections[0].schemaVersion)
         assertEquals(setOf("enabled", "region"), envelope.settings.sections[0].payload.jsonObject.keys)
+        assertEquals("integrations.futureProvider", envelope.settings.sections[2].sectionKey)
+        assertEquals(setOf("enabled", "futureField"), envelope.settings.sections[2].payload.jsonObject.keys)
         assertEquals(1746999000000L, envelope.addons.updatedAtMs)
         assertEquals("https://v3-cinemeta.strem.io", envelope.addons.items[0].url)
         assertEquals(1746998000000L, envelope.secrets.updatedAtMs)

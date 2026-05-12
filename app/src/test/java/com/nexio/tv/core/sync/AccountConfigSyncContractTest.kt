@@ -55,8 +55,12 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.decodeFromString
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -117,6 +121,70 @@ class AccountConfigSyncContractTest {
         assertEquals("OPENAI", settings.provider)
         assertEquals("openrouter/free", settings.model)
         assertEquals("https://openrouter.ai/api/v1", settings.baseUrl)
+    }
+
+    @Test
+    fun `v13 setting sections apply to account config payload without resetting unrelated settings`() {
+        val current = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            integrations = IntegrationSettings(
+                tmdb = TmdbSyncSettings(useArtwork = false),
+                omdb = OmdbSyncSettings(enabled = true),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = false,
+                    provider = "OPENAI",
+                    model = "openrouter/free",
+                    baseUrl = "https://openrouter.ai/api/v1"
+                )
+            ),
+            catalogs = CatalogSyncSettings(
+                home = com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings(
+                    heroCatalogKeys = listOf("old-hero"),
+                    homeCatalogOrderKeys = listOf("old-row"),
+                    disabledHomeCatalogKeys = emptyList()
+                )
+            ),
+            playback = com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings(
+                streamSelection = com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings(
+                    trackingProvider = "TRAKT"
+                )
+            ),
+            formatter = FormatterSyncSettings(enabled = true)
+        )
+
+        val translated = AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION.applyToPayload(
+            current = current,
+            sectionPayload = buildJsonObject {
+                put("enabled", true)
+                put("provider", "DASHSCOPE")
+                put("model", "qwen-mt-flash")
+                put("baseUrl", "https://dashscope-intl.aliyuncs.com/api/v1")
+            }
+        )
+        val withPlayback = AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION.applyToPayload(
+            current = translated,
+            sectionPayload = buildJsonObject {
+                put("trackingProvider", "SIMKL")
+            }
+        )
+        val withCatalog = AccountSettingsSectionKey.CATALOGS_HOME.applyToPayload(
+            current = withPlayback,
+            sectionPayload = buildJsonObject {
+                put("heroCatalogKeys", buildJsonArray { add("new-hero") })
+                put("homeCatalogOrderKeys", buildJsonArray { add("new-row") })
+                put("disabledHomeCatalogKeys", buildJsonArray {})
+            }
+        )
+
+        assertEquals(true, withCatalog.integrations.subtitleTranslation.enabled)
+        assertEquals("DASHSCOPE", withCatalog.integrations.subtitleTranslation.provider)
+        assertEquals("qwen-mt-flash", withCatalog.integrations.subtitleTranslation.model)
+        assertEquals("SIMKL", withCatalog.playback.streamSelection.trackingProvider)
+        assertEquals(listOf("new-hero"), withCatalog.catalogs.home?.heroCatalogKeys)
+        assertEquals(listOf("new-row"), withCatalog.catalogs.home?.homeCatalogOrderKeys)
+        assertEquals(false, withCatalog.integrations.tmdb.useArtwork)
+        assertEquals(true, withCatalog.integrations.omdb.enabled)
+        assertEquals(true, withCatalog.formatter.enabled)
     }
 
     @Test
@@ -206,7 +274,7 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
-        assertEquals(9, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals(
             "\"[[chip:cached]]\"",
@@ -228,13 +296,7 @@ class AccountConfigSyncContractTest {
         assertEquals("\"openai/gpt-5.2\"", subtitleTranslation["model"].toString())
         assertEquals("\"https://openrouter.ai/api/v1\"", subtitleTranslation["baseUrl"].toString())
         assertEquals(null, json["integrations"]?.jsonObject?.get("gemini")?.jsonObject?.get("enabled"))
-        val tvdb = json["integrations"]?.jsonObject?.get("tvdb")?.jsonObject
-        assertEquals("true", tvdb?.get("enabled").toString())
-        assertEquals("true", tvdb?.get("configured").toString())
-        assertEquals("\"VALID\"", tvdb?.get("validationStatus").toString())
-        assertFalse(tvdb?.containsKey("apiKey") == true)
-        assertFalse(tvdb?.containsKey("pin") == true)
-        assertFalse(tvdb?.containsKey("token") == true)
+        assertFalse(json["integrations"]?.jsonObject?.containsKey("tvdb") == true)
         assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("torBox") == true)
         assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("easyDebrid") == true)
         assertEquals(
@@ -313,7 +375,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 9`() {
+    fun `build account config sync rpc params includes current contract version`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -338,16 +400,19 @@ class AccountConfigSyncContractTest {
         assertEquals("\"app\"", pushParams["p_source"].toString())
         assertTrue(pushParams.containsKey("p_settings_payload"))
         assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, pullParams["p_contract_version"]?.toString()?.toInt())
-        assertEquals(9, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+        assertEquals(
+            ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt()
+        )
     }
 
     @Test
-    fun `current contract emits version 9`() {
-        assertEquals(9, ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
+    fun `current contract emits version 12`() {
+        assertEquals(12, ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
     }
 
     @Test
-    fun `version 9 payload includes tmdb and kitsu sections when set`() {
+    fun `current version payload includes tmdb and kitsu sections when set`() {
         val payload = AccountConfigSyncPayload(
             schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
             catalogs = CatalogSyncSettings(
@@ -359,7 +424,7 @@ class AccountConfigSyncContractTest {
             .encodeToString(AccountConfigSyncPayload.serializer(), payload)
         assertTrue(json.contains("\"tmdb\""))
         assertTrue(json.contains("\"kitsu\""))
-        assertTrue(json.contains("\"schemaVersion\":9"))
+        assertTrue(json.contains("\"schemaVersion\":$ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION"))
     }
 
     @Test
