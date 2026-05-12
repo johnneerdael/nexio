@@ -306,6 +306,100 @@ class ContinueWatchingMergerTest {
     }
 
     @Test
+    fun `cross-provider conflict picks fresher candidate when trivial delta`() {
+        val trakt = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:14",
+            positionMs = 50_000L,
+            durationMs = 100_000L,
+            lastWatchedMs = 1000L,
+        )
+        val simkl = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL, // ContinueWatchingSource enum has no SIMKL_*; use any source for resume id
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:14",
+            positionMs = 55_000L,
+            durationMs = 100_000L,
+            lastWatchedMs = 2000L,
+        )
+
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = trakt,
+                    positionMs = 50_000L,
+                    updatedAt = 1000L,
+                    parentId = "x",
+                    contentIdKey = "x:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt0903747", season = 5, episode = 14),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+                record(
+                    resumeIdentity = simkl,
+                    positionMs = 55_000L,
+                    updatedAt = 2000L,
+                    parentId = "y",
+                    contentIdKey = "y:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt0903747", season = 5, episode = 14),
+                ).copy(provider = TrackingProvider.SIMKL, durationMs = 100_000L),
+            )
+        )
+
+        assertEquals(1, merged.size)
+        // Trivial 5-second delta -> newer (SIMKL) wins.
+        assertEquals(TrackingProvider.SIMKL, merged.single().provider)
+    }
+
+    @Test
+    fun `cross-provider conflict keeps leader on meaningful delta despite older timestamp`() {
+        val leaderResume = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt1",
+            videoId = "tt1:1:1",
+            positionMs = 80_000L,
+            durationMs = 100_000L,
+            lastWatchedMs = 1000L,
+        )
+        val trailerResume = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tt1",
+            videoId = "tt1:1:1",
+            positionMs = 10_000L,
+            durationMs = 100_000L,
+            lastWatchedMs = 2000L,
+        )
+
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = leaderResume,
+                    positionMs = 80_000L,
+                    updatedAt = 1000L,
+                    parentId = "p1",
+                    contentIdKey = "p1:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt1", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+                record(
+                    resumeIdentity = trailerResume,
+                    positionMs = 10_000L,
+                    updatedAt = 2000L,
+                    parentId = "p2",
+                    contentIdKey = "p2:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt1", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.SIMKL, durationMs = 100_000L),
+            )
+        )
+
+        // 70s lead is well above the 30s threshold; leader (TRAKT) wins.
+        assertEquals(1, merged.size)
+        assertEquals(TrackingProvider.TRAKT, merged.single().provider)
+    }
+
+    @Test
     fun `episode records only merge when season and episode also match`() {
         val s5e14 = resumeIdentity(
             source = ContinueWatchingSource.LOCAL,
