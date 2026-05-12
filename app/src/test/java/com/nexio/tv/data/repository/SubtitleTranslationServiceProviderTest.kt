@@ -911,7 +911,7 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
-    fun assSsaSystemPromptModeSendsRawAssBatchAndWritesTranslatedAss() = runTest {
+    fun assSsaFileTranslationSendsSegmentSurfacesAndWritesTranslatedAss() = runTest {
         val server = MockWebServer()
         val sourceAss = """
             [Script Info]
@@ -946,7 +946,7 @@ class SubtitleTranslationServiceProviderTest {
                               "choices": [
                                 {
                                   "message": {
-                                    "content": ${JSONObject.quote(translatedAss)}
+                                    "content": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Bordtekst\"]},{\"id\":\"ass_1\",\"segments\":[\"Hallo daar.\"]}]}"
                                   }
                                 }
                               ]
@@ -987,18 +987,19 @@ class SubtitleTranslationServiceProviderTest {
             ).getOrThrow()
 
             val translatedFile = File(result.translatedSubtitle.url.removePrefix("file:"))
-            assertEquals(translatedAss, translatedFile.readText())
+            assertEquals(translatedAss + "\n", translatedFile.readText())
 
             val downloadRequest = server.takeRequest()
             assertEquals("/subtitle.ass", downloadRequest.path)
             val providerRequest = server.takeRequest()
             val body = providerRequest.body.readUtf8()
-            assertTrue(body.contains("ASS_SSA_SUBTITLE_TRANSLATOR"))
-            assertTrue(body.contains("Dialogue: 0,0:00:01.00,0:00:02.00,Default,SIGN"))
-            assertTrue(body.contains("""{\\pos(475.43,40)}Sign text"""))
+            assertTrue(body.contains("Translate subtitle segments to the target language."))
+            assertTrue(body.contains(""""items""""))
+            assertTrue(body.contains(""""segments":["Sign text"]""") || body.contains("""\"segments\":[\"Sign text\"]"""))
             assertTrue(body.contains("Hello there."))
-            assertFalse(body.contains(""""items""""))
-            assertFalse(body.contains("response_format"))
+            assertTrue(body.contains("response_format"))
+            assertFalse(body.contains("ASS_SSA_SUBTITLE_TRANSLATOR"))
+            assertFalse(body.contains("""{\\pos(475.43,40)}Sign text"""))
         } finally {
             server.shutdown()
             cacheDir.deleteRecursively()

@@ -305,54 +305,25 @@ class SubtitleTranslationService @Inject constructor(
                 } else if (document.format == TimedTextFormat.ASS ||
                     document.format == TimedTextFormat.SSA
                 ) {
-                    if (normalizedSettings.assSsaSystemPromptEnabled) {
-                        translateRawAssSsaText(
-                            text = sourceText,
+                    val surfaces = document.assSsaSegmentSurfaces()
+                    val batches = AssSsaSegmentSurfaceBatchPlanner.plan(surfaces)
+                    val translatedSegments = mutableMapOf<String, List<String>>()
+                    batches.forEach { batch ->
+                        val response = translateAssSsaSegmentSurfaces(
+                            surfaces = batch.units,
                             targetLanguageCode = normalizedTarget,
                             sourceLanguageCode = sourceLanguageCode,
                             settings = normalizedSettings
                         ).getOrThrow()
-                    } else {
-                        val batches = AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
-                        val batchResponses = batches.map { batch ->
-                            translateProtectedAssSsaUnits(
-                                units = batch.units,
-                                targetLanguageCode = normalizedTarget,
-                                sourceLanguageCode = sourceLanguageCode,
-                                settings = normalizedSettings
-                            ).getOrThrow()
+                        batch.coreUnits.forEach { surface ->
+                            response[surface.id]?.let { translatedSegments[surface.id] = it }
                         }
-                        val protectedTranslations = mutableMapOf<String, String>()
-                        batches.forEachIndexed { index, batch ->
-                            val response = batchResponses[index]
-                            batch.coreUnits.forEach { unit ->
-                                response[unit.id]?.takeIf { it.isNotBlank() }?.let {
-                                    protectedTranslations[unit.id] = it
-                                }
-                            }
-                        }
-                        val allCoreIds = batches.flatMapTo(mutableSetOf()) { batch ->
-                            batch.coreUnits.map { it.id }
-                        }
-                        batches.forEachIndexed { index, batch ->
-                            val response = batchResponses[index]
-                            val overlapUnits = batch.units.take(batch.leadOverlap) +
-                                batch.units.drop(batch.leadOverlap + batch.coreCount)
-                            overlapUnits.forEach { unit ->
-                                if (unit.id in allCoreIds && unit.id !in protectedTranslations) {
-                                    response[unit.id]?.takeIf { it.isNotBlank() }?.let {
-                                        protectedTranslations[unit.id] = it
-                                    }
-                                }
-                            }
-                        }
-                        diagnosticsLogger.log(
-                            "ass_translate_merge batches=${batches.size} " +
-                                "core_units=${allCoreIds.size} " +
-                                "translated=${protectedTranslations.size}"
-                        )
-                        document.renderAssSsaProtected(protectedTranslations)
                     }
+                    diagnosticsLogger.log(
+                        "ass_segment_translate_merge batches=${batches.size} " +
+                            "surfaces=${surfaces.size} translated=${translatedSegments.size}"
+                    )
+                    document.renderAssSsaSegmentSurfaces(translatedSegments)
                 } else {
                     val translatedBlocks = translateBlocks(
                         blocks = document.translatableBlocks,
