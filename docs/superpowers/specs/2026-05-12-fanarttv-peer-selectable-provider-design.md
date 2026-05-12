@@ -47,7 +47,7 @@ These existing units are reused unchanged or extended surgically:
 
 ## Architecture
 
-Fanart.tv slots into the existing chain at three points: a new `ArtworkProviderChoiceKey`, a new descriptor in the registry, and a new dedicated URL resolver injected at the same consumer sites that already consume `PosterRatingsUrlResolver`.
+Fanart.tv slots into the existing chain at three points: a new `ArtworkProviderChoiceKey`, a new descriptor in the registry, and a new candidate generator injected into `MetadataArtworkDecisionResolver`. The generator emits `ArtworkCandidate` instances with `provider=FANART_TV` and `sourceRole=PREMIUM` for poster/logo/backdrop when the user selected FANART_TV for that type. The existing `ArtworkRouter.isActiveSupportedPremium(...)` already picks user-selected PREMIUM candidates over PRIMARY — no router rank change, no new `ArtworkSourceRole` value. `PosterRatingsUrlResolver` is unchanged; it remains the templated-URL path for RPDB/Top Posters and ignores FANART_TV (its `resolveProvider` returns null for non-RPDB/non-TopPosters selections, which is the well-behaved no-op).
 
 ```
 PosterRatingsSettingsScreen
@@ -70,33 +70,42 @@ ArtworkSettingsInvalidator → HydratedHomeOverlayStore.markStaleAll
         ▼
 Home pipeline re-hydrates each item
         │
-        ▼
-For each item:
-   ArtworkProviderResolver.resolve(POSTER, contentType, isAnime, ids, settings)
+        ├─► HomeResolvedDisplayMapper:
+        │     ArtworkProviderResolver.resolve(POSTER, ...) → FANART_TV (or ADDON via fall-through)
+        │     preferredArtworkProviders[POSTER] = result, stamped on ResolvedDisplayItem
         │
-        ├─ explicit = FANART_TV
-        ├─ ArtworkProviderCapabilityResolver.evaluate:
-        │     ├─ ANIME?                         → reject "anime_unsupported_for_fanart_tv"
-        │     ├─ no TMDB(movie)/TVDB(series)?   → reject "missing_supported_provider_id"
-        │     ├─ BuildConfig key blank?         → reject "fanart_tv_not_configured"
-        │     └─ else                           → supported
-        │
-        └─ returns FANART_TV (or ContentTypeDefaults fallback)
+        └─► MetadataArtworkDecisionResolver.resolveFields(candidates):
+              ├─ existing primary candidates (TMDB/TVDB/addon)
+              ├─ existing premium candidates (RPDB/TopPosters)
+              └─ NEW: FanartTvCandidateGenerator
+                    │
+                    ├─ For each requested type (POSTER/LOGO/BACKDROP):
+                    │     ├─ settings.selection.providerFor(type) != FANART_TV → skip
+                    │     ├─ capability rejects (anime / missing id / unconfigured) → skip
+                    │     └─ else: include in lookup
+                    │
+                    ├─ If at least one type to fetch:
+                    │     IntegrationRuntime call via FanartTvLookupShape (CacheFirst 14d)
+                    │     in-memory parse, picker.pickFor(doc, callType, type) → URL or null
+                    │
+                    └─ Emit ArtworkCandidate(provider=FANART_TV, sourceRole=PREMIUM, source=RemoteUrl(url))
+                       for each non-null URL
 
-Consumer (TmdbMetadataService / TvdbMetadataService / HomeCatalogRefreshCoordinator):
-   if providerId == FANART_TV:
-       FanartTvArtworkResolver.fetchUrl(callId, type) → URL or null
-       on null AND not anime → empty slot (no further fallback)
-   else:
-       existing PosterRatingsUrlResolver path
-        │
-        ▼
-preferredArtworkProviders[type] = FANART_TV stamped on ResolvedDisplayItem
-        │
-        ▼
-ResolvedDisplaySurfaceRepository.preferredAwareSlot enforces non-downgrade
-        │
-        ▼
+ArtworkRouter.select(candidates, policy):
+   PREMIUM candidates whose provider matches user selection win
+   FANART_TV-selected + Fanart-emitted PREMIUM candidate present → wins
+   FANART_TV-selected + no Fanart candidate emitted → falls through to PRIMARY (ADDON)
+
+MetadataArtworkDecisionResolver writes ArtworkDecision to ArtworkDecisionCache
+ArtworkAssetRepository fetches bytes for selected URL via existing pipeline
+Slot built with selectedProvider = chosen provider id
+
+ResolvedDisplaySurfaceRepository.preferredAwareSlot:
+   preferred[POSTER] = FANART_TV
+   incoming slot.selectedProvider = FANART_TV → accept (Fanart delivered)
+   incoming slot.selectedProvider = ADDON     → reject (non-downgrade) → slot empty per Q1 rule
+   incoming slot.selectedProvider = ADDON AND preferred = ADDON (anime fall-through case) → accept
+
 Coil renders the URL via the existing ArtworkAssetRepository disk pipeline
 ```
 
@@ -113,13 +122,13 @@ All new files under two packages, mirroring existing patterns.
 | `core/artwork/fanarttv/FanartTvAvailability.kt` | Sealed type. `Available(apiKey)` when `BuildConfig.FANARTTV_API_KEY` is non-blank, else `Disabled(reason)`. |
 | `core/artwork/fanarttv/FanartTvIdSelector.kt` | `(mediaKind, ProviderIds) → FanartTvCallId?`. Movie → tmdb, Series → tvdb, anything else (including anime) → null. |
 | `core/artwork/fanarttv/FanartTvImagePicker.kt` | Pure function. `(FanartTvDocument, FanartTvCallId.Type, ArtworkType) → URL?`. Highest-`likes`; `lang=en` for poster/logo; any lang for backdrop; deterministic tie-break by ascending id. THUMBNAIL → null. |
-| `core/artwork/fanarttv/FanartTvArtworkResolver.kt` | The new resolver. Composes availability + id selector + lookup + picker → URL or null. |
+| `core/artwork/fanarttv/FanartTvCandidateGenerator.kt` | Augments `MetadataArtworkDecisionResolver`. For each requested type, checks user selection + capability + Fanart availability; if all pass, calls `FanartTvLookup.fetch(...)` and emits a `RemoteUrl` `ArtworkCandidate(provider=FANART_TV, sourceRole=PREMIUM)` for each non-null picker output. Single-flight + 14d JSON cache provided by `IntegrationRuntime`; the generator is stateless. |
 | `core/artwork/fanarttv/FanartTvApiShapes.kt` | `const LOOKUP = "fanarttv.lookup"`. |
 | `core/artwork/fanarttv/dto/FanartTvDocument.kt` | `@Serializable` DTO with the six consumed image arrays. |
 | `core/artwork/fanarttv/dto/FanartTvImage.kt` | `@Serializable` single-image DTO (id, url, lang, likes). |
 | `core/artwork/fanarttv/FanartTvLookup.kt` | Interface + `FanartTvLookupResult` sealed (`Success(doc) / NotFound / AuthFailed / Transient`). |
 | `data/integration/fanarttv/FanartTvApi.kt` | Retrofit interface: `GET /v3.2/movies/{tmdbId}` and `GET /v3.2/tv/{tvdbId}` with `?api_key=`. |
-| `data/integration/fanarttv/FanartTvApiModule.kt` | Hilt module: provides `FanartTvApi` (Retrofit + base URL `https://webservice.fanart.tv/`); binds `FanartTvLookup` to `RuntimeFanartTvLookup`. |
+| `data/integration/fanarttv/FanartTvApiModule.kt` | Hilt module: provides `FanartTvApi` (Retrofit + base URL `https://webservice.fanart.tv/`); binds `FanartTvLookup` to `RuntimeFanartTvLookup`; provides `FanartTvCandidateGenerator`. |
 | `data/integration/fanarttv/FanartTvLookupShape.kt` | `IntegrationCallSpec` builder with `IntegrationCachePolicy.CacheFirst(14d)` and `api_key` declared as a redacted query parameter. |
 | `data/integration/fanarttv/RuntimeFanartTvLookup.kt` | `FanartTvLookup` impl. Calls `FanartTvLookupShape.fetch(...)` and maps `HttpException` to typed result. |
 
@@ -132,11 +141,9 @@ All new files under two packages, mirroring existing patterns.
 | `domain/model/ArtworkProviderSettings.kt` | Add `ArtworkProviderChoiceKey.FANART_TV` constant; extend `fromStored()`; extend `toRuntimeProviderId()`. |
 | `core/artwork/ArtworkProviderRegistry.kt` | Add `fanartTvDescriptor` to `artworkProviderDescriptors` list. |
 | `core/artwork/ArtworkProviderCapabilityResolver.kt` | Add `descriptor()` branch for FANART_TV; add `fanartTvRejectionReason(...)` (build-key check + anime block + asymmetric tmdb-for-movie / tvdb-for-series id check). |
-| `core/tmdb/TmdbMetadataService.kt` | Inject `FanartTvArtworkResolver`; when active provider is FANART_TV, route through it. |
-| `core/tvdb/TvdbMetadataService.kt` | Same wiring. |
-| `ui/screens/home/HomeCatalogRefreshCoordinator.kt` | Same wiring. |
+| `data/integration/metadata/MetadataArtworkDecisionResolver.kt` | Inject `FanartTvCandidateGenerator`; augment the candidate list at the top of `resolveFields(...)` by appending Fanart-emitted candidates per ownerKey before routing. |
 
-The consumer wiring at the three sites uses the same shape: branch on `providerId == FANART_TV`, route to `FanartTvArtworkResolver.fetchUrl(...)`. The branch is kept inline at each site rather than abstracted into a dispatcher — three call sites, small shape, dispatcher would obscure the wiring.
+`PosterRatingsUrlResolver`, `TmdbMetadataService`, `TvdbMetadataService`, and `HomeCatalogRefreshCoordinator` are **unchanged**. `PosterRatingsUrlResolver.resolveProvider(settings)` already returns `null` for any selection that isn't RPDB or TOP_POSTERS, so it cleanly no-ops when FANART_TV is selected. Logo and backdrop URLs flow through `MetadataArtworkDecisionResolver` and the existing addon/metadata candidate path; the new generator simply adds Fanart-sourced candidates that the router picks ahead of PRIMARY when user selection matches.
 
 ## Settings UI Behavior
 
@@ -171,19 +178,23 @@ The descriptor's `isConfigured` lambda reads `BuildConfig.FANARTTV_API_KEY` dire
 
 The mediaKind-aware id check is stricter than RPDB's "any of the supported id types is present". Fanart.tv specifically wants TMDB for movies and TVDB for series, never the other way around. That asymmetry justifies the dedicated branch.
 
-## URL Resolution
+## Candidate Generation
 
-`FanartTvArtworkResolver.fetchUrl(callId: FanartTvCallId, type: ArtworkType): String?`:
+`FanartTvCandidateGenerator.generate(ownerKey, canonicalContentId, mediaKind, providerIds, requestedTypes, settings): List<ArtworkCandidate>`:
 
-1. `availability = FanartTvAvailability.from(BuildConfig.FANARTTV_API_KEY)`. If `Disabled`, return null.
-2. `result = lookup.fetch(callId, availability.apiKey)`.
-3. Match on `result`:
-   - `Success(doc)` → return `picker.pickFor(doc, callId.type, type)` (URL or null).
-   - `NotFound` / `AuthFailed` / `Transient` → return null.
+1. If `BuildConfig.FANARTTV_API_KEY` is blank → return empty.
+2. Filter `requestedTypes` to those where `settings.selection.providerFor(type) == FANART_TV`. If empty → return empty.
+3. Filter further to types that pass `ArtworkProviderCapabilityResolver` (anime / missing id / unsupported type → drop). If empty → return empty.
+4. `callId = FanartTvIdSelector.select(mediaKind, providerIds)`. If null → return empty.
+5. `result = lookup.fetch(callId, BuildConfig.FANARTTV_API_KEY)`.
+   - `Success(doc)` → for each remaining requested type, `picker.pickFor(doc, callId.type, type)` → URL or null. For each non-null URL, emit one `ArtworkCandidate(provider=FANART_TV, sourceRole=PREMIUM, source=RemoteUrl(url))`.
+   - `NotFound` / `AuthFailed` / `Transient` → return empty.
 
-The resolver makes no decisions about fallback. The consumer (TmdbMetadataService / TvdbMetadataService / HomeCatalogRefreshCoordinator) writes the URL (or null) into the slot. The surface repo's `preferredAwareSlot` enforces non-downgrade — if Fanart returns null, no other source back-fills.
+The generator emits zero candidates when Fanart can't deliver. The router then naturally picks a PRIMARY (addon) candidate. `ResolvedDisplaySurfaceRepository.preferredAwareSlot` enforces the empty-slot contract: when `preferredArtworkProviders[type] = FANART_TV` and the incoming slot's `selectedProvider = ADDON`, the slot is rejected → empty per the user's Q1 rule. No fetcher-side null-handling required.
 
-The resolver does not check anime — that's enforced upstream by `ArtworkProviderResolver` (capability rejection routes anime to defaults). The defensive check in `FanartTvIdSelector` (returns null for ANIME) provides belt-and-suspenders.
+For anime, both `ArtworkProviderResolver.resolve(...)` and the generator's capability check return ADDON / skip Fanart respectively. `preferredArtworkProviders[type] = ADDON` and the incoming ADDON slot is accepted — anime renders normally.
+
+The generator is invoked from `MetadataArtworkDecisionResolver.resolveFields(...)` per `ownerKey`. Single-flight and 14d JSON cache come from `IntegrationRuntime` + `IntegrationSingleFlight` automatically — the generator does no coalescing of its own.
 
 ## Cache Layers (No New Persistence)
 
@@ -280,17 +291,17 @@ Builds without the key compile and run; Fanart.tv simply never appears in the se
 | THUMBNAIL with Fanart selected (defensive — UI cannot reach this) | `unsupported_artwork_type_for_provider` | ADDON fallback |
 | Otherwise (movie+TMDB / series+TVDB, non-anime, key present) | none | `FANART_TV` |
 
-**Fetcher layer (resolver returned FANART_TV):**
+**Generator layer (FANART_TV selected, capability supported, non-anime):**
 
-| Condition | `fetchUrl(...)` result | Slot |
-|---|---|---|
-| Lookup `Success(doc)` + picker finds match | URL string | filled with Fanart URL |
-| Lookup `Success(doc)` + picker finds no match (no en variant for poster/logo, empty array) | `null` | empty slot per Q1 rule |
-| Lookup `NotFound` (404) | `null` | empty slot |
-| Lookup `AuthFailed` (401/403) | `null` | empty slot (recovers when key fixed) |
-| Lookup `Transient` (429/5xx/network) | `null` | empty slot (runtime backoff applies) |
+| Condition | Generator emits | Router picks | Surface result |
+|---|---|---|---|
+| Lookup `Success(doc)` + picker finds match | 1 candidate per non-null type | FANART_TV PREMIUM (preferred match) | filled with Fanart URL |
+| Lookup `Success(doc)` + picker finds no match (no en variant for poster/logo, empty array) | 0 candidates for that type | PRIMARY (ADDON) | rejected by preferredAwareSlot → empty slot per Q1 rule |
+| Lookup `NotFound` (404) | 0 candidates | PRIMARY (ADDON) | rejected → empty slot |
+| Lookup `AuthFailed` (401/403) | 0 candidates | PRIMARY (ADDON) | rejected → empty slot (recovers on next resolve after key fix) |
+| Lookup `Transient` (429/5xx/network) | 0 candidates | PRIMARY (ADDON) | rejected → empty slot (runtime backoff applies) |
 
-The strict no-fallback-at-fetcher-layer rule is intentional. If the user picked Fanart for non-anime, an empty slot is the contract. The only fallback is the capability-layer fallback.
+The empty-slot contract is enforced at the surface layer by `preferredAwareSlot`, not at the generator/fetcher. The generator simply emits zero candidates; the router falls through to ADDON; the surface repo rejects the ADDON slot because the preferred provider is FANART_TV. This means **no fetcher-side null-handling code** — the existing non-downgrade machinery does the work.
 
 ## Test Plan
 
@@ -300,15 +311,19 @@ The strict no-fallback-at-fetcher-layer rule is intentional. If the user picked 
 - `FanartTvIdSelectorTest` — Movie+TMDB → MOVIE call-id; Series+TVDB → TV call-id; ANIME → null (defensive); missing id → null; UNKNOWN → null.
 - `FanartTvImagePickerTest` — table-driven over the documented rules. Plus two fixture-driven assertions that lock picker outputs against the committed Fight Club / Breaking Bad responses. THUMBNAIL returns null.
 
-### Resolver test
+### Generator test
 
-`FanartTvArtworkResolverTest` (with a fake `FanartTvLookup`):
+`FanartTvCandidateGeneratorTest` (with a fake `FanartTvLookup`):
 
-- BuildConfig key blank → returns null without calling lookup.
-- ANIME (defensive) → returns null without calling lookup.
-- Lookup `Success(doc)` with en variant → returns the picked URL.
-- Lookup `Success(empty doc)` → returns null.
-- Lookup `NotFound` / `AuthFailed` / `Transient` → returns null.
+- BuildConfig key blank → emits zero candidates without calling lookup.
+- No requested type has FANART_TV selected → emits zero, no lookup call.
+- All requested types fail capability (anime / missing id) → emits zero, no lookup call.
+- ANIME (defensive) → emits zero without calling lookup.
+- Lookup `Success(doc)` with en variants for all three types → emits 3 candidates with `provider=FANART_TV`, `sourceRole=PREMIUM`, `source=RemoteUrl(url)`.
+- Lookup `Success(doc)` with en variant only for poster → emits 1 candidate (poster); zero for logo/backdrop.
+- Lookup `Success(empty doc)` → emits zero candidates.
+- Lookup `NotFound` / `AuthFailed` / `Transient` → emits zero candidates.
+- Mixed selection (POSTER=FANART_TV, LOGO=DEFAULT, BACKDROP=FANART_TV) → exactly one lookup call; only POSTER and BACKDROP candidates emitted.
 
 ### Lookup-shape test
 
@@ -339,12 +354,13 @@ The strict no-fallback-at-fetcher-layer rule is intentional. If the user picked 
 - Explicit FANART_TV + ANIME → returns ContentTypeDefaults.resolve(POSTER, isAnime=true) → ADDON; trace records `fellThroughTo=ADDON`.
 - Explicit FANART_TV + missing-id → returns ContentTypeDefaults.resolve(POSTER, isAnime=false) → ADDON; trace records `fellThroughTo=ADDON`.
 
-### Consumer-wiring tests
+### Resolver-augmentation test
 
-For each modified consumer (`TmdbMetadataService`, `TvdbMetadataService`, `HomeCatalogRefreshCoordinator`):
+`MetadataArtworkDecisionResolverFanartTvTest`:
 
-- When `ArtworkProviderResolver` returns FANART_TV → service calls `FanartTvArtworkResolver.fetchUrl(...)` instead of the existing `PosterRatingsUrlResolver.apply(...)` path.
-- When `ArtworkProviderResolver` returns RPDB / TOP_POSTERS / ADDON → existing path is preserved (regression guard).
+- When `resolveFields(...)` is called with TVDB primary candidates and the user has `posterProvider=FANART_TV`, the resolver invokes `FanartTvCandidateGenerator.generate(...)` exactly once per ownerKey with `requestedTypes` = the union of artwork types in the input candidate list (excluding THUMBNAIL).
+- The generator's emitted candidates are appended to the candidate list passed to `ArtworkRouter.select(...)`.
+- When `posterProvider=DEFAULT` → generator is invoked but emits zero (per generator-level filtering); existing behavior unchanged.
 
 ### Surface-repo test (extends existing `ResolvedDisplaySurfaceRepositoryTest`)
 
@@ -389,21 +405,21 @@ No end-to-end network test against real fanart.tv. The two captured fixtures cov
 - `RuntimeFanartTvLookup` impl mapping `HttpException` → typed result.
 - `FanartTvLookupShapeTest` verifying CacheFirst TTL and redaction.
 
-### Phase 5: Resolver
-- `FanartTvArtworkResolver` composing availability + lookup + picker.
-- Hilt `@Provides` for the resolver.
-- Unit tests covering all fetcher-layer outcomes.
-
-### Phase 6: Settings-layer integration
+### Phase 5: Settings-layer integration
 - Add `ArtworkProviderChoiceKey.FANART_TV` constant; extend `fromStored()` and `toRuntimeProviderId()`.
 - Add `fanartTvDescriptor` to `artworkProviderDescriptors` list.
 - Extend `ArtworkProviderCapabilityResolver` with `descriptor()` branch and `fanartTvRejectionReason`.
 - Extend registry, capability-resolver, and resolver-decision tests.
 
-### Phase 7: Consumer wiring
-- Inject `FanartTvArtworkResolver` into `TmdbMetadataService`, `TvdbMetadataService`, `HomeCatalogRefreshCoordinator`.
-- At each site, branch on FANART_TV → call resolver; otherwise existing path.
-- Add per-consumer wiring tests.
+### Phase 6: Candidate generator
+- `FanartTvCandidateGenerator` composing settings filter + capability filter + lookup + picker → emit candidates.
+- Hilt `@Provides` for the generator.
+- Unit tests covering all generator-layer outcomes.
+
+### Phase 7: MetadataArtworkDecisionResolver augmentation
+- Inject `FanartTvCandidateGenerator` into `MetadataArtworkDecisionResolver`.
+- At the top of `resolveFields(...)`, group input candidates by ownerKey, call generator once per group with the union of imageTypes (excluding THUMBNAIL), append generator output to the list before routing.
+- Add the augmentation test.
 
 ### Phase 8: Verification & smoke
 - Audit redaction end-to-end test.
