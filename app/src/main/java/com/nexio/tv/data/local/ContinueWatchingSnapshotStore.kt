@@ -231,13 +231,33 @@ class ContinueWatchingSnapshotStore private constructor(
                                 }
                                 "metadataSnapshotsByItemKey" -> {
                                     val obj: JsonObject? = gson.fromJson(reader, JsonObject::class.java)
+                                    // Resilient decode: a per-entry failure (e.g. R8-obfuscated field
+                                    // names from a prior build, where write went through default Gson
+                                    // reflection and read uses ContinueWatchingMetadataSnapshotTypeAdapter
+                                    // which keys on literal "routingVersion" / "parentId" / ...)
+                                    // must NOT sink the entire snapshot read. Without this guard the
+                                    // upstream runCatching here treats any NPE as "snapshot unreadable"
+                                    // and returns null, leaving the CW rail empty even though resumeItems
+                                    // and records decoded fine. Drop unreadable entries silently —
+                                    // metadataSnapshotsByItemKey is a click-time fallback cache; losing
+                                    // it just makes click-time metadata fall back to displayMetadataByItemKey,
+                                    // not break the rail.
                                     metadataSnapshotsByItemKey = if (obj != null) {
-                                        val type = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
-                                        // Phase 3.8 full — clickTimeSlots is sanitized at construction time
-                                        // (SlotConversions.kt coerces null/blank fields to rank=EMPTY); no
-                                        // separate sanitize step needed.
-                                        gson.fromJson<Map<String, ContinueWatchingMetadataSnapshot>>(obj, type)
-                                            ?: emptyMap()
+                                        val accum = LinkedHashMap<String, ContinueWatchingMetadataSnapshot>(obj.size())
+                                        for ((entryKey, entryValue) in obj.entrySet()) {
+                                            runCatching {
+                                                gson.fromJson(entryValue, ContinueWatchingMetadataSnapshot::class.java)
+                                            }.onSuccess { decoded ->
+                                                if (decoded != null) accum[entryKey] = decoded
+                                            }.onFailure { error ->
+                                                Log.w(
+                                                    TAG,
+                                                    "Dropped unreadable metadataSnapshotsByItemKey entry $entryKey",
+                                                    error
+                                                )
+                                            }
+                                        }
+                                        accum
                                     } else emptyMap()
                                 }
                                 "updatedAtMs" -> updatedAtMs = reader.nextLong()
