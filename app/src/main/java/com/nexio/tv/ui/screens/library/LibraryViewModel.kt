@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.repository.DebridLibraryService
+import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
+import com.nexio.tv.data.repository.TorBoxResolvedPlayback
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
@@ -13,8 +15,11 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -85,17 +90,72 @@ data class LibraryUiState(
     val pendingOperation: Boolean = false
 )
 
+internal sealed interface DirectPlayCommand {
+    data class Resolving(val fileName: String) : DirectPlayCommand
+    data class Navigate(
+        val url: String,
+        val torBoxTorrentId: Int,
+        val torBoxFileId: Int,
+        val fileName: String,
+        val resumePositionMs: Long,
+        val deterministicAutoplay: Boolean = true,
+    ) : DirectPlayCommand
+    data class Failed(val message: String) : DirectPlayCommand
+}
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val torBoxDirectPlayHandler: TorBoxDirectPlayHandler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
+    private val _directPlayCommands = MutableSharedFlow<DirectPlayCommand>(extraBufferCapacity = 4)
+    internal val directPlayCommands: SharedFlow<DirectPlayCommand> = _directPlayCommands.asSharedFlow()
+
+    private val _torBoxRefreshing = MutableStateFlow(false)
+    internal val torBoxRefreshing: StateFlow<Boolean> = _torBoxRefreshing.asStateFlow()
+
     private var messageClearJob: Job? = null
     private var initialTraktSyncRequested = false
+
+    internal fun onTorBoxItemClick(entry: LibraryEntry) {
+        val match = Regex("""^tb:torrent:(\d+):file:(\d+)$""").matchEntire(entry.id) ?: return
+        val torrentId = match.groupValues[1].toInt()
+        val fileId = match.groupValues[2].toInt()
+        val fileName = entry.playbackFilename ?: entry.name
+        viewModelScope.launch {
+            _directPlayCommands.tryEmit(DirectPlayCommand.Resolving(fileName))
+            when (val result = torBoxDirectPlayHandler.resolve(torrentId, fileId, fileName)) {
+                is TorBoxResolvedPlayback.Resolved -> _directPlayCommands.tryEmit(
+                    DirectPlayCommand.Navigate(
+                        url = result.url,
+                        torBoxTorrentId = result.torrentId,
+                        torBoxFileId = result.fileId,
+                        fileName = result.fileName,
+                        resumePositionMs = result.resumePositionMs,
+                    )
+                )
+                is TorBoxResolvedPlayback.Failed -> _directPlayCommands.tryEmit(
+                    DirectPlayCommand.Failed(result.message)
+                )
+            }
+        }
+    }
+
+    internal fun refreshTorBoxLibraryNow() {
+        viewModelScope.launch {
+            _torBoxRefreshing.value = true
+            try {
+                libraryRepository.refreshTorBoxNow()
+            } finally {
+                _torBoxRefreshing.value = false
+            }
+        }
+    }
 
     init {
         observeLayoutPreferences()
