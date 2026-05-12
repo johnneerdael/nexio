@@ -109,6 +109,23 @@ class AssSsaSegmentSurfaceTranslationTest {
         assertTrue(result.isFailure)
     }
 
+    @Test
+    fun validationRejectsUnmatchedRawAssBraces() {
+        val surface = parseSurface("Hello")
+
+        assertTrue(surface.validateTranslatedSegments(listOf("Hallo {wereld")).isFailure)
+        assertTrue(surface.validateTranslatedSegments(listOf("Hallo }")).isFailure)
+    }
+
+    @Test
+    fun inlineMarkersAvoidLiteralSourceMarkerCollisions() {
+        val surface = parseSurface("go<1/>o{\\k10}d")
+
+        assertEquals(listOf("go<1/>o<2/>d"), surface.segments)
+        assertEquals(mapOf("<2/>" to "{\\k10}"), surface.inlineMarkers)
+        assertEquals("ga<1/>e{\\k10}d", surface.recomposeOrThrow(listOf("ga<1/>e<2/>d")))
+    }
+
     private fun parseSurface(text: String): AssSsaTranslationSurface {
         return when (val result = AssSsaSegmentSurfaceParser.parse("evt_0", text)) {
             is AssSsaSurfaceParseResult.Translatable -> result.surface
