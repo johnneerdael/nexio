@@ -85,6 +85,31 @@ class SubtitleTranslationServiceProviderTest {
             subtitleTranslationDiskCacheKey("https://subs.example/movie.srt", "nl", baseline),
             subtitleTranslationDiskCacheKey("https://subs.example/movie.srt", "nl", baseline.copy(baseUrl = "https://openrouter.ai/api/v1"))
         )
+        assertNotEquals(
+            subtitleTranslationDiskCacheKey("https://subs.example/movie.ass", "nl", baseline),
+            subtitleTranslationDiskCacheKey("https://subs.example/movie.ass", "nl", baseline.copy(subRipSystemPromptEnabled = true))
+        )
+    }
+
+    @Test
+    fun diskCacheKeyUsesSegmentSurfaceVersion() {
+        val key = subtitleTranslationDiskCacheKey(
+            sourceUrl = "https://subs.example/movie.ass",
+            targetLanguage = "nl",
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-5-nano",
+                baseUrl = "https://api.openai.com/v1"
+            )
+        )
+
+        assertEquals(64, key.length)
+        assertNotEquals(
+            key,
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest("file|https://subs.example/movie.ass|nl|OPENAI|gpt-5-nano|https://api.openai.com/v1|srtRaw=false|v3".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        )
     }
 
     @Test
@@ -457,63 +482,6 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
-    fun protectedAssBatchTranslationSendsPlaceholderContractAndMapsItems() = runTest {
-        val server = MockWebServer()
-        server.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setBody(
-                    """
-                    {
-                      "choices": [
-                        {
-                          "message": {
-                            "content": "{\"items\":[{\"id\":\"evt_1\",\"text\":\"Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos\"}]}"
-                          }
-                        }
-                      ]
-                    }
-                    """.trimIndent()
-                )
-        )
-        server.start()
-        try {
-            val service = SubtitleTranslationService(
-                context = mockk<Context>(relaxed = true),
-                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
-                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
-            )
-            val unit = AssSsaProtectedTranslationUnit.fromTokens(
-                id = "evt_1",
-                tokens = AssSsaTextTokenizer.tokenize("""I am {\i1}not{\i0} angry""")
-            )
-
-            val result = service.translateProtectedAssSsaUnits(
-                units = listOf(unit),
-                targetLanguageCode = "nl",
-                sourceLanguageCode = "en",
-                settings = SubtitleTranslationSettings(
-                    provider = SubtitleTranslationProvider.OPENAI,
-                    apiKey = "test-key",
-                    model = "gpt-5-nano",
-                    baseUrl = server.url("/v1").toString()
-                )
-            )
-
-            assertEquals(
-                mapOf("evt_1" to "Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos"),
-                result.getOrThrow()
-            )
-            val body = server.takeRequest().body.readUtf8()
-            assertTrue(body.contains("Translate subtitle text from the source language to the target language."))
-            assertTrue(body.contains("⟦[A-Z_]+_[0-9]+⟧"))
-            assertTrue(body.contains("I am ⟦ASS_000⟧not⟦ASS_001⟧ angry"))
-        } finally {
-            server.shutdown()
-        }
-    }
-
-    @Test
     fun assSsaSegmentTranslationSendsSegmentArraysAndRecomposesValidItems() = runTest {
         val server = MockWebServer()
         server.enqueue(
@@ -564,7 +532,7 @@ class SubtitleTranslationServiceProviderTest {
                 requestBody.contains(""""context":"Hello world"""") ||
                     requestBody.contains("""\"context\":\"Hello world\"""")
             )
-            assertFalse(requestBody.contains("⟦ASS_"))
+            assertFalse(requestBody.contains("\u27E6ASS_"))
             assertFalse(requestBody.contains("{\\i1}"))
             val itemProperties = JSONObject(requestBody)
                 .getJSONObject("response_format")

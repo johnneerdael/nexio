@@ -7,12 +7,12 @@ class AssSsaLocalFixtureRegressionTest {
     @Test
     fun ganbareDefaultSignLineTranslatesTextOnly() {
         val text = "{\\bord3\\shad0\\fs14\\fax0.12\\c&H353135&\\3c&HF5F5F5&\\frz29.62\\pos(63,80)}My best friend?!"
-        val unit = AssSsaProtectedTranslationUnit.fromText("evt_0", text)
+        val surface = (AssSsaSegmentSurfaceParser.parse("evt_0", text) as AssSsaSurfaceParseResult.Translatable).surface
 
-        assertEquals("⟦ASS_000⟧My best friend?!", unit.protectedText)
+        assertEquals(listOf("My best friend?!"), surface.segments)
         assertEquals(
             "{\\bord3\\shad0\\fs14\\fax0.12\\c&H353135&\\3c&HF5F5F5&\\frz29.62\\pos(63,80)}Mijn beste vriend?!",
-            unit.reconstruct("⟦ASS_000⟧Mijn beste vriend?!").getOrThrow()
+            surface.recomposeOrThrow(listOf("Mijn beste vriend?!"))
         )
     }
 
@@ -36,9 +36,9 @@ class AssSsaLocalFixtureRegressionTest {
     @Test
     fun classDeSignsStyleTranslatesTextOnly() {
         val text = "{\\pos(312,198.667)}MAEHARA"
-        val unit = AssSsaProtectedTranslationUnit.fromText("evt_0", text)
+        val surface = (AssSsaSegmentSurfaceParser.parse("evt_0", text) as AssSsaSurfaceParseResult.Translatable).surface
 
-        assertEquals("⟦ASS_000⟧MAEHARA", unit.protectedText)
-        assertEquals("{\\pos(312,198.667)}MAEHARA", unit.reconstruct("⟦ASS_000⟧MAEHARA").getOrThrow())
+        assertEquals(listOf("MAEHARA"), surface.segments)
+        assertEquals("{\\pos(312,198.667)}MAEHARA", surface.recomposeOrThrow(listOf("MAEHARA")))
     }
 }
