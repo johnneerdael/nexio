@@ -3,12 +3,15 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver
 import com.nexio.tv.core.playback.PlaybackOwnerContext
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -125,5 +128,43 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
         val result = newService().checkin(movieItem(), message = null, ownerProfileId = 1)
         assert(!result)
+    }
+
+    @Test
+    fun `Trakt scrobble uses hydratedIds when present`() = runTest {
+        stubState(trakt = true, simkl = false)
+        val captured = slot<TraktScrobbleItem>()
+        coEvery { traktService.scrobbleStart(capture(captured), any(), any(), any()) } returns Unit
+
+        val item = TrackingScrobbleItem.Movie(
+            contentId = "tmdb:1396",
+            title = "Breaking Bad",
+            year = 2008,
+            hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396", tvdb = "81189"),
+        )
+        newService().scrobbleStart(item, 10f, owner())
+
+        val sent = captured.captured as TraktScrobbleItem.Movie
+        assertEquals("tt0903747", sent.ids.imdb)
+        assertEquals(1396, sent.ids.tmdb)
+        assertEquals(81189, sent.ids.tvdb)
+    }
+
+    @Test
+    fun `Trakt scrobble falls back to contentId parse when hydratedIds is null`() = runTest {
+        stubState(trakt = true, simkl = false)
+        val captured = slot<TraktScrobbleItem>()
+        coEvery { traktService.scrobbleStart(capture(captured), any(), any(), any()) } returns Unit
+
+        val item = TrackingScrobbleItem.Movie(
+            contentId = "tt9999999",
+            title = "x",
+            year = null,
+            hydratedIds = null,
+        )
+        newService().scrobbleStart(item, 10f, owner())
+
+        val sent = captured.captured as TraktScrobbleItem.Movie
+        assertEquals("tt9999999", sent.ids.imdb)
     }
 }
