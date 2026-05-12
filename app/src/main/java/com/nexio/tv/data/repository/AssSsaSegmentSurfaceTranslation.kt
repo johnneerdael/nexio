@@ -300,6 +300,12 @@ internal data class AssSsaSegmentSurfaceBatch(
         get() = units.subList(leadOverlap, leadOverlap + coreCount)
 }
 
+internal data class AssSsaTranslationBatchConfig(
+    val maxEvents: Int = DEFAULT_TRANSLATION_RAMP_TERMINAL,
+    val maxVisibleChars: Int = 20_000,
+    val rampUpEnabled: Boolean = true
+)
+
 internal object AssSsaSegmentSurfaceBatchPlanner {
     fun plan(
         surfaces: List<AssSsaTranslationSurface>,

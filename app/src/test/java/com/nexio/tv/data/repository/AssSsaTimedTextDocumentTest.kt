@@ -148,7 +148,7 @@ class AssSsaTimedTextDocumentTest {
     }
 
     @Test
-    fun phraseModeKeepsInlineStylePlaceholderAroundTranslatedEquivalent() {
+    fun segmentSurfaceKeepsInlineStyleSeparatorsAroundTranslatedEquivalent() {
         val document = TimedTextDocument.parse(
             raw = """
                 [Events]
@@ -158,11 +158,11 @@ class AssSsaTimedTextDocumentTest {
             url = "file:///tmp/subtitle.ass"
         )!!
 
-        val units = document.assSsaProtectedUnits()
+        val surfaces = document.assSsaSegmentSurfaces()
 
         assertEquals(
-            listOf("I am ⟦ASS_000⟧not⟦ASS_001⟧ amused.⟦LB_002⟧Really."),
-            units.map { it.protectedText }
+            listOf(listOf("I am", "not", "amused.", "Really.")),
+            surfaces.map { it.segments }
         )
         assertEquals(
             """
@@ -170,9 +170,9 @@ class AssSsaTimedTextDocumentTest {
             Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Ik ben {\i1}niet{\i0} geamuseerd.\NEcht niet.
             """.trimIndent() + "\n",
-            document.renderAssSsaProtected(
+            document.renderAssSsaSegmentSurfaces(
                 mapOf(
-                    "ass_0" to "Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ geamuseerd.⟦LB_002⟧Echt niet."
+                    "ass_0" to listOf("Ik ben", "niet", "geamuseerd.", "Echt niet.")
                 )
             )
         )

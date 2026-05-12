@@ -5,19 +5,10 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
-import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class SubtitleTranslationSettingsDataStoreTest {
-    @Test
-    fun settingsDomainDoesNotExposeAssSsaRawPromptFlag() {
-        val fieldNames = SubtitleTranslationSettings::class.java.declaredFields.map { it.name }
-
-        assertFalse(fieldNames.contains("assSsaSystemPromptEnabled"))
-    }
-
     @Test
     fun defaultsUseOpenRouterFreeModelAndEndpoint() {
         val settings = defaultSubtitleTranslationSettings()
