@@ -1,11 +1,15 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -57,11 +61,22 @@ import javax.inject.Singleton
 @Singleton
 class MetadataDisplayRepository @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
-    private val detailRatingDisplayRepository: DetailRatingDisplayRepository
+    private val detailRatingDisplayRepository: DetailRatingDisplayRepository,
+    private val animeIdMappingService: AnimeIdMappingService
 ) {
     constructor(metadataRouterFacade: MetadataRouterFacade) : this(
         metadataRouterFacade = metadataRouterFacade,
-        detailRatingDisplayRepository = DetailRatingDisplayRepository.noOp()
+        detailRatingDisplayRepository = DetailRatingDisplayRepository.noOp(),
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
+    )
+
+    constructor(
+        metadataRouterFacade: MetadataRouterFacade,
+        detailRatingDisplayRepository: DetailRatingDisplayRepository
+    ) : this(
+        metadataRouterFacade = metadataRouterFacade,
+        detailRatingDisplayRepository = detailRatingDisplayRepository,
+        animeIdMappingService = AnimeIdMappingService { AnimeIdMapAsset(schemaVersion = 0) }
     )
 
     suspend fun resolveDetailDisplay(
@@ -156,7 +171,8 @@ class MetadataDisplayRepository @Inject constructor(
                 provider = provider,
                 id = id,
                 remoteIds = resolvedDocument.remoteIds,
-                targetIds = route?.targetIds.orEmpty()
+                targetIds = route?.targetIds.orEmpty(),
+                mediaKind = route?.mediaKind
             )
         )
     }
@@ -178,9 +194,10 @@ class MetadataDisplayRepository @Inject constructor(
         provider: ProviderId?,
         id: String?,
         remoteIds: Map<String, Set<String>>,
-        targetIds: Map<MetadataPrimaryProvider, String>
+        targetIds: Map<MetadataPrimaryProvider, String>,
+        mediaKind: MetadataMediaKind?
     ): ProviderIds {
-        val remoteProviderIds = ProviderIds(
+        val mergedRemoteAndTargets = ProviderIds(
             imdb = remoteIds.firstValueFor("imdb"),
             tmdb = remoteIds.firstValueFor("tmdb"),
             tvdb = remoteIds.firstValueFor("tvdb"),
@@ -191,6 +208,20 @@ class MetadataDisplayRepository @Inject constructor(
             anilist = remoteIds.firstValueFor("anilist"),
             anidb = remoteIds.firstValueFor("anidb")
         ).mergeMissing(targetIds.toProviderIds())
+
+        // Kitsu addons return only kitsu/mal/anilist — never imdb/tmdb/tvdb.
+        // MetadataIdentityResolver only knows TMDB↔TVDB and IMDB→TVDB, so it
+        // also never produces cross-IDs for kitsu sources. Consult the local
+        // AnimeIdMappingService binary asset (mmap'd, no I/O cost) so that
+        // subtitle providers downstream (Wyzie, OpenSubtitles) receive IMDB
+        // instead of a kitsu id they cannot search by.
+        val animeMapIds = animeMapProviderIdsForKitsu(
+            provider = provider,
+            id = id,
+            kitsuFromRemote = mergedRemoteAndTargets.kitsu,
+            mediaKind = mediaKind
+        )
+        val remoteProviderIds = mergedRemoteAndTargets.mergeMissing(animeMapIds)
         if (id.isNullOrBlank()) return remoteProviderIds
 
         return when (provider) {
@@ -202,6 +233,35 @@ class MetadataDisplayRepository @Inject constructor(
             ProviderId.SIMKL -> remoteProviderIds.copy(simkl = remoteProviderIds.simkl ?: id)
             else -> remoteProviderIds
         }
+    }
+
+    private fun animeMapProviderIdsForKitsu(
+        provider: ProviderId?,
+        id: String?,
+        kitsuFromRemote: String?,
+        mediaKind: MetadataMediaKind?
+    ): ProviderIds {
+        val rawKitsu = when {
+            provider == ProviderId.KITSU && !id.isNullOrBlank() -> id
+            !kitsuFromRemote.isNullOrBlank() -> kitsuFromRemote
+            else -> return ProviderIds()
+        }
+        // Strip any series:season:episode suffix — canonical ids for episode
+        // surfaces arrive as "7442:1:1" but the anime map indexes by bare kitsu id.
+        val kitsuId = rawKitsu.removePrefix("kitsu:")
+            .substringBefore(':')
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?: return ProviderIds()
+        val resolvedKind = when (mediaKind) {
+            MetadataMediaKind.MOVIE -> ContentMediaKind.MOVIE
+            MetadataMediaKind.SERIES, MetadataMediaKind.ANIME -> ContentMediaKind.SERIES
+            // The asset stores both movies and series; for unknown kind fall
+            // back to SERIES (dominant shape) — resolveProviderIdsForKitsu
+            // does the final matches(mediaKind) gate inside the service.
+            MetadataMediaKind.UNKNOWN, null -> ContentMediaKind.SERIES
+        }
+        return animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, resolvedKind)
     }
 
     private fun Map<MetadataPrimaryProvider, String>.toProviderIds(): ProviderIds =
