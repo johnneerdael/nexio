@@ -290,6 +290,46 @@ internal object AssSsaSegmentSurfaceParser {
     }
 }
 
+internal fun parseAssSsaSegmentResponse(
+    responseText: String,
+    surfaces: List<AssSsaTranslationSurface>
+): Map<String, List<String>> {
+    val normalized = sanitizeJsonLikeResponse(responseText)
+    val root = JSONObject(normalized)
+    val items = root.optJSONArray("items") ?: JSONArray()
+    val byId = surfaces.associateBy { it.id }
+    val parsed = mutableMapOf<String, List<String>>()
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        val id = item.optString("id")
+        val surface = byId[id] ?: continue
+        val segmentsJson = item.optJSONArray("segments") ?: continue
+        val segments = buildList {
+            for (segmentIndex in 0 until segmentsJson.length()) {
+                add(segmentsJson.optString(segmentIndex))
+            }
+        }
+        val checked = surface.validateTranslatedSegments(segments).getOrNull() ?: continue
+        parsed[id] = checked
+    }
+    return parsed
+}
+
+private fun sanitizeJsonLikeResponse(responseText: String): String {
+    val trimmed = responseText.trim()
+    val unfenced = if (trimmed.startsWith("```")) {
+        trimmed
+            .replaceFirst(Regex("""^```[A-Za-z0-9_-]*\s*"""), "")
+            .replace(Regex("""\s*```\s*$"""), "")
+            .trim()
+    } else {
+        trimmed
+    }
+    val start = unfenced.indexOf('{')
+    val end = unfenced.lastIndexOf('}')
+    return if (start >= 0 && end >= start) unfenced.substring(start, end + 1) else unfenced
+}
+
 private val MARKER_PATTERN = Regex("""<\d+/>""")
 private val RAW_ASS_ESCAPE_PATTERN = Regex("""\\[Nnh]""")
 

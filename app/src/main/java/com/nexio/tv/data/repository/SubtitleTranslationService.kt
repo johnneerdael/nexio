@@ -235,6 +235,21 @@ class SubtitleTranslationService @Inject constructor(
             """.trimIndent()
         }
 
+        @androidx.annotation.VisibleForTesting
+        internal fun buildAssSsaSegmentSystemPromptForTest(): String {
+            return """
+                Translate subtitle segments to the target language.
+                Return valid JSON only.
+                Keep the same item ids.
+                Keep exactly the same number of segments for each item.
+                Do not merge, split, reorder, or omit segments.
+                Preserve placeholders like <1/>, <2/>, <3/> exactly.
+                Place placeholders inside the equivalent translated word when possible.
+                Do not output ASS/SSA syntax such as {...}, \N, \n, or \h.
+                Keep subtitle phrasing concise and natural.
+            """.trimIndent()
+        }
+
         internal val SRT_TIMESTAMP_REGEX =
             Regex("""\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}""")
         internal val SRT_CUE_HEADER_REGEX = Regex("""(^|\n)\s*1\s*\r?\n""")
@@ -516,6 +531,47 @@ class SubtitleTranslationService @Inject constructor(
                 diagnosticsLogger.log(
                     "protected_ass_parse_success requestedItems=${units.size} parsedItems=${parsed.size} " +
                         "missingItems=${(units.size - parsed.size).coerceAtLeast(0)}"
+                )
+            }
+        }
+    }
+
+    internal suspend fun translateAssSsaSegmentSurfaces(
+        surfaces: List<AssSsaTranslationSurface>,
+        targetLanguageCode: String,
+        sourceLanguageCode: String?,
+        settings: SubtitleTranslationSettings
+    ): Result<Map<String, List<String>>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val normalizedTarget = targetLanguageCode.trim().ifBlank {
+                throw IllegalArgumentException("Target language is required.")
+            }
+            val normalizedSettings = settings.copy(apiKey = settings.apiKey.trim())
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
+            }
+            if (surfaces.isEmpty()) return@runCatching emptyMap()
+
+            val payload = JSONObject()
+                .put("sourceLanguage", displaySourceLanguage(sourceLanguageCode))
+                .put("targetLanguage", displayLanguage(normalizedTarget))
+                .put("items", JSONArray().apply { surfaces.forEach { put(it.toJson()) } })
+
+            val response = executeTranslationRequest(
+                promptPayload = payload,
+                targetLanguageCode = normalizedTarget,
+                targetLanguageName = displayLanguage(normalizedTarget),
+                sourceLanguageName = displaySourceLanguage(sourceLanguageCode),
+                markerPayload = null,
+                settings = normalizedSettings,
+                includeSchema = true,
+                systemPromptOverride = buildAssSsaSegmentSystemPromptForTest()
+            ) ?: throw IllegalStateException("Subtitle translation provider did not return an ASS/SSA segment payload.")
+
+            parseAssSsaSegmentResponse(response, surfaces).also { parsed ->
+                diagnosticsLogger.log(
+                    "ass_segment_parse_success requestedItems=${surfaces.size} parsedItems=${parsed.size} " +
+                        "droppedItems=${(surfaces.size - parsed.size).coerceAtLeast(0)}"
                 )
             }
         }
