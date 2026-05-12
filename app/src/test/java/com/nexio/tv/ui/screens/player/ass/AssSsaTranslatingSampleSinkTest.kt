@@ -43,6 +43,39 @@ class AssSsaTranslatingSampleSinkTest {
     }
 
     @Test
+    fun translatesEmbeddedMatroskaRawSampleThroughSegmentSurfaces() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { surfaces ->
+                assertEquals(listOf(listOf("I am", "not", "angry")), surfaces.map { it.segments })
+                mapOf("evt_0" to listOf("Ik ben", "niet", "boos"))
+            }
+        )
+
+        sink.onTrackHeader(
+            trackId = 4,
+            headerData = "[Script Info]\nScriptType: v4.00+\n".toByteArray(),
+            format = Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+                .build()
+        )
+        sink.onSubtitleSample(
+            trackId = 4,
+            timeUs = 1_000_000L,
+            data = "17,0,Default,,0,0,0,,I am {\\i1}not{\\i0} angry".toByteArray()
+        )
+
+        assertEquals(
+            "17,0,Default,,0,0,0,,Ik ben {\\i1}niet{\\i0} boos",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
     fun translatesCommentSampleWhenItMatchesEventFormat() = runTest {
         val downstream = RecordingAssSsaSampleSink()
         val sink = AssSsaTranslatingSampleSink(

@@ -62,6 +62,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.data.repository.AssSsaSegmentSurfaceBatchPlanner
+import com.nexio.tv.data.repository.mergeAssSsaSegmentBatchResponses
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
@@ -703,19 +704,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         )
                     },
                     translate = { surfaces ->
-                        val translated = mutableMapOf<String, List<String>>()
-                        AssSsaSegmentSurfaceBatchPlanner.plan(surfaces).forEach { batch ->
-                            val response = subtitleTranslationService.translateAssSsaSegmentSurfaces(
+                        val batchResponses = AssSsaSegmentSurfaceBatchPlanner.plan(surfaces).map { batch ->
+                            batch to subtitleTranslationService.translateAssSsaSegmentSurfaces(
                                 surfaces = batch.units,
                                 targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
                                 sourceLanguageCode = null,
                                 settings = subtitleTranslationSettings
                             ).getOrThrow()
-                            batch.coreUnits.forEach { surface ->
-                                response[surface.id]?.let { translated[surface.id] = it }
-                            }
                         }
-                        translated
+                        mergeAssSsaSegmentBatchResponses(batchResponses)
                     },
                     diagnosticsLogger = subtitleTranslationService.diagnosticsLogger
                 )

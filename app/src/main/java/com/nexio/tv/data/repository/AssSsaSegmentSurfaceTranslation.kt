@@ -326,6 +326,36 @@ internal object AssSsaSegmentSurfaceBatchPlanner {
     }
 }
 
+internal fun mergeAssSsaSegmentBatchResponses(
+    batchResponses: List<Pair<AssSsaSegmentSurfaceBatch, Map<String, List<String>>>>
+): Map<String, List<String>> {
+    val merged = mutableMapOf<String, List<String>>()
+    batchResponses.forEach { (batch, response) ->
+        batch.coreUnits.forEach { surface ->
+            response[surface.id]?.let { merged[surface.id] = it }
+        }
+    }
+
+    val allCoreIds = batchResponses.asSequence()
+        .flatMap { (batch, _) -> batch.coreUnits.asSequence().map { it.id } }
+        .toSet()
+    val missingAfterPrimary = allCoreIds.asSequence()
+        .filter { it !in merged }
+        .toSet()
+    if (missingAfterPrimary.isEmpty()) return merged
+
+    batchResponses.forEach { (batch, response) ->
+        val overlapUnits = batch.units.take(batch.leadOverlap) +
+            batch.units.drop(batch.leadOverlap + batch.coreCount)
+        overlapUnits.forEach { surface ->
+            if (surface.id in missingAfterPrimary && surface.id !in merged) {
+                response[surface.id]?.let { merged[surface.id] = it }
+            }
+        }
+    }
+    return merged
+}
+
 internal fun parseAssSsaSegmentResponse(
     responseText: String,
     surfaces: List<AssSsaTranslationSurface>
