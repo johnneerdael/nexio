@@ -85,6 +85,12 @@ private data class RawSubRipCue(
         get() = RAW_SUBRIP_TAG_PATTERN.findAll(textLines.joinToString("\n")).map { it.value }.toList()
 }
 
+private data class DashScopeAssSsaSegmentBlock(
+    val block: TranslatableTimedTextBlock,
+    val surfaceId: String,
+    val segmentIndex: Int
+)
+
 internal enum class SubtitleTranslationProviderError {
     InvalidApiKey,
     AccessDenied,
@@ -551,20 +557,48 @@ class SubtitleTranslationService @Inject constructor(
                 throw IllegalArgumentException("Subtitle translation API key is missing.")
             }
             if (surfaces.isEmpty()) return@runCatching emptyMap()
+            val targetLanguageName = displayLanguage(normalizedTarget)
+            val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
 
             val payload = JSONObject()
-                .put("sourceLanguage", displaySourceLanguage(sourceLanguageCode))
-                .put("targetLanguage", displayLanguage(normalizedTarget))
+                .put("sourceLanguage", sourceLanguageName)
+                .put("targetLanguage", targetLanguageName)
                 .put("items", JSONArray().apply { surfaces.forEach { put(it.toJson()) } })
+
+            if (normalizedSettings.provider == SubtitleTranslationProvider.DASHSCOPE) {
+                val segmentBlocks = buildDashScopeAssSsaSegmentBlocks(surfaces)
+                val response = executeTranslationRequest(
+                    promptPayload = payload,
+                    targetLanguageCode = normalizedTarget,
+                    targetLanguageName = targetLanguageName,
+                    sourceLanguageName = sourceLanguageName,
+                    markerPayload = buildDashScopeMarkerPayload(segmentBlocks.map { it.block }),
+                    settings = normalizedSettings,
+                    includeSchema = false,
+                    systemPromptOverride = buildAssSsaSegmentSystemPromptForTest()
+                ) ?: throw IllegalStateException("Subtitle translation provider did not return an ASS/SSA segment payload.")
+
+                return@runCatching parseDashScopeAssSsaSegmentResponse(response, surfaces, segmentBlocks)
+            }
 
             val response = executeTranslationRequest(
                 promptPayload = payload,
                 targetLanguageCode = normalizedTarget,
-                targetLanguageName = displayLanguage(normalizedTarget),
-                sourceLanguageName = displaySourceLanguage(sourceLanguageCode),
+                targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
                 markerPayload = null,
                 settings = normalizedSettings,
                 includeSchema = true,
+                responseSchema = SubtitleTranslationResponseSchema.AssSsaSegmentItems,
+                systemPromptOverride = buildAssSsaSegmentSystemPromptForTest()
+            ) ?: executeTranslationRequest(
+                promptPayload = payload,
+                targetLanguageCode = normalizedTarget,
+                targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
+                markerPayload = null,
+                settings = normalizedSettings,
+                includeSchema = false,
                 responseSchema = SubtitleTranslationResponseSchema.AssSsaSegmentItems,
                 systemPromptOverride = buildAssSsaSegmentSystemPromptForTest()
             ) ?: throw IllegalStateException("Subtitle translation provider did not return an ASS/SSA segment payload.")
@@ -1129,6 +1163,25 @@ class SubtitleTranslationService @Inject constructor(
     ): String {
         return blocks.joinToString("\n") { block ->
             "[[${block.blockId}]] ${block.text}"
+        }
+    }
+
+    private fun buildDashScopeAssSsaSegmentBlocks(
+        surfaces: List<AssSsaTranslationSurface>
+    ): List<DashScopeAssSsaSegmentBlock> {
+        var blockId = 0
+        return surfaces.flatMap { surface ->
+            surface.segments.mapIndexed { segmentIndex, segment ->
+                DashScopeAssSsaSegmentBlock(
+                    block = TranslatableTimedTextBlock(
+                        blockId = blockId++,
+                        prefixLines = emptyList(),
+                        text = segment
+                    ),
+                    surfaceId = surface.id,
+                    segmentIndex = segmentIndex
+                )
+            }
         }
     }
 
@@ -1763,6 +1816,34 @@ class SubtitleTranslationService @Inject constructor(
             throw IllegalStateException("Subtitle translation provider returned an incomplete translation payload.")
         }
         return parsed.filterKeys { it in expectedIds }
+    }
+
+    private fun parseDashScopeAssSsaSegmentResponse(
+        responseText: String,
+        surfaces: List<AssSsaTranslationSurface>,
+        segmentBlocks: List<DashScopeAssSsaSegmentBlock>
+    ): Map<String, List<String>> {
+        val translatedByBlockId = parseDashScopeMarkerResponse(
+            responseText = responseText,
+            blocks = segmentBlocks.map { it.block }
+        )
+        val segmentsBySurface = surfaces.associate { surface ->
+            surface.id to MutableList<String?>(surface.segments.size) { null }
+        }
+        segmentBlocks.forEach { segmentBlock ->
+            val translated = translatedByBlockId[segmentBlock.block.blockId] ?: return@forEach
+            segmentsBySurface[segmentBlock.surfaceId]?.set(segmentBlock.segmentIndex, translated)
+        }
+
+        return buildMap {
+            surfaces.forEach { surface ->
+                val segmentSlots = segmentsBySurface[surface.id] ?: return@forEach
+                val translatedSegments = segmentSlots.mapNotNull { it }
+                if (translatedSegments.size != surface.segments.size) return@forEach
+                val checked = surface.validateTranslatedSegments(translatedSegments).getOrNull() ?: return@forEach
+                put(surface.id, checked)
+            }
+        }
     }
 
     private fun buildProtectedAssSsaSystemPrompt(): String {
