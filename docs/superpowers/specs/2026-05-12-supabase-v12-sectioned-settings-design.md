@@ -1,7 +1,7 @@
 # Supabase Contract v12 Sectioned Account Settings Design
 
 Date: 2026-05-12
-Status: draft for user review
+Status: approved design, pending implementation plan
 
 ## Purpose
 
