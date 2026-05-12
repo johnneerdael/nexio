@@ -808,10 +808,16 @@ class DebridLibraryService @Inject constructor(
 
         @JvmStatic
         fun isTorBoxFilePlayable(file: TorBoxFileDto): Boolean {
-            val mime = file.mimeType ?: return false
-            if (!mime.startsWith("video/", ignoreCase = true)) return false
             val size = file.size ?: return false
-            return size >= TORBOX_MIN_PLAYABLE_BYTES
+            if (size < TORBOX_MIN_PLAYABLE_BYTES) return false
+            // Accept either a video/* mimeType OR a known video extension. TorBox populates
+            // mimetype for most files but not all; falling back to the extension whitelist
+            // recovers entries the strict mimeType-only filter was rejecting.
+            val mime = file.mimeType
+            if (mime != null && mime.startsWith("video/", ignoreCase = true)) return true
+            val filename = file.shortName ?: file.name ?: return false
+            val extension = filename.substringAfterLast('.', "").lowercase(java.util.Locale.US)
+            return extension.isNotEmpty() && extension in STRICT_PLAYABLE_VIDEO_EXTENSIONS
         }
 
         data class TorBoxNextFile(
