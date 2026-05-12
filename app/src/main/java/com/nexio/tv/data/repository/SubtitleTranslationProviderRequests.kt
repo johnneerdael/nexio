@@ -50,6 +50,7 @@ internal fun buildOpenAiChatCompletionRequest(
     userPayload: String,
     includeJsonMode: Boolean = true,
     strictJsonSchemaItemCount: Int? = null,
+    responseSchema: SubtitleTranslationResponseSchema = SubtitleTranslationResponseSchema.TextItems,
     isReasoningModel: Boolean = false
 ): JSONObject {
     val systemMessage = JSONObject()
@@ -73,7 +74,7 @@ internal fun buildOpenAiChatCompletionRequest(
         val useStrictSchema = strictJsonSchemaItemCount != null &&
             supportsStrictJsonSchemaResponseFormat(settings)
         val responseFormat = if (useStrictSchema) {
-            buildOpenAiStrictJsonSchemaResponseFormat(strictJsonSchemaItemCount!!)
+            buildOpenAiStrictJsonSchemaResponseFormat(strictJsonSchemaItemCount, responseSchema)
         } else {
             JSONObject().put("type", "json_object")
         }
@@ -127,19 +128,19 @@ internal fun supportsStrictJsonSchemaResponseFormat(
         normalized.startsWith("o4")
 }
 
-private fun buildOpenAiStrictJsonSchemaResponseFormat(itemCount: Int): JSONObject {
-    val idSchema = JSONObject().put("type", "integer")
-    val textSchema = JSONObject().put("type", "string")
+internal enum class SubtitleTranslationResponseSchema {
+    TextItems,
+    AssSsaSegmentItems
+}
 
-    val itemProperties = JSONObject()
-        .put("id", idSchema)
-        .put("text", textSchema)
-
-    val itemSchema = JSONObject()
-        .put("type", "object")
-        .put("additionalProperties", false)
-        .put("required", JSONArray().put("id").put("text"))
-        .put("properties", itemProperties)
+private fun buildOpenAiStrictJsonSchemaResponseFormat(
+    itemCount: Int,
+    responseSchema: SubtitleTranslationResponseSchema
+): JSONObject {
+    val itemSchema = when (responseSchema) {
+        SubtitleTranslationResponseSchema.TextItems -> buildOpenAiTextItemSchema()
+        SubtitleTranslationResponseSchema.AssSsaSegmentItems -> buildOpenAiAssSsaSegmentItemSchema()
+    }
 
     val arraySchema = JSONObject()
         .put("type", "array")
@@ -161,6 +162,35 @@ private fun buildOpenAiStrictJsonSchemaResponseFormat(itemCount: Int): JSONObjec
     return JSONObject()
         .put("type", "json_schema")
         .put("json_schema", schemaWrapper)
+}
+
+private fun buildOpenAiTextItemSchema(): JSONObject {
+    val itemProperties = JSONObject()
+        .put("id", JSONObject().put("type", "integer"))
+        .put("text", JSONObject().put("type", "string"))
+
+    return JSONObject()
+        .put("type", "object")
+        .put("additionalProperties", false)
+        .put("required", JSONArray().put("id").put("text"))
+        .put("properties", itemProperties)
+}
+
+private fun buildOpenAiAssSsaSegmentItemSchema(): JSONObject {
+    val itemProperties = JSONObject()
+        .put("id", JSONObject().put("type", "string"))
+        .put(
+            "segments",
+            JSONObject()
+                .put("type", "array")
+                .put("items", JSONObject().put("type", "string"))
+        )
+
+    return JSONObject()
+        .put("type", "object")
+        .put("additionalProperties", false)
+        .put("required", JSONArray().put("id").put("segments"))
+        .put("properties", itemProperties)
 }
 
 internal fun buildAnthropicMessagesRequest(
