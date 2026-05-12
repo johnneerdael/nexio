@@ -151,6 +151,31 @@ class DefaultTrackingScrobbleServiceFanOutTest {
     }
 
     @Test
+    fun `anime scrobble continues to Simkl even when Trakt anime projection fails`() = runTest {
+        stubState(trakt = true, simkl = true)
+        // Force Trakt anime projection to fail by returning null from the resolver lookup.
+        coEvery { animeIdMappingService.resolveKitsuId(any(), any()) } returns null
+
+        val item = TrackingScrobbleItem.Episode(
+            contentId = "mal:21",
+            showTitle = "Cowboy Bebop",
+            showYear = 1998,
+            season = 1, number = 5,
+            episodeTitle = "Ballad of Fallen Angels",
+            hydratedIds = ProviderIds(
+                kitsu = "1", mal = "21", anilist = "1", anidb = "10",
+                imdb = "tt0213338", tmdb = "30991",
+            ),
+        )
+
+        newService().scrobbleStart(item, 10f, owner())
+
+        // Trakt skipped (projection failed). Simkl still fires with the anime-aware item.
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+    }
+
+    @Test
     fun `Trakt scrobble falls back to contentId parse when hydratedIds is null`() = runTest {
         stubState(trakt = true, simkl = false)
         val captured = slot<TraktScrobbleItem>()
