@@ -188,6 +188,31 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `v13 pull applies sparse account settings with section presence markers`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val liveSessionStart = source.indexOf("private fun hasLiveFullAccountSession", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, liveSessionStart)
+
+        assertTrue(
+            "v13 pull must derive known present section keys from the snapshot rows",
+            pullBlock.contains("val appliedSectionKeys = appliedSections.map { it.first }.toSet()")
+        )
+        assertTrue(
+            "v13 pull must resolve secrets only for sections present in the sparse snapshot",
+            pullBlock.contains("resolveRemoteSecretsForApply(settings, appliedSectionKeys)")
+        )
+        assertTrue(
+            "v13 pull must pass section presence into local settings application",
+            pullBlock.contains("sectionKeys = appliedSectionKeys")
+        )
+        assertFalse(
+            "v13 pull must not apply the default-backed sparse payload as a complete payload",
+            pullBlock.contains("applySharedAccountConfigSyncSettings(settings)")
+        )
+    }
+
+    @Test
     fun `metadata provider sync defaults are core enabled`() {
         val tmdb = TmdbSyncSettings()
 
