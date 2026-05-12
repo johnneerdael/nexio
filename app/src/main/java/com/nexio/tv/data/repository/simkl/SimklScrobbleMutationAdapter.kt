@@ -11,6 +11,7 @@ import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
@@ -164,28 +165,35 @@ class SimklScrobbleMutationAdapter @Inject constructor(
         }
 
         private fun JsonObject.populateItem(item: TrackingScrobbleItem) {
+            val ids = item.hydratedIds?.toSimklIds() ?: parseSimklIds(item.contentId)
             when (item) {
                 is TrackingScrobbleItem.Movie -> {
                     addProperty(PAYLOAD_ITEM_TYPE, "movie")
                     item.title?.let { addProperty(PAYLOAD_TITLE, it) }
                     item.year?.let { addProperty(PAYLOAD_YEAR, it) }
-                    parseSimklIds(item.contentId).imdb?.let { addProperty(PAYLOAD_IMDB, it) }
-                    parseSimklIds(item.contentId).tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
-                    parseSimklIds(item.contentId).simkl?.let { addProperty(PAYLOAD_SIMKL, it) }
+                    ids.imdb?.let { addProperty(PAYLOAD_IMDB, it) }
+                    ids.tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
+                    ids.simkl?.let { addProperty(PAYLOAD_SIMKL, it) }
                 }
                 is TrackingScrobbleItem.Episode -> {
                     addProperty(PAYLOAD_ITEM_TYPE, "episode")
                     item.showTitle?.let { addProperty(PAYLOAD_SHOW_TITLE, it) }
                     item.showYear?.let { addProperty(PAYLOAD_SHOW_YEAR, it) }
-                    parseSimklIds(item.contentId).imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
-                    parseSimklIds(item.contentId).tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
-                    parseSimklIds(item.contentId).simkl?.let { addProperty(PAYLOAD_SHOW_SIMKL, it) }
+                    ids.imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
+                    ids.tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
+                    ids.simkl?.let { addProperty(PAYLOAD_SHOW_SIMKL, it) }
                     addProperty(PAYLOAD_SEASON, item.season)
                     addProperty(PAYLOAD_NUMBER, item.number)
                     item.episodeTitle?.let { addProperty(PAYLOAD_EPISODE_TITLE, it) }
                 }
             }
         }
+
+        private fun ProviderIds.toSimklIds(): ParsedSimklIds = ParsedSimklIds(
+            simkl = simkl?.toLongOrNull(),
+            imdb = imdb,
+            tmdb = tmdb,
+        )
 
         private fun buildRollbackMetadata(
             rollbackState: TraktWatchingNowStateController.Snapshot,
