@@ -1173,33 +1173,32 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
     ).toContinueWatchingInProgress(displayMetadataByItemKey).copy(
         canonicalKey = canonicalKey,
         streamFetchVideoId = streamFetchIdentity?.videoId
-    ).withImdbFromIdBundle(idBundle.imdb)
+    ).withResolvedImdb(displayIdentity?.providerIds?.imdb)
 }
 
-// Enrich displayMetadata.imdbId from the ContinueWatchingRecord.idBundle (resolved by
-// StableIdBundleResolver during identity resolution, Phase 2 of the dual-provider plan).
-// Stream resolution downstream (continueWatchingImdbHint -> Stream route -> stream provider)
-// reads displayMetadata.imdbId first and falls back to contentId-as-imdb only when the
-// canonical id is itself a tt-prefix IMDB. For TV with canonical "tvdb:N" the fallback
-// returns null, so without this plumb the stream picker has no IMDB to query addons with.
-private fun ContinueWatchingItem.InProgress.withImdbFromIdBundle(
-    imdbFromBundle: String?
+// Enrich displayMetadata.imdbId from ContinueWatchingRecord.displayIdentity.providerIds.imdb.
+// This is the field populated by ContinueWatchingIdentityResolver via
+// StableIdBundleResolver and reliably persisted to the on-disk snapshot — see
+// /data/data/.../continue-watching-snapshot-v1/p1.json shows canonical IMDB ids for
+// every record under canonicalKey.canonicalParent.providerIds.imdb and the matching
+// displayIdentity.providerIds.imdb. The earlier sibling field ContinueWatchingRecord.idBundle
+// was added but is not serialized through the current snapshot schema, so reading from it
+// is a no-op for restored snapshots.
+//
+// Stream resolution downstream (NexioNavHost.continueWatchingImdbHint -> Stream route ->
+// stream provider) reads displayMetadata.imdbId first and falls back to contentId-as-imdb
+// only when the canonical id is itself a tt-prefix IMDB. For TV with canonical "tvdb:N" the
+// fallback returns null, so without this plumb the stream picker has no IMDB to query
+// IMDB-keyed addons (Wyzie etc.) with — which is the user-visible "no eligible links" bug
+// for TV CW tiles. Movies sidestep it incidentally because their canonical id IS the IMDB.
+private fun ContinueWatchingItem.InProgress.withResolvedImdb(
+    resolvedImdb: String?
 ): ContinueWatchingItem.InProgress {
-    val resolved = imdbFromBundle?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val resolved = resolvedImdb?.trim()?.takeIf { it.isNotEmpty() } ?: return this
     val current = displayMetadata
     if (!current?.imdbId.isNullOrBlank()) return this
     val updated = (current ?: HomeDisplayMetadata()).copy(imdbId = resolved)
     return copy(displayMetadata = updated)
-}
-
-private fun ContinueWatchingItem.NextUp.withImdbFromIdBundle(
-    imdbFromBundle: String?
-): ContinueWatchingItem.NextUp {
-    val resolved = imdbFromBundle?.trim()?.takeIf { it.isNotEmpty() } ?: return this
-    val current = info.displayMetadata
-    if (!current?.imdbId.isNullOrBlank()) return this
-    val updated = (current ?: HomeDisplayMetadata()).copy(imdbId = resolved)
-    return ContinueWatchingItem.NextUp(info.copy(displayMetadata = updated))
 }
 
 private fun ContinueWatchingRecord.toSyntheticNextUp(
@@ -1209,10 +1208,11 @@ private fun ContinueWatchingRecord.toSyntheticNextUp(
     val contentType = contentTypeForUi()
     val contentId = streamFetchIdentity?.contentId ?: parentId
     val cachedMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
-    // Backstop displayMetadata.imdbId from the record's idBundle so the stream-picker can
-    // query IMDB-keyed addons (same rationale as withImdbFromIdBundle on the InProgress path).
+    // Backstop displayMetadata.imdbId from the record's displayIdentity (same source the
+    // resolver populates and that IS serialized in the snapshot, unlike the never-persisted
+    // ContinueWatchingRecord.idBundle field). See withResolvedImdb above for rationale.
     val displayMetadata = if (cachedMetadata?.imdbId.isNullOrBlank()) {
-        val resolved = idBundle.imdb?.trim()?.takeIf { it.isNotEmpty() }
+        val resolved = displayIdentity?.providerIds?.imdb?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved != null) {
             (cachedMetadata ?: HomeDisplayMetadata()).copy(imdbId = resolved)
         } else {
