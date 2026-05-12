@@ -381,7 +381,7 @@ class SimklProgressService @Inject constructor(
                             duration = runtimeMs,
                             lastWatched = watchedAtMs,
                             progressPercent = 100f,
-                            source = "simkl_history"
+                            source = com.nexio.tv.domain.model.WatchProgress.SOURCE_SIMKL_HISTORY
                         )
                     }
                 }
@@ -532,7 +532,7 @@ class SimklProgressService @Inject constructor(
             duration = runtimeMs,
             lastWatched = parseIsoMillis(item.stringValue("paused_at")),
             progressPercent = percent,
-            source = "simkl_playback"
+            source = com.nexio.tv.domain.model.WatchProgress.SOURCE_SIMKL_PLAYBACK
         )
     }
 
@@ -565,7 +565,7 @@ class SimklProgressService @Inject constructor(
             duration = runtimeMs,
             lastWatched = parseIsoMillis(item.stringValue("paused_at")),
             progressPercent = percent,
-            source = "simkl_playback"
+            source = com.nexio.tv.domain.model.WatchProgress.SOURCE_SIMKL_PLAYBACK
         )
     }
 

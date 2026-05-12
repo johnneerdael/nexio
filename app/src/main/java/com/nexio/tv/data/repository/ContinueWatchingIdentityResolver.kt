@@ -81,7 +81,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 profileId = input.profileId,
                 parentId = parentKey,
                 contentId = contentKey,
-                provider = TrackingProvider.TRAKT,
+                provider = providerForSource(progress.source),
                 routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
                 positionMs = progress.position,
                 durationMs = progress.duration,
@@ -162,7 +162,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
             profileId = input.profileId,
             parentId = parentKey,
             contentId = contentKey,
-            provider = TrackingProvider.TRAKT,
+            provider = providerForSource(progress.source),
             routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
             positionMs = progress.position,
             durationMs = progress.duration,
@@ -178,6 +178,15 @@ class ContinueWatchingIdentityResolver @Inject constructor(
             languageTag = input.languageTag,
             idBundle = observedIds(progress).toContinueWatchingIdBundle(episodeContext),
         )
+    }
+
+    private fun providerForSource(source: String): TrackingProvider = when (source) {
+        WatchProgress.SOURCE_SIMKL_PLAYBACK,
+        WatchProgress.SOURCE_SIMKL_HISTORY -> TrackingProvider.SIMKL
+        WatchProgress.SOURCE_TRAKT_PLAYBACK,
+        WatchProgress.SOURCE_TRAKT_HISTORY,
+        WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS -> TrackingProvider.TRAKT
+        else -> TrackingProvider.TRAKT  // SOURCE_LOCAL and unknown sources stay TRAKT for legacy display
     }
 
     private fun ProviderIds.toContinueWatchingIdBundle(
