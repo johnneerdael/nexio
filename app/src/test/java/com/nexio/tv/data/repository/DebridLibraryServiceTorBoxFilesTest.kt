@@ -151,6 +151,25 @@ class DebridLibraryServiceTorBoxFilesTest {
     }
 
     @Test
+    fun `buildTorBoxEntry produces an entry with null directPlaybackUrl`() {
+        val torrent = TorBoxTorrentListItemDto(
+            id = 7,
+            name = "Movie",
+            files = listOf(
+                TorBoxFileDto(
+                    id = 10, name = "movie.mkv", shortName = "movie.mkv",
+                    size = 800L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+            ),
+        )
+        val file = torrent.files.first()
+        val entry = DebridLibraryService.buildTorBoxEntry(torrent, file)
+        assertNull(entry.directPlaybackUrl)
+        assertEquals("tb:torrent:7:file:10", entry.id)
+        assertEquals("movie.mkv", entry.playbackFilename)
+    }
+
+    @Test
     fun `pickNextFileInTorrent on single-file torrent returns null`() {
         val torrent = TorBoxTorrentListItemDto(
             id = 7,

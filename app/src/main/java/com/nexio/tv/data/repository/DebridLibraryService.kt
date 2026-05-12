@@ -204,8 +204,21 @@ class DebridLibraryService @Inject constructor(
             return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
         }
 
-        val candidates = shortlistedEntries.mapNotNull {
-            it.toBenchmarkCandidate(DebridBenchmarkProvider.TORBOX)
+        // Library entries now carry no eager directPlaybackUrl (lazy-resolved on click in normal use).
+        // For benchmarks we still need a resolved URL per shortlisted entry, so resolve on demand here.
+        // The shortlist is small (<= a few items), so this is cheap compared to the prior
+        // resolve-every-entry approach.
+        val torrentEntryRegex = Regex("""^tb:torrent:(\d+):file:(\d+)$""")
+        val candidates = mutableListOf<DebridBenchmarkCandidate>()
+        for (i in shortlistedEntries.indices) {
+            val entry = shortlistedEntries[i]
+            val match = torrentEntryRegex.matchEntire(entry.id) ?: continue
+            val torrentId = match.groupValues[1].toIntOrNull() ?: continue
+            val fileId = match.groupValues[2].toIntOrNull() ?: continue
+            val url = requestTorBoxDownload(apiKey = apiKey, torrentId = torrentId, fileId = fileId)
+                ?: continue
+            entry.copy(directPlaybackUrl = url).toBenchmarkCandidate(DebridBenchmarkProvider.TORBOX)
+                ?.let { candidates += it }
         }
         if (candidates.isEmpty()) {
             DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
@@ -522,26 +535,16 @@ class DebridLibraryService @Inject constructor(
             .filter { it.isDownloaded() || it.resolvedState().equals("downloaded", ignoreCase = true) }
             .take(100)
 
-        val detailsSemaphore = Semaphore(6)
-        coroutineScope {
-            candidates.flatMap { torrent ->
-                torrent.files.map { file -> torrent to file }
-            }.map { (torrent, file) ->
-                async {
-                    detailsSemaphore.withPermit {
-                        if (!isLikelyPlayable(file)) {
-                            return@withPermit null
-                        }
-                        val directUrl = requestTorBoxDownload(
-                            apiKey = apiKey,
-                            torrentId = torrent.id ?: return@withPermit null,
-                            fileId = file.id ?: return@withPermit null
-                        ) ?: return@withPermit null
-                        mapTorBoxItem(torrent, file, directUrl)
-                    }
-                }
-            }.awaitAll().filterNotNull()
+        val out = mutableListOf<LibraryEntry>()
+        for (i in candidates.indices) {
+            val torrent = candidates[i]
+            for (j in torrent.files.indices) {
+                val file = torrent.files[j]
+                if (file.id == null || !isLikelyPlayable(file)) continue
+                out += mapTorBoxItem(torrent, file)
+            }
         }
+        out
     }
 
     suspend fun nextPlayableFileInTorrent(
@@ -628,32 +631,10 @@ class DebridLibraryService @Inject constructor(
     private fun mapTorBoxItem(
         torrent: TorBoxTorrentListItemDto,
         file: TorBoxFileDto,
-        directUrl: String
     ): LibraryEntry {
-        val filename = file.shortName
-            ?.takeIf { it.isNotBlank() }
-            ?: file.name
-            ?.takeIf { it.isNotBlank() }
-            ?: torrent.name.orEmpty().ifBlank { "TorBox File" }
-        return LibraryEntry(
-            id = "tb:torrent:${torrent.id}:file:${file.id}",
-            type = inferContentType(filename, file.mimeType),
-            name = stripVideoExtension(filename),
-            poster = null,
-            background = null,
-            logo = null,
-            description = torrent.name,
-            releaseInfo = file.size?.takeIf { it > 0L }?.let { "${it / (1024 * 1024)} MB" },
-            imdbRating = null,
-            genres = emptyList(),
-            addonBaseUrl = null,
-            listKeys = setOf(TORBOX_LIST_KEY),
-            listedAt = parseIsoToMillis(torrent.createdAt ?: torrent.legacyCreatedAt),
-            directPlaybackUrl = directUrl,
-            playbackStreamName = filename,
-            playbackFilename = filename,
-            playbackSizeBytes = file.size
-        )
+        val base = buildTorBoxEntry(torrent, file)
+        val typed = inferContentType(base.playbackFilename, file.mimeType)
+        return if (typed == base.type) base else base.copy(type = typed)
     }
 
     private fun LibraryEntry.toBenchmarkCandidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate? {
@@ -829,6 +810,54 @@ class DebridLibraryService @Inject constructor(
             val fileId: Int,
             val fileName: String,
         )
+
+        /**
+         * Build a [LibraryEntry] for a single TorBox file. The playback URL is intentionally
+         * left null — the lazy resolve happens on click via TorBoxDirectPlayHandler.
+         */
+        @JvmStatic
+        fun buildTorBoxEntry(
+            torrent: TorBoxTorrentListItemDto,
+            file: TorBoxFileDto,
+        ): LibraryEntry {
+            val filename = file.shortName
+                ?.takeIf { it.isNotBlank() }
+                ?: file.name
+                ?.takeIf { it.isNotBlank() }
+                ?: torrent.name.orEmpty().ifBlank { "TorBox File" }
+            return LibraryEntry(
+                id = "tb:torrent:${torrent.id}:file:${file.id}",
+                type = "other",
+                name = stripVideoExtensionPure(filename),
+                poster = null,
+                background = null,
+                logo = null,
+                description = torrent.name,
+                releaseInfo = file.size?.takeIf { it > 0L }?.let { "${it / (1024 * 1024)} MB" },
+                imdbRating = null,
+                genres = emptyList(),
+                addonBaseUrl = null,
+                listKeys = setOf(TORBOX_LIST_KEY),
+                listedAt = parseIsoToMillisPure(torrent.createdAt ?: torrent.legacyCreatedAt),
+                directPlaybackUrl = null,
+                playbackStreamName = filename,
+                playbackFilename = filename,
+                playbackSizeBytes = file.size,
+            )
+        }
+
+        /** Pure mirror of the instance `stripVideoExtension` helper. */
+        @JvmStatic
+        internal fun stripVideoExtensionPure(filename: String): String =
+            filename.substringBeforeLast('.', filename)
+
+        /** Pure mirror of the instance `parseIsoToMillis` helper. */
+        @JvmStatic
+        internal fun parseIsoToMillisPure(raw: String?): Long {
+            if (raw.isNullOrBlank()) return 0L
+            return runCatching { java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli() }
+                .getOrDefault(0L)
+        }
 
         @JvmStatic
         fun pickNextFileInTorrent(
