@@ -68,27 +68,11 @@ class SubtitleTranslationServicePromptTest {
     }
 
     @Test
-    fun `buildRawAssSsaSystemPrompt instructs auto-detection when source is auto`() {
-        val prompt = SubtitleTranslationService.buildRawAssSsaSystemPromptForTest(
-            targetLanguageName = "Dutch",
-            sourceLanguageName = "auto"
-        )
+    fun `buildAssSsaSegmentSystemPrompt keeps model contract short`() {
+        val prompt = SubtitleTranslationService.buildAssSsaSegmentSystemPromptForTest()
 
-        val lower = prompt.lowercase()
-        assertTrue("expected detect/automatically in: $prompt",
-            lower.contains("detect") && lower.contains("automatically")
-        )
-        assertTrue("expected target name in: $prompt", prompt.contains("Dutch"))
-    }
-
-    @Test
-    fun `buildRawAssSsaSystemPrompt names source explicitly when known`() {
-        val prompt = SubtitleTranslationService.buildRawAssSsaSystemPromptForTest(
-            targetLanguageName = "Dutch",
-            sourceLanguageName = "Polish"
-        )
-
-        assertTrue("expected source name in: $prompt", prompt.contains("Polish"))
-        assertTrue("expected target name in: $prompt", prompt.contains("Dutch"))
+        assertTrue(prompt.contains("Keep exactly the same number of segments"))
+        assertTrue(prompt.contains("Preserve placeholders like <1/>"))
+        assertTrue(prompt.contains("Do not output ASS/SSA syntax"))
     }
 }
