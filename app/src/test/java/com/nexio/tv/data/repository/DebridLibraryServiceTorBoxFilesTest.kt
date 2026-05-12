@@ -1,9 +1,13 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
+import com.nexio.tv.data.repository.DebridLibraryService.Companion.TorBoxNextFile
 import com.nexio.tv.data.repository.DebridLibraryService.Companion.isTorBoxFilePlayable
+import com.nexio.tv.data.repository.DebridLibraryService.Companion.pickNextFileInTorrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -91,5 +95,73 @@ class DebridLibraryServiceTorBoxFilesTest {
             mimeType = "video/webm",
         )
         assertTrue(isTorBoxFilePlayable(file))
+    }
+
+    @Test
+    fun `pickNextFileInTorrent returns next file by alphabetical name`() {
+        val torrent = TorBoxTorrentListItemDto(
+            id = 7,
+            name = "Show S01",
+            files = listOf(
+                TorBoxFileDto(
+                    id = 12, name = "Show.S01E03.mkv", shortName = "Show.S01E03.mkv",
+                    size = 500L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+                TorBoxFileDto(
+                    id = 10, name = "Show.S01E01.mkv", shortName = "Show.S01E01.mkv",
+                    size = 500L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+                TorBoxFileDto(
+                    id = 11, name = "Show.S01E02.mkv", shortName = "Show.S01E02.mkv",
+                    size = 500L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+            ),
+        )
+
+        val afterE1 = pickNextFileInTorrent(torrent, currentFileId = 10)
+        assertEquals(TorBoxNextFile(torrentId = 7, fileId = 11, fileName = "Show.S01E02.mkv"), afterE1)
+
+        val afterE3 = pickNextFileInTorrent(torrent, currentFileId = 12)
+        assertNull(afterE3)
+    }
+
+    @Test
+    fun `pickNextFileInTorrent skips unplayable files`() {
+        val torrent = TorBoxTorrentListItemDto(
+            id = 7,
+            name = "Show S01",
+            files = listOf(
+                TorBoxFileDto(
+                    id = 10, name = "Show.S01E01.mkv", shortName = "Show.S01E01.mkv",
+                    size = 500L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+                TorBoxFileDto(
+                    id = 99, name = "info.nfo", shortName = "info.nfo",
+                    size = 4_096L, mimeType = "text/plain",
+                ),
+                TorBoxFileDto(
+                    id = 11, name = "Show.S01E02.mkv", shortName = "Show.S01E02.mkv",
+                    size = 500L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+            ),
+        )
+
+        val next = pickNextFileInTorrent(torrent, currentFileId = 10)
+        assertEquals(11, next?.fileId)
+    }
+
+    @Test
+    fun `pickNextFileInTorrent on single-file torrent returns null`() {
+        val torrent = TorBoxTorrentListItemDto(
+            id = 7,
+            name = "Movie",
+            files = listOf(
+                TorBoxFileDto(
+                    id = 10, name = "movie.mkv", shortName = "movie.mkv",
+                    size = 1L * 1024L * 1024L * 1024L, mimeType = "video/x-matroska",
+                ),
+            ),
+        )
+        assertNull(pickNextFileInTorrent(torrent, currentFileId = 10))
     }
 }

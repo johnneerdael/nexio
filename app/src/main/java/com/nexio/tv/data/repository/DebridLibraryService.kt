@@ -544,6 +544,19 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
+    suspend fun nextPlayableFileInTorrent(
+        torrentId: Int,
+        currentFileId: Int,
+    ): TorBoxNextFile? = withContext(Dispatchers.IO) {
+        val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
+        if (apiKey.isBlank()) return@withContext null
+        val response = torBoxProvider.fetchTorrentList(apiKey = apiKey, id = torrentId, limit = 1)
+            ?: return@withContext null
+        val torrent = response.data.orEmpty().firstOrNull { it.id == torrentId }
+            ?: return@withContext null
+        pickNextFileInTorrent(torrent, currentFileId)
+    }
+
     private fun mapRealDebridTorrentFile(
         torrent: RealDebridTorrentDto,
         info: RealDebridTorrentInfoDto,
@@ -809,6 +822,33 @@ class DebridLibraryService @Inject constructor(
             if (!mime.startsWith("video/", ignoreCase = true)) return false
             val size = file.size ?: return false
             return size >= TORBOX_MIN_PLAYABLE_BYTES
+        }
+
+        data class TorBoxNextFile(
+            val torrentId: Int,
+            val fileId: Int,
+            val fileName: String,
+        )
+
+        @JvmStatic
+        fun pickNextFileInTorrent(
+            torrent: TorBoxTorrentListItemDto,
+            currentFileId: Int,
+        ): TorBoxNextFile? {
+            val torrentId = torrent.id ?: return null
+            val playable = torrent.files
+                .filter { it.id != null && isTorBoxFilePlayable(it) }
+                .sortedBy { it.shortName ?: it.name ?: "" }
+            var found = false
+            for (i in playable.indices) {
+                val file = playable[i]
+                if (found) {
+                    val name = file.shortName ?: file.name ?: continue
+                    return TorBoxNextFile(torrentId = torrentId, fileId = file.id!!, fileName = name)
+                }
+                if (file.id == currentFileId) found = true
+            }
+            return null
         }
         private const val BENCHMARK_SIZE_GIB = 1024L * 1024L * 1024L
         private const val BENCHMARK_MAX_RESOLUTION_COUNT = 2
