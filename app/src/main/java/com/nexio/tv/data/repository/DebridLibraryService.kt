@@ -529,7 +529,7 @@ class DebridLibraryService @Inject constructor(
             }.map { (torrent, file) ->
                 async {
                     detailsSemaphore.withPermit {
-                        if (!isLikelyPlayable(file) || isLikelySampleFile(file)) {
+                        if (!isLikelyPlayable(file)) {
                             return@withPermit null
                         }
                         val directUrl = requestTorBoxDownload(
@@ -685,9 +685,8 @@ class DebridLibraryService @Inject constructor(
         )
     }
 
-    private fun isLikelyPlayable(file: TorBoxFileDto): Boolean {
-        return isStrictPlayableVideoCandidate(filename = file.shortName ?: file.name)
-    }
+    private fun isLikelyPlayable(file: TorBoxFileDto): Boolean =
+        isTorBoxFilePlayable(file)
 
     private fun isLikelySampleFile(file: RealDebridTorrentFileDto): Boolean {
         return isLikelySampleVideoFile(
@@ -801,6 +800,16 @@ class DebridLibraryService @Inject constructor(
         const val PREMIUMIZE_LIST_KEY = "service:premiumize"
         const val TORBOX_LIST_KEY = "service:torbox"
         const val EASY_DEBRID_LIST_KEY = "service:easydebrid"
+
+        internal const val TORBOX_MIN_PLAYABLE_BYTES: Long = 50L * 1024L * 1024L
+
+        @JvmStatic
+        fun isTorBoxFilePlayable(file: TorBoxFileDto): Boolean {
+            val mime = file.mimeType ?: return false
+            if (!mime.startsWith("video/", ignoreCase = true)) return false
+            val size = file.size ?: return false
+            return size >= TORBOX_MIN_PLAYABLE_BYTES
+        }
         private const val BENCHMARK_SIZE_GIB = 1024L * 1024L * 1024L
         private const val BENCHMARK_MAX_RESOLUTION_COUNT = 2
         private const val EASY_DEBRID_MIN_BENCHMARK_BYTES = 1L * BENCHMARK_SIZE_GIB
