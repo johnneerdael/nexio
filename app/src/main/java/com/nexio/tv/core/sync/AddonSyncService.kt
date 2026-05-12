@@ -14,6 +14,7 @@ import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.data.remote.supabase.requireValidV1Secret
 import com.nexio.tv.data.remote.supabase.requireValidV2Transport
+import dagger.Lazy
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -38,7 +39,11 @@ class AddonSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val addonPreferences: AddonPreferences,
     private val startupPushGate: AccountConfigStartupPushGate,
-    private val syncWatermarkStore: SyncWatermarkDataStore
+    private val syncWatermarkStore: SyncWatermarkDataStore,
+    // dagger.Lazy breaks the StartupSyncService → AddonRepositoryImpl → AddonSyncService cycle.
+    // Used to trigger a fresh pull when the server reports our base watermark is stale, so
+    // local state is discarded and overwritten by remote per the v10 contract.
+    private val startupSyncServiceLazy: Lazy<StartupSyncService>
 ) {
     /** See `AccountSettingsSyncService.setAccountSecretV10` — same contract. */
     private suspend fun setAccountSecretV10(extraParams: JsonObject) {
@@ -52,8 +57,10 @@ class AddonSyncService @Inject constructor(
         when (outcome) {
             is V10PushOutcome.Applied ->
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
-            is V10PushOutcome.StaleBase ->
-                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.StaleBase -> {
+                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); requesting immediate refresh — local secret will be overwritten by remote")
+                startupSyncServiceLazy.get().requestSyncNow()
+            }
             is V10PushOutcome.Failed -> throw outcome.cause
             is V10PushOutcome.FieldConflict -> Unit
         }
@@ -171,7 +178,8 @@ class AddonSyncService @Inject constructor(
                     Log.d(TAG, "Pushed ${localAddons.size} addons to remote, new watermark=${outcome.currentUpdatedAtMs}")
                 }
                 is V10PushOutcome.StaleBase -> {
-                    Log.w(TAG, "Addon push rejected as stale (server=${outcome.currentUpdatedAtMs}, base=$baseUpdatedAtMs); next startup pull will reconcile")
+                    Log.w(TAG, "Addon push rejected as stale (server=${outcome.currentUpdatedAtMs}, base=$baseUpdatedAtMs); requesting immediate refresh — local addon changes will be overwritten by remote")
+                    startupSyncServiceLazy.get().requestSyncNow()
                     return@withContext Result.success(Unit)
                 }
                 is V10PushOutcome.FieldConflict ->

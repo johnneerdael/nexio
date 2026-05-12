@@ -388,8 +388,10 @@ class AccountSettingsSyncService @Inject constructor(
         when (outcome) {
             is V10PushOutcome.Applied ->
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
-            is V10PushOutcome.StaleBase ->
-                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.StaleBase -> {
+                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); pulling — local secret change will be overwritten by remote")
+                pullFromRemoteAndApply()
+            }
             is V10PushOutcome.Failed -> throw outcome.cause
             is V10PushOutcome.FieldConflict -> Unit
         }
@@ -407,8 +409,10 @@ class AccountSettingsSyncService @Inject constructor(
         when (outcome) {
             is V10PushOutcome.Applied ->
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
-            is V10PushOutcome.StaleBase ->
-                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs)")
+            is V10PushOutcome.StaleBase -> {
+                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); pulling — local delete will be overwritten by remote")
+                pullFromRemoteAndApply()
+            }
             is V10PushOutcome.Failed -> throw outcome.cause
             is V10PushOutcome.FieldConflict -> Unit
         }
