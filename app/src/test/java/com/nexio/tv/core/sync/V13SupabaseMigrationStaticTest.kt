@@ -184,6 +184,30 @@ class V13SupabaseMigrationStaticTest {
             push.indexOf("legacy section payload preflight") in 0 until push.indexOf("insert into public.account_settings_sections"),
         )
         assertTrue(
+            "legacy push must normalize incoming payload with the v7-equivalent v6 storage contract",
+            push.contains("p_contract_version => 6"),
+        )
+        assertTrue(
+            "legacy push must preserve existing catalog option pins before section writes",
+            push.contains("account_settings_preserve_catalog_option_pins"),
+        )
+        assertTrue(
+            "legacy push must select section payloads from the normalized legacy payload",
+            push.contains("public.account_settings_section_payload(v_next_payload, section_key)"),
+        )
+        assertFalse(
+            "legacy push must not explode raw incoming settings directly into section writes",
+            push.contains("public.account_settings_section_payload(p_settings_payload, section_key)"),
+        )
+        assertTrue(
+            "legacy push must use exact path overlap helper for changed-path filtering",
+            push.contains("public.account_settings_paths_overlap(section_key, path)"),
+        )
+        assertFalse(
+            "legacy push changed-path filtering must not use wildcard LIKE with caller-provided paths",
+            Regex("""(?i)\blike\b""").containsMatchIn(push),
+        )
+        assertTrue(
             "legacy push must write sections directly after preflight for atomic legacy behavior",
             push.contains("insert into public.account_settings_sections"),
         )
