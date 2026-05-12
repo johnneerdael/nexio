@@ -766,6 +766,7 @@ class AccountSettingsSyncService @Inject constructor(
     private data class ResolvedRemoteRealDebridSecrets(
         val accessPayload: AccountRealDebridAccessSecretPayload?,
         val refreshPayload: AccountRealDebridRefreshSecretPayload?,
+        val preserveLocalTokens: Boolean,
         val remote: RealDebridSyncSettings
     )
 
@@ -2019,6 +2020,12 @@ class AccountSettingsSyncService @Inject constructor(
             resolvedRealDebrid == null
         ) {
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)
+        } else if (
+            sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID) &&
+            resolvedRealDebrid?.preserveLocalTokens == true
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
+            followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
         }
         val resolvedTrakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
             resolveRemoteTraktSecrets(settings.integrations.traktAuth)
@@ -2482,9 +2489,25 @@ class AccountSettingsSyncService @Inject constructor(
             return null
         }
 
+        val accessPayload = accessResult.getOrNull()
+        val refreshPayload = refreshResult.getOrNull()
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+        val userClientId = accessPayload?.userClientId?.trim().orEmpty()
+        val userClientSecret = accessPayload?.userClientSecret?.trim().orEmpty()
+        val remoteHasTokens = accessToken.isNotBlank() &&
+            refreshToken.isNotBlank() &&
+            userClientId.isNotBlank() &&
+            userClientSecret.isNotBlank()
+        val localState = realDebridAuthDataStore.state.first()
+        val preserveLocalTokens = !remoteHasTokens &&
+            localState.isAuthenticated &&
+            (remote.connected || remote.pending)
+
         return ResolvedRemoteRealDebridSecrets(
-            accessPayload = accessResult.getOrNull(),
-            refreshPayload = refreshResult.getOrNull(),
+            accessPayload = accessPayload,
+            refreshPayload = refreshPayload,
+            preserveLocalTokens = preserveLocalTokens,
             remote = remote
         )
     }
@@ -2496,6 +2519,11 @@ class AccountSettingsSyncService @Inject constructor(
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         val userClientId = accessPayload?.userClientId?.trim().orEmpty()
         val userClientSecret = accessPayload?.userClientSecret?.trim().orEmpty()
+
+        if (secrets.preserveLocalTokens) {
+            realDebridAuthDataStore.saveUsername(secrets.remote.username.takeIf { it.isNotBlank() })
+            return
+        }
 
         if (
             accessToken.isNotBlank() &&

@@ -806,6 +806,9 @@ class AccountConfigSyncContractTest {
         assertTrue(resolveBlock.contains("resolvedSimkl?.preserveLocalTokens == true"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH"))
+        assertTrue(resolveBlock.contains("resolvedRealDebrid?.preserveLocalTokens == true"))
+        assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID"))
+        assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID"))
         assertTrue(resolveBlock.contains("resolvedKitsu.preserveLocalTokens"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
@@ -859,6 +862,8 @@ class AccountConfigSyncContractTest {
         val traktBlock = source.substring(traktStart, simklStart)
         val simklBlock = source.substring(simklStart, kitsuStart)
         val kitsuBlock = source.substring(kitsuStart, realDebridStart)
+        val realDebridEnd = source.indexOf("private suspend fun applyResolvedRemoteRealDebridSecrets")
+        val realDebridBlock = source.substring(realDebridStart, realDebridEnd)
 
         assertTrue(traktBlock.contains("accessToken.isBlank() || refreshToken.isBlank()"))
         assertTrue(traktBlock.contains("remote.connected || remote.pending"))
@@ -866,6 +871,10 @@ class AccountConfigSyncContractTest {
         assertTrue(simklBlock.contains("remote.connected || remote.pending"))
         assertTrue(kitsuBlock.contains("!remoteHasTokens && remote.connected"))
         assertTrue(kitsuBlock.contains("preserveLocalTokens = preserveLocalTokens"))
+        assertTrue(realDebridBlock.contains("!remoteHasTokens"))
+        assertTrue(realDebridBlock.contains("localState.isAuthenticated"))
+        assertTrue(realDebridBlock.contains("remote.connected || remote.pending"))
+        assertTrue(realDebridBlock.contains("preserveLocalTokens = preserveLocalTokens"))
     }
 
     @Test
