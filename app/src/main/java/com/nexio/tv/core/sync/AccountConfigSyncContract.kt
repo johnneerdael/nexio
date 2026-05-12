@@ -55,7 +55,7 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 9
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 11
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -69,7 +69,6 @@ internal fun observeAccountConfigSyncChanges(
     theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
-    wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -97,7 +96,6 @@ internal fun observeAccountConfigSyncChanges(
         theIntroDbSettings,
         animeSkipEnabled,
         subtitleTranslationSettings,
-        wyzieSettings,
         posterRatingsSettings,
         premiumizeSettings,
         premiumizeAccountState,
@@ -127,7 +125,6 @@ internal fun observeAccountConfigSyncChangedPaths(
     theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
-    wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -155,7 +152,6 @@ internal fun observeAccountConfigSyncChangedPaths(
         theIntroDbSettings.map { "integrations.theIntroDb" },
         animeSkipEnabled.map { "integrations.animeSkip.enabled" },
         subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
-        wyzieSettings.map { "integrations.wyzie" },
         posterRatingsSettings.map { "integrations.posterRatings" },
         premiumizeSettings.map { "integrations.debrid.premiumize" },
         premiumizeAccountState.map { "integrations.debrid.premiumize" },

@@ -8,13 +8,12 @@ import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.SubtitleApiShapes
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi
-import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.remote.dto.WyzieSubtitleDto
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.WyzieIdHints
 import com.nexio.tv.domain.model.WyzieSource
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -32,7 +31,6 @@ private const val LOG_PREFIX = "WYZIE_SUBS"
 class WyzieSubtitleIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
     private val api: WyzieSubtitleApi,
-    private val settingsDataStore: WyzieSettingsDataStore,
 ) {
 
     suspend fun search(
@@ -42,12 +40,8 @@ class WyzieSubtitleIntegrationProvider @Inject constructor(
         season: Int?,
         episode: Int?,
     ): List<WyzieSubtitleDto> {
-        val settings = settingsDataStore.settings.first()
-        if (!settings.enabled) {
-            return emptyList() // No log per spec table for `enabled == false`.
-        }
-        if (settings.apiKey.isNullOrBlank()) {
-            Log.d(TAG, "$LOG_PREFIX skipped: no key")
+        if (BuildConfig.WYZIE_API_KEY.isNullOrBlank()) {
+            Log.d(TAG, "$LOG_PREFIX skipped: no build-time key")
             return emptyList()
         }
         if (sources.isEmpty()) {
