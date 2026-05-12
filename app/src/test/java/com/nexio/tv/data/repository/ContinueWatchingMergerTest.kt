@@ -441,6 +441,103 @@ class ContinueWatchingMergerTest {
         assertEquals(2, merged.size)
     }
 
+    @Test
+    fun `near-complete cross-provider records are dropped from merged output`() {
+        val nearTrakt = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt-near", videoId = "tt-near:1:1",
+            positionMs = 95_000L, durationMs = 100_000L, lastWatchedMs = 1000L,
+        )
+        val nearSimkl = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tt-near", videoId = "tt-near:1:1",
+            positionMs = 96_000L, durationMs = 100_000L, lastWatchedMs = 2000L,
+        )
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = nearTrakt,
+                    positionMs = 95_000L,
+                    updatedAt = 1000L,
+                    parentId = "x",
+                    contentIdKey = "x:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt-near", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+                record(
+                    resumeIdentity = nearSimkl,
+                    positionMs = 96_000L,
+                    updatedAt = 2000L,
+                    parentId = "y",
+                    contentIdKey = "y:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt-near", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.SIMKL, durationMs = 100_000L),
+            )
+        )
+        assertEquals(0, merged.size)
+    }
+
+    @Test
+    fun `near-complete same-provider records are also dropped`() {
+        val a = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt-same", videoId = "tt-same:1:1",
+            positionMs = 95_500L, durationMs = 100_000L, lastWatchedMs = 1000L,
+        )
+        val b = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_HISTORY,
+            contentId = "tt-same", videoId = "tt-same:1:1",
+            positionMs = 100_000L, durationMs = 100_000L, lastWatchedMs = 2000L,
+        )
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = a,
+                    positionMs = 95_500L,
+                    updatedAt = 1000L,
+                    parentId = "x",
+                    contentIdKey = "x:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt-same", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+                record(
+                    resumeIdentity = b,
+                    positionMs = 100_000L,
+                    updatedAt = 2000L,
+                    parentId = "x",
+                    contentIdKey = "x:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt-same", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+            )
+        )
+        assertEquals(0, merged.size)
+    }
+
+    @Test
+    fun `records at the 95 percent boundary still drop`() {
+        val onBoundary = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt-edge", videoId = "tt-edge:1:1",
+            positionMs = 95_000L, durationMs = 100_000L, lastWatchedMs = 1000L,
+        )
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = onBoundary,
+                    positionMs = 95_000L,
+                    updatedAt = 1000L,
+                    parentId = "x",
+                    contentIdKey = "x:s1e1",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt-edge", season = 1, episode = 1),
+                ).copy(provider = TrackingProvider.TRAKT, durationMs = 100_000L),
+            )
+        )
+        assertEquals(0, merged.size)
+    }
+
     private fun record(
         resumeIdentity: ResumeIdentity,
         positionMs: Long,

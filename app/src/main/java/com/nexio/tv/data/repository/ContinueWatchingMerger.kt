@@ -5,9 +5,19 @@ object ContinueWatchingMerger {
     // reuse the same class; this internal instance is only consulted by mergeRecords.
     private val diffPlanner = ContinueWatchingProgressDiffPlanner()
 
+    // Records at or above this completion ratio do not belong in Continue Watching.
+    // Matches ContinueWatchingProgressDiffPlanner.NEAR_COMPLETE_PERCENT (95%) and
+    // CrossWatch's _planner.py:218 max_percent default. The upstream
+    // ContinueWatchingSnapshotService.shouldTreatAsResumeForContinueWatching already
+    // drops >=85% records (WatchProgress.COMPLETED_THRESHOLD), but applying the cap here
+    // too keeps the merger self-consistent regardless of upstream filter drift.
+    private const val NEAR_COMPLETE_PERCENT = 95f
+
     fun merge(records: List<ContinueWatchingRecord>): List<ContinueWatchingRecord> {
         if (records.isEmpty()) return emptyList()
-        val sorted = records.sortedByDescending { it.updatedAt }
+        val eligible = records.filter { it.isEligibleForContinueWatching() }
+        if (eligible.isEmpty()) return emptyList()
+        val sorted = eligible.sortedByDescending { it.updatedAt }
 
         // Union-find: two records share a group if they share any non-null ID under the
         // same provider key. Episode bundles include season+episode in the bucket key so
@@ -42,20 +52,43 @@ object ContinueWatchingMerger {
             for (i in 1 until indices.size) union(indices[0], indices[i])
         }
 
-        val groups = LinkedHashMap<Int, ContinueWatchingRecord>()
+        // Reduce each group. mergeRecords returns null when the planner decides the group
+        // should not surface in CW (e.g. all candidates >=95% complete after cross-provider
+        // conflict resolution). Null groups are dropped from the final list.
+        val groups = LinkedHashMap<Int, ContinueWatchingRecord?>()
         sorted.indices.forEach { idx ->
             val root = find(idx)
-            val cur = groups[root]
-            groups[root] = if (cur == null) sorted[idx] else mergeRecords(cur, sorted[idx])
+            if (!groups.containsKey(root)) {
+                groups[root] = sorted[idx]
+            } else {
+                groups[root] = mergeRecords(groups[root], sorted[idx])
+            }
         }
-        return groups.values.sortedByDescending { it.updatedAt }
+        return groups.values.filterNotNull().sortedByDescending { it.updatedAt }
     }
 
+    private fun ContinueWatchingRecord.isEligibleForContinueWatching(): Boolean {
+        if (percentComplete() >= NEAR_COMPLETE_PERCENT) return false
+        // ContinueWatchingRecord.Source has only LOCAL / SYNTHETIC / REMOTE today; all
+        // three are eligible surfaces. If a future enum value (e.g. HISTORY) is added,
+        // ContinueWatchingMergerTest.`all current source enum values pass the eligibility
+        // backstop` fails and forces the maintainer to revisit this branch.
+        return when (source) {
+            ContinueWatchingRecord.Source.LOCAL,
+            ContinueWatchingRecord.Source.SYNTHETIC,
+            ContinueWatchingRecord.Source.REMOTE -> true
+        }
+    }
+
+    private fun ContinueWatchingRecord.percentComplete(): Float =
+        if (durationMs <= 0L) 0f else (positionMs.toFloat() / durationMs.toFloat()) * 100f
+
     private fun mergeRecords(
-        existing: ContinueWatchingRecord,
+        existing: ContinueWatchingRecord?,
         candidate: ContinueWatchingRecord
-    ): ContinueWatchingRecord {
-        val progressWinner = chooseProgressWinner(existing, candidate)
+    ): ContinueWatchingRecord? {
+        if (existing == null) return candidate
+        val progressWinner = chooseProgressWinner(existing, candidate) ?: return null
         val aliases = (existing.resumeIdentities + candidate.resumeIdentities)
             .distinctBy { it.lookupKey() }
         val aliasLookupKeys = aliases.map { it.lookupKey() }.toSet()
@@ -83,11 +116,12 @@ object ContinueWatchingMerger {
     private fun chooseProgressWinner(
         existing: ContinueWatchingRecord,
         candidate: ContinueWatchingRecord
-    ): ContinueWatchingRecord {
+    ): ContinueWatchingRecord? {
         // Cross-provider conflict: defer to the diff planner so a meaningful position lead
-        // never regresses just because the trailing provider has a newer timestamp.
+        // never regresses just because the trailing provider has a newer timestamp. Null
+        // return means the planner judged neither candidate eligible for CW; propagate it.
         if (existing.provider != candidate.provider) {
-            return diffPlanner.pickWinner(listOf(existing, candidate)) ?: existing
+            return diffPlanner.pickWinner(listOf(existing, candidate))
         }
         val existingHasProgress = existing.hasMeaningfulProgress()
         val candidateHasProgress = candidate.hasMeaningfulProgress()
