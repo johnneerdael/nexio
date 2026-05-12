@@ -38,11 +38,37 @@ class DebridLibraryServiceTorBoxFilesTest {
     }
 
     @Test
-    fun `null mimeType is not playable even if extension is mp4`() {
+    fun `null mimeType falls back to video extension match`() {
         val file = TorBoxFileDto(
             id = 1,
             name = "movie.mp4",
             shortName = "movie.mp4",
+            size = 200L * 1024L * 1024L,
+            mimeType = null,
+        )
+        // TorBox does not always populate mimetype. Filename has .mp4, size is over the
+        // 50 MB floor, so this should be considered playable.
+        assertTrue(isTorBoxFilePlayable(file))
+    }
+
+    @Test
+    fun `null mimeType with non-video extension is not playable`() {
+        val file = TorBoxFileDto(
+            id = 1,
+            name = "info.nfo",
+            shortName = "info.nfo",
+            size = 200L * 1024L * 1024L,
+            mimeType = null,
+        )
+        assertFalse(isTorBoxFilePlayable(file))
+    }
+
+    @Test
+    fun `null mimeType with no extension is not playable`() {
+        val file = TorBoxFileDto(
+            id = 1,
+            name = "release",
+            shortName = "release",
             size = 200L * 1024L * 1024L,
             mimeType = null,
         )
