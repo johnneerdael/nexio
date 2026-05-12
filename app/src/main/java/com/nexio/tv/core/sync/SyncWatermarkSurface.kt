@@ -12,6 +12,7 @@ package com.nexio.tv.core.sync
  */
 enum class SyncWatermarkSurface {
     ACCOUNT_SETTINGS,
+    ACCOUNT_SETTINGS_SECTION,
     ACCOUNT_ADDONS,
     ACCOUNT_SECRETS,
     PROFILE_SETTINGS,
