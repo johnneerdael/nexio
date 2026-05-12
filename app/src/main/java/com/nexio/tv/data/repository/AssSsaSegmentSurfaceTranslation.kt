@@ -290,6 +290,42 @@ internal object AssSsaSegmentSurfaceParser {
     }
 }
 
+internal data class AssSsaSegmentSurfaceBatch(
+    val units: List<AssSsaTranslationSurface>,
+    val leadOverlap: Int,
+    val coreCount: Int,
+    val trailOverlap: Int
+) {
+    val coreUnits: List<AssSsaTranslationSurface>
+        get() = units.subList(leadOverlap, leadOverlap + coreCount)
+}
+
+internal object AssSsaSegmentSurfaceBatchPlanner {
+    fun plan(
+        surfaces: List<AssSsaTranslationSurface>,
+        config: AssSsaTranslationBatchConfig = AssSsaTranslationBatchConfig()
+    ): List<AssSsaSegmentSurfaceBatch> {
+        if (surfaces.isEmpty()) return emptyList()
+
+        return planRampedTranslationBatches(
+            items = surfaces,
+            maxCoreEntries = config.maxEvents,
+            maxCoreChars = config.maxVisibleChars,
+            sizeOf = { surface ->
+                surface.context.length + surface.segments.sumOf { it.length }
+            },
+            rampUpEnabled = config.rampUpEnabled
+        ).map { ramped ->
+            AssSsaSegmentSurfaceBatch(
+                units = ramped.items,
+                leadOverlap = ramped.leadOverlap,
+                coreCount = ramped.coreCount,
+                trailOverlap = ramped.trailOverlap
+            )
+        }
+    }
+}
+
 internal fun parseAssSsaSegmentResponse(
     responseText: String,
     surfaces: List<AssSsaTranslationSurface>

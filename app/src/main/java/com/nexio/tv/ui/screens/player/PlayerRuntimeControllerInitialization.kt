@@ -61,7 +61,7 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
-import com.nexio.tv.data.repository.AssSsaTranslationBatchPlanner
+import com.nexio.tv.data.repository.AssSsaSegmentSurfaceBatchPlanner
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
@@ -702,28 +702,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             translationApiKeyPresent = subtitleTranslationSettings.apiKey.isNotBlank()
                         )
                     },
-                    useSystemPromptTranslation = {
-                        subtitleTranslationSettings.assSsaSystemPromptEnabled
-                    },
-                    translate = { units ->
-                        val translated = mutableMapOf<String, String>()
-                        AssSsaTranslationBatchPlanner.plan(units).forEach { batch ->
-                            translated += subtitleTranslationService.translateProtectedAssSsaUnits(
-                                units = batch.units,
+                    translate = { surfaces ->
+                        val translated = mutableMapOf<String, List<String>>()
+                        AssSsaSegmentSurfaceBatchPlanner.plan(surfaces).forEach { batch ->
+                            val response = subtitleTranslationService.translateAssSsaSegmentSurfaces(
+                                surfaces = batch.units,
                                 targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
                                 sourceLanguageCode = null,
                                 settings = subtitleTranslationSettings
                             ).getOrThrow()
+                            batch.coreUnits.forEach { surface ->
+                                response[surface.id]?.let { translated[surface.id] = it }
+                            }
                         }
                         translated
-                    },
-                    translateRawAssSsa = { sample ->
-                        subtitleTranslationService.translateRawAssSsaText(
-                            text = sample,
-                            targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
-                            sourceLanguageCode = null,
-                            settings = subtitleTranslationSettings
-                        ).getOrThrow()
                     },
                     diagnosticsLogger = subtitleTranslationService.diagnosticsLogger
                 )
