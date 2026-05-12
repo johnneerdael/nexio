@@ -798,7 +798,8 @@ class AccountConfigSyncContractTest {
         val applyStart = source.indexOf("private suspend fun applyResolvedRemoteSecrets", startIndex = resolveStart)
         val resolveBlock = source.substring(resolveStart, applyStart)
 
-        assertTrue(pullBlock.contains("val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty()"))
+        assertTrue(pullBlock.contains("val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty() &&"))
+        assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
         assertTrue(pullBlock.contains("if (scheduleSecretFollowUpPush && hasLiveFullAccountSession())"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
@@ -815,6 +816,7 @@ class AccountConfigSyncContractTest {
 
         assertTrue("account secrets watermark must be decided after secret resolution", secretsWatermarkIndex > resolveIndex)
         assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = sectionKeysToApply + preservedPullSecretSectionKeys"))
+        assertTrue(pullBlock.contains("preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)"))
         assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
         assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)"))
     }
