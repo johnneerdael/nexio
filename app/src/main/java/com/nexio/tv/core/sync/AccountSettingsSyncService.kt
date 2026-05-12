@@ -47,6 +47,7 @@ import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayloadJson
 import com.nexio.tv.data.remote.supabase.AccountConfigV7PushResult
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
@@ -631,7 +632,7 @@ class AccountSettingsSyncService @Inject constructor(
                 revision = envelope.settings.syncRevision,
                 settingsRevision = envelope.settings.syncRevision,
                 updatedAt = null,
-                settings = Json.decodeFromJsonElement(
+                settings = AccountConfigSyncPayloadJson.decodeFromJsonElement(
                     AccountConfigSyncPayload.serializer(),
                     envelope.settings.payload
                 ),

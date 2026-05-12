@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.AccountSettingsSyncService
+import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
+import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +31,9 @@ internal class SettingsViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val profileSyncService: ProfileSyncService,
     private val profileSettingsSyncService: ProfileSettingsSyncService,
+    private val accountSettingsSyncService: AccountSettingsSyncService,
+    private val addonRepository: AddonRepositoryImpl,
+    private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     private val profileManager: ProfileManager
 ) : ViewModel() {
     val hasLiveFullAccountSession: StateFlow<Boolean> = combine(
@@ -65,6 +72,7 @@ internal class SettingsViewModel @Inject constructor(
         if (_syncStatus.value == SyncStatus.SYNCING) return
         viewModelScope.launch {
             _syncStatus.value = SyncStatus.SYNCING
+            val accountResult = pullAccountSnapshot()
             val pullResult = profileSyncService.pullFromRemote()
             val activeId = profileManager.activeProfileId.value
             val metaResult = if (pullResult.isSuccess) {
@@ -73,13 +81,32 @@ internal class SettingsViewModel @Inject constructor(
                 pullResult.map { Unit }
             }
             val blobResult = profileSettingsSyncService.pushBlobForProfile(activeId)
-            _syncStatus.value = if (metaResult.isSuccess && blobResult.isSuccess) {
+            _syncStatus.value = if (accountResult.isSuccess && metaResult.isSuccess && blobResult.isSuccess) {
                 SyncStatus.SUCCESS
             } else {
                 SyncStatus.ERROR
             }
             delay(3000)
             _syncStatus.value = SyncStatus.IDLE
+        }
+    }
+
+    private suspend fun pullAccountSnapshot(): Result<Unit> {
+        addonRepository.beginRemoteSyncReconcile()
+        return try {
+            val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonConfigs(
+                remoteAddons = remoteAddonConfigs,
+                removeMissingLocal = true
+            )
+            accountSyncRefreshNotifier.notifyRefreshRequired()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            addonRepository.endRemoteSyncReconcile()
         }
     }
 

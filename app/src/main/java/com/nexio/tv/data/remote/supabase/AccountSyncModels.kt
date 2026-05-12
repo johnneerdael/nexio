@@ -5,8 +5,18 @@ package com.nexio.tv.data.remote.supabase
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
+
+/**
+ * Account settings payloads are written by multiple clients. Android owns a typed subset of the
+ * portal settings object, so v10 pulls must ignore newer web-only fields while preserving the
+ * fields Android does understand.
+ */
+val AccountConfigSyncPayloadJson: Json = Json {
+    ignoreUnknownKeys = true
+}
 
 @Serializable
 data class AccountSnapshotRpcResponse(
