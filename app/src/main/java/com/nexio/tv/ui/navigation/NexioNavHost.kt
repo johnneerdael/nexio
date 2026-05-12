@@ -44,9 +44,7 @@ import com.nexio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
 import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
@@ -181,64 +179,41 @@ fun NexioNavHost(
                     navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 },
                 onContinueWatchingClick = { item ->
-                    // homeScope is rememberCoroutineScope() — defaults to Dispatchers.Main.immediate.
-                    // The hydration chain (resolveContinueWatchingRuntimeMinutes / enrichContinueWatching*)
-                    // calls metadataRouterFacade.fetchTvEpisodeEnrichment which hits TVDB/network.
-                    // Without an explicit dispatcher these run on Main, blocking input dispatch and
-                    // producing a 5s+ ANR ("waited 5003ms for KeyEvent DPAD_CENTER"). Detail-page play
-                    // works because that handler runs on viewModelScope where the metadata calls
-                    // already withContext(IO). For symmetry, run the hydration off-Main and only the
-                    // navController.navigate() on Main.
+                    // Optimistic navigation: build the Stream route from data already on the
+                    // ContinueWatchingItem (progress, displayMetadata, idBundle-derived imdbId)
+                    // and navigate immediately. The previous *WithHydration* path resolved
+                    // runtime via metadataRouterFacade.fetchTvEpisodeEnrichment and ran
+                    // language enrichment, both of which (a) are cosmetic — stream resolution
+                    // doesn't need them — and (b) on a heavy show like Masterchef S18 (~1000
+                    // episodes) parse the whole season list + cross-reference TMDB even when
+                    // the data is fully disk-cached, pegging CPU on Main and ANRing the app
+                    // ("Input dispatching timed out, Waited 5003ms for DPAD_CENTER"). Runtime
+                    // and language can be background-hydrated by the home pipeline; the click
+                    // path must not block on them.
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = withContext(Dispatchers.IO) {
-                            buildContinueWatchingStreamRouteWithHydration(
-                                item = item,
-                                deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                                resolveRuntimeMinutes = { candidate ->
-                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                                },
-                                resolveOriginalLanguageEnrichment = { candidate ->
-                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                                }
-                            )
-                        }
+                        val route = buildContinueWatchingStreamRoute(
+                            item = item,
+                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled
+                        )
                         navController.navigate(route)
                     }
                 },
                 onContinueWatchingStartFromBeginning = { item ->
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = withContext(Dispatchers.IO) {
-                            buildContinueWatchingStreamRouteWithHydration(
-                                item = item,
-                                deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                                startFromBeginning = true,
-                                resolveRuntimeMinutes = { candidate ->
-                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                                },
-                                resolveOriginalLanguageEnrichment = { candidate ->
-                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                                }
-                            )
-                        }
+                        val route = buildContinueWatchingStreamRoute(
+                            item = item,
+                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                            startFromBeginning = true
+                        )
                         navController.navigate(route)
                     }
                 },
                 onContinueWatchingManualStreamSelection = { item ->
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = withContext(Dispatchers.IO) {
-                            buildContinueWatchingManualSelectionStreamRouteWithHydration(
-                                item = item,
-                                resolveRuntimeMinutes = { candidate ->
-                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                                },
-                                resolveOriginalLanguageEnrichment = { candidate ->
-                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                                }
-                            )
-                        }
+                        val route = buildContinueWatchingManualSelectionStreamRoute(item = item)
                         navController.navigate(route)
                     }
                 },
