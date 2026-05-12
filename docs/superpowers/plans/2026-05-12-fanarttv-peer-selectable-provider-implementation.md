@@ -919,6 +919,8 @@ Build the shape class using the `IntegrationCallSpec` builder pattern from Step 
 
 If `IntegrationCallSpec` does not directly expose `redactedUrlForTrace` / `cachePolicy` properties, adjust the test assertions to mirror whatever the existing poster-shape redaction tests assert on. The behavioral goal — raw key never appears in trace, ttl is 14d — must be verified.
 
+**CLAUDE.md rule #3 verification (before committing this task):** confirm the runtime's cached-body read path streams via `JsonReader` / `Json.decodeFromStream` rather than materializing the body as a `String` first. The Fanart.tv response is 35–50 KB for typical titles. If the runtime decodes via `gson.fromJson(String, ...)` or `Json.decodeFromString(String, ...)` after reading the cached blob, that's the banned `StringReader.str`-pinning anti-pattern. Run `grep -rn "fromJson\|decodeFromString\|asString" app/src/main/java/com/nexio/tv/core/integration/ app/src/main/java/com/nexio/tv/data/integration/IntegrationCache* 2>/dev/null | head -20` and confirm the cached-body path uses an `InputStream` / `BufferedReader` source. If it does NOT, this is a pre-existing rule-3 issue affecting all providers — flag it in the PR description as an out-of-scope finding rather than silently introducing a per-Fanart workaround.
+
 - [ ] **Step 5: Run — passes**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvLookupShapeTest"`
@@ -1947,15 +1949,22 @@ class MetadataArtworkDecisionResolver @Inject constructor(
         candidates: List<ArtworkCandidate>,
         settings: ArtworkProviderSettings
     ): List<ArtworkCandidate> {
-        val byOwner = candidates.groupBy { it.ownerKey }
+        // CLAUDE.md rule #4: don't iterate a Map via forEach inside a suspend fun —
+        // Map.forEach's EntryIterator gets pinned in the continuation across
+        // fanartGenerator.generate(...)'s suspension. Materialize the entries as
+        // an indexed list and iterate with an indexed for loop.
+        val ownerEntries = candidates.groupBy { it.ownerKey }.entries.toList()
         val additions = mutableListOf<ArtworkCandidate>()
-        byOwner.forEach { (ownerKey, perOwnerCandidates) ->
+        for (i in ownerEntries.indices) {
+            val entry = ownerEntries[i]
+            val ownerKey = entry.key
+            val perOwnerCandidates = entry.value
             val sample = perOwnerCandidates.first()
             val requestedTypes = perOwnerCandidates
                 .map { it.imageType }
                 .filter { it != ArtworkType.THUMBNAIL }
                 .toSet()
-            if (requestedTypes.isEmpty()) return@forEach
+            if (requestedTypes.isEmpty()) continue
             additions += fanartGenerator.generate(
                 ownerKey = ownerKey,
                 canonicalContentId = sample.canonicalContentId,
@@ -1974,7 +1983,9 @@ Add the necessary import:
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 ```
 
-Note: `settingsSource.settings.first()` was already called inside `resolveFields`. Hoist it once at the top so both `augmentWithFanart` and the existing routing policy share the same snapshot.
+**CLAUDE.md rule #4 compliance:** the body uses an indexed for-loop over `ownerEntries: List<Map.Entry<...>>` instead of `Map.forEach { ... suspend ... }`. The indexed-for compiles to a primitive int counter — no `EntryIterator` allocation, nothing pinned in `generate(...)`'s continuation. (`Iterable.forEach` / `Map.forEach` over a suspending lambda is the banned anti-pattern.)
+
+Note: `settingsSource.settings.first()` was already called inside `resolveFields`. Hoist it once at the top so both `augmentWithFanart` and the existing routing policy share the same snapshot — avoids two separate Flow collections per call.
 
 - [ ] **Step 4: Run — pass**
 
@@ -2061,49 +2072,65 @@ Expected: a non-empty value.
 Run: `./gradlew :app:installDebug`
 Expected: BUILD SUCCESSFUL and install succeeds.
 
-- [ ] **Step 3: Settings dialog presence**
+- [ ] **Step 3: Launch the app and select a profile**
 
-On the device, open Settings → Poster Ratings. Verify the Poster, Logo, and Backdrop selectors offer "Fanart.tv" as an option. Verify the Thumbnail selector does **not** offer Fanart.tv.
+CLAUDE.md rule #8 — the profile picker is NOT the home screen. Every home-pipeline smoke must select a profile first:
 
-- [ ] **Step 4: Movie behavior**
+```bash
+ADB_TARGET="${ADB_TARGET:-$(adb devices | sed -n '2p' | cut -f1)}"
+adb -s "$ADB_TARGET" shell am force-stop com.nexiodebug.tv
+adb -s "$ADB_TARGET" logcat -c
+adb -s "$ADB_TARGET" shell monkey -p com.nexiodebug.tv 1
+sleep 5                                                              # profile picker renders
+adb -s "$ADB_TARGET" shell input keyevent KEYCODE_DPAD_CENTER       # tap focused profile
+sleep 30                                                             # home loads + rails populate
+```
+
+Expected: home screen loads with rails populated; no FATAL/ANR/AndroidRuntime errors in `adb logcat -d -t 600`.
+
+- [ ] **Step 4: Settings dialog presence**
+
+On the device, navigate Home → Settings → Poster Ratings. Verify the Poster, Logo, and Backdrop selectors offer "Fanart.tv" as an option. Verify the Thumbnail selector does **not** offer Fanart.tv.
+
+- [ ] **Step 5: Movie behavior**
 
 Select Fanart.tv for poster, logo, backdrop. Open a Fight Club detail page (TMDB id 550). Verify:
 - Poster URL = `https://assets.fanart.tv/fanart/fight-club-522a5477c7bd3.jpg`
 - Logo URL = `https://assets.fanart.tv/fanart/fight-club-504c0530d5f93.png`
 - Backdrop URL = `https://assets.fanart.tv/fanart/fight-club-55e2393686745.jpg`
 
-- [ ] **Step 5: TV behavior**
+- [ ] **Step 6: TV behavior**
 
 Open Breaking Bad detail page (TVDB id 81189). Verify:
 - Poster = `https://assets.fanart.tv/fanart/breaking-bad-5427fc5ebded7.jpg`
 - Logo = `https://assets.fanart.tv/fanart/breaking-bad-503d6f03d4bfe.png`
 - Backdrop = `https://assets.fanart.tv/fanart/breaking-bad-4fcb7b24428ba.jpg`
 
-- [ ] **Step 6: Anime fallback**
+- [ ] **Step 7: Anime fallback**
 
 Open any anime title with Fanart.tv selected for poster. Verify the addon-side poster renders (not blank, not Fanart). Logcat / runtime audit should show no `fanarttv.lookup` call for that item.
 
-- [ ] **Step 7: Missing-id fallback**
+- [ ] **Step 8: Missing-id fallback**
 
 Find a movie that has no TMDB id (or simulate by clearing TMDB id in stableIds for one test item). Verify the poster falls back to the addon-side image.
 
-- [ ] **Step 8: Empty-slot for non-anime + Fanart no-en**
+- [ ] **Step 9: Empty-slot for non-anime + Fanart no-en**
 
 Find a non-anime title that Fanart.tv covers with no en-variant logo (or a title not in fanart.tv). Verify the logo slot is empty (not the addon logo). This is the strict-honor contract per Q1.
 
-- [ ] **Step 9: Cache hit on repeat**
+- [ ] **Step 10: Cache hit on repeat**
 
-Force-stop and re-open with Fanart.tv selected for an already-resolved title. Verify there is no new `fanarttv.lookup` runtime call (cached JSON body) and no new image bytes call (disk cache hit).
+Force-stop, relaunch, re-select the profile (rule #8), wait for home + rails to load. Open the same Fight Club detail page. Verify there is no new `fanarttv.lookup` runtime call (cached JSON body) and no new image bytes call (disk cache hit).
 
-- [ ] **Step 10: Toggle off**
+- [ ] **Step 11: Toggle off**
 
 Switch all three selectors back to Default. Verify all visible items re-hydrate (`markStaleAll` from `ArtworkSettingsInvalidator`) and revert to the prior provider's URLs.
 
-- [ ] **Step 11: Verify api_key participation in IntegrationCallSpec equality**
+- [ ] **Step 12: Verify api_key participation in IntegrationCallSpec equality**
 
-If the build-config key changes (e.g. you fix a typo in `local.properties`), confirm the next resolver call hits the network rather than serving a stale cached response under the bad key. If `api_key` is not part of `IntegrationCallSpec` equality, add a one-line `markStaleAll` on app boot when the build-config key differs from a persisted last-seen key. Verify by changing the key in `local.properties`, rebuilding, restarting, and observing a fresh network call.
+If the build-config key changes (e.g. you fix a typo in `local.properties`), confirm the next resolver call hits the network rather than serving a stale cached response under the bad key. If `api_key` is not part of `IntegrationCallSpec` equality, add a one-line `markStaleAll` on app boot when the build-config key differs from a persisted last-seen key. Verify by changing the key in `local.properties`, rebuilding, restarting (with profile re-select), and observing a fresh network call.
 
-- [ ] **Step 12: Document the manual outcome in the implementation PR**
+- [ ] **Step 13: Document the manual outcome in the implementation PR**
 
 No code change. Note in the PR description what was checked and what was observed.
 
@@ -2139,3 +2166,20 @@ This section is for the plan author, not the implementer.
 - Consumer wiring at TmdbMetadataService / TvdbMetadataService / HomeCatalogRefreshCoordinator — those files are unchanged.
 - Custom URL-fetch-then-set-slot path at hydration time — replaced by candidate-generator + existing router + existing surface non-downgrade.
 - INTERMEDIATE source role and router rank shift — not needed; PREMIUM rank with user-selection match handles it.
+
+---
+
+## CLAUDE.md Hard-Rule Compliance Audit
+
+This plan was audited against the eight project-wide invariants in `CLAUDE.md` before finalization.
+
+| Rule | Status | Notes |
+|---|---|---|
+| #1 Display authority — first paint never downgrades | ✓ compliant | We use `preferredArtworkProviders` + `preferredAwareSlot` (the existing reducer / surface non-downgrade machinery) to enforce empty-slot for non-anime when Fanart can't deliver. We do NOT add new "if poster null fall back to backdrop" logic anywhere. The candidate generator emits PREMIUM candidates that flow through the existing router → decision cache → asset repo → surface repo chain. |
+| #2 State retention — no hot lists in observed UiState | ✓ compliant | No new `HomeUiState` fields. Generator returns a `List<ArtworkCandidate>` to `MetadataArtworkDecisionResolver` (not Compose-observed). |
+| #3 Persistence — no large blobs in SharedPreferences; stream JSON | ✓ compliant by design, with verification flagged | We use `IntegrationRuntime.CacheFirst(14d)` → `integration_cache.blobPath` (file on disk), the standard provider path. We do NOT write to SharedPreferences or DataStore. Task 4.3 Step 4 includes an explicit verification that the cached-body read path streams via `JsonReader` / `Json.decodeFromStream` rather than materializing the body as a `String` first — Fanart.tv responses are 35–50 KB. |
+| #4 Coroutines — no suspending forEach over lists | ✓ compliant | `FanartTvCandidateGenerator.generate(...)` uses synchronous `filter`/`mapNotNull` lambdas only (capability-resolver and picker calls are non-suspending). `MetadataArtworkDecisionResolver.augmentWithFanart(...)` materializes `groupBy` entries to a `List` and iterates via `for (i in ownerEntries.indices)` — no `Map.forEach { ... suspend ... }`, no `EntryIterator` pinning across `generate(...)`'s suspension. |
+| #5 Memoization — at every reference-fresh boundary | ✓ compliant | Generator output is consumed by `ArtworkRouter.select` and persisted via `ArtworkDecisionCache` keyed by content. Not exposed to Compose. No new reference-fresh boundary added. |
+| #6 Coroutines — don't pin large values as outer-fun locals across fan-out | ✓ compliant | `augmentWithFanart` is sequential; no `supervisorScope` / `coroutineScope` fan-out. `generate(...)`'s outer locals are tiny (availability sealed type, max-3-element `typesToTry: List<ArtworkType>`, `callId: FanartTvCallId` data class). |
+| #7 Git staging — NEVER sweep up work that isn't yours | ✓ compliant | Every commit step in this plan stages explicit file paths only — no `git add -A`, no `git add .`, no `git commit -a`. |
+| #8 Smoke tests — profile picker is NOT the home screen | ✓ compliant | Task 8.2 manual smoke includes an explicit "launch + select profile + wait for rails" step (Step 3) before any home-pipeline observation. Step 10 (cache hit on repeat) also re-selects the profile after relaunch. |
