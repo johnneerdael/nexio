@@ -70,6 +70,7 @@ class PlayerViewModel @Inject constructor(
     private val authRecoveryInterceptor: AuthRecoveryInterceptor,
     private val hyperHdrSessionStateHolder: HyperHdrSessionStateHolder,
     private val traktEpisodeMappingService: TraktEpisodeMappingService,
+    private val torBoxResumeStore: com.nexio.tv.data.local.TorBoxResumeStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var playbackRegistrationToken: String? = null
@@ -87,6 +88,7 @@ class PlayerViewModel @Inject constructor(
         PlayerRuntimeController(
             context = context,
             watchProgressRepository = watchProgressRepository,
+            torBoxResumeStore = torBoxResumeStore,
             metaRepository = metaRepository,
             streamRepository = streamRepository,
             addonRepository = addonRepository,

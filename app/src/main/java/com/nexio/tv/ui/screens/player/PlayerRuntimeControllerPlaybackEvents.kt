@@ -242,9 +242,25 @@ private fun PlayerRuntimeController.maybeRefreshVodTelemetry(now: Long) {
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {
-    
+
+    // TorBox library entries have no Trakt/TMDB id and so do not go through WatchProgressRepository;
+    // their resume position is stored separately in TorBoxResumeStore. Bail before the contentId
+    // null-check below so the TorBox path does not get filtered out.
+    val torBox = torBoxContext
+    if (torBox != null && position >= 1000) {
+        scope.launch {
+            torBoxResumeStore.savePosition(
+                torrentId = torBox.torrentId,
+                fileId = torBox.fileId,
+                positionMs = position,
+                durationMs = duration,
+            )
+        }
+        return
+    }
+
     if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
-    
+
     if (position < 1000) return
 
     val fallbackPercent = if (duration <= 0L) 5f else null
