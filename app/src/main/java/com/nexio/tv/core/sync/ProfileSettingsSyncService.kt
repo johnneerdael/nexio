@@ -166,8 +166,12 @@ class ProfileSettingsSyncService @Inject constructor(
                             buildJsonObject {
                                 put("p_base_updated_at_ms", baseMs)
                                 put("p_profile_id", scopedProfileId)
-                                put("p_settings_json", blob.toString())
+                                // Pass the JsonObject directly so PostgREST forwards it as jsonb.
+                                // blob.toString() would land as a jsonb string scalar instead,
+                                // corrupting profile_settings.settings_json on write.
+                                put("p_settings_json", blob)
                                 put("p_platform", "tv")
+                                put("p_source", "app")
                             }
                         ).decodeAs<V10PushResult>()
                     }
