@@ -51,26 +51,24 @@ class SubtitleTranslationSettingsDataStoreTest {
     }
 
     @Test
-    fun openRouterEndpointKeepsCustomModelAndBaseUrl() {
+    fun openRouterEndpointKeepsCustomModelBaseUrlAndSubRipPromptFlag() {
         val settings = normalizeSubtitleTranslationSettings(
             enabled = true,
             providerName = "OPENAI",
             apiKey = "openrouter-key",
             model = "openai/gpt-5.2",
             baseUrl = "https://openrouter.ai/api/v1/",
-            assSsaSystemPromptEnabled = true,
             subRipSystemPromptEnabled = true
         )
 
         assertEquals(SubtitleTranslationProvider.OPENAI, settings.provider)
         assertEquals("openai/gpt-5.2", settings.model)
         assertEquals("https://openrouter.ai/api/v1", settings.baseUrl)
-        assertEquals(true, settings.assSsaSystemPromptEnabled)
         assertEquals(true, settings.subRipSystemPromptEnabled)
     }
 
     @Test
-    fun missingSystemPromptPreferencesDefaultDisabled() {
+    fun missingSubRipSystemPromptPreferenceDefaultsDisabled() {
         val settings = normalizeSubtitleTranslationSettings(
             enabled = true,
             providerName = "OPENAI",
@@ -79,7 +77,6 @@ class SubtitleTranslationSettingsDataStoreTest {
             baseUrl = "https://openrouter.ai/api/v1"
         )
 
-        assertEquals(false, settings.assSsaSystemPromptEnabled)
         assertEquals(false, settings.subRipSystemPromptEnabled)
     }
 
@@ -103,13 +100,11 @@ class SubtitleTranslationSettingsDataStoreTest {
         val providerKey = stringPreferencesKey("subtitle_translation_provider")
         val modelKey = stringPreferencesKey("subtitle_translation_model")
         val baseUrlKey = stringPreferencesKey("subtitle_translation_base_url")
-        val assSsaSystemPromptKey = booleanPreferencesKey("subtitle_translation_ass_ssa_system_prompt_enabled")
         val subRipSystemPromptKey = booleanPreferencesKey("subtitle_translation_subrip_system_prompt_enabled")
         val prefs = mutablePreferencesOf(
             providerKey to "OPENAI",
             modelKey to "openai/gpt-5.2",
             baseUrlKey to "https://openrouter.ai/api/v1",
-            assSsaSystemPromptKey to true,
             subRipSystemPromptKey to true
         )
 
@@ -118,7 +113,6 @@ class SubtitleTranslationSettingsDataStoreTest {
         assertEquals("DASHSCOPE", prefs[providerKey])
         assertEquals(SubtitleTranslationDefaults.DASHSCOPE_MODEL, prefs[modelKey])
         assertEquals(SubtitleTranslationDefaults.DASHSCOPE_BASE_URL, prefs[baseUrlKey])
-        assertEquals(true, prefs[assSsaSystemPromptKey])
         assertEquals(true, prefs[subRipSystemPromptKey])
     }
 }

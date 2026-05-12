@@ -61,7 +61,8 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
-import com.nexio.tv.data.repository.AssSsaTranslationBatchPlanner
+import com.nexio.tv.data.repository.AssSsaSegmentSurfaceBatchPlanner
+import com.nexio.tv.data.repository.mergeAssSsaSegmentBatchResponses
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
@@ -702,28 +703,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             translationApiKeyPresent = subtitleTranslationSettings.apiKey.isNotBlank()
                         )
                     },
-                    useSystemPromptTranslation = {
-                        subtitleTranslationSettings.assSsaSystemPromptEnabled
-                    },
-                    translate = { units ->
-                        val translated = mutableMapOf<String, String>()
-                        AssSsaTranslationBatchPlanner.plan(units).forEach { batch ->
-                            translated += subtitleTranslationService.translateProtectedAssSsaUnits(
-                                units = batch.units,
+                    translate = { surfaces ->
+                        val batchResponses = AssSsaSegmentSurfaceBatchPlanner.plan(surfaces).map { batch ->
+                            batch to subtitleTranslationService.translateAssSsaSegmentSurfaces(
+                                surfaces = batch.units,
                                 targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
                                 sourceLanguageCode = null,
                                 settings = subtitleTranslationSettings
                             ).getOrThrow()
                         }
-                        translated
-                    },
-                    translateRawAssSsa = { sample ->
-                        subtitleTranslationService.translateRawAssSsaText(
-                            text = sample,
-                            targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
-                            sourceLanguageCode = null,
-                            settings = subtitleTranslationSettings
-                        ).getOrThrow()
+                        mergeAssSsaSegmentBatchResponses(batchResponses)
                     },
                     diagnosticsLogger = subtitleTranslationService.diagnosticsLogger
                 )

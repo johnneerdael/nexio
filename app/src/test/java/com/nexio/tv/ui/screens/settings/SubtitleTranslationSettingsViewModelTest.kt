@@ -11,7 +11,6 @@ class SubtitleTranslationSettingsViewModelTest {
             provider = SubtitleTranslationProvider.OPENAI,
             model = "openrouter/custom-model",
             baseUrl = "https://openrouter.ai/api/v1",
-            assSsaSystemPromptEnabled = true,
             subRipSystemPromptEnabled = true
         )
 
@@ -20,7 +19,6 @@ class SubtitleTranslationSettingsViewModelTest {
         assertEquals(SubtitleTranslationProvider.OPENAI, next.provider)
         assertEquals("openrouter/custom-model", next.model)
         assertEquals("https://openrouter.ai/api/v1", next.baseUrl)
-        assertEquals(true, next.assSsaSystemPromptEnabled)
         assertEquals(true, next.subRipSystemPromptEnabled)
     }
 

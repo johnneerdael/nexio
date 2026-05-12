@@ -88,12 +88,6 @@ class SubtitleTranslationSettingsViewModel @Inject constructor(
         }
     }
 
-    fun setAssSsaSystemPromptEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            dataStore.setAssSsaSystemPromptEnabled(enabled)
-        }
-    }
-
     fun setSubRipSystemPromptEnabled(enabled: Boolean) {
         viewModelScope.launch {
             dataStore.setSubRipSystemPromptEnabled(enabled)
@@ -107,7 +101,6 @@ data class SubtitleTranslationSettingsUiState(
     val apiKey: String = "",
     val model: String = SubtitleTranslationDefaults.OPENAI_MODEL,
     val baseUrl: String = SubtitleTranslationDefaults.OPENAI_BASE_URL,
-    val assSsaSystemPromptEnabled: Boolean = false,
     val subRipSystemPromptEnabled: Boolean = false
 ) {
     fun fromSettings(settings: SubtitleTranslationSettings): SubtitleTranslationSettingsUiState = copy(
@@ -116,7 +109,6 @@ data class SubtitleTranslationSettingsUiState(
         apiKey = settings.apiKey,
         model = settings.model,
         baseUrl = settings.baseUrl,
-        assSsaSystemPromptEnabled = settings.assSsaSystemPromptEnabled,
         subRipSystemPromptEnabled = settings.subRipSystemPromptEnabled
     )
 
