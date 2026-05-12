@@ -5,46 +5,37 @@ import com.nexio.tv.domain.model.WyzieIdHints
 import com.nexio.tv.domain.model.WyzieSource
 
 /**
- * Pure mapping from `(content type, hints)` to the curated Wyzie source list.
+ * Pure mapping from `(content type, hints)` to the Wyzie source list.
  *
- * Anime detection: any of `kitsu`/`mal`/`anilist`/`anidb` non-null. yify is intentionally
- * dropped from the movie list (SRT-in-ZIP, Media3 cannot unwrap).
+ * Wyzie's free tier exposes only `opensubtitles`, `subdl`, and `tvsubtitles`; asking for any
+ * other provider returns HTTP 403. Pro-tier scrapers (animetosho, jimaku, kitsunekko, ajatttools,
+ * subf2m, podnapisi, gestdown) historically had separate movie/tv and anime/non-anime routing,
+ * but in practice that produced 100% 403s for anime users on the free key.
+ *
+ * To keep behaviour identical for free and pro keys and avoid silent anime degradation, all
+ * movie/tv/anime requests now use the same free-tier-accessible source triple. Pro keys still
+ * get the same response from these three providers; users wanting the anime-specialised
+ * scrapers can re-introduce branching by extending this list.
+ *
+ * `hints.isAnime` is no longer consulted here — anime detection still drives [WyzieIdHints]
+ * construction (so `kitsu:`/`mal:` IDs are recognised) but no longer changes the source set.
  */
 object WyzieSourceRouter {
 
-    private val NON_ANIME_MOVIE = listOf(
+    private val UNIFIED_SOURCES = listOf(
         WyzieSource.OPENSUBTITLES,
         WyzieSource.SUBDL,
-        WyzieSource.SUBF2M,
-        WyzieSource.PODNAPISI,
+        WyzieSource.TVSUBTITLES,
     )
 
-    private val NON_ANIME_TV = listOf(
-        WyzieSource.OPENSUBTITLES,
-        WyzieSource.SUBDL,
-        WyzieSource.SUBF2M,
-        WyzieSource.PODNAPISI,
-        WyzieSource.GESTDOWN,
-    )
-
-    private val ANIME_MOVIE = listOf(
-        WyzieSource.JIMAKU,
-        WyzieSource.AJATTTOOLS,
-    )
-
-    private val ANIME_TV = listOf(
-        WyzieSource.ANIMETOSHO,
-        WyzieSource.JIMAKU,
-        WyzieSource.KITSUNEKKO,
-        WyzieSource.AJATTTOOLS,
-    )
-
-    fun sourcesFor(type: ContentType, hints: WyzieIdHints): List<WyzieSource> {
-        val anime = hints.isAnime
-        return when (type) {
-            ContentType.MOVIE -> if (anime) ANIME_MOVIE else NON_ANIME_MOVIE
-            ContentType.SERIES, ContentType.TV -> if (anime) ANIME_TV else NON_ANIME_TV
-            ContentType.CHANNEL, ContentType.PERSON, ContentType.UNKNOWN -> emptyList()
+    @Suppress("UNUSED_PARAMETER")
+    fun sourcesFor(type: ContentType, hints: WyzieIdHints): List<WyzieSource> =
+        when (type) {
+            ContentType.MOVIE,
+            ContentType.SERIES,
+            ContentType.TV -> UNIFIED_SOURCES
+            ContentType.CHANNEL,
+            ContentType.PERSON,
+            ContentType.UNKNOWN -> emptyList()
         }
-    }
 }

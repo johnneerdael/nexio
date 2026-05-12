@@ -8,123 +8,94 @@ import org.junit.Test
 
 class WyzieSourceRouterTest {
 
+    private val unified = listOf(
+        WyzieSource.OPENSUBTITLES,
+        WyzieSource.SUBDL,
+        WyzieSource.TVSUBTITLES,
+    )
+
     private val nonAnime = WyzieIdHints(imdb = "tt0121955")
 
     @Test
-    fun `non-anime movie returns curated movie source list`() {
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.MOVIE, nonAnime)
+    fun `movie returns unified source list`() {
+        assertEquals(unified, WyzieSourceRouter.sourcesFor(ContentType.MOVIE, nonAnime))
+    }
+
+    @Test
+    fun `series returns unified source list`() {
+        assertEquals(unified, WyzieSourceRouter.sourcesFor(ContentType.SERIES, nonAnime))
+    }
+
+    @Test
+    fun `tv content type returns unified source list`() {
+        assertEquals(unified, WyzieSourceRouter.sourcesFor(ContentType.TV, nonAnime))
+    }
+
+    @Test
+    fun `kitsu hint does not switch source list`() {
         assertEquals(
-            listOf(
-                WyzieSource.OPENSUBTITLES,
-                WyzieSource.SUBDL,
-                WyzieSource.SUBF2M,
-                WyzieSource.PODNAPISI,
-            ),
-            sources,
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.MOVIE, WyzieIdHints(kitsu = "42")),
+        )
+        assertEquals(
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.SERIES, WyzieIdHints(kitsu = "42")),
         )
     }
 
     @Test
-    fun `non-anime series returns curated tv source list with gestdown`() {
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.SERIES, nonAnime)
+    fun `mal hint does not switch source list`() {
         assertEquals(
-            listOf(
-                WyzieSource.OPENSUBTITLES,
-                WyzieSource.SUBDL,
-                WyzieSource.SUBF2M,
-                WyzieSource.PODNAPISI,
-                WyzieSource.GESTDOWN,
-            ),
-            sources,
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.SERIES, WyzieIdHints(mal = "1")),
         )
     }
 
     @Test
-    fun `tv content type aliases to series source list`() {
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.TV, nonAnime)
+    fun `anilist hint does not switch source list`() {
         assertEquals(
-            WyzieSourceRouter.sourcesFor(ContentType.SERIES, nonAnime),
-            sources,
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.SERIES, WyzieIdHints(anilist = "5")),
         )
     }
 
     @Test
-    fun `kitsu hint trips anime movie routing`() {
-        val sources = WyzieSourceRouter.sourcesFor(
-            ContentType.MOVIE,
-            WyzieIdHints(kitsu = "42"),
-        )
-        assertEquals(listOf(WyzieSource.JIMAKU, WyzieSource.AJATTTOOLS), sources)
-    }
-
-    @Test
-    fun `mal hint trips anime series routing`() {
-        val sources = WyzieSourceRouter.sourcesFor(
-            ContentType.SERIES,
-            WyzieIdHints(mal = "1"),
-        )
+    fun `anidb hint does not switch source list`() {
         assertEquals(
-            listOf(
-                WyzieSource.ANIMETOSHO,
-                WyzieSource.JIMAKU,
-                WyzieSource.KITSUNEKKO,
-                WyzieSource.AJATTTOOLS,
-            ),
-            sources,
-        )
-    }
-
-    @Test
-    fun `anilist hint trips anime detection`() {
-        assertEquals(
-            true,
-            WyzieSourceRouter.sourcesFor(ContentType.SERIES, WyzieIdHints(anilist = "5"))
-                .first() == WyzieSource.ANIMETOSHO,
-        )
-    }
-
-    @Test
-    fun `anidb hint trips anime detection`() {
-        assertEquals(
-            true,
-            WyzieSourceRouter.sourcesFor(ContentType.MOVIE, WyzieIdHints(anidb = "9"))
-                .first() == WyzieSource.JIMAKU,
-        )
-    }
-
-    @Test
-    fun `anime tv aliases to series anime list`() {
-        assertEquals(
-            WyzieSourceRouter.sourcesFor(ContentType.SERIES, WyzieIdHints(kitsu = "1")),
-            WyzieSourceRouter.sourcesFor(ContentType.TV, WyzieIdHints(kitsu = "1")),
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.MOVIE, WyzieIdHints(anidb = "9")),
         )
     }
 
     @Test
     fun `unknown content type returns empty`() {
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.UNKNOWN, nonAnime)
-        assertEquals(emptyList<WyzieSource>(), sources)
+        assertEquals(
+            emptyList<WyzieSource>(),
+            WyzieSourceRouter.sourcesFor(ContentType.UNKNOWN, nonAnime),
+        )
     }
 
     @Test
     fun `channel content type returns empty`() {
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.CHANNEL, nonAnime)
-        assertEquals(emptyList<WyzieSource>(), sources)
+        assertEquals(
+            emptyList<WyzieSource>(),
+            WyzieSourceRouter.sourcesFor(ContentType.CHANNEL, nonAnime),
+        )
+    }
+
+    @Test
+    fun `person content type returns empty`() {
+        assertEquals(
+            emptyList<WyzieSource>(),
+            WyzieSourceRouter.sourcesFor(ContentType.PERSON, nonAnime),
+        )
     }
 
     @Test
     fun `router does not check id presence — that boundary lives in the provider`() {
-        // Hints with no usable id still get a source list; the provider is responsible
-        // for skipping the network call.
-        val sources = WyzieSourceRouter.sourcesFor(ContentType.MOVIE, WyzieIdHints.EMPTY)
         assertEquals(
-            listOf(
-                WyzieSource.OPENSUBTITLES,
-                WyzieSource.SUBDL,
-                WyzieSource.SUBF2M,
-                WyzieSource.PODNAPISI,
-            ),
-            sources,
+            unified,
+            WyzieSourceRouter.sourcesFor(ContentType.MOVIE, WyzieIdHints.EMPTY),
         )
     }
 }
