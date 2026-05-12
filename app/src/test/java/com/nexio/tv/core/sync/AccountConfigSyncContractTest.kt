@@ -823,10 +823,89 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `dirty account secret sections are empty without baseline`() {
+    fun `dirty account secret sections include configured local secrets without baseline`() {
+        assertEquals(
+            setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_MDBLIST,
+                AccountSettingsSectionKey.INTEGRATIONS_OMDB,
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+                AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP,
+                AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
+                AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
+                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+            ),
+            dirtyAccountSecretSectionKeys(accountSecretSnapshot(), baseline = null)
+        )
+    }
+
+    @Test
+    fun `dirty account secret sections are empty without baseline when local secrets are blank`() {
         assertEquals(
             emptySet<AccountSettingsSectionKey>(),
-            dirtyAccountSecretSectionKeys(accountSecretSnapshot(mdbListApiKey = "local-mdblist"), baseline = null)
+            dirtyAccountSecretSectionKeys(emptyAccountSecretPushSnapshot(), baseline = null)
+        )
+    }
+
+    @Test
+    fun `account secret baseline after pull keeps preserved local sections dirty`() {
+        val existing = accountSecretSnapshot(
+            mdbListApiKey = "old-mdblist",
+            subtitleTranslationApiKey = "old-translation"
+        )
+        val current = accountSecretSnapshot(
+            mdbListApiKey = "remote-mdblist-new",
+            subtitleTranslationApiKey = "local-translation-new",
+            legacyGeminiApiKey = "local-gemini-new"
+        )
+
+        val baseline = accountSecretBaselineAfterPull(
+            current = current,
+            existing = existing,
+            appliedSectionKeys = setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_MDBLIST,
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
+            ),
+            preserveLocalSectionKeys = setOf(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)
+        )
+
+        assertEquals(
+            setOf(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION),
+            dirtyAccountSecretSectionKeys(current, baseline)
+        )
+    }
+
+    @Test
+    fun `account secret baseline after first pull starts from blank for unpulled sections`() {
+        val current = accountSecretSnapshot(
+            mdbListApiKey = "remote-mdblist",
+            subtitleTranslationApiKey = "local-translation"
+        )
+
+        val baseline = accountSecretBaselineAfterPull(
+            current = current,
+            existing = null,
+            appliedSectionKeys = setOf(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST),
+            preserveLocalSectionKeys = emptySet()
+        )
+
+        assertEquals(
+            setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_OMDB,
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+                AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP,
+                AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
+                AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
+                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+            ),
+            dirtyAccountSecretSectionKeys(current, baseline)
         )
     }
 
