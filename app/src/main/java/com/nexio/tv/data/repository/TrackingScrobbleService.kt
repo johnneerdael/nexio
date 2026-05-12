@@ -51,6 +51,13 @@ sealed interface TrackingScrobbleItem {
     ) : TrackingScrobbleItem
 }
 
+fun TrackingScrobbleItem.withHydratedIds(
+    ids: com.nexio.tv.domain.model.ProviderIds?,
+): TrackingScrobbleItem = when (this) {
+    is TrackingScrobbleItem.Movie -> copy(hydratedIds = ids)
+    is TrackingScrobbleItem.Episode -> copy(hydratedIds = ids)
+}
+
 data class TrackingWatchingNowState(
     val active: Boolean = false,
     val title: String? = null,
