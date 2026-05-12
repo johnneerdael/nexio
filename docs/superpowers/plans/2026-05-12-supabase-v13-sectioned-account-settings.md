@@ -1,10 +1,10 @@
-# Supabase Contract v12 Sectioned Account Settings Implementation Plan
+# Supabase Contract v13 Sectioned Account Settings Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the monolithic account settings JSONB source of truth with sectioned JSONB rows and v12 RPCs while keeping the current full-payload contract working through adapters.
+**Goal:** Replace the monolithic account settings JSONB source of truth with sectioned JSONB rows and v13 RPCs while keeping the current full-payload contract working through adapters.
 
-**Architecture:** Supabase becomes authoritative per `(user_id, section_key)` in `account_settings_sections`; v12 clients pull/push only dirty sections with independent watermarks. The existing full-payload account settings RPCs become compatibility adapters over the section table, so current v11 clients continue to work during rollout. Android and `nexio-web` keep composed UI settings objects locally, but remote sync state becomes section-aware.
+**Architecture:** Supabase becomes authoritative per `(user_id, section_key)` in `account_settings_sections`; v13 clients pull/push only dirty sections with independent watermarks. The existing full-payload account settings RPCs become compatibility adapters over the section table, so current v12 clients continue to work during rollout. Android and `nexio-web` keep composed UI settings objects locally, but remote sync state becomes section-aware.
 
 **Tech Stack:** PostgreSQL/PLpgSQL Supabase migrations and RPCs, Kotlin/Hilt/DataStore/kotlinx.serialization on Android, Nuxt server routes and TypeScript tests in `nexio-web`.
 
@@ -12,10 +12,12 @@
 
 ## Current Checkout Notes
 
-- The current app/web contract constant is `11`.
-- The latest server-side migration `supabase/migrations/20260512040000_v11_remove_wyzie_integration.sql` removes Wyzie from the synced settings model.
-- In this checkout, the timestamped account snapshot/settings RPC names still end in `_v10` (`sync_pull_account_snapshot_v10`, `sync_push_account_settings_v10`). Treat those as the current legacy full-payload compatibility surface, even though the payload contract constant is now 11.
-- Do not reintroduce `integrations.wyzie`, `wyzie_api_key`, or a Wyzie settings section.
+- The current app/web contract constant is `12`.
+- The latest v12 baseline includes `supabase/migrations/20260512050000_v12_remove_tmdb_tvdb_secrets_and_drop_legacy_blocks.sql` and `supabase/migrations/20260512060000_v12_align_pull_rpc_contract_version_label.sql`.
+- The timestamped account snapshot/settings RPC names still end in `_v10` (`sync_pull_account_snapshot_v10`, `sync_push_account_settings_v10`), but their envelope contract label is now `12`. Treat those as the current legacy full-payload compatibility surface.
+- Do not reintroduce `integrations.wyzie`, `integrations.theIntroDb`, `integrations.tvdb`, `wyzie_api_key`, `tmdb_api_key`, or `tvdb_api_key`.
+- Keep `integrations.tmdb` as a synced settings section, but assume credentials come from `BuildConfig.TMDB_API_KEY` and clients force `enabled = true`.
+- Keep `integrations.kitsuAuth` synced without an `enabled` field.
 
 ## File Structure
 
@@ -23,11 +25,11 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql` | Creates `account_settings_sections`, section-key helpers, backfill, v12 pull/push RPCs, and legacy full-payload adapters. |
+| `supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql` | Creates `account_settings_sections`, section-key helpers, backfill, v13 pull/push RPCs, and legacy full-payload adapters. |
 | `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt` | Android section-key registry and path-to-section mapping. |
-| `app/src/main/java/com/nexio/tv/data/remote/supabase/V12ContractModels.kt` | Kotlin serialization models for v12 sectioned snapshots and push outcomes. |
+| `app/src/main/java/com/nexio/tv/data/remote/supabase/V13ContractModels.kt` | Kotlin serialization models for v13 sectioned snapshots and push outcomes. |
 | `app/src/test/java/com/nexio/tv/core/sync/AccountSettingsSectionKeyTest.kt` | Android tests for section mapping, Wyzie exclusion, and high-level coverage. |
-| `app/src/test/java/com/nexio/tv/data/remote/supabase/V12ContractModelsTest.kt` | Android v12 envelope decode tests, including unknown sections. |
+| `app/src/test/java/com/nexio/tv/data/remote/supabase/V13ContractModelsTest.kt` | Android v13 envelope decode tests, including unknown sections. |
 | `nexio-web/utils/account-settings-sections.ts` | Web section registry plus compose/extract helpers. |
 | `nexio-web/tests/account-settings-sections.test.ts` | Web tests for compose/extract behavior and Wyzie exclusion. |
 
@@ -38,31 +40,31 @@
 | `supabase/account_settings_sync.sql` | Keep canonical SQL snapshot aligned for static tests that read this file. |
 | `app/src/main/java/com/nexio/tv/core/sync/SyncWatermarkSurface.kt` | Add `ACCOUNT_SETTINGS_SECTION` surface. |
 | `app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt` | Add section-key watermark helpers. |
-| `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt` | Bump contract to 12 and add section encode/decode helpers. |
-| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | Pull/apply v12 sections and push only dirty sections. |
-| `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt` | Decode v12 account snapshot for addon pull paths. |
-| `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt` | Persist v12 section watermarks on startup pull. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt` | Bump contract to 13 and add section encode/decode helpers. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | Pull/apply v13 sections and push only dirty sections. |
+| `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt` | Decode v13 account snapshot for addon pull paths. |
+| `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt` | Persist v13 section watermarks on startup pull. |
 | `app/src/test/java/com/nexio/tv/data/local/SyncWatermarkDataStoreTest.kt` | Cover section-key watermark isolation. |
-| `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` | Cover v12 contract constant, section extraction, and Wyzie absence. |
+| `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` | Cover v13 contract constant, section extraction, and Wyzie absence. |
 | `app/src/test/java/com/nexio/tv/ui/screens/settings/SettingsViewModelSyncTest.kt` | Keep Sync Now coverage using the account snapshot path. |
-| `nexio-web/types/portal.ts` | Bump contract to 12 and add v12 envelope/push types. |
-| `nexio-web/server/api/account/bootstrap.get.ts` | Pull v12 sections and compose `PortalSettings`. |
-| `nexio-web/server/api/account/persist.post.ts` | Push only dirty sections via v12 batch RPC. |
+| `nexio-web/types/portal.ts` | Bump contract to 13 and add v13 envelope/push types. |
+| `nexio-web/server/api/account/bootstrap.get.ts` | Pull v13 sections and compose `PortalSettings`. |
+| `nexio-web/server/api/account/persist.post.ts` | Push only dirty sections via v13 batch RPC. |
 | `nexio-web/tests/account-persist-atomicity.test.ts` | Update persistence expectations to section batch writes. |
 | `nexio-web/tests/use-portal-store-multi-config.test.ts` | Keep UI store behavior while remote dirty state is sectioned. |
 
 ---
 
-### Task 1: Supabase v12 Schema, Section Helpers, And Backfill
+### Task 1: Supabase v13 Schema, Section Helpers, And Backfill
 
 **Files:**
-- Create: `supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql`
+- Create: `supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql`
 - Modify: `supabase/account_settings_sync.sql`
 - Test: static SQL review plus local Supabase smoke queries
 
 - [ ] **Step 1: Write the failing static check for the migration content**
 
-Create `app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt`:
+Create `app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt`:
 
 ```kotlin
 package com.nexio.tv.core.sync
@@ -72,26 +74,30 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class V12SupabaseMigrationStaticTest {
-    private val migration = File("supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql")
+class V13SupabaseMigrationStaticTest {
+    private val migration = File("supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql")
 
     @Test
-    fun `v12 migration creates section table and RPCs without wyzie`() {
-        assertTrue("v12 migration must exist", migration.exists())
+    fun `v13 migration creates section table and RPCs without wyzie`() {
+        assertTrue("v13 migration must exist", migration.exists())
         val sql = migration.readText()
 
         assertTrue(sql.contains("create table if not exists public.account_settings_sections"))
         assertTrue(sql.contains("create or replace function public.account_settings_section_key_allowed"))
-        assertTrue(sql.contains("create or replace function public.sync_pull_account_snapshot_v12"))
-        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_section_v12"))
-        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_sections_v12"))
+        assertTrue(sql.contains("create or replace function public.sync_pull_account_snapshot_v13"))
+        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_section_v13"))
+        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_sections_v13"))
 
         assertTrue(sql.contains("'integrations.subtitleTranslation'"))
         assertTrue(sql.contains("'playback.streamSelection'"))
         assertTrue(sql.contains("'formatter'"))
 
         assertFalse(sql.contains("'integrations.wyzie'"))
+        assertFalse(sql.contains("'integrations.theIntroDb'"))
+        assertFalse(sql.contains("'integrations.tvdb'"))
         assertFalse(sql.contains("wyzie_api_key"))
+        assertFalse(sql.contains("tmdb_api_key"))
+        assertFalse(sql.contains("tvdb_api_key"))
     }
 }
 ```
@@ -101,17 +107,17 @@ class V12SupabaseMigrationStaticTest {
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
-Expected: FAIL with `v12 migration must exist`.
+Expected: FAIL with `v13 migration must exist`.
 
 - [ ] **Step 3: Create the migration table, allowed-key helper, and backfill helpers**
 
-Create `supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql` with this first block:
+Create `supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql` with this first block:
 
 ```sql
--- Contract v12: sectioned account settings.
+-- Contract v13: sectioned account settings.
 -- Authoritative account settings live in account_settings_sections.
 
 create table if not exists public.account_settings_sections (
@@ -157,12 +163,10 @@ as $$
     'integrations.subtitleTranslation',
     'integrations.tmdb',
     'integrations.omdb',
-    'integrations.tvdb',
     'integrations.posterRatings',
     'integrations.animeSkip',
     'integrations.mdblist',
     'integrations.kitsu',
-    'integrations.theIntroDb',
     'integrations.traktAuth',
     'integrations.simklAuth',
     'integrations.kitsuAuth',
@@ -202,12 +206,10 @@ as $$
     when 'integrations.subtitleTranslation' then p_settings #> '{integrations,subtitleTranslation}'
     when 'integrations.tmdb' then p_settings #> '{integrations,tmdb}'
     when 'integrations.omdb' then p_settings #> '{integrations,omdb}'
-    when 'integrations.tvdb' then p_settings #> '{integrations,tvdb}'
     when 'integrations.posterRatings' then p_settings #> '{integrations,posterRatings}'
     when 'integrations.animeSkip' then p_settings #> '{integrations,animeSkip}'
     when 'integrations.mdblist' then p_settings #> '{integrations,mdblist}'
     when 'integrations.kitsu' then p_settings #> '{integrations,kitsu}'
-    when 'integrations.theIntroDb' then p_settings #> '{integrations,theIntroDb}'
     when 'integrations.traktAuth' then p_settings #> '{integrations,traktAuth}'
     when 'integrations.simklAuth' then p_settings #> '{integrations,simklAuth}'
     when 'integrations.kitsuAuth' then p_settings #> '{integrations,kitsuAuth}'
@@ -228,7 +230,7 @@ as $$
 $$;
 ```
 
-This intentionally includes the current non-Wyzie synced sections visible in `nexio-web/utils/portal-sync-paths.ts`, even though the design spec listed the minimum set. It prevents a v12 migration from silently dropping TheIntroDb or auth status sections.
+This intentionally includes only the current v12 synced settings roots. It keeps auth status sections while excluding the v12-removed TheIntroDb, TVDB, TMDB secret, TVDB secret, Kitsu enabled, and Wyzie surfaces.
 
 - [ ] **Step 4: Add the section merge helper and backfill**
 
@@ -254,12 +256,10 @@ begin
       when 'integrations.subtitleTranslation' then jsonb_set(v_payload, '{integrations,subtitleTranslation}', v_row.payload, true)
       when 'integrations.tmdb' then jsonb_set(v_payload, '{integrations,tmdb}', v_row.payload, true)
       when 'integrations.omdb' then jsonb_set(v_payload, '{integrations,omdb}', v_row.payload, true)
-      when 'integrations.tvdb' then jsonb_set(v_payload, '{integrations,tvdb}', v_row.payload, true)
       when 'integrations.posterRatings' then jsonb_set(v_payload, '{integrations,posterRatings}', v_row.payload, true)
       when 'integrations.animeSkip' then jsonb_set(v_payload, '{integrations,animeSkip}', v_row.payload, true)
       when 'integrations.mdblist' then jsonb_set(v_payload, '{integrations,mdblist}', v_row.payload, true)
       when 'integrations.kitsu' then jsonb_set(v_payload, '{integrations,kitsu}', v_row.payload, true)
-      when 'integrations.theIntroDb' then jsonb_set(v_payload, '{integrations,theIntroDb}', v_row.payload, true)
       when 'integrations.traktAuth' then jsonb_set(v_payload, '{integrations,traktAuth}', v_row.payload, true)
       when 'integrations.simklAuth' then jsonb_set(v_payload, '{integrations,simklAuth}', v_row.payload, true)
       when 'integrations.kitsuAuth' then jsonb_set(v_payload, '{integrations,kitsuAuth}', v_row.payload, true)
@@ -288,12 +288,10 @@ with section_keys(section_key) as (
     ('integrations.subtitleTranslation'),
     ('integrations.tmdb'),
     ('integrations.omdb'),
-    ('integrations.tvdb'),
     ('integrations.posterRatings'),
     ('integrations.animeSkip'),
     ('integrations.mdblist'),
     ('integrations.kitsu'),
-    ('integrations.theIntroDb'),
     ('integrations.traktAuth'),
     ('integrations.simklAuth'),
     ('integrations.kitsuAuth'),
@@ -326,7 +324,7 @@ select
   1,
   coalesce(s.sync_revision, 0),
   coalesce(s.updated_at, now()),
-  coalesce(nullif(trim(s.updated_from), ''), 'v12-backfill')
+  coalesce(nullif(trim(s.updated_from), ''), 'v13-backfill')
 from public.account_settings_public s
 cross join section_keys k
 where public.account_settings_section_payload(s.settings_payload, k.section_key) is not null
@@ -343,7 +341,7 @@ on conflict (user_id, section_key) do update
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
 Expected: PASS.
@@ -378,26 +376,26 @@ subtitle_section = {"model":"openai/gpt-5.5"}
 - [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt
-git commit -m "feat(supabase): add v12 account settings section store"
+git add supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt
+git commit -m "feat(supabase): add v13 account settings section store"
 ```
 
 ---
 
-### Task 2: Supabase v12 Pull And Push RPCs
+### Task 2: Supabase v13 Pull And Push RPCs
 
 **Files:**
-- Modify: `supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql`
+- Modify: `supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql`
 - Modify: `supabase/account_settings_sync.sql`
-- Test: `app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt`
+- Test: `app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt`
 
 - [ ] **Step 1: Extend the static test for RPC details**
 
-Append this test to `V12SupabaseMigrationStaticTest`:
+Append this test to `V13SupabaseMigrationStaticTest`:
 
 ```kotlin
 @Test
-fun `v12 migration has section scoped stale base and batch outcomes`() {
+fun `v13 migration has section scoped stale base and batch outcomes`() {
     val sql = migration.readText()
 
     assertTrue(sql.contains("p_base_updated_at_ms"))
@@ -413,17 +411,17 @@ fun `v12 migration has section scoped stale base and batch outcomes`() {
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
 Expected: FAIL until RPC bodies contain section stale-base and batch result code.
 
-- [ ] **Step 3: Add the v12 pull RPC**
+- [ ] **Step 3: Add the v13 pull RPC**
 
 Append:
 
 ```sql
-create or replace function public.sync_pull_account_settings_sections_v12()
+create or replace function public.sync_pull_account_settings_sections_v13()
 returns jsonb
 language plpgsql
 security definer
@@ -448,7 +446,7 @@ begin
   where user_id = v_user_id;
 
   return jsonb_build_object(
-    'contract_version', 12,
+    'contract_version', 13,
     'settings', jsonb_build_object(
       'sections', v_sections,
       'updated_at_ms', v_settings_ms
@@ -457,7 +455,7 @@ begin
 end;
 $$;
 
-create or replace function public.sync_pull_account_snapshot_v12()
+create or replace function public.sync_pull_account_snapshot_v13()
 returns jsonb
 language plpgsql
 security definer
@@ -471,7 +469,7 @@ declare
   v_secrets jsonb;
   v_secrets_ms bigint;
 begin
-  v_settings := public.sync_pull_account_settings_sections_v12()->'settings';
+  v_settings := public.sync_pull_account_settings_sections_v13()->'settings';
 
   select coalesce(jsonb_agg(row_to_json(a)::jsonb order by a.sort_order), '[]'::jsonb),
          coalesce(max(public.sync_to_ms(a.updated_at)), 0)
@@ -492,7 +490,7 @@ begin
   where s.user_id = v_user_id;
 
   return jsonb_build_object(
-    'contract_version', 12,
+    'contract_version', 13,
     'settings', v_settings,
     'addons', jsonb_build_object('items', v_addons, 'updated_at_ms', v_addons_ms),
     'secrets', jsonb_build_object('items', v_secrets, 'updated_at_ms', v_secrets_ms)
@@ -506,7 +504,7 @@ $$;
 Append:
 
 ```sql
-create or replace function public.sync_push_account_settings_section_v12(
+create or replace function public.sync_push_account_settings_section_v13(
   p_section_key text,
   p_payload jsonb,
   p_base_updated_at_ms bigint,
@@ -594,7 +592,7 @@ $$;
 Append:
 
 ```sql
-create or replace function public.sync_push_account_settings_sections_v12(
+create or replace function public.sync_push_account_settings_sections_v13(
   p_sections jsonb,
   p_source text default 'app'
 )
@@ -615,7 +613,7 @@ begin
 
   for v_item in select value from jsonb_array_elements(p_sections)
   loop
-    v_result := public.sync_push_account_settings_section_v12(
+    v_result := public.sync_push_account_settings_section_v13(
       p_section_key => v_item->>'section_key',
       p_payload => coalesce(v_item->'payload', '{}'::jsonb),
       p_base_updated_at_ms => coalesce((v_item->>'base_updated_at_ms')::bigint, 0),
@@ -641,17 +639,17 @@ $$;
 Append:
 
 ```sql
-revoke all on function public.sync_pull_account_settings_sections_v12() from public;
-grant execute on function public.sync_pull_account_settings_sections_v12() to authenticated;
+revoke all on function public.sync_pull_account_settings_sections_v13() from public;
+grant execute on function public.sync_pull_account_settings_sections_v13() to authenticated;
 
-revoke all on function public.sync_pull_account_snapshot_v12() from public;
-grant execute on function public.sync_pull_account_snapshot_v12() to authenticated;
+revoke all on function public.sync_pull_account_snapshot_v13() from public;
+grant execute on function public.sync_pull_account_snapshot_v13() to authenticated;
 
-revoke all on function public.sync_push_account_settings_section_v12(text, jsonb, bigint, text) from public;
-grant execute on function public.sync_push_account_settings_section_v12(text, jsonb, bigint, text) to authenticated;
+revoke all on function public.sync_push_account_settings_section_v13(text, jsonb, bigint, text) from public;
+grant execute on function public.sync_push_account_settings_section_v13(text, jsonb, bigint, text) to authenticated;
 
-revoke all on function public.sync_push_account_settings_sections_v12(jsonb, text) from public;
-grant execute on function public.sync_push_account_settings_sections_v12(jsonb, text) to authenticated;
+revoke all on function public.sync_push_account_settings_sections_v13(jsonb, text) from public;
+grant execute on function public.sync_push_account_settings_sections_v13(jsonb, text) to authenticated;
 ```
 
 - [ ] **Step 7: Run static tests**
@@ -659,7 +657,7 @@ grant execute on function public.sync_push_account_settings_sections_v12(jsonb, 
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
 Expected: PASS.
@@ -672,20 +670,20 @@ After `supabase db reset`, smoke the function definitions:
 select proname
 from pg_proc
 where proname in (
-  'sync_pull_account_snapshot_v12',
-  'sync_push_account_settings_section_v12',
-  'sync_push_account_settings_sections_v12'
+  'sync_pull_account_snapshot_v13',
+  'sync_push_account_settings_section_v13',
+  'sync_push_account_settings_sections_v13'
 )
 order by proname;
 ```
 
-Expected: all three v12 RPCs are listed.
+Expected: all three v13 RPCs are listed.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt
-git commit -m "feat(supabase): add v12 sectioned settings RPCs"
+git add supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt
+git commit -m "feat(supabase): add v13 sectioned settings RPCs"
 ```
 
 ---
@@ -693,9 +691,9 @@ git commit -m "feat(supabase): add v12 sectioned settings RPCs"
 ### Task 3: Supabase Legacy Full-Payload Adapter
 
 **Files:**
-- Modify: `supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql`
+- Modify: `supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql`
 - Modify: `supabase/account_settings_sync.sql`
-- Test: `app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt`
+- Test: `app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt`
 
 - [ ] **Step 1: Add a static test for the adapter**
 
@@ -709,7 +707,7 @@ fun `legacy account settings RPCs are adapters over sections`() {
     assertTrue(sql.contains("account_settings_sections_to_payload"))
     assertTrue(sql.contains("sync_push_account_settings_v10"))
     assertTrue(sql.contains("sync_pull_account_snapshot_v10"))
-    assertTrue(sql.contains("sync_push_account_settings_sections_v12"))
+    assertTrue(sql.contains("sync_push_account_settings_sections_v13"))
 }
 ```
 
@@ -718,14 +716,14 @@ fun `legacy account settings RPCs are adapters over sections`() {
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
 Expected: FAIL until adapter bodies are added.
 
 - [ ] **Step 3: Replace current full-payload pull with a section-backed adapter**
 
-Append a new `create or replace function public.sync_pull_account_snapshot_v10()` body to the v12 migration. Preserve the existing addon/secret envelope behavior from `supabase/migrations/20260512020000_v10_fix_pull_addon_url_and_push_settings_record.sql`, but replace settings row reads with:
+Append a new `create or replace function public.sync_pull_account_snapshot_v10()` body to the v13 migration. Preserve the existing addon/secret envelope behavior from `supabase/migrations/20260512020000_v10_fix_pull_addon_url_and_push_settings_record.sql`, but replace settings row reads with:
 
 ```sql
 select public.account_settings_sections_to_payload(v_user_id),
@@ -762,12 +760,10 @@ section_keys(section_key) as (
     ('integrations.subtitleTranslation'),
     ('integrations.tmdb'),
     ('integrations.omdb'),
-    ('integrations.tvdb'),
     ('integrations.posterRatings'),
     ('integrations.animeSkip'),
     ('integrations.mdblist'),
     ('integrations.kitsu'),
-    ('integrations.theIntroDb'),
     ('integrations.traktAuth'),
     ('integrations.simklAuth'),
     ('integrations.kitsuAuth'),
@@ -807,7 +803,7 @@ where public.account_settings_section_payload(p_settings_payload, section_key) i
 Then call:
 
 ```sql
-v_batch_result := public.sync_push_account_settings_sections_v12(v_sections, coalesce(nullif(trim(p_source), ''), 'legacy-adapter'));
+v_batch_result := public.sync_push_account_settings_sections_v13(v_sections, coalesce(nullif(trim(p_source), ''), 'legacy-adapter'));
 ```
 
 Return a legacy-compatible shape:
@@ -842,7 +838,7 @@ return jsonb_build_object(
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V12SupabaseMigrationStaticTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.V13SupabaseMigrationStaticTest
 ```
 
 Expected: PASS.
@@ -850,21 +846,21 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/migrations/20260512050000_contract_v12_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V12SupabaseMigrationStaticTest.kt
+git add supabase/migrations/20260512070000_contract_v13_sectioned_account_settings.sql supabase/account_settings_sync.sql app/src/test/java/com/nexio/tv/core/sync/V13SupabaseMigrationStaticTest.kt
 git commit -m "feat(supabase): adapt legacy account settings RPCs to sections"
 ```
 
 ---
 
-### Task 4: Android V12 Models, Section Registry, And Watermarks
+### Task 4: Android V13 Models, Section Registry, And Watermarks
 
 **Files:**
 - Create: `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt`
-- Create: `app/src/main/java/com/nexio/tv/data/remote/supabase/V12ContractModels.kt`
+- Create: `app/src/main/java/com/nexio/tv/data/remote/supabase/V13ContractModels.kt`
 - Modify: `app/src/main/java/com/nexio/tv/core/sync/SyncWatermarkSurface.kt`
 - Modify: `app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt`
 - Test: `app/src/test/java/com/nexio/tv/core/sync/AccountSettingsSectionKeyTest.kt`
-- Test: `app/src/test/java/com/nexio/tv/data/remote/supabase/V12ContractModelsTest.kt`
+- Test: `app/src/test/java/com/nexio/tv/data/remote/supabase/V13ContractModelsTest.kt`
 - Test: `app/src/test/java/com/nexio/tv/data/local/SyncWatermarkDataStoreTest.kt`
 
 - [ ] **Step 1: Write section-key tests**
@@ -901,15 +897,16 @@ class AccountSettingsSectionKeyTest {
     }
 
     @Test
-    fun `wyzie is not a v12 settings section`() {
+    fun `wyzie is not a v13 settings section`() {
         assertFalse(AccountSettingsSectionKey.values().any { it.key.contains("wyzie", ignoreCase = true) })
         assertEquals(null, AccountSettingsSectionKey.fromChangedPath("integrations.wyzie.enabled"))
     }
 
     @Test
-    fun `section registry includes current synced non wyzie roots`() {
+    fun `section registry follows v12 integration removals`() {
         val keys = AccountSettingsSectionKey.values().map { it.key }.toSet()
-        assertTrue("TheIntroDb must not be dropped", "integrations.theIntroDb" in keys)
+        assertFalse("TheIntroDb is device-local only", "integrations.theIntroDb" in keys)
+        assertFalse("TVDB is build-config only", "integrations.tvdb" in keys)
         assertTrue("Trakt auth status must not be dropped", "integrations.traktAuth" in keys)
         assertTrue("SIMKL auth status must not be dropped", "integrations.simklAuth" in keys)
         assertTrue("Kitsu auth status must not be dropped", "integrations.kitsuAuth" in keys)
@@ -938,12 +935,10 @@ enum class AccountSettingsSectionKey(val key: String) {
     SUBTITLE_TRANSLATION("integrations.subtitleTranslation"),
     TMDB("integrations.tmdb"),
     OMDB("integrations.omdb"),
-    TVDB("integrations.tvdb"),
     POSTER_RATINGS("integrations.posterRatings"),
     ANIME_SKIP("integrations.animeSkip"),
     MDBLIST_INTEGRATION("integrations.mdblist"),
     KITSU_INTEGRATION("integrations.kitsu"),
-    THE_INTRO_DB("integrations.theIntroDb"),
     TRAKT_AUTH("integrations.traktAuth"),
     SIMKL_AUTH("integrations.simklAuth"),
     KITSU_AUTH("integrations.kitsuAuth"),
@@ -977,9 +972,9 @@ enum class AccountSettingsSectionKey(val key: String) {
 }
 ```
 
-- [ ] **Step 4: Add v12 serialization model tests**
+- [ ] **Step 4: Add v13 serialization model tests**
 
-Create `V12ContractModelsTest.kt`:
+Create `V13ContractModelsTest.kt`:
 
 ```kotlin
 package com.nexio.tv.data.remote.supabase
@@ -988,14 +983,14 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class V12ContractModelsTest {
+class V13ContractModelsTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
-    fun `v12 account snapshot decodes sectioned settings and unknown sections`() {
+    fun `v13 account snapshot decodes sectioned settings and unknown sections`() {
         val raw = """
             {
-              "contract_version": 12,
+              "contract_version": 13,
               "settings": {
                 "sections": [
                   {
@@ -1020,7 +1015,7 @@ class V12ContractModelsTest {
             }
         """.trimIndent()
 
-        val envelope = json.decodeFromString(V12AccountSnapshotEnvelope.serializer(), raw)
+        val envelope = json.decodeFromString(V13AccountSnapshotEnvelope.serializer(), raw)
 
         assertEquals(12, envelope.contractVersion)
         assertEquals(2, envelope.settings.sections.size)
@@ -1030,9 +1025,9 @@ class V12ContractModelsTest {
 }
 ```
 
-- [ ] **Step 5: Add v12 serialization models**
+- [ ] **Step 5: Add v13 serialization models**
 
-Create `V12ContractModels.kt`:
+Create `V13ContractModels.kt`:
 
 ```kotlin
 package com.nexio.tv.data.remote.supabase
@@ -1042,21 +1037,21 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
-data class V12AccountSnapshotEnvelope(
+data class V13AccountSnapshotEnvelope(
     @SerialName("contract_version") val contractVersion: Int,
-    val settings: V12AccountSettingsSections,
+    val settings: V13AccountSettingsSections,
     val addons: V10AccountAddonsSection,
     val secrets: V10AccountSecretsSection
 )
 
 @Serializable
-data class V12AccountSettingsSections(
-    val sections: List<V12AccountSettingsSectionRow> = emptyList(),
+data class V13AccountSettingsSections(
+    val sections: List<V13AccountSettingsSectionRow> = emptyList(),
     @SerialName("updated_at_ms") val updatedAtMs: Long = 0
 )
 
 @Serializable
-data class V12AccountSettingsSectionRow(
+data class V13AccountSettingsSectionRow(
     @SerialName("section_key") val sectionKey: String,
     val payload: JsonElement,
     @SerialName("schema_version") val schemaVersion: Int = 1,
@@ -1065,7 +1060,7 @@ data class V12AccountSettingsSectionRow(
 )
 
 @Serializable
-data class V12SectionPushResult(
+data class V13SectionPushResult(
     val applied: Boolean,
     @SerialName("section_key") val sectionKey: String,
     val reason: String? = null,
@@ -1074,9 +1069,9 @@ data class V12SectionPushResult(
 )
 
 @Serializable
-data class V12BatchPushResult(
+data class V13BatchPushResult(
     val applied: Boolean,
-    val sections: List<V12SectionPushResult> = emptyList()
+    val sections: List<V13SectionPushResult> = emptyList()
 )
 ```
 
@@ -1133,7 +1128,7 @@ fun `account settings section watermarks are isolated by section key`() = runTes
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountSettingsSectionKeyTest --tests com.nexio.tv.data.remote.supabase.V12ContractModelsTest --tests com.nexio.tv.data.local.SyncWatermarkDataStoreTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountSettingsSectionKeyTest --tests com.nexio.tv.data.remote.supabase.V13ContractModelsTest --tests com.nexio.tv.data.local.SyncWatermarkDataStoreTest
 ```
 
 Expected: PASS.
@@ -1141,28 +1136,28 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt app/src/main/java/com/nexio/tv/data/remote/supabase/V12ContractModels.kt app/src/main/java/com/nexio/tv/core/sync/SyncWatermarkSurface.kt app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt app/src/test/java/com/nexio/tv/core/sync/AccountSettingsSectionKeyTest.kt app/src/test/java/com/nexio/tv/data/remote/supabase/V12ContractModelsTest.kt app/src/test/java/com/nexio/tv/data/local/SyncWatermarkDataStoreTest.kt
-git commit -m "feat(sync): add v12 account settings section models"
+git add app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt app/src/main/java/com/nexio/tv/data/remote/supabase/V13ContractModels.kt app/src/main/java/com/nexio/tv/core/sync/SyncWatermarkSurface.kt app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt app/src/test/java/com/nexio/tv/core/sync/AccountSettingsSectionKeyTest.kt app/src/test/java/com/nexio/tv/data/remote/supabase/V13ContractModelsTest.kt app/src/test/java/com/nexio/tv/data/local/SyncWatermarkDataStoreTest.kt
+git commit -m "feat(sync): add v13 account settings section models"
 ```
 
 ---
 
-### Task 5: Android Pull And Apply V12 Sections
+### Task 5: Android Pull And Apply V13 Sections
 
 **Files:**
 - Modify: `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt`
 - Modify: `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt`
 - Modify: `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt`
 - Test: `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt`
-- Test: `app/src/test/java/com/nexio/tv/data/remote/supabase/V12ContractModelsTest.kt`
+- Test: `app/src/test/java/com/nexio/tv/data/remote/supabase/V13ContractModelsTest.kt`
 
-- [ ] **Step 1: Add a v12 section-apply contract test**
+- [ ] **Step 1: Add a v13 section-apply contract test**
 
 Append to `AccountConfigSyncContractTest.kt`:
 
 ```kotlin
 @Test
-fun `v12 subtitle translation section can be composed into account payload`() {
+fun `v13 subtitle translation section can be composed into account payload`() {
     val sectionPayload = buildJsonObject {
         put("enabled", true)
         put("provider", "OPENAI")
@@ -1234,7 +1229,7 @@ fun AccountSettingsSectionKey.applyToPayload(
 
 Then extend this helper section-by-section for the typed sections Android already applies in `AccountSettingsSyncService.applySharedAccountConfigSyncSettings`. Keep unknown or web-only sections as no-ops instead of failing.
 
-- [ ] **Step 4: Route `pullFromRemoteAndApply` through v12**
+- [ ] **Step 4: Route `pullFromRemoteAndApply` through v13**
 
 In `AccountSettingsSyncService.pullFromRemoteAndApply`, replace:
 
@@ -1246,8 +1241,8 @@ postgrest.rpc("sync_pull_account_snapshot_v10")
 with:
 
 ```kotlin
-postgrest.rpc("sync_pull_account_snapshot_v12")
-    .decodeAs<V12AccountSnapshotEnvelope>()
+postgrest.rpc("sync_pull_account_snapshot_v13")
+    .decodeAs<V13AccountSnapshotEnvelope>()
 ```
 
 Build the payload:
@@ -1276,7 +1271,7 @@ Do not log as error. At most log `Log.d(TAG, "Ignoring unknown account settings 
 
 - [ ] **Step 6: Update startup and addon pull decode**
 
-Any account snapshot pull in `StartupSyncService` or `AddonSyncService` should decode `V12AccountSnapshotEnvelope` and read:
+Any account snapshot pull in `StartupSyncService` or `AddonSyncService` should decode `V13AccountSnapshotEnvelope` and read:
 
 ```kotlin
 envelope.addons.items
@@ -1291,7 +1286,7 @@ Do not reintroduce full settings payload decode in these paths.
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.data.remote.supabase.V12ContractModelsTest --tests com.nexio.tv.ui.screens.settings.SettingsViewModelSyncTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.data.remote.supabase.V13ContractModelsTest --tests com.nexio.tv.ui.screens.settings.SettingsViewModelSyncTest
 ```
 
 Expected: PASS.
@@ -1299,8 +1294,8 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt app/src/test/java/com/nexio/tv/data/remote/supabase/V12ContractModelsTest.kt
-git commit -m "feat(sync): pull v12 account settings sections"
+git add app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSectionKey.kt app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt app/src/test/java/com/nexio/tv/data/remote/supabase/V13ContractModelsTest.kt
+git commit -m "feat(sync): pull v13 account settings sections"
 ```
 
 ---
@@ -1318,7 +1313,7 @@ Append:
 
 ```kotlin
 @Test
-fun `v12 push groups dirty paths by section`() {
+fun `v13 push groups dirty paths by section`() {
     val dirty = listOf(
         "integrations.subtitleTranslation.model",
         "integrations.subtitleTranslation.provider",
@@ -1434,14 +1429,14 @@ fun AccountConfigSyncPayload.sectionPayload(sectionKey: AccountSettingsSectionKe
 }
 ```
 
-`THE_INTRO_DB` and `KITSU_INTEGRATION` stay `null` in Android until `AccountConfigSyncPayload` has typed fields for them; the section rows remain preserved server-side and on web.
+`KITSU_INTEGRATION` stays `null` in Android until `AccountConfigSyncPayload` has a typed integration-settings field for it; the section row remains preserved server-side and on web.
 
-- [ ] **Step 4: Build v12 batch params**
+- [ ] **Step 4: Build v13 batch params**
 
 Add:
 
 ```kotlin
-suspend fun buildAccountSettingsSectionsPushParamsV12(
+suspend fun buildAccountSettingsSectionsPushParamsV13(
     payload: AccountConfigSyncPayload,
     changedPaths: List<String>,
     watermarkStore: SyncWatermarkDataStore
@@ -1460,24 +1455,24 @@ suspend fun buildAccountSettingsSectionsPushParamsV12(
 
     return buildJsonObject {
         put("p_sections", JsonArray(sections))
-        put("p_source", "android-v12")
+        put("p_source", "android-v13")
     }
 }
 ```
 
-- [ ] **Step 5: Route push through v12 batch RPC**
+- [ ] **Step 5: Route push through v13 batch RPC**
 
 In `AccountSettingsSyncService.pushToRemote`, replace the v10 settings push call with:
 
 ```kotlin
-val params = buildAccountSettingsSectionsPushParamsV12(
+val params = buildAccountSettingsSectionsPushParamsV13(
     payload = snapshot.payload,
     changedPaths = snapshot.changedPaths,
     watermarkStore = syncWatermarkStore
 )
 
 val result = withJwtRefreshRetry {
-    postgrest.rpc("sync_push_account_settings_sections_v12", params).decodeAs<V12BatchPushResult>()
+    postgrest.rpc("sync_push_account_settings_sections_v13", params).decodeAs<V13BatchPushResult>()
 }
 ```
 
@@ -1518,7 +1513,7 @@ Expected: PASS.
 
 ```bash
 git add app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt
-git commit -m "feat(sync): push account settings by v12 section"
+git commit -m "feat(sync): push account settings by v13 section"
 ```
 
 ---
@@ -1575,18 +1570,18 @@ npm test -- account-settings-sections.test.ts
 
 Expected: FAIL because the utility file does not exist.
 
-- [ ] **Step 3: Add v12 web types**
+- [ ] **Step 3: Add v13 web types**
 
 In `nexio-web/types/portal.ts`, change:
 
 ```ts
-export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 11
+export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 12
 ```
 
 to:
 
 ```ts
-export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 12
+export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 13
 ```
 
 Add:
@@ -1596,12 +1591,10 @@ export type AccountSettingsSectionKey =
   | 'integrations.subtitleTranslation'
   | 'integrations.tmdb'
   | 'integrations.omdb'
-  | 'integrations.tvdb'
   | 'integrations.posterRatings'
   | 'integrations.animeSkip'
   | 'integrations.mdblist'
   | 'integrations.kitsu'
-  | 'integrations.theIntroDb'
   | 'integrations.traktAuth'
   | 'integrations.simklAuth'
   | 'integrations.kitsuAuth'
@@ -1626,8 +1619,8 @@ export type AccountSettingsSectionRecord = {
   updated_at_ms: number
 }
 
-export type V12AccountSnapshotEnvelope = {
-  contract_version: 12
+export type V13AccountSnapshotEnvelope = {
+  contract_version: 13
   settings: {
     sections: AccountSettingsSectionRecord[]
     updated_at_ms: number
@@ -1648,12 +1641,10 @@ export const validAccountSettingsSectionKeys: AccountSettingsSectionKey[] = [
   'integrations.subtitleTranslation',
   'integrations.tmdb',
   'integrations.omdb',
-  'integrations.tvdb',
   'integrations.posterRatings',
   'integrations.animeSkip',
   'integrations.mdblist',
   'integrations.kitsu',
-  'integrations.theIntroDb',
   'integrations.traktAuth',
   'integrations.simklAuth',
   'integrations.kitsuAuth',
@@ -1689,12 +1680,10 @@ function payloadFor(settings: PortalSettings, sectionKey: AccountSettingsSection
     case 'integrations.subtitleTranslation': return settings.integrations.subtitleTranslation
     case 'integrations.tmdb': return settings.integrations.tmdb
     case 'integrations.omdb': return settings.integrations.omdb
-    case 'integrations.tvdb': return settings.integrations.tvdb
     case 'integrations.posterRatings': return settings.integrations.posterRatings
     case 'integrations.animeSkip': return settings.integrations.animeSkip
     case 'integrations.mdblist': return settings.integrations.mdblist
     case 'integrations.kitsu': return settings.integrations.kitsu
-    case 'integrations.theIntroDb': return settings.integrations.theIntroDb
     case 'integrations.traktAuth': return settings.integrations.traktAuth
     case 'integrations.simklAuth': return settings.integrations.simklAuth
     case 'integrations.kitsuAuth': return settings.integrations.kitsuAuth
@@ -1727,12 +1716,10 @@ export function composePortalSettingsFromSections(base: PortalSettings, sections
       case 'integrations.subtitleTranslation': next.integrations.subtitleTranslation = { ...next.integrations.subtitleTranslation, ...payload }; break
       case 'integrations.tmdb': next.integrations.tmdb = { ...next.integrations.tmdb, ...payload }; break
       case 'integrations.omdb': next.integrations.omdb = { ...next.integrations.omdb, ...payload }; break
-      case 'integrations.tvdb': next.integrations.tvdb = { ...next.integrations.tvdb, ...payload }; break
       case 'integrations.posterRatings': next.integrations.posterRatings = { ...next.integrations.posterRatings, ...payload }; break
       case 'integrations.animeSkip': next.integrations.animeSkip = { ...next.integrations.animeSkip, ...payload }; break
       case 'integrations.mdblist': next.integrations.mdblist = { ...next.integrations.mdblist, ...payload }; break
       case 'integrations.kitsu': next.integrations.kitsu = { ...next.integrations.kitsu, ...payload }; break
-      case 'integrations.theIntroDb': next.integrations.theIntroDb = { ...next.integrations.theIntroDb, ...payload }; break
       case 'integrations.traktAuth': next.integrations.traktAuth = { ...next.integrations.traktAuth, ...payload }; break
       case 'integrations.simklAuth': next.integrations.simklAuth = { ...next.integrations.simklAuth, ...payload }; break
       case 'integrations.kitsuAuth': next.integrations.kitsuAuth = { ...next.integrations.kitsuAuth, ...payload }; break
@@ -1770,12 +1757,12 @@ Expected: PASS.
 
 ```bash
 git add nexio-web/types/portal.ts nexio-web/utils/account-settings-sections.ts nexio-web/tests/account-settings-sections.test.ts
-git commit -m "feat(web): add v12 account settings section helpers"
+git commit -m "feat(web): add v13 account settings section helpers"
 ```
 
 ---
 
-### Task 8: Web Bootstrap And Persist Use V12 Sections
+### Task 8: Web Bootstrap And Persist Use V13 Sections
 
 **Files:**
 - Modify: `nexio-web/server/api/account/bootstrap.get.ts`
@@ -1783,7 +1770,7 @@ git commit -m "feat(web): add v12 account settings section helpers"
 - Test: `nexio-web/tests/account-persist-atomicity.test.ts`
 - Test: `nexio-web/tests/use-portal-store-multi-config.test.ts`
 
-- [ ] **Step 1: Update persist tests for v12 batch RPC**
+- [ ] **Step 1: Update persist tests for v13 batch RPC**
 
 In `nexio-web/tests/account-persist-atomicity.test.ts`, update the expected settings RPC from:
 
@@ -1794,7 +1781,7 @@ expect(calls.some((call) => call.path.includes('sync_push_account_settings_v10')
 to:
 
 ```ts
-const settingsCall = calls.find((call) => call.path.includes('sync_push_account_settings_sections_v12'))
+const settingsCall = calls.find((call) => call.path.includes('sync_push_account_settings_sections_v13'))
 expect(settingsCall).toBeTruthy()
 expect(JSON.parse(String(settingsCall!.body)).p_sections).toEqual(
   expect.arrayContaining([
@@ -1814,7 +1801,7 @@ npm test -- account-persist-atomicity.test.ts
 
 Expected: FAIL because `persist.post.ts` still calls the legacy full-payload settings RPC.
 
-- [ ] **Step 3: Update bootstrap to pull v12 and compose settings**
+- [ ] **Step 3: Update bootstrap to pull v13 and compose settings**
 
 In `bootstrap.get.ts`, replace:
 
@@ -1825,7 +1812,7 @@ const envelope = await supabaseFetch<V10AccountSnapshotEnvelope>('/rest/v1/rpc/s
 with:
 
 ```ts
-const envelope = await supabaseFetch<V12AccountSnapshotEnvelope>('/rest/v1/rpc/sync_pull_account_snapshot_v12', {
+const envelope = await supabaseFetch<V13AccountSnapshotEnvelope>('/rest/v1/rpc/sync_pull_account_snapshot_v13', {
 ```
 
 Then replace:
@@ -1848,7 +1835,7 @@ Keep addon/secret handling as-is.
 Replace the seeded settings push with:
 
 ```ts
-const seededSettings = await supabaseFetch<V12BatchPushResult>('/rest/v1/rpc/sync_push_account_settings_sections_v12', {
+const seededSettings = await supabaseFetch<V13BatchPushResult>('/rest/v1/rpc/sync_push_account_settings_sections_v13', {
   method: 'POST',
   body: JSON.stringify({
     p_sections: extractPortalSettingsSections(settings, validAccountSettingsSectionKeys).map((section) => ({
@@ -1856,7 +1843,7 @@ const seededSettings = await supabaseFetch<V12BatchPushResult>('/rest/v1/rpc/syn
       payload: section.payload,
       base_updated_at_ms: 0
     })),
-    p_source: 'web-v12-bootstrap'
+    p_source: 'web-v13-bootstrap'
   })
 }, token)
 ```
@@ -1875,7 +1862,7 @@ const sectionPayloads = extractPortalSettingsSections(body.settings, dirtySectio
 Replace `sync_push_account_settings_v10` call with:
 
 ```ts
-const settingsResult = await supabaseFetch<V12BatchPushResult>('/rest/v1/rpc/sync_push_account_settings_sections_v12', {
+const settingsResult = await supabaseFetch<V13BatchPushResult>('/rest/v1/rpc/sync_push_account_settings_sections_v13', {
   method: 'POST',
   body: JSON.stringify({
     p_sections: sectionPayloads.map((section) => ({
@@ -1883,7 +1870,7 @@ const settingsResult = await supabaseFetch<V12BatchPushResult>('/rest/v1/rpc/syn
       payload: section.payload,
       base_updated_at_ms: body.sectionWatermarks?.[section.section_key] ?? body.settingsUpdatedAtMs ?? 0
     })),
-    p_source: 'web-v12'
+    p_source: 'web-v13'
   })
 }, token)
 ```
@@ -1915,7 +1902,7 @@ Expected: PASS.
 
 ```bash
 git add nexio-web/server/api/account/bootstrap.get.ts nexio-web/server/api/account/persist.post.ts nexio-web/tests/account-persist-atomicity.test.ts nexio-web/tests/use-portal-store-multi-config.test.ts
-git commit -m "feat(web): sync account settings through v12 sections"
+git commit -m "feat(web): sync account settings through v13 sections"
 ```
 
 ---
@@ -1931,7 +1918,7 @@ git commit -m "feat(web): sync account settings through v12 sections"
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.core.sync.AccountSettingsSectionKeyTest --tests com.nexio.tv.data.remote.supabase.V12ContractModelsTest --tests com.nexio.tv.data.local.SyncWatermarkDataStoreTest --tests com.nexio.tv.ui.screens.settings.SettingsViewModelSyncTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.core.sync.AccountSettingsSectionKeyTest --tests com.nexio.tv.data.remote.supabase.V13ContractModelsTest --tests com.nexio.tv.data.local.SyncWatermarkDataStoreTest --tests com.nexio.tv.ui.screens.settings.SettingsViewModelSyncTest
 ```
 
 Expected: BUILD SUCCESSFUL.
@@ -1962,15 +1949,15 @@ Expected: reset completes without SQL errors.
 In `docs/supabase-settings-sync-guide.md`, add:
 
 ```md
-## Contract v12 Sectioned Account Settings
+## Contract v13 Sectioned Account Settings
 
-Contract v12 makes `account_settings_sections` the authoritative account-settings source. Each row is keyed by `(user_id, section_key)` and carries its own JSONB payload, `sync_revision`, `updated_at`, and `updated_from`.
+Contract v13 makes `account_settings_sections` the authoritative account-settings source. Each row is keyed by `(user_id, section_key)` and carries its own JSONB payload, `sync_revision`, `updated_at`, and `updated_from`.
 
-V12 clients pull `sync_pull_account_snapshot_v12` and push `sync_push_account_settings_sections_v12`. Clients must send only dirty sections and carry per-section `base_updated_at_ms` watermarks.
+V13 clients pull `sync_pull_account_snapshot_v13` and push `sync_push_account_settings_sections_v13`. Clients must send only dirty sections and carry per-section `base_updated_at_ms` watermarks.
 
 The legacy full-payload account settings RPCs remain available during rollout as adapters over `account_settings_sections`. They reconstruct the old settings payload for legacy pulls and split legacy pushes back into section rows.
 
-Wyzie is not a synced account-settings section in v12. Wyzie subtitle access is build-time configured on Android.
+Wyzie is not a synced account-settings section in v13. Wyzie subtitle access is build-time configured on Android.
 ```
 
 - [ ] **Step 5: Run doc/static checks**
@@ -1978,7 +1965,7 @@ Wyzie is not a synced account-settings section in v12. Wyzie subtitle access is 
 Run:
 
 ```bash
-rg -n "integrations\\.wyzie|wyzie_api_key|sync_push_account_settings_v10\\(|sync_pull_account_snapshot_v10\\(" docs/supabase-settings-sync-guide.md docs/superpowers/specs/2026-05-12-supabase-v12-sectioned-settings-design.md
+rg -n "integrations\\.wyzie|wyzie_api_key|sync_push_account_settings_v10\\(|sync_pull_account_snapshot_v10\\(" docs/supabase-settings-sync-guide.md docs/superpowers/specs/2026-05-12-supabase-v13-sectioned-settings-design.md
 ```
 
 Expected: no matches.
@@ -1987,7 +1974,7 @@ Expected: no matches.
 
 ```bash
 git add docs/supabase-settings-sync-guide.md docs/superpowers/notes/2026-05-12-contract-v10-handoff.md
-git commit -m "docs(sync): document v12 sectioned account settings"
+git commit -m "docs(sync): document v13 sectioned account settings"
 ```
 
 ---
@@ -1996,6 +1983,6 @@ git commit -m "docs(sync): document v12 sectioned account settings"
 
 - Spec coverage: schema, section keys, pull RPC, push RPC, backward compatibility, migration/backfill, Android, web, tests, observability, and rollout are covered by Tasks 1-9.
 - Wyzie removal: every section list in this plan excludes `integrations.wyzie`; static checks assert Wyzie is not reintroduced.
-- Source-of-truth risk: Task 1 adds TheIntroDb and auth sections visible in current synced paths so the implementation does not drop live settings not listed in the first design draft.
-- Compatibility: Tasks 2-3 add v12 RPCs and adapt the latest legacy full-payload RPC surface.
+- Source-of-truth risk: Task 1 keeps the current v12 synced auth sections while preserving v12 removals for TheIntroDb, TVDB, TMDB/TVDB user secrets, Kitsu `enabled`, and Wyzie.
+- Compatibility: Tasks 2-3 add v13 RPCs and adapt the latest legacy full-payload RPC surface.
 - TDD: every code-bearing task starts with a failing or focused test before implementation.
