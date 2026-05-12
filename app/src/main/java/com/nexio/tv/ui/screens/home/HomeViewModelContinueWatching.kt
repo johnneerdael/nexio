@@ -1173,7 +1173,33 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
     ).toContinueWatchingInProgress(displayMetadataByItemKey).copy(
         canonicalKey = canonicalKey,
         streamFetchVideoId = streamFetchIdentity?.videoId
-    )
+    ).withImdbFromIdBundle(idBundle.imdb)
+}
+
+// Enrich displayMetadata.imdbId from the ContinueWatchingRecord.idBundle (resolved by
+// StableIdBundleResolver during identity resolution, Phase 2 of the dual-provider plan).
+// Stream resolution downstream (continueWatchingImdbHint -> Stream route -> stream provider)
+// reads displayMetadata.imdbId first and falls back to contentId-as-imdb only when the
+// canonical id is itself a tt-prefix IMDB. For TV with canonical "tvdb:N" the fallback
+// returns null, so without this plumb the stream picker has no IMDB to query addons with.
+private fun ContinueWatchingItem.InProgress.withImdbFromIdBundle(
+    imdbFromBundle: String?
+): ContinueWatchingItem.InProgress {
+    val resolved = imdbFromBundle?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val current = displayMetadata
+    if (!current?.imdbId.isNullOrBlank()) return this
+    val updated = (current ?: HomeDisplayMetadata()).copy(imdbId = resolved)
+    return copy(displayMetadata = updated)
+}
+
+private fun ContinueWatchingItem.NextUp.withImdbFromIdBundle(
+    imdbFromBundle: String?
+): ContinueWatchingItem.NextUp {
+    val resolved = imdbFromBundle?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val current = info.displayMetadata
+    if (!current?.imdbId.isNullOrBlank()) return this
+    val updated = (current ?: HomeDisplayMetadata()).copy(imdbId = resolved)
+    return ContinueWatchingItem.NextUp(info.copy(displayMetadata = updated))
 }
 
 private fun ContinueWatchingRecord.toSyntheticNextUp(
@@ -1182,7 +1208,19 @@ private fun ContinueWatchingRecord.toSyntheticNextUp(
     val episode = episodeContext ?: return null
     val contentType = contentTypeForUi()
     val contentId = streamFetchIdentity?.contentId ?: parentId
-    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    val cachedMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    // Backstop displayMetadata.imdbId from the record's idBundle so the stream-picker can
+    // query IMDB-keyed addons (same rationale as withImdbFromIdBundle on the InProgress path).
+    val displayMetadata = if (cachedMetadata?.imdbId.isNullOrBlank()) {
+        val resolved = idBundle.imdb?.trim()?.takeIf { it.isNotEmpty() }
+        if (resolved != null) {
+            (cachedMetadata ?: HomeDisplayMetadata()).copy(imdbId = resolved)
+        } else {
+            cachedMetadata
+        }
+    } else {
+        cachedMetadata
+    }
     return ContinueWatchingItem.NextUp(
         NextUpInfo(
             contentId = contentId,
