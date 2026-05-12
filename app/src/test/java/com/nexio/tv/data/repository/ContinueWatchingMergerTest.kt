@@ -516,6 +516,20 @@ class ContinueWatchingMergerTest {
     }
 
     @Test
+    fun `all current source enum values pass the eligibility backstop`() {
+        // Pin: when ContinueWatchingRecord.Source gains a new value (e.g. HISTORY),
+        // the maintainer must update ContinueWatchingMerger.isEligibleForContinueWatching
+        // to decide whether that source should surface in CW. This test fails if a new
+        // enum value is added without being explicitly enumerated.
+        val expected = setOf(
+            ContinueWatchingRecord.Source.LOCAL,
+            ContinueWatchingRecord.Source.SYNTHETIC,
+            ContinueWatchingRecord.Source.REMOTE,
+        )
+        assertEquals(expected, ContinueWatchingRecord.Source.values().toSet())
+    }
+
+    @Test
     fun `records at the 95 percent boundary still drop`() {
         val onBoundary = resumeIdentity(
             source = ContinueWatchingSource.TRAKT_PLAYBACK,
