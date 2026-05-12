@@ -1053,7 +1053,7 @@ class AccountSettingsSyncService @Inject constructor(
                     )
                     syncWatermarkStore.setAccountSettingsSectionBaselines(
                         accountSettingsSectionBaselinePayloads(buildLocalPayload())
-                            .filterKeys { sectionKey -> sectionKey !in preserveLocalSectionKeys }
+                            .filterKeys { sectionKey -> sectionKey in sectionKeysToApply }
                     )
                     lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)
