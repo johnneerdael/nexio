@@ -17,17 +17,19 @@ class AssSsaLocalFixtureRegressionTest {
     }
 
     @Test
-    fun ganbareMovingSignTranslatesVisibleTextOnly() {
+    fun ganbareMovingSignBuildsSegmentSurface() {
         val text = "{\\an8\\fnComic Sans MS\\b1\\fs45\\bord2.5\\shad3\\move(165,182,165,-182)\\3c&H181060&\\4c&H181060&\\c&H3093F2&}Lov{\\c&H55C8F8&}able {\\c&H3093F2&}Lun{\\c&H55C8F8&}ches!"
-        val unit = AssSsaProtectedTranslationUnit.fromText("evt_0", text)
+        val surface = (AssSsaSegmentSurfaceParser.parse("evt_0", text) as AssSsaSurfaceParseResult.Translatable).surface
 
         assertEquals(
-            "⟦ASS_000⟧Lov⟦ASS_001⟧able ⟦ASS_002⟧Lun⟦ASS_003⟧ches!",
-            unit.protectedText
+            "{\\an8\\fnComic Sans MS\\b1\\fs45\\bord2.5\\shad3\\move(165,182,165,-182)\\3c&H181060&\\4c&H181060&\\c&H3093F2&}",
+            surface.prefixRaw
         )
+        assertEquals(listOf("Lov<1/>able", "Lun<2/>ches!"), surface.segments)
+        assertEquals(listOf(" {\\c&H3093F2&}"), surface.separators)
         assertEquals(
             "{\\an8\\fnComic Sans MS\\b1\\fs45\\bord2.5\\shad3\\move(165,182,165,-182)\\3c&H181060&\\4c&H181060&\\c&H3093F2&}Lie{\\c&H55C8F8&}felijke {\\c&H3093F2&}lun{\\c&H55C8F8&}ches!",
-            unit.reconstruct("⟦ASS_000⟧Lie⟦ASS_001⟧felijke ⟦ASS_002⟧lun⟦ASS_003⟧ches!").getOrThrow()
+            surface.recomposeOrThrow(listOf("Lie<1/>felijke", "lun<2/>ches!"))
         )
     }
 

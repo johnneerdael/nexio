@@ -28,7 +28,11 @@ internal fun parseAssSsaTimedTextDocument(
             continue
         }
 
-        if (inEventsSection && trimmed.startsWith("Dialogue:", ignoreCase = true) && textFieldIndex >= 0) {
+        if (inEventsSection &&
+            textFieldIndex >= 0 &&
+            (trimmed.startsWith("Dialogue:", ignoreCase = true) ||
+                trimmed.startsWith("Comment:", ignoreCase = true))
+        ) {
             val parsedDialogue = parseAssSsaDialogueLine(
                 line = line,
                 eventFieldCount = eventFormat.size,
@@ -78,12 +82,7 @@ internal data class AssSsaDialogueBlock(
     }
 
     override fun render(translations: Map<Int, String>): String {
-        val text = textSegments.joinToString("") { segment -> segment.render(translations) }
-        return if (fieldsBeforeText.isEmpty()) {
-            prefix + text
-        } else {
-            prefix + fieldsBeforeText.joinToString(",") + "," + text
-        }
+        return renderWithText(textSegments.joinToString("") { segment -> segment.render(translations) })
     }
 
     fun toProtectedTranslationUnit(id: String): AssSsaProtectedTranslationUnit {
@@ -105,8 +104,32 @@ internal data class AssSsaDialogueBlock(
         }
     }
 
-    private fun rawText(): String {
+    fun rawText(): String {
         return textSegments.joinToString("") { segment -> segment.render(emptyMap()) }
+    }
+
+    fun segmentSurface(id: String): AssSsaTranslationSurface? {
+        return when (val result = AssSsaSegmentSurfaceParser.parse(id, rawText())) {
+            is AssSsaSurfaceParseResult.Translatable -> result.surface
+            is AssSsaSurfaceParseResult.PreserveOnly -> null
+        }
+    }
+
+    fun renderSegmentSurface(surface: AssSsaTranslationSurface?, translatedSegments: List<String>?): String {
+        val nextText = if (surface != null && translatedSegments != null) {
+            runCatching { surface.recomposeOrThrow(translatedSegments) }.getOrDefault(rawText())
+        } else {
+            rawText()
+        }
+        return renderWithText(nextText)
+    }
+
+    private fun renderWithText(text: String): String {
+        return if (fieldsBeforeText.isEmpty()) {
+            prefix + text
+        } else {
+            prefix + fieldsBeforeText.joinToString(",") + "," + text
+        }
     }
 }
 
