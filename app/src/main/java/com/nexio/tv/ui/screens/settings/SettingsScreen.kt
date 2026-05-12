@@ -85,7 +85,6 @@ private enum class IntegrationSettingsSection {
     Kitsu,
     TheIntroDb,
     Tmdb,
-    Tvdb,
     Omdb,
     MdbList,
     AnimeSkip,
@@ -221,7 +220,6 @@ fun SettingsScreen(
     val integrationKitsuFocusRequester = remember { FocusRequester() }
     val integrationTheIntroDbFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
-    val integrationTvdbFocusRequester = remember { FocusRequester() }
     val integrationOmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
@@ -415,7 +413,6 @@ fun SettingsScreen(
                             kitsuFocusRequester = integrationKitsuFocusRequester,
                             theIntroDbFocusRequester = integrationTheIntroDbFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
-                            tvdbFocusRequester = integrationTvdbFocusRequester,
                             omdbFocusRequester = integrationOmdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
@@ -650,7 +647,6 @@ private fun IntegrationSettingsContent(
     kitsuFocusRequester: FocusRequester,
     theIntroDbFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
-    tvdbFocusRequester: FocusRequester,
     omdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
@@ -666,7 +662,7 @@ private fun IntegrationSettingsContent(
     val sharedSections = remember {
         setOf(
             IntegrationSettingsSection.Debrid, IntegrationSettingsSection.TheIntroDb,
-            IntegrationSettingsSection.Tmdb, IntegrationSettingsSection.Tvdb,
+            IntegrationSettingsSection.Tmdb,
             IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
@@ -692,7 +688,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Kitsu -> kitsuFocusRequester
             IntegrationSettingsSection.TheIntroDb -> theIntroDbFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
-            IntegrationSettingsSection.Tvdb -> tvdbFocusRequester
             IntegrationSettingsSection.Omdb -> omdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
@@ -767,13 +762,6 @@ private fun IntegrationSettingsContent(
                                     title = "TMDB",
                                     subtitle = stringResource(R.string.settings_tmdb_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
-                                )
-                            }
-                            item(key = "integration_hub_tvdb") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.tvdb_hub_title),
-                                    subtitle = stringResource(R.string.settings_tvdb_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Tvdb) }
                                 )
                             }
                             item(key = "integration_hub_omdb") {
@@ -857,12 +845,6 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Tmdb -> {
             TmdbSettingsContent(
                 initialFocusRequester = tmdbFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.Tvdb -> {
-            TvdbSettingsContent(
-                initialFocusRequester = tvdbFocusRequester
             )
         }
 

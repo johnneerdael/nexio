@@ -18,7 +18,6 @@ import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
-import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.domain.model.UserProfile
 
 fun stockDefaultProfile(): UserProfile =
@@ -47,12 +46,6 @@ fun stockAccountConfigSyncPayload(): AccountConfigSyncPayload =
                 ),
                 torBox = TorBoxSyncSettings(configured = false, email = "", plan = ""),
                 easyDebrid = EasyDebridSyncSettings(configured = false, userId = "", paidUntil = "")
-            ),
-            tvdb = TvdbSyncSettings(
-                enabled = true,
-                configured = true,
-                validationStatus = "VALID",
-                lastFailure = ""
             )
         ),
         // Stock/reset payload uses present-but-empty catalog sections so that

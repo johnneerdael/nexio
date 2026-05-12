@@ -72,22 +72,7 @@ fun TmdbSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val validating by viewModel.validating.collectAsStateWithLifecycle()
-    var showApiKeyDialog by remember { mutableStateOf(false) }
     var showCatalogDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val missingApiKeyMsg = stringResource(R.string.tmdb_missing_api_key)
-    val invalidApiKeyMsg = stringResource(R.string.tmdb_invalid_api_key)
-
-    LaunchedEffect(Unit) {
-        viewModel.validationError.collect { error ->
-            val text = when (error) {
-                TmdbValidationError.MissingApiKey -> missingApiKeyMsg
-                TmdbValidationError.InvalidApiKey -> invalidApiKeyMsg
-            }
-            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-        }
-    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -107,21 +92,6 @@ fun TmdbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "tmdb_api_key") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.tmdb_api_key_title),
-                        subtitle = stringResource(R.string.tmdb_api_key_subtitle),
-                        value = maskApiKey(uiState.apiKey, stringResource(R.string.mdblist_not_set)),
-                        enabled = true,
-                        onClick = { showApiKeyDialog = true },
-                        modifier = if (initialFocusRequester != null) {
-                            Modifier.focusRequester(initialFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
-
                 item(key = "tmdb_catalogs") {
                     SettingsActionRow(
                         title = stringResource(R.string.tmdb_catalogs_title),
@@ -131,7 +101,12 @@ fun TmdbSettingsContent(
                             uiState.enabledCatalogKeys.size
                         ),
                         enabled = uiState.catalogControlsEditable,
-                        onClick = { showCatalogDialog = true }
+                        onClick = { showCatalogDialog = true },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                 }
 
@@ -276,16 +251,6 @@ fun TmdbSettingsContent(
                 }
             }
         }
-    }
-
-    if (showApiKeyDialog) {
-        TmdbApiKeyDialog(
-            currentValue = uiState.apiKey,
-            validating = validating,
-            onSave = { value, onSuccess -> viewModel.validateAndSaveApiKey(value, onSuccess) },
-            onClear = { viewModel.validateAndSaveApiKey("") {}; showApiKeyDialog = false },
-            onDismiss = { showApiKeyDialog = false }
-        )
     }
 
     if (showCatalogDialog) {

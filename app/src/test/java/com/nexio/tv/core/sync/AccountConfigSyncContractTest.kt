@@ -8,7 +8,6 @@ import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
-import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -33,11 +32,9 @@ import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
-import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
-import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
@@ -125,13 +122,8 @@ class AccountConfigSyncContractTest {
     @Test
     fun `metadata provider sync defaults are core enabled`() {
         val tmdb = TmdbSyncSettings()
-        val tvdb = TvdbSyncSettings()
 
         assertTrue(tmdb.enabled)
-        assertTrue(tvdb.enabled)
-        assertTrue(tvdb.configured)
-        assertEquals("VALID", tvdb.validationStatus)
-        assertEquals("", tvdb.lastFailure)
     }
 
     @Test
@@ -142,20 +134,7 @@ class AccountConfigSyncContractTest {
                     premiumize = PremiumizeSyncSettings(configured = true, customerId = 42),
                     realDebrid = RealDebridSyncSettings(connected = true, username = "rd-user")
                 ),
-                theIntroDb = TheIntroDbSyncSettings(
-                    enabled = true,
-                    showIntroButton = false,
-                    showRecapButton = true,
-                    showCreditsButton = false,
-                    showPreviewButton = true
-                ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
-                tvdb = TvdbSyncSettings(
-                    enabled = true,
-                    configured = true,
-                    validationStatus = "VALID",
-                    lastFailure = ""
-                ),
                 omdb = OmdbSyncSettings(enabled = true),
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
@@ -170,7 +149,6 @@ class AccountConfigSyncContractTest {
                 gemini = GeminiSyncSettings(enabled = true),
                 posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = true),
                 kitsuAuth = KitsuAuthSyncSettings(
-                    enabled = true,
                     connected = true,
                     username = "kitsu-user",
                     accessTokenSecretRef = "kitsu_access_token",
@@ -335,44 +313,6 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `tvdb public sync omits credential fields`() {
-        val payload = buildAccountConfigSyncPayload(
-            integrations = IntegrationSettings(
-                tvdb = TvdbSyncSettings(
-                    enabled = true,
-                    configured = true,
-                    validationStatus = "INVALID",
-                    lastFailure = "Invalid credentials"
-                )
-            ),
-            heroCatalogKeys = emptyList(),
-            homeCatalogOrderKeys = emptyList(),
-            disabledHomeCatalogKeys = emptyList(),
-            traktCatalogEnabledSet = emptyList(),
-            traktCatalogOrder = emptyList(),
-            traktSelectedPopularListKeys = emptyList(),
-            simklCatalogEnabledSet = emptyList(),
-            simklCatalogOrder = emptyList(),
-            mdbListHiddenPersonalListKeys = emptyList(),
-            mdbListSelectedTopListKeys = emptyList(),
-            mdbListCatalogOrder = emptyList(),
-            trackingProvider = TrackingProvider.TRAKT,
-            formatter = FormatterSyncSettings()
-        )
-
-        val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
-        val tvdb = json["integrations"]!!.jsonObject["tvdb"]!!.jsonObject
-
-        assertEquals("true", tvdb["enabled"].toString())
-        assertEquals("true", tvdb["configured"].toString())
-        assertEquals("\"INVALID\"", tvdb["validationStatus"].toString())
-        assertEquals("\"Invalid credentials\"", tvdb["lastFailure"].toString())
-        assertFalse(tvdb.containsKey("apiKey"))
-        assertFalse(tvdb.containsKey("pin"))
-        assertFalse(tvdb.containsKey("token"))
-    }
-
-    @Test
     fun `build account config sync rpc params includes contract version 9`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
@@ -465,46 +405,6 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `observeAccountConfigSyncChangedPaths emits tvdb path label`() = runTest {
-        val tvdbSettings = MutableSharedFlow<Unit>(replay = 1)
-
-        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
-            observeAccountConfigSyncChangedPaths(
-                heroCatalogSelections = MutableSharedFlow<Unit>(),
-                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
-                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
-                tmdbSettings = MutableSharedFlow<Unit>(),
-                tvdbSettings = tvdbSettings,
-                mdbListSettings = MutableSharedFlow<Unit>(),
-                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
-                omdbSettings = MutableSharedFlow<Unit>(),
-                theIntroDbSettings = MutableSharedFlow<Unit>(),
-                animeSkipEnabled = MutableSharedFlow<Unit>(),
-                subtitleTranslationSettings = MutableSharedFlow<Unit>(),
-                posterRatingsSettings = MutableSharedFlow<Unit>(),
-                premiumizeSettings = MutableSharedFlow<Unit>(),
-                premiumizeAccountState = MutableSharedFlow<Unit>(),
-                torBoxSettings = MutableSharedFlow<Unit>(),
-                torBoxAccountState = MutableSharedFlow<Unit>(),
-                easyDebridSettings = MutableSharedFlow<Unit>(),
-                easyDebridAccountState = MutableSharedFlow<Unit>(),
-                realDebridState = MutableSharedFlow<Unit>(),
-                kitsuAuthState = MutableSharedFlow<Unit>(),
-                traktAuthState = MutableSharedFlow<Unit>(),
-                traktCatalogPreferences = MutableSharedFlow<Unit>(),
-                simklCatalogPreferences = MutableSharedFlow<Unit>(),
-                simklAuthState = MutableSharedFlow<Unit>(),
-                playerSettings = MutableSharedFlow<Unit>()
-            ).first()
-        }
-
-        tvdbSettings.emit(Unit)
-        advanceUntilIdle()
-
-        assertEquals("integrations.tvdb", emission.await())
-    }
-
-    @Test
     fun `observeAccountConfigSyncChangedPaths emits kitsu auth path label`() = runTest {
         val kitsuAuthState = MutableSharedFlow<Unit>(replay = 1)
 
@@ -514,11 +414,9 @@ class AccountConfigSyncContractTest {
                 homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
                 disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
                 tmdbSettings = MutableSharedFlow<Unit>(),
-                tvdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = MutableSharedFlow<Unit>(),
                 mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
                 omdbSettings = MutableSharedFlow<Unit>(),
-                theIntroDbSettings = MutableSharedFlow<Unit>(),
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
                 subtitleTranslationSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
@@ -676,7 +574,6 @@ class AccountConfigSyncContractTest {
         val mdbListSettings = MutableSharedFlow<Unit>(replay = 1)
         val mdbListCatalogPreferences = MutableSharedFlow<Unit>(replay = 1)
         val omdbSettings = MutableSharedFlow<Unit>(replay = 1)
-        val theIntroDbSettings = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
         val subtitleTranslationSettings = MutableSharedFlow<Unit>(replay = 1)
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
@@ -697,11 +594,9 @@ class AccountConfigSyncContractTest {
                 homeCatalogOrderKeys = homeCatalogOrderKeys,
                 disabledHomeCatalogKeys = disabledHomeCatalogKeys,
                 tmdbSettings = tmdbSettings,
-                tvdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = mdbListSettings,
                 mdbListCatalogPreferences = mdbListCatalogPreferences,
                 omdbSettings = omdbSettings,
-                theIntroDbSettings = theIntroDbSettings,
                 animeSkipEnabled = animeSkipEnabled,
                 subtitleTranslationSettings = subtitleTranslationSettings,
                 posterRatingsSettings = posterRatingsSettings,
@@ -793,7 +688,6 @@ class AccountConfigSyncContractTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
         val omdbSettingsDataStore = mockk<OmdbSettingsDataStore>(relaxed = true)
-        val theIntroDbSettingsDataStore = mockk<TheIntroDbSettingsDataStore>(relaxed = true)
         val animeSkipSettingsDataStore = mockk<AnimeSkipSettingsDataStore>(relaxed = true)
         val subtitleTranslationSettingsDataStore = mockk<SubtitleTranslationSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
@@ -802,13 +696,6 @@ class AccountConfigSyncContractTest {
 
         val settings = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
-                theIntroDb = TheIntroDbSyncSettings(
-                    enabled = true,
-                    showIntroButton = true,
-                    showRecapButton = false,
-                    showCreditsButton = true,
-                    showPreviewButton = false
-                ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false, useBasicInfo = false),
                 mdblist = MDBListSyncSettings(
                     enabled = true,
@@ -867,7 +754,6 @@ class AccountConfigSyncContractTest {
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             mdbListSettingsDataStore = mdbListSettingsDataStore,
             omdbSettingsDataStore = omdbSettingsDataStore,
-            theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
             animeSkipSettingsDataStore = animeSkipSettingsDataStore,
             subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
@@ -884,11 +770,6 @@ class AccountConfigSyncContractTest {
         coVerify(exactly = 1) { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(listOf("row-c")) }
         coVerify(exactly = 1) { tmdbSettingsDataStore.setEnabled(true) }
         coVerify(exactly = 1) { omdbSettingsDataStore.setEnabled(true) }
-        coVerify(exactly = 1) { theIntroDbSettingsDataStore.setEnabled(true) }
-        coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowIntroButton(true) }
-        coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowRecapButton(false) }
-        coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowCreditsButton(true) }
-        coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowPreviewButton(false) }
         coVerify(exactly = 1) {
             subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
                 enabled = true,
