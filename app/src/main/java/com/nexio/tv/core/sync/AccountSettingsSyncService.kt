@@ -165,6 +165,21 @@ private val CATALOG_SECTION_KEYS = setOf(
     AccountSettingsSectionKey.CATALOGS_HOME
 )
 
+private val ACCOUNT_SECRET_SECTION_KEYS = setOf(
+    AccountSettingsSectionKey.INTEGRATIONS_MDBLIST,
+    AccountSettingsSectionKey.INTEGRATIONS_OMDB,
+    AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+    AccountSettingsSectionKey.INTEGRATIONS_GEMINI,
+    AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP,
+    AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS,
+    AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE,
+    AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX,
+    AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
+    AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
+    AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
+    AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+)
+
 private fun Set<AccountSettingsSectionKey>?.includesSection(section: AccountSettingsSectionKey): Boolean {
     return this == null || section in this
 }
@@ -180,6 +195,7 @@ internal fun selectSubtitleTranslationApiKeySecret(
 ): String? {
     if (genericTranslationKey == null) return null
     if (genericTranslationKey.isNotBlank()) return genericTranslationKey
+    if (allowLegacyFallback && legacyGeminiKey == null) return null
     return legacyGeminiKey
         ?.takeIf { allowLegacyFallback && it.isNotBlank() }
         ?: genericTranslationKey
@@ -623,9 +639,9 @@ class AccountSettingsSyncService @Inject constructor(
     /**
      * v10 wrapper for `sync_set_account_secret`. Reads the current
      * ACCOUNT_SECRETS watermark, injects it as `p_base_updated_at_ms`, and on
-     * applied responses advances the watermark. Stale-base rejections advance
-     * to the server watermark and let the caller schedule a retry without
-     * pulling remote secrets over local dirty values.
+     * applied responses advances the watermark. Stale-base rejections keep the
+     * old base because advancing without resolving the remote secret payload
+     * would permit an older local value to overwrite the newer remote value.
      */
     private suspend fun setAccountSecretV10(extraParams: JsonObject): Boolean {
         val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
@@ -641,8 +657,11 @@ class AccountSettingsSyncService @Inject constructor(
                 return true
             }
             is V10PushOutcome.StaleBase -> {
-                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); retrying after watermark advance")
-                handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)
+                Log.w(
+                    TAG,
+                    "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); " +
+                        "preserving local dirty secret until a pull resolves the remote payload"
+                )
                 return false
             }
             is V10PushOutcome.Failed -> throw outcome.cause
@@ -665,17 +684,16 @@ class AccountSettingsSyncService @Inject constructor(
                 return true
             }
             is V10PushOutcome.StaleBase -> {
-                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); retrying after watermark advance")
-                handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)
+                Log.w(
+                    TAG,
+                    "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); " +
+                        "preserving local dirty secret until a pull resolves the remote payload"
+                )
                 return false
             }
             is V10PushOutcome.Failed -> throw outcome.cause
             is V10PushOutcome.FieldConflict -> return false
         }
-    }
-
-    private suspend fun handleStaleAccountSecretPush(currentUpdatedAtMs: Long) {
-        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = currentUpdatedAtMs)
     }
 
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
@@ -708,6 +726,7 @@ class AccountSettingsSyncService @Inject constructor(
         val trakt: ResolvedRemoteTraktSecrets?,
         val simkl: ResolvedRemoteSimklSecrets?,
         val preservedLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet(),
+        val unresolvedRemoteSecretSectionKeys: Set<AccountSettingsSectionKey> = emptySet(),
         val followUpLocalSecretSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
     )
 
@@ -855,8 +874,6 @@ class AccountSettingsSyncService @Inject constructor(
                 if (dirtySecretSectionKeys.isNotEmpty()) {
                     lastSyncedAccountSecretSnapshot = snapshot.secrets.normalizedForPush()
                 }
-            } else {
-                scheduleFollowUpPush = true
             }
 
             if (scheduleFollowUpPush) {
@@ -904,10 +921,21 @@ class AccountSettingsSyncService @Inject constructor(
                 syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
             }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
-            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
             val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
             val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)
+            val preservedPullSecretSectionKeys = preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
+            if (
+                resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty() &&
+                preservedPullSecretSectionKeys.isEmpty()
+            ) {
+                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+            } else {
+                Log.w(
+                    TAG,
+                    "Not advancing account secrets watermark; unresolved=${resolvedSecrets.unresolvedRemoteSecretSectionKeys}, preserved=$preservedPullSecretSectionKeys"
+                )
+            }
             val secretBaselinePreserveSectionKeys = preserveLocalSectionKeys + resolvedSecrets.preservedLocalSectionKeys
             val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty()
 
@@ -1758,7 +1786,12 @@ class AccountSettingsSyncService @Inject constructor(
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
         val preservedLocalSecretSections = linkedSetOf<AccountSettingsSectionKey>()
+        val unresolvedRemoteSecretSections = linkedSetOf<AccountSettingsSectionKey>()
         val followUpLocalSecretSections = linkedSetOf<AccountSettingsSectionKey>()
+        fun preserveUnresolvedRemoteSecretSection(sectionKey: AccountSettingsSectionKey) {
+            preservedLocalSecretSections += sectionKey
+            unresolvedRemoteSecretSections += sectionKey
+        }
 
         val mdbListApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
             resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
@@ -1766,7 +1799,7 @@ class AccountSettingsSyncService @Inject constructor(
             null
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST) && mdbListApiKey == null) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_MDBLIST
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)
         }
         val omdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
             resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
@@ -1774,7 +1807,7 @@ class AccountSettingsSyncService @Inject constructor(
             null
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB) && omdbApiKey == null) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_OMDB
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)
         }
         val resolveSubtitleTranslation = sectionKeys.includesSection(
             AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
@@ -1791,11 +1824,14 @@ class AccountSettingsSyncService @Inject constructor(
         } else {
             null
         }
-        if (
+        val subtitleTranslationSecretUnresolved =
             resolveSubtitleTranslation &&
-            (genericTranslationKey == null || (allowLegacyFallback && genericTranslationKey.isBlank() && legacyGeminiKey == null))
-        ) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
+            (
+                genericTranslationKey == null ||
+                    (allowLegacyFallback && genericTranslationKey.isBlank() && legacyGeminiKey == null)
+                )
+        if (subtitleTranslationSecretUnresolved) {
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)
         }
         val animeSkipClientId = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
             resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)
@@ -1803,7 +1839,7 @@ class AccountSettingsSyncService @Inject constructor(
             null
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP) && animeSkipClientId == null) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)
         }
         val rpdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
             resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)
@@ -1819,7 +1855,7 @@ class AccountSettingsSyncService @Inject constructor(
             sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS) &&
             (rpdbApiKey == null || topPostersApiKey == null)
         ) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)
         }
         val premiumizeApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
             resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)
@@ -1830,7 +1866,7 @@ class AccountSettingsSyncService @Inject constructor(
             sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE) &&
             premiumizeApiKey == null
         ) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)
         }
         val torBoxApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
             resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)
@@ -1838,7 +1874,7 @@ class AccountSettingsSyncService @Inject constructor(
             null
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX) && torBoxApiKey == null) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)
         }
         val easyDebridApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
             resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)
@@ -1849,7 +1885,7 @@ class AccountSettingsSyncService @Inject constructor(
             sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID) &&
             easyDebridApiKey == null
         ) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)
         }
         val resolvedRealDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
             resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
@@ -1860,7 +1896,7 @@ class AccountSettingsSyncService @Inject constructor(
             sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID) &&
             resolvedRealDebrid == null
         ) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)
         }
         val resolvedTrakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
             resolveRemoteTraktSecrets(settings.integrations.traktAuth)
@@ -1869,7 +1905,7 @@ class AccountSettingsSyncService @Inject constructor(
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
             when {
-                resolvedTrakt == null -> preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+                resolvedTrakt == null -> preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
                 resolvedTrakt.preserveLocalTokens -> {
                     preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
                     followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
@@ -1882,16 +1918,20 @@ class AccountSettingsSyncService @Inject constructor(
             null
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH) && resolvedSimkl == null) {
-            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
         }
         return ResolvedRemoteSecretsForApply(
             mdbListApiKey = mdbListApiKey,
             omdbApiKey = omdbApiKey,
-            subtitleTranslationApiKey = selectSubtitleTranslationApiKeySecret(
-                genericTranslationKey = genericTranslationKey,
-                legacyGeminiKey = legacyGeminiKey,
-                allowLegacyFallback = allowLegacyFallback
-            ),
+            subtitleTranslationApiKey = if (subtitleTranslationSecretUnresolved) {
+                null
+            } else {
+                selectSubtitleTranslationApiKeySecret(
+                    genericTranslationKey = genericTranslationKey,
+                    legacyGeminiKey = legacyGeminiKey,
+                    allowLegacyFallback = allowLegacyFallback
+                )
+            },
             animeSkipClientId = animeSkipClientId,
             rpdbApiKey = rpdbApiKey,
             topPostersApiKey = topPostersApiKey,
@@ -1902,6 +1942,7 @@ class AccountSettingsSyncService @Inject constructor(
             trakt = resolvedTrakt,
             simkl = resolvedSimkl,
             preservedLocalSectionKeys = preservedLocalSecretSections,
+            unresolvedRemoteSecretSectionKeys = unresolvedRemoteSecretSections,
             followUpLocalSecretSectionKeys = followUpLocalSecretSections
         )
     }
