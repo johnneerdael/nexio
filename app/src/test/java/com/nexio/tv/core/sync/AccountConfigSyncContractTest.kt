@@ -716,6 +716,32 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `account settings section baseline after pull only records applied sections`() {
+        val localAfterPull = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            integrations = IntegrationSettings(
+                tmdb = TmdbSyncSettings(useArtwork = true, useDetails = true)
+            ),
+            catalogs = CatalogSyncSettings(
+                home = HomeCatalogSyncSettings(
+                    heroCatalogKeys = listOf("local-hero"),
+                    homeCatalogOrderKeys = listOf("local-row"),
+                    disabledHomeCatalogKeys = emptyList()
+                )
+            )
+        )
+        val baselineAfterPull = accountSettingsSectionBaselinePayloads(localAfterPull)
+            .filterKeys {
+                it in setOf(AccountSettingsSectionKey.INTEGRATIONS_TMDB)
+            }
+
+        val dirtySections = dirtyAccountSettingsSectionKeys(localAfterPull, baselineAfterPull)
+
+        assertTrue(dirtySections.contains(AccountSettingsSectionKey.CATALOGS_HOME))
+        assertFalse(dirtySections.contains(AccountSettingsSectionKey.INTEGRATIONS_TMDB))
+    }
+
+    @Test
     fun `account settings push routes through v13 section batch rpc and handles partial outcomes`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pushStart = source.indexOf("suspend fun pushToRemote")
