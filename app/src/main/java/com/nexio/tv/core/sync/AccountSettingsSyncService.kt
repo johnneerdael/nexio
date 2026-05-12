@@ -192,6 +192,18 @@ internal fun legacyGeminiApiKeySecretForPush(
     return translationApiKey.takeIf { providerName.equals("GEMINI", ignoreCase = true) }
 }
 
+internal fun clearAppliedChangedPathsForGeneration(
+    pendingChangedPaths: MutableSet<String>,
+    pendingChangedPathsGeneration: Long,
+    snapshotChangedPathsGeneration: Long,
+    appliedChangedPaths: Set<String>
+): Boolean {
+    if (pendingChangedPathsGeneration != snapshotChangedPathsGeneration) return false
+
+    pendingChangedPaths.removeAll(appliedChangedPaths)
+    return true
+}
+
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -554,12 +566,6 @@ class AccountSettingsSyncService @Inject constructor(
                         }
                     }
 
-                    if (hasStaleSection) {
-                        Log.w(TAG, "Account settings section push stale; pulling without clearing pending local changes")
-                        pullFromRemoteAndApply(clearPendingChanges = false)
-                        return@withContext Result.success(Unit)
-                    }
-
                     if (appliedChangedPaths.isNotEmpty()) {
                         applyingRemoteMutex.withLock {
                             if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
@@ -567,13 +573,29 @@ class AccountSettingsSyncService @Inject constructor(
                                 lastAppliedRemoteRevision = maxOf(lastAppliedRemoteRevision, revision)
                             }
                             synchronized(pendingChangedPaths) {
-                                if (pendingChangedPathsGeneration == snapshot.changedPathsGeneration) {
-                                    pendingChangedPaths.removeAll(appliedChangedPaths)
-                                } else {
+                                if (!clearAppliedChangedPathsForGeneration(
+                                        pendingChangedPaths = pendingChangedPaths,
+                                        pendingChangedPathsGeneration = pendingChangedPathsGeneration,
+                                        snapshotChangedPathsGeneration = snapshot.changedPathsGeneration,
+                                        appliedChangedPaths = appliedChangedPaths
+                                    )
+                                ) {
                                     scheduleFollowUpPush = true
                                 }
                             }
                         }
+                    }
+
+                    if (hasStaleSection) {
+                        if (scheduleFollowUpPush) {
+                            pushJob = scope.launch {
+                                delay(500)
+                                pushToRemote()
+                            }
+                        }
+                        Log.w(TAG, "Account settings section push stale; pulling without clearing pending local changes")
+                        pullFromRemoteAndApply(clearPendingChanges = false)
+                        return@withContext Result.success(Unit)
                     }
                 }
             }
