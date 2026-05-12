@@ -1,5 +1,15 @@
 # Supabase Settings Sync Guide
 
+## Contract v13 Sectioned Account Settings
+
+Contract v13 makes `account_settings_sections` the authoritative account-settings source. Each row is keyed by `(user_id, section_key)` and carries its own JSONB payload, `sync_revision`, `updated_at`, and `updated_from`.
+
+V13 clients pull `sync_pull_account_snapshot_v13` and push `sync_push_account_settings_sections_v13`. Clients must send only dirty sections and carry per-section `base_updated_at_ms` watermarks.
+
+The legacy full-payload account settings RPCs remain available during rollout as adapters over `account_settings_sections`. They reconstruct the old settings payload for legacy pulls and split legacy pushes back into section rows.
+
+Wyzie is not a synced account-settings section in v13. Wyzie subtitle access is build-time configured on Android.
+
 ## Account Config Contract v7
 
 Contract v7 prevents stale full-payload overwrites by using optimistic concurrency.
