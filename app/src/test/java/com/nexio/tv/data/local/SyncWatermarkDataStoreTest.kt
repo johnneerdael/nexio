@@ -2,6 +2,7 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.core.sync.AccountSettingsSectionKey
 import com.nexio.tv.core.sync.SyncWatermarkSurface
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -49,12 +50,39 @@ class SyncWatermarkDataStoreTest {
     }
 
     @Test
+    fun `account settings section watermarks isolate by section`() = runTest {
+        val store = newStore()
+        store.clearAll()
+
+        store.setAccountSettingsSection(
+            AccountSettingsSectionKey.INTEGRATIONS_TMDB,
+            ms = 111L
+        )
+        store.setAccountSettingsSection(
+            AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION,
+            ms = 222L
+        )
+
+        assertEquals(
+            111L,
+            store.getAccountSettingsSection(AccountSettingsSectionKey.INTEGRATIONS_TMDB)
+        )
+        assertEquals(
+            222L,
+            store.getAccountSettingsSection(AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION)
+        )
+        assertEquals(0L, store.get(SyncWatermarkSurface.ACCOUNT_SETTINGS_SECTION, profileId = null))
+    }
+
+    @Test
     fun `clearAll wipes every watermark`() = runTest {
         val store = newStore()
         store.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = 1L)
         store.set(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = 1, ms = 2L)
+        store.setAccountSettingsSection(AccountSettingsSectionKey.CATALOGS_HOME, ms = 3L)
         store.clearAll()
         assertEquals(0L, store.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null))
         assertEquals(0L, store.get(SyncWatermarkSurface.PROFILE_SETTINGS, profileId = 1))
+        assertEquals(0L, store.getAccountSettingsSection(AccountSettingsSectionKey.CATALOGS_HOME))
     }
 }

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.sync.AccountSettingsSectionKey
 import com.nexio.tv.core.sync.SyncWatermarkSurface
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
@@ -33,12 +34,24 @@ class SyncWatermarkDataStore @Inject constructor(
         return longPreferencesKey("watermark.$suffix")
     }
 
+    private fun accountSettingsSectionKey(section: AccountSettingsSectionKey): Preferences.Key<Long> {
+        return longPreferencesKey("watermark.${SyncWatermarkSurface.ACCOUNT_SETTINGS_SECTION.name}:${section.key}")
+    }
+
     suspend fun get(surface: SyncWatermarkSurface, profileId: Int?): Long {
         return dataStore.data.first()[key(surface, profileId)] ?: 0L
     }
 
     suspend fun set(surface: SyncWatermarkSurface, profileId: Int?, ms: Long) {
         dataStore.edit { prefs -> prefs[key(surface, profileId)] = ms }
+    }
+
+    suspend fun getAccountSettingsSection(section: AccountSettingsSectionKey): Long {
+        return dataStore.data.first()[accountSettingsSectionKey(section)] ?: 0L
+    }
+
+    suspend fun setAccountSettingsSection(section: AccountSettingsSectionKey, ms: Long) {
+        dataStore.edit { prefs -> prefs[accountSettingsSectionKey(section)] = ms }
     }
 
     suspend fun clearAll() {
