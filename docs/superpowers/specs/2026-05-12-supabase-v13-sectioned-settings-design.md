@@ -96,6 +96,8 @@ Use section-per-functional-owner granularity:
 
 ```text
 integrations.subtitleTranslation
+integrations.imdb
+integrations.gemini
 integrations.tmdb
 integrations.omdb
 integrations.posterRatings
@@ -321,6 +323,8 @@ Backfill mapping:
 
 ```text
 settings_payload.integrations.subtitleTranslation -> integrations.subtitleTranslation
+settings_payload.integrations.imdb -> integrations.imdb
+settings_payload.integrations.gemini -> integrations.gemini
 settings_payload.integrations.tmdb -> integrations.tmdb
 settings_payload.integrations.omdb -> integrations.omdb
 settings_payload.integrations.posterRatings -> integrations.posterRatings

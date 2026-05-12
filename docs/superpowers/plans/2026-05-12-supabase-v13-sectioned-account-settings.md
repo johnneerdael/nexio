@@ -17,6 +17,7 @@
 - The timestamped account snapshot/settings RPC names still end in `_v10` (`sync_pull_account_snapshot_v10`, `sync_push_account_settings_v10`), but their envelope contract label is now `12`. Treat those as the current legacy full-payload compatibility surface.
 - Do not reintroduce `integrations.wyzie`, `integrations.theIntroDb`, `integrations.tvdb`, `wyzie_api_key`, `tmdb_api_key`, or `tvdb_api_key`.
 - Keep `integrations.tmdb` as a synced settings section, but assume credentials come from `BuildConfig.TMDB_API_KEY` and clients force `enabled = true`.
+- Keep `integrations.imdb` and `integrations.gemini` as synced settings sections because Android and web still expose them as current settings surfaces.
 - Keep `integrations.kitsuAuth` synced without an `enabled` field.
 
 ## File Structure
@@ -84,9 +85,9 @@ class V13SupabaseMigrationStaticTest {
 
         assertTrue(sql.contains("create table if not exists public.account_settings_sections"))
         assertTrue(sql.contains("create or replace function public.account_settings_section_key_allowed"))
-        assertTrue(sql.contains("create or replace function public.sync_pull_account_snapshot_v13"))
-        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_section_v13"))
-        assertTrue(sql.contains("create or replace function public.sync_push_account_settings_sections_v13"))
+        assertTrue(sql.contains("create or replace function public.account_settings_section_payload"))
+        assertTrue(sql.contains("create or replace function public.account_settings_sections_to_payload"))
+        assertTrue(sql.contains("insert into public.account_settings_sections"))
 
         assertTrue(sql.contains("'integrations.subtitleTranslation'"))
         assertTrue(sql.contains("'playback.streamSelection'"))
@@ -159,8 +160,11 @@ immutable
 parallel safe
 set search_path = public
 as $$
-  select trim(coalesce(p_section_key, '')) = any (array[
+  select coalesce(p_section_key = trim(p_section_key), false)
+    and p_section_key = any (array[
     'integrations.subtitleTranslation',
+    'integrations.imdb',
+    'integrations.gemini',
     'integrations.tmdb',
     'integrations.omdb',
     'integrations.posterRatings',
@@ -204,6 +208,8 @@ set search_path = public
 as $$
   select case trim(coalesce(p_section_key, ''))
     when 'integrations.subtitleTranslation' then p_settings #> '{integrations,subtitleTranslation}'
+    when 'integrations.imdb' then p_settings #> '{integrations,imdb}'
+    when 'integrations.gemini' then p_settings #> '{integrations,gemini}'
     when 'integrations.tmdb' then p_settings #> '{integrations,tmdb}'
     when 'integrations.omdb' then p_settings #> '{integrations,omdb}'
     when 'integrations.posterRatings' then p_settings #> '{integrations,posterRatings}'
@@ -244,7 +250,7 @@ stable
 set search_path = public, pg_temp
 as $$
 declare
-  v_payload jsonb := '{}'::jsonb;
+  v_payload jsonb := '{"integrations":{},"catalogs":{},"playback":{}}'::jsonb;
   v_row record;
 begin
   for v_row in
@@ -254,6 +260,8 @@ begin
   loop
     v_payload := case v_row.section_key
       when 'integrations.subtitleTranslation' then jsonb_set(v_payload, '{integrations,subtitleTranslation}', v_row.payload, true)
+      when 'integrations.imdb' then jsonb_set(v_payload, '{integrations,imdb}', v_row.payload, true)
+      when 'integrations.gemini' then jsonb_set(v_payload, '{integrations,gemini}', v_row.payload, true)
       when 'integrations.tmdb' then jsonb_set(v_payload, '{integrations,tmdb}', v_row.payload, true)
       when 'integrations.omdb' then jsonb_set(v_payload, '{integrations,omdb}', v_row.payload, true)
       when 'integrations.posterRatings' then jsonb_set(v_payload, '{integrations,posterRatings}', v_row.payload, true)
@@ -286,6 +294,8 @@ $$;
 with section_keys(section_key) as (
   values
     ('integrations.subtitleTranslation'),
+    ('integrations.imdb'),
+    ('integrations.gemini'),
     ('integrations.tmdb'),
     ('integrations.omdb'),
     ('integrations.posterRatings'),
@@ -758,6 +768,8 @@ with changed(path) as (
 section_keys(section_key) as (
   values
     ('integrations.subtitleTranslation'),
+    ('integrations.imdb'),
+    ('integrations.gemini'),
     ('integrations.tmdb'),
     ('integrations.omdb'),
     ('integrations.posterRatings'),
@@ -933,6 +945,8 @@ package com.nexio.tv.core.sync
 
 enum class AccountSettingsSectionKey(val key: String) {
     SUBTITLE_TRANSLATION("integrations.subtitleTranslation"),
+    IMDB("integrations.imdb"),
+    GEMINI("integrations.gemini"),
     TMDB("integrations.tmdb"),
     OMDB("integrations.omdb"),
     POSTER_RATINGS("integrations.posterRatings"),
@@ -1346,6 +1360,14 @@ In `AccountConfigSyncContract.kt`, add:
 ```kotlin
 fun AccountConfigSyncPayload.sectionPayload(sectionKey: AccountSettingsSectionKey): JsonElement? {
     return when (sectionKey) {
+        AccountSettingsSectionKey.IMDB -> Json.encodeToJsonElement(
+            com.nexio.tv.data.remote.supabase.ImdbSyncSettings.serializer(),
+            integrations.imdb
+        )
+        AccountSettingsSectionKey.GEMINI -> Json.encodeToJsonElement(
+            com.nexio.tv.data.remote.supabase.GeminiSyncSettings.serializer(),
+            integrations.gemini
+        )
         AccountSettingsSectionKey.TMDB -> Json.encodeToJsonElement(
             com.nexio.tv.data.remote.supabase.TmdbSyncSettings.serializer(),
             integrations.tmdb
@@ -1589,6 +1611,8 @@ Add:
 ```ts
 export type AccountSettingsSectionKey =
   | 'integrations.subtitleTranslation'
+  | 'integrations.imdb'
+  | 'integrations.gemini'
   | 'integrations.tmdb'
   | 'integrations.omdb'
   | 'integrations.posterRatings'
@@ -1639,6 +1663,8 @@ import type { AccountSettingsSectionKey, AccountSettingsSectionRecord, PortalSet
 
 export const validAccountSettingsSectionKeys: AccountSettingsSectionKey[] = [
   'integrations.subtitleTranslation',
+  'integrations.imdb',
+  'integrations.gemini',
   'integrations.tmdb',
   'integrations.omdb',
   'integrations.posterRatings',
@@ -1678,6 +1704,8 @@ export function dirtyPathsToSectionKeys(paths: Iterable<string>): AccountSetting
 function payloadFor(settings: PortalSettings, sectionKey: AccountSettingsSectionKey): Record<string, unknown> | null {
   switch (sectionKey) {
     case 'integrations.subtitleTranslation': return settings.integrations.subtitleTranslation
+    case 'integrations.imdb': return settings.integrations.imdb
+    case 'integrations.gemini': return settings.integrations.gemini
     case 'integrations.tmdb': return settings.integrations.tmdb
     case 'integrations.omdb': return settings.integrations.omdb
     case 'integrations.posterRatings': return settings.integrations.posterRatings
@@ -1714,6 +1742,8 @@ export function composePortalSettingsFromSections(base: PortalSettings, sections
     const payload = section.payload as any
     switch (section.section_key) {
       case 'integrations.subtitleTranslation': next.integrations.subtitleTranslation = { ...next.integrations.subtitleTranslation, ...payload }; break
+      case 'integrations.imdb': next.integrations.imdb = { ...next.integrations.imdb, ...payload }; break
+      case 'integrations.gemini': next.integrations.gemini = { ...next.integrations.gemini, ...payload }; break
       case 'integrations.tmdb': next.integrations.tmdb = { ...next.integrations.tmdb, ...payload }; break
       case 'integrations.omdb': next.integrations.omdb = { ...next.integrations.omdb, ...payload }; break
       case 'integrations.posterRatings': next.integrations.posterRatings = { ...next.integrations.posterRatings, ...payload }; break
