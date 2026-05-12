@@ -30,6 +30,7 @@ internal data class AssSsaTranslationSurface(
                 "Expected ${segments.size} translated ASS/SSA segments, got ${translatedSegments.size}"
             }
 
+            val sourceLiteralMarkers = sourceLiteralMarkers()
             val repaired = translatedSegments.mapIndexed { index, segment ->
                 require(!segment.contains('\n') && !segment.contains('\r')) {
                     "Translated ASS/SSA segment contains a raw line break"
@@ -42,14 +43,14 @@ internal data class AssSsaTranslationSurface(
                         .replace(Regex("""${Regex.escape(marker)}[ \t]+"""), marker)
                 }
 
-                require(!RAW_ASS_BLOCK_PATTERN.containsMatchIn(normalized)) {
+                require(!normalized.contains('{') && !normalized.contains('}')) {
                     "Translated ASS/SSA segment introduced raw override syntax"
                 }
                 require(!RAW_ASS_ESCAPE_PATTERN.containsMatchIn(normalized)) {
                     "Translated ASS/SSA segment introduced raw ASS/SSA escape syntax"
                 }
                 MARKER_PATTERN.findAll(normalized).forEach { match ->
-                    require(inlineMarkers.containsKey(match.value)) {
+                    require(inlineMarkers.containsKey(match.value) || match.value in sourceLiteralMarkers) {
                         "Translated ASS/SSA segment contains unknown marker ${match.value}"
                     }
                 }
@@ -98,6 +99,13 @@ internal data class AssSsaTranslationSurface(
             .put("context", context)
             .put("segments", JSONArray(segments))
     }
+
+    private fun sourceLiteralMarkers(): Set<String> {
+        return segments
+            .flatMap { segment -> MARKER_PATTERN.findAll(segment).map { it.value } }
+            .filterNot { marker -> inlineMarkers.containsKey(marker) }
+            .toSet()
+    }
 }
 
 internal object AssSsaSegmentSurfaceParser {
@@ -116,9 +124,22 @@ internal object AssSsaSegmentSurfaceParser {
         val segments = mutableListOf<String>()
         val separators = mutableListOf<String>()
         val inlineMarkers = linkedMapOf<String, String>()
+        val occupiedMarkerTokens = tokens
+            .filterIsInstance<AssSsaTextToken.Text>()
+            .flatMap { token -> MARKER_PATTERN.findAll(token.raw).map { it.value } }
+            .toMutableSet()
         var currentSegment: StringBuilder? = null
         var markerIndex = 1
         var index = 0
+
+        fun nextInlineMarker(): String {
+            while ("<$markerIndex/>" in occupiedMarkerTokens) {
+                markerIndex += 1
+            }
+            return "<${markerIndex++}/>".also { marker ->
+                occupiedMarkerTokens += marker
+            }
+        }
 
         fun startOrContinueText(raw: String) {
             val current = currentSegment
@@ -190,7 +211,7 @@ internal object AssSsaSegmentSurfaceParser {
             val isIntraword = previousChar.isSurfaceWordChar() && nextChar.isSurfaceWordChar()
 
             if (isIntraword) {
-                val marker = "<${markerIndex++}/>"
+                val marker = nextInlineMarker()
                 inlineMarkers[marker] = rawSyntax
                 currentSegment?.append(marker) ?: prefixRaw.append(rawSyntax)
             } else {
@@ -230,7 +251,7 @@ internal object AssSsaSegmentSurfaceParser {
                 suffixRaw = suffixRaw.toString(),
                 inlineMarkers = inlineMarkers,
                 context = segments.joinToString(" ") { segment ->
-                    MARKER_PATTERN.replace(segment, "")
+                    segment.withoutGeneratedMarkers(inlineMarkers.keys)
                 }
             )
         )
@@ -238,8 +259,11 @@ internal object AssSsaSegmentSurfaceParser {
 }
 
 private val MARKER_PATTERN = Regex("""<\d+/>""")
-private val RAW_ASS_BLOCK_PATTERN = Regex("""\{[^}]*}""")
 private val RAW_ASS_ESCAPE_PATTERN = Regex("""\\[Nnh]""")
+
+private fun String.withoutGeneratedMarkers(markers: Set<String>): String {
+    return markers.fold(this) { text, marker -> text.replace(marker, "") }
+}
 
 private fun Char?.isSurfaceWordChar(): Boolean {
     if (this == null) return false
