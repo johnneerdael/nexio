@@ -393,22 +393,23 @@ internal suspend fun buildAccountSettingsSectionsPushParamsV13(
     sectionKeys: Set<AccountSettingsSectionKey>,
     watermarkStore: SyncWatermarkDataStore
 ): JsonObject {
+    val sectionParams = mutableListOf<JsonObject>()
+    for (sectionKey in sectionKeys) {
+        val sectionPayload = payload.sectionPayload(sectionKey) ?: continue
+        val baseUpdatedAtMs = watermarkStore.getAccountSettingsSection(sectionKey)
+        sectionParams += buildJsonObject {
+            put("section_key", sectionKey.key)
+            put("payload", sectionPayload)
+            put("base_updated_at_ms", baseUpdatedAtMs)
+        }
+    }
+
     return buildJsonObject {
         put(
             "p_sections",
             buildJsonArray {
-                sectionKeys.forEach { sectionKey ->
-                    val sectionPayload = payload.sectionPayload(sectionKey) ?: return@forEach
-                    add(
-                        buildJsonObject {
-                            put("section_key", sectionKey.key)
-                            put("payload", sectionPayload)
-                            put(
-                                "base_updated_at_ms",
-                                watermarkStore.getAccountSettingsSection(sectionKey)
-                            )
-                        }
-                    )
+                for (sectionParam in sectionParams) {
+                    add(sectionParam)
                 }
             }
         )

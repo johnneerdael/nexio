@@ -1,7 +1,9 @@
 # Supabase Contract v13 Sectioned Account Settings Design
 
 Date: 2026-05-12
-Status: approved design, pending implementation plan
+Status: implemented in `work/v13-sectioned-account-settings`
+
+Implementation note: v13 is the Supabase RPC/envelope contract for sectioned account settings. Android intentionally keeps its composed `AccountConfigSyncPayload.schemaVersion` constant at `12` because that number describes the local full-payload compatibility shape, not the v13 section RPC envelope.
 
 ## Purpose
 

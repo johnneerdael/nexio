@@ -850,19 +850,19 @@ class AccountSettingsSyncService @Inject constructor(
                     val appliedSectionKeys = linkedSetOf<AccountSettingsSectionKey>()
                     var maxAppliedRevision: Long? = null
                     var hasStaleSection = false
-                    result.sections.forEach { result ->
-                        val sectionKey = AccountSettingsSectionKey.fromKey(result.sectionKey)
-                            ?: return@forEach
-                        if (result.applied) {
-                            if (result.currentUpdatedAtMs != null) {
-                                syncWatermarkStore.setAccountSettingsSection(sectionKey, result.currentUpdatedAtMs)
+                    for (sectionResult in result.sections) {
+                        val sectionKey = AccountSettingsSectionKey.fromKey(sectionResult.sectionKey)
+                            ?: continue
+                        if (sectionResult.applied) {
+                            if (sectionResult.currentUpdatedAtMs != null) {
+                                syncWatermarkStore.setAccountSettingsSection(sectionKey, sectionResult.currentUpdatedAtMs)
                             }
-                            result.syncRevision?.let { revision ->
+                            sectionResult.syncRevision?.let { revision ->
                                 maxAppliedRevision = maxOf(maxAppliedRevision ?: revision, revision)
                             }
                             appliedSectionKeys += sectionKey
                             appliedChangedPaths += pushableChangedPathsBySection[sectionKey].orEmpty()
-                        } else if (result.reason == "stale_base") {
+                        } else if (sectionResult.reason == "stale_base") {
                             hasStaleSection = true
                         }
                     }
@@ -1002,18 +1002,18 @@ class AccountSettingsSyncService @Inject constructor(
             }
             var settings = AccountConfigSyncPayload(schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
             val appliedSections = mutableListOf<Pair<AccountSettingsSectionKey, Long>>()
-            envelope.settings.sections.forEach { section ->
+            for (section in envelope.settings.sections) {
                 val key = AccountSettingsSectionKey.fromKey(section.sectionKey)
                 if (key == null) {
                     Log.d(TAG, "Ignoring unknown account settings section ${section.sectionKey}")
-                    return@forEach
+                    continue
                 }
                 settings = key.applyToPayload(settings, section.payload)
                 appliedSections += key to section.updatedAtMs
             }
             val appliedSectionKeys = appliedSections.map { it.first }.toSet()
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
-            appliedSections.forEach { (key, updatedAtMs) ->
+            for ((key, updatedAtMs) in appliedSections) {
                 syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
             }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
