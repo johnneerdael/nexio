@@ -7,18 +7,15 @@ import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.SubtitleApiShapes
 import com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi
-import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.remote.dto.WyzieSubtitleDto
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.WyzieIdHints
-import com.nexio.tv.domain.model.WyzieSettings
 import com.nexio.tv.domain.model.WyzieSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,14 +25,9 @@ import retrofit2.Response
 class WyzieSubtitleIntegrationProviderTest {
 
     private fun makeProvider(
-        settings: WyzieSettings = WyzieSettings(apiKey = "k", enabled = true),
         api: WyzieSubtitleApi = mockk(),
         runtime: IntegrationRuntime = passthroughRuntime(),
-    ): WyzieSubtitleIntegrationProvider {
-        val store: WyzieSettingsDataStore = mockk()
-        coEvery { store.settings } returns flowOf(settings)
-        return WyzieSubtitleIntegrationProvider(runtime, api, store)
-    }
+    ): WyzieSubtitleIntegrationProvider = WyzieSubtitleIntegrationProvider(runtime, api)
 
     private fun passthroughRuntime(): IntegrationRuntime = object : IntegrationRuntime {
         override suspend fun <T> get(
@@ -54,36 +46,6 @@ class WyzieSubtitleIntegrationProviderTest {
     }
 
     @Test
-    fun `skips when settings disabled`() = runTest {
-        val api: WyzieSubtitleApi = mockk()
-        val provider = makeProvider(settings = WyzieSettings(apiKey = "k", enabled = false), api = api)
-
-        val result = provider.search(
-            type = ContentType.MOVIE,
-            hints = WyzieIdHints(imdb = "tt0121955"),
-            sources = listOf(WyzieSource.OPENSUBTITLES),
-            season = null, episode = null,
-        )
-        assertEquals(emptyList<WyzieSubtitleDto>(), result)
-        coVerify(exactly = 0) { api.search(any(), any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `skips when api key blank`() = runTest {
-        val api: WyzieSubtitleApi = mockk()
-        val provider = makeProvider(settings = WyzieSettings(apiKey = null, enabled = true), api = api)
-
-        val result = provider.search(
-            type = ContentType.MOVIE,
-            hints = WyzieIdHints(imdb = "tt0121955"),
-            sources = listOf(WyzieSource.OPENSUBTITLES),
-            season = null, episode = null,
-        )
-        assertEquals(emptyList<WyzieSubtitleDto>(), result)
-        coVerify(exactly = 0) { api.search(any(), any(), any(), any(), any()) }
-    }
-
-    @Test
     fun `skips when no usable id (no imdb and no tmdb)`() = runTest {
         val api: WyzieSubtitleApi = mockk()
         val provider = makeProvider(api = api)
@@ -91,7 +53,7 @@ class WyzieSubtitleIntegrationProviderTest {
         val result = provider.search(
             type = ContentType.MOVIE,
             hints = WyzieIdHints(kitsu = "42"),
-            sources = listOf(WyzieSource.JIMAKU),
+            sources = listOf(WyzieSource.OPENSUBTITLES),
             season = null, episode = null,
         )
         assertEquals(emptyList<WyzieSubtitleDto>(), result)
@@ -174,12 +136,12 @@ class WyzieSubtitleIntegrationProviderTest {
             type = ContentType.MOVIE,
             hints = WyzieIdHints(imdb = "tt1"),
             sources = listOf(
-                WyzieSource.OPENSUBTITLES, WyzieSource.SUBDL, WyzieSource.SUBF2M, WyzieSource.PODNAPISI
+                WyzieSource.OPENSUBTITLES, WyzieSource.SUBDL, WyzieSource.TVSUBTITLES
             ),
             season = null, episode = null,
         )
         coVerify(exactly = 1) {
-            api.search(id = any(), source = "opensubtitles,subdl,subf2m,podnapisi", format = any(), season = any(), episode = any())
+            api.search(id = any(), source = "opensubtitles,subdl,tvsubtitles", format = any(), season = any(), episode = any())
         }
     }
 

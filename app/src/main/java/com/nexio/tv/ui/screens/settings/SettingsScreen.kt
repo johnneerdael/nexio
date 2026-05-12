@@ -90,8 +90,6 @@ private enum class IntegrationSettingsSection {
     MdbList,
     AnimeSkip,
     SubtitleTranslation,
-    OpenSubtitles,
-    WyzieSubtitles,
     PosterRatings,
     HyperHdr
 }
@@ -228,8 +226,6 @@ fun SettingsScreen(
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
-    val integrationOpenSubtitlesFocusRequester = remember { FocusRequester() }
-    val integrationWyzieSubtitlesFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
     val integrationHyperHdrFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
@@ -424,8 +420,6 @@ fun SettingsScreen(
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
-                            openSubtitlesFocusRequester = integrationOpenSubtitlesFocusRequester,
-                            wyzieSubtitlesFocusRequester = integrationWyzieSubtitlesFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
                             hyperHdrFocusRequester = integrationHyperHdrFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
@@ -661,8 +655,6 @@ private fun IntegrationSettingsContent(
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     subtitleTranslationFocusRequester: FocusRequester,
-    openSubtitlesFocusRequester: FocusRequester,
-    wyzieSubtitlesFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
     hyperHdrFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
@@ -678,8 +670,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
-            IntegrationSettingsSection.OpenSubtitles,
-            IntegrationSettingsSection.WyzieSubtitles,
             IntegrationSettingsSection.PosterRatings,
             IntegrationSettingsSection.HyperHdr
         )
@@ -707,8 +697,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
-            IntegrationSettingsSection.OpenSubtitles -> openSubtitlesFocusRequester
-            IntegrationSettingsSection.WyzieSubtitles -> wyzieSubtitlesFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
             IntegrationSettingsSection.HyperHdr -> hyperHdrFocusRequester
         }
@@ -816,20 +804,6 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
                                 )
                             }
-                            item(key = "integration_hub_open_subtitles") {
-                                SettingsActionRow(
-                                    title = "OpenSubtitles",
-                                    subtitle = "Native subtitle search and exact file-hash matching",
-                                    onClick = { onSelectSection(IntegrationSettingsSection.OpenSubtitles) }
-                                )
-                            }
-                            item(key = "integration_hub_wyzie_subtitles") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.wyzie_subtitles_title),
-                                    subtitle = stringResource(R.string.settings_wyzie_subtitles_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.WyzieSubtitles) }
-                                )
-                            }
                             item(key = "integration_hub_poster_ratings") {
                                 SettingsActionRow(
                                     title = stringResource(R.string.poster_ratings_title),
@@ -913,18 +887,6 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.SubtitleTranslation -> {
             SubtitleTranslationSettingsContent(
                 initialFocusRequester = subtitleTranslationFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.OpenSubtitles -> {
-            OpenSubtitlesSettingsContent(
-                initialFocusRequester = openSubtitlesFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.WyzieSubtitles -> {
-            WyzieSubtitleSettingsContent(
-                initialFocusRequester = wyzieSubtitlesFocusRequester
             )
         }
 

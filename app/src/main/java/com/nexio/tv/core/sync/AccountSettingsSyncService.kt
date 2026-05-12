@@ -31,7 +31,6 @@ import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.SyncWatermarkDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
-import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -92,7 +91,6 @@ import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
-import com.nexio.tv.data.remote.supabase.WyzieSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.repository.EasyDebridService
@@ -143,8 +141,6 @@ private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
 private const val TRANSLATION_SECRET_TYPE = "translation_api_key"
 private const val TRANSLATION_SECRET_REF = "integration:subtitle-translation"
-private const val WYZIE_SECRET_TYPE = "wyzie_api_key"
-private const val WYZIE_SECRET_REF = "integration:wyzie"
 private const val ANIMESKIP_SECRET_TYPE = "animeskip_api_key"
 private const val ANIMESKIP_SECRET_REF = "integration:animeSkip"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
@@ -203,7 +199,6 @@ class AccountSettingsSyncService @Inject constructor(
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
-    private val wyzieSettingsDataStore: WyzieSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
@@ -300,7 +295,6 @@ class AccountSettingsSyncService @Inject constructor(
                     .map { Unit },
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
-                wyzieSettings = wyzieSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
@@ -444,7 +438,6 @@ class AccountSettingsSyncService @Inject constructor(
         val omdbApiKey: String,
         val subtitleTranslationApiKey: String,
         val legacyGeminiApiKey: String?,
-        val wyzieApiKey: String,
         val animeSkipClientId: String,
         val rpdbApiKey: String,
         val topPostersApiKey: String,
@@ -483,7 +476,6 @@ class AccountSettingsSyncService @Inject constructor(
         val mdbListApiKey: String?,
         val omdbApiKey: String?,
         val subtitleTranslationApiKey: String?,
-        val wyzieApiKey: String?,
         val animeSkipClientId: String?,
         val rpdbApiKey: String?,
         val topPostersApiKey: String?,
@@ -804,9 +796,6 @@ class AccountSettingsSyncService @Inject constructor(
                 gemini = GeminiSyncSettings(
                     enabled = subtitleTranslation.enabled
                 ),
-                wyzie = WyzieSyncSettings(
-                    enabled = wyzieSettingsDataStore.settings.first().enabled,
-                ),
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.selection.posterProvider ==
                         ArtworkProviderChoiceKey.RPDB,
@@ -973,12 +962,6 @@ class AccountSettingsSyncService @Inject constructor(
             model = remoteTranslation.model,
             baseUrl = remoteTranslation.baseUrl
         )
-        val remoteWyzie = settings.integrations.wyzie
-        wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
-        if (resolveRemoteInlineSecrets) resolveApiKeySecretOrNull(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF)?.let {
-            wyzieSettingsDataStore.setApiKey(it)
-        }
-
         applyPosterRatingsProviderSelection(
             settings = settings.integrations.posterRatings,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
@@ -1032,7 +1015,6 @@ class AccountSettingsSyncService @Inject constructor(
         mdbListSettingsDataStore.setApiKey("")
         omdbSettingsDataStore.setApiKey("")
         subtitleTranslationSettingsDataStore.setApiKey("")
-        wyzieSettingsDataStore.setApiKey("")
         animeSkipSettingsDataStore.setClientId("")
         posterRatingsSettingsDataStore.setRpdbApiKey("")
         posterRatingsSettingsDataStore.setTopPostersApiKey("")
@@ -1125,12 +1107,6 @@ class AccountSettingsSyncService @Inject constructor(
             model = remoteTranslation.model,
             baseUrl = remoteTranslation.baseUrl
         )
-        val remoteWyzie = settings.integrations.wyzie
-        wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
-        resolveApiKeySecretOrNull(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF)?.let {
-            wyzieSettingsDataStore.setApiKey(it)
-        }
-
         applyPosterRatingsProviderSelection(
             settings = settings.integrations.posterRatings,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
@@ -1222,7 +1198,6 @@ class AccountSettingsSyncService @Inject constructor(
                 providerName = subtitleTranslationSettings.provider.name,
                 translationApiKey = subtitleTranslationSettings.apiKey
             ),
-            wyzieApiKey = wyzieSettingsDataStore.settings.first().apiKey.orEmpty(),
             animeSkipClientId = animeSkipSettingsDataStore.clientId.first(),
             rpdbApiKey = posterRatingsSettingsDataStore.settings.first().rpdbApiKey,
             topPostersApiKey = posterRatingsSettingsDataStore.settings.first().topPostersApiKey,
@@ -1256,7 +1231,6 @@ class AccountSettingsSyncService @Inject constructor(
         syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, snapshot.mdbListApiKey)
         syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, snapshot.omdbApiKey)
         syncApiKeySecretToRemote(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF, snapshot.subtitleTranslationApiKey)
-        syncApiKeySecretToRemote(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF, snapshot.wyzieApiKey)
         syncApiKeySecretToRemote(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF, snapshot.animeSkipClientId)
         snapshot.legacyGeminiApiKey?.let { legacyGeminiKey ->
             syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
@@ -1496,7 +1470,6 @@ class AccountSettingsSyncService @Inject constructor(
                 legacyGeminiKey = legacyGeminiKey,
                 allowLegacyFallback = allowLegacyFallback
             ),
-            wyzieApiKey = resolveApiKeySecretOrNull(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF),
             animeSkipClientId = resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF),
             rpdbApiKey = resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF),
             topPostersApiKey = resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF),
@@ -1517,7 +1490,6 @@ class AccountSettingsSyncService @Inject constructor(
         secrets.mdbListApiKey?.let { mdbListSettingsDataStore.setApiKey(it) }
         secrets.omdbApiKey?.let { omdbSettingsDataStore.setApiKey(it) }
         secrets.subtitleTranslationApiKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
-        secrets.wyzieApiKey?.let { wyzieSettingsDataStore.setApiKey(it) }
         secrets.animeSkipClientId?.let { animeSkipSettingsDataStore.setClientId(it) }
         secrets.rpdbApiKey?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
         secrets.topPostersApiKey?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }

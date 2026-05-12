@@ -124,7 +124,7 @@ data class AccountTvdbCredentialSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 9,
+    val schemaVersion: Int = 11,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),
@@ -289,8 +289,6 @@ data class IntegrationSettings(
     val subtitleTranslation: SubtitleTranslationSyncSettings = SubtitleTranslationSyncSettings(),
     @EncodeDefault
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
-    @EncodeDefault
-    val wyzie: WyzieSyncSettings = WyzieSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
     val kitsuAuth: KitsuAuthSyncSettings = KitsuAuthSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings(),
@@ -420,11 +418,6 @@ data class SubtitleTranslationSyncSettings(
     val model: String = "openrouter/free",
     @EncodeDefault
     val baseUrl: String = "https://openrouter.ai/api/v1"
-)
-
-@Serializable
-data class WyzieSyncSettings(
-    val enabled: Boolean = true
 )
 
 @Serializable
