@@ -220,9 +220,10 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             optimisticVersion: Long,
             session: TrackingAuthSession
         ): TraktMutationEnvelope {
+            val effectiveAction = coerceAction(action, progressPercent)
             val payload = JsonObject().apply {
                 populateItem(item)
-                addProperty(PAYLOAD_ACTION, action)
+                addProperty(PAYLOAD_ACTION, effectiveAction)
                 addProperty(PAYLOAD_PROGRESS, progressPercent.coerceIn(0f, 100f))
             }
             return TraktMutationEnvelope(
@@ -239,6 +240,16 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 metadata = buildRollbackMetadata(rollbackState, optimisticVersion)
             )
         }
+
+        // Trakt rejects /scrobble/pause at >= 80% with HTTP 422. Above that threshold the
+        // request would enter the outbox WAITING_RETRY -> TERMINAL_FAILED cycle on every
+        // backoff iteration. Coerce to "stop" upstream — the equivalent semantic at that
+        // progress is that playback ended, not that it paused.
+        // CrossWatch reference: providers/scrobble/trakt/sink.py:750
+        private fun coerceAction(action: String, progressPercent: Float): String =
+            if (action == "pause" && progressPercent >= TRAKT_PAUSE_REJECTION_THRESHOLD) "stop" else action
+
+        private const val TRAKT_PAUSE_REJECTION_THRESHOLD = 80f
 
         fun buildCheckinEnvelope(
             item: TraktScrobbleItem,
