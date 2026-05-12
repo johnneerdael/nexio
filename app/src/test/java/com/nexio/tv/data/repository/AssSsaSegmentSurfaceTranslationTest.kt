@@ -126,6 +126,35 @@ class AssSsaSegmentSurfaceTranslationTest {
         assertEquals("ga<1/>e{\\k10}d", surface.recomposeOrThrow(listOf("ga<1/>e<2/>d")))
     }
 
+    @Test
+    fun validationRejectsGeneratedMarkerMovedToAnotherSegment() {
+        val surface = parseSurface("go{\\k10}od {\\i1}now")
+
+        assertEquals(listOf("go<1/>od", "now"), surface.segments)
+        assertEquals(listOf(" {\\i1}"), surface.separators)
+        assertTrue(surface.validateTranslatedSegments(listOf("goed", "nu<1/>")).isFailure)
+    }
+
+    @Test
+    fun lineBreakBetweenWordsNeverBecomesInlineMarker() {
+        val surface = parseSurface("Hello\\Nworld")
+
+        assertEquals(listOf("Hello", "world"), surface.segments)
+        assertEquals(listOf("\\N"), surface.separators)
+        assertEquals(emptyMap<String, String>(), surface.inlineMarkers)
+        assertEquals("Hallo\\Nwereld", surface.recomposeOrThrow(listOf("Hallo", "wereld")))
+    }
+
+    @Test
+    fun hardSpaceBetweenWordsNeverBecomesInlineMarker() {
+        val surface = parseSurface("Hello\\hworld")
+
+        assertEquals(listOf("Hello", "world"), surface.segments)
+        assertEquals(listOf("\\h"), surface.separators)
+        assertEquals(emptyMap<String, String>(), surface.inlineMarkers)
+        assertEquals("Hallo\\hwereld", surface.recomposeOrThrow(listOf("Hallo", "wereld")))
+    }
+
     private fun parseSurface(text: String): AssSsaTranslationSurface {
         return when (val result = AssSsaSegmentSurfaceParser.parse("evt_0", text)) {
             is AssSsaSurfaceParseResult.Translatable -> result.surface
