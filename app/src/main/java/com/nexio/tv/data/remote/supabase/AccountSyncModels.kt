@@ -2,6 +2,8 @@
 
 package com.nexio.tv.data.remote.supabase
 
+import com.nexio.tv.domain.model.HOME_CATALOG_RAILS_VERSION
+import com.nexio.tv.domain.model.HomeCatalogRail
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.EncodeDefault
@@ -169,10 +171,14 @@ data class CatalogSyncSettings(
 
 @Serializable
 data class HomeCatalogSyncSettings(
+    val railsVersion: Int? = null,
+    val rails: List<HomeCatalogRail>? = null,
     val heroCatalogKeys: List<String>? = null,
     val homeCatalogOrderKeys: List<String>? = null,
     val disabledHomeCatalogKeys: List<String>? = null
-)
+) {
+    fun railsVersionOrDefault(): Int = railsVersion ?: HOME_CATALOG_RAILS_VERSION
+}
 
 @Serializable
 data class TraktCatalogSyncSettings(
