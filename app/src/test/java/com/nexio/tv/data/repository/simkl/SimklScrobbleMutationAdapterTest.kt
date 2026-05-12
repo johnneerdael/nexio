@@ -9,12 +9,14 @@ import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -113,6 +115,77 @@ class SimklScrobbleMutationAdapterTest {
         adapter.reconcileSuccess(envelope)
 
         coVerify(exactly = 1) { progressService.refreshNow() }
+    }
+
+    @Test
+    fun `movie envelope uses hydratedIds when present`() {
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Movie(
+                contentId = "tmdb:1396",
+                title = "Breaking Bad",
+                year = 2008,
+                hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396", simkl = "5045"),
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession()
+        )
+
+        val payload = envelope.payload
+        assertEquals("tt0903747", payload.get("imdb").asString)
+        assertEquals("1396", payload.get("tmdb").asString)
+        assertEquals(5045L, payload.get("simkl").asLong)
+    }
+
+    @Test
+    fun `episode envelope uses hydratedIds for show ids`() {
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Episode(
+                contentId = "tmdb:1396",
+                showTitle = "Breaking Bad",
+                showYear = 2008,
+                season = 5,
+                number = 14,
+                episodeTitle = "Ozymandias",
+                hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396", simkl = "5045"),
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession()
+        )
+
+        val payload = envelope.payload
+        assertEquals("tt0903747", payload.get("showImdb").asString)
+        assertEquals("1396", payload.get("showTmdb").asString)
+        assertEquals(5045L, payload.get("showSimkl").asLong)
+        assertEquals(5, payload.get("season").asInt)
+        assertEquals(14, payload.get("number").asInt)
+    }
+
+    @Test
+    fun `envelope falls back to contentId parse when hydratedIds is null`() {
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Movie(
+                contentId = "tt1234567",
+                title = "x",
+                year = 2025,
+                hydratedIds = null,
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession()
+        )
+
+        val payload = envelope.payload
+        assertEquals("tt1234567", payload.get("imdb").asString)
+        assertNull(payload.get("tmdb"))
+        assertNull(payload.get("simkl"))
     }
 
     private fun movieItem(title: String) = TrackingScrobbleItem.Movie(
