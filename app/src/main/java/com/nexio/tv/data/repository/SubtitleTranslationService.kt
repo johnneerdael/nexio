@@ -307,18 +307,15 @@ class SubtitleTranslationService @Inject constructor(
                 ) {
                     val surfaces = document.assSsaSegmentSurfaces()
                     val batches = AssSsaSegmentSurfaceBatchPlanner.plan(surfaces)
-                    val translatedSegments = mutableMapOf<String, List<String>>()
-                    batches.forEach { batch ->
-                        val response = translateAssSsaSegmentSurfaces(
+                    val batchResponses = batches.map { batch ->
+                        batch to translateAssSsaSegmentSurfaces(
                             surfaces = batch.units,
                             targetLanguageCode = normalizedTarget,
                             sourceLanguageCode = sourceLanguageCode,
                             settings = normalizedSettings
                         ).getOrThrow()
-                        batch.coreUnits.forEach { surface ->
-                            response[surface.id]?.let { translatedSegments[surface.id] = it }
-                        }
                     }
+                    val translatedSegments = mergeAssSsaSegmentBatchResponses(batchResponses)
                     diagnosticsLogger.log(
                         "ass_segment_translate_merge batches=${batches.size} " +
                             "surfaces=${surfaces.size} translated=${translatedSegments.size}"

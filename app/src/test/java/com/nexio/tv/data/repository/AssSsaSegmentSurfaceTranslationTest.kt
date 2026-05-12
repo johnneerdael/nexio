@@ -155,8 +155,32 @@ class AssSsaSegmentSurfaceTranslationTest {
         assertEquals("Hallo\\hwereld", surface.recomposeOrThrow(listOf("Hallo", "wereld")))
     }
 
+    @Test
+    fun overlapBatchResponseFillsMissingCoreSegmentTranslation() {
+        val surfaces = (0..14).map { index ->
+            parseSurface(id = "ass_$index", text = "Source $index")
+        }
+        val batches = AssSsaSegmentSurfaceBatchPlanner.plan(
+            surfaces,
+            config = AssSsaTranslationBatchConfig(maxEvents = 60, maxVisibleChars = 200_000)
+        )
+        val batchResponses = listOf(
+            batches[0] to (0..5).associate { index -> "ass_$index" to listOf("Translated $index") },
+            batches[1] to (listOf(4) + (6..14)).associate { index -> "ass_$index" to listOf("Translated $index") }
+        )
+
+        val merged = mergeAssSsaSegmentBatchResponses(batchResponses)
+
+        assertEquals("Translated 5", merged["ass_5"]?.single())
+        assertEquals(15, merged.size)
+    }
+
     private fun parseSurface(text: String): AssSsaTranslationSurface {
-        return when (val result = AssSsaSegmentSurfaceParser.parse("evt_0", text)) {
+        return parseSurface(id = "evt_0", text = text)
+    }
+
+    private fun parseSurface(id: String, text: String): AssSsaTranslationSurface {
+        return when (val result = AssSsaSegmentSurfaceParser.parse(id, text)) {
             is AssSsaSurfaceParseResult.Translatable -> result.surface
             is AssSsaSurfaceParseResult.PreserveOnly -> error("Expected translatable surface for $text")
         }

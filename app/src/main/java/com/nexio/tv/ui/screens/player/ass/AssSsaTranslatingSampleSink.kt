@@ -18,10 +18,22 @@ internal class AssSsaTranslatingSampleSink(
     private val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
         AutoTranslateDiagnosticsLogger.disabled()
 ) : AssSsaSampleSink {
-    private val trackFormats = linkedMapOf<Int, AssSsaEventFormat>()
+    private val trackFormats = linkedMapOf<Int, TrackEventFormats>()
 
     override fun onTrackHeader(trackId: Int, headerData: ByteArray, format: Format) {
-        trackFormats[trackId] = AssSsaEventFormat.standardDialogue()
+        val dialogueFormat = headerData.decodeToString()
+            .lineSequence()
+            .mapNotNull(AssSsaEventFormat::parse)
+            .lastOrNull()
+            ?: AssSsaEventFormat.standardDialogue()
+        trackFormats[trackId] = TrackEventFormats(
+            dialogueFormat = dialogueFormat,
+            rawSampleFormat = if (format.isEmbeddedAssSsaFormat()) {
+                AssSsaEventFormat.matroskaAss()
+            } else {
+                dialogueFormat
+            }
+        )
         downstream.onTrackHeader(trackId, headerData, format)
     }
 
@@ -37,9 +49,9 @@ internal class AssSsaTranslatingSampleSink(
         }
 
         val text = data.decodeToString()
-        val format = trackFormats[trackId] ?: AssSsaEventFormat.standardDialogue()
+        val formats = trackFormats[trackId] ?: TrackEventFormats.default()
         val records = text.lineSequence()
-            .mapNotNull { line -> AssSsaEventRecord.parseDialogueLine(line, format) }
+            .mapNotNull { line -> line.parseAssSsaSampleRecord(formats) }
             .toList()
         if (records.isEmpty()) {
             diagnosticsLogger.log(
@@ -102,5 +114,43 @@ internal class AssSsaTranslatingSampleSink(
 
     override fun onFontAttachment(name: String, data: ByteArray) {
         downstream.onFontAttachment(name, data)
+    }
+
+    private data class TrackEventFormats(
+        val dialogueFormat: AssSsaEventFormat,
+        val rawSampleFormat: AssSsaEventFormat
+    ) {
+        companion object {
+            fun default(): TrackEventFormats {
+                val dialogueFormat = AssSsaEventFormat.standardDialogue()
+                return TrackEventFormats(
+                    dialogueFormat = dialogueFormat,
+                    rawSampleFormat = dialogueFormat
+                )
+            }
+        }
+    }
+
+    private fun String.parseAssSsaSampleRecord(formats: TrackEventFormats): AssSsaEventRecord? {
+        val trimmed = trimStart()
+        return if (trimmed.startsWith("Dialogue:", ignoreCase = true) ||
+            trimmed.startsWith("Comment:", ignoreCase = true)
+        ) {
+            AssSsaEventRecord.parseDialogueLine(this, formats.dialogueFormat)
+        } else {
+            parseRawAssSsaSampleRecord(formats.rawSampleFormat)
+        }
+    }
+
+    private fun String.parseRawAssSsaSampleRecord(format: AssSsaEventFormat): AssSsaEventRecord? {
+        if (format.textIndex < 0) return null
+        val values = split(',', limit = format.fields.size)
+        if (values.size <= format.textIndex) return null
+        return AssSsaEventRecord(
+            kind = "Sample",
+            prefix = "",
+            format = format,
+            values = values
+        )
     }
 }
