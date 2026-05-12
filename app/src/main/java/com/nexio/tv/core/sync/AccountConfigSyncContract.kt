@@ -11,7 +11,6 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
-import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -55,18 +54,16 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 11
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 12
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
     homeCatalogOrderKeys: Flow<Unit>,
     disabledHomeCatalogKeys: Flow<Unit>,
     tmdbSettings: Flow<Unit>,
-    tvdbSettings: Flow<Unit>,
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
     omdbSettings: Flow<Unit>,
-    theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
@@ -89,11 +86,9 @@ internal fun observeAccountConfigSyncChanges(
         homeCatalogOrderKeys,
         disabledHomeCatalogKeys,
         tmdbSettings,
-        tvdbSettings,
         mdbListSettings,
         mdbListCatalogPreferences,
         omdbSettings,
-        theIntroDbSettings,
         animeSkipEnabled,
         subtitleTranslationSettings,
         posterRatingsSettings,
@@ -118,11 +113,9 @@ internal fun observeAccountConfigSyncChangedPaths(
     homeCatalogOrderKeys: Flow<Unit>,
     disabledHomeCatalogKeys: Flow<Unit>,
     tmdbSettings: Flow<Unit>,
-    tvdbSettings: Flow<Unit>,
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
     omdbSettings: Flow<Unit>,
-    theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
@@ -145,11 +138,9 @@ internal fun observeAccountConfigSyncChangedPaths(
         homeCatalogOrderKeys.map { "catalogs.home.homeCatalogOrderKeys" },
         disabledHomeCatalogKeys.map { "catalogs.home.disabledHomeCatalogKeys" },
         tmdbSettings.map { "integrations.tmdb" },
-        tvdbSettings.map { "integrations.tvdb" },
         mdbListSettings.map { "integrations.mdblist" },
         mdbListCatalogPreferences.map { "catalogs.mdblist" },
         omdbSettings.map { "integrations.omdb.enabled" },
-        theIntroDbSettings.map { "integrations.theIntroDb" },
         animeSkipEnabled.map { "integrations.animeSkip.enabled" },
         subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
         posterRatingsSettings.map { "integrations.posterRatings" },
@@ -334,7 +325,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     tmdbSettingsDataStore: TmdbSettingsDataStore,
     mdbListSettingsDataStore: MDBListSettingsDataStore,
     omdbSettingsDataStore: OmdbSettingsDataStore,
-    theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
@@ -379,12 +369,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
 
     omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
-
-    theIntroDbSettingsDataStore.setEnabled(true)
-    theIntroDbSettingsDataStore.setShowIntroButton(settings.integrations.theIntroDb.showIntroButton)
-    theIntroDbSettingsDataStore.setShowRecapButton(settings.integrations.theIntroDb.showRecapButton)
-    theIntroDbSettingsDataStore.setShowCreditsButton(settings.integrations.theIntroDb.showCreditsButton)
-    theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
 
     animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
 

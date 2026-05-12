@@ -124,7 +124,7 @@ data class AccountTvdbCredentialSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 11,
+    val schemaVersion: Int = 12,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),
@@ -276,10 +276,7 @@ data class LayoutSettings(
 @Serializable
 data class IntegrationSettings(
     val debrid: DebridSyncSettings = DebridSyncSettings(),
-    val theIntroDb: TheIntroDbSyncSettings = TheIntroDbSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
-    @EncodeDefault
-    val tvdb: TvdbSyncSettings = TvdbSyncSettings(),
     val omdb: OmdbSyncSettings = OmdbSyncSettings(),
     @EncodeDefault
     val imdb: ImdbSyncSettings = ImdbSyncSettings(),
@@ -337,15 +334,6 @@ data class EasyDebridSyncSettings(
 )
 
 @Serializable
-data class TheIntroDbSyncSettings(
-    val enabled: Boolean = true,
-    val showIntroButton: Boolean = true,
-    val showRecapButton: Boolean = true,
-    val showCreditsButton: Boolean = true,
-    val showPreviewButton: Boolean = true
-)
-
-@Serializable
 data class TmdbSyncSettings(
     @EncodeDefault
     val enabled: Boolean = true,
@@ -358,18 +346,6 @@ data class TmdbSyncSettings(
     val useEpisodes: Boolean = true,
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true
-)
-
-@Serializable
-data class TvdbSyncSettings(
-    @EncodeDefault
-    val enabled: Boolean = true,
-    @EncodeDefault
-    val configured: Boolean = true,
-    @EncodeDefault
-    val validationStatus: String = "VALID",
-    @EncodeDefault
-    val lastFailure: String = ""
 )
 
 @Serializable
@@ -428,7 +404,6 @@ data class PosterRatingsSyncSettings(
 
 @Serializable
 data class KitsuAuthSyncSettings(
-    val enabled: Boolean = true,
     val connected: Boolean = false,
     val username: String = "",
     val accessTokenSecretRef: String? = null,
