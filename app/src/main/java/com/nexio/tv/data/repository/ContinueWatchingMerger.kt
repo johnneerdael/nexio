@@ -1,6 +1,10 @@
 package com.nexio.tv.data.repository
 
 object ContinueWatchingMerger {
+    // Stateless — instantiated once at object-init time. Hilt-injected planners elsewhere
+    // reuse the same class; this internal instance is only consulted by mergeRecords.
+    private val diffPlanner = ContinueWatchingProgressDiffPlanner()
+
     fun merge(records: List<ContinueWatchingRecord>): List<ContinueWatchingRecord> {
         if (records.isEmpty()) return emptyList()
         val sorted = records.sortedByDescending { it.updatedAt }
@@ -80,6 +84,11 @@ object ContinueWatchingMerger {
         existing: ContinueWatchingRecord,
         candidate: ContinueWatchingRecord
     ): ContinueWatchingRecord {
+        // Cross-provider conflict: defer to the diff planner so a meaningful position lead
+        // never regresses just because the trailing provider has a newer timestamp.
+        if (existing.provider != candidate.provider) {
+            return diffPlanner.pickWinner(listOf(existing, candidate)) ?: existing
+        }
         val existingHasProgress = existing.hasMeaningfulProgress()
         val candidateHasProgress = candidate.hasMeaningfulProgress()
         if (!existingHasProgress && candidateHasProgress) return candidate
