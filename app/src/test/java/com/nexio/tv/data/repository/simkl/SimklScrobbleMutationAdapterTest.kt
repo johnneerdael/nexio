@@ -188,6 +188,61 @@ class SimklScrobbleMutationAdapterTest {
         assertNull(payload.get("simkl"))
     }
 
+    @Test
+    fun `episode with anime IDs routes to anime parent and includes anime ids`() {
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Episode(
+                contentId = "kitsu:1",
+                showTitle = "Cowboy Bebop",
+                showYear = 1998,
+                season = 1, number = 5,
+                episodeTitle = "Ballad of Fallen Angels",
+                hydratedIds = ProviderIds(
+                    kitsu = "1", mal = "1", anilist = "1", anidb = "10",
+                    imdb = "tt0213338", tmdb = "30991", simkl = "5045",
+                ),
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession()
+        )
+
+        val payload = envelope.payload
+        // Anime detection routes to the "anime" parent envelope, not "show".
+        assertEquals("anime", payload.get("parentKind").asString)
+        // Anime IDs flow through.
+        assertEquals("1", payload.get("showMal").asString)
+        assertEquals("1", payload.get("showAnilist").asString)
+        assertEquals("1", payload.get("showKitsu").asString)
+        assertEquals("10", payload.get("showAnidb").asString)
+        // Plus the usual show IDs.
+        assertEquals("tt0213338", payload.get("showImdb").asString)
+        assertEquals(5045L, payload.get("showSimkl").asLong)
+    }
+
+    @Test
+    fun `non-anime episode keeps show parent`() {
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Episode(
+                contentId = "tt0903747",
+                showTitle = "Breaking Bad",
+                showYear = 2008,
+                season = 5, number = 14,
+                episodeTitle = "Ozymandias",
+                hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396"),
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession()
+        )
+
+        assertEquals("show", envelope.payload.get("parentKind").asString)
+    }
+
     private fun movieItem(title: String) = TrackingScrobbleItem.Movie(
         contentId = "tt1234567",
         title = title,

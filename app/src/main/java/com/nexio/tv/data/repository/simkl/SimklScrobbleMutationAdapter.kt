@@ -83,22 +83,37 @@ class SimklScrobbleMutationAdapter @Inject constructor(
 
     companion object {
         private const val PAYLOAD_ITEM_TYPE = "itemType"
+        private const val PAYLOAD_PARENT_KIND = "parentKind"
         private const val PAYLOAD_TITLE = "title"
         private const val PAYLOAD_YEAR = "year"
         private const val PAYLOAD_IMDB = "imdb"
         private const val PAYLOAD_TMDB = "tmdb"
+        private const val PAYLOAD_TVDB = "tvdb"
         private const val PAYLOAD_SIMKL = "simkl"
+        private const val PAYLOAD_MAL = "mal"
+        private const val PAYLOAD_ANILIST = "anilist"
+        private const val PAYLOAD_KITSU = "kitsu"
+        private const val PAYLOAD_ANIDB = "anidb"
         private const val PAYLOAD_SHOW_TITLE = "showTitle"
         private const val PAYLOAD_SHOW_YEAR = "showYear"
         private const val PAYLOAD_SHOW_IMDB = "showImdb"
         private const val PAYLOAD_SHOW_TMDB = "showTmdb"
+        private const val PAYLOAD_SHOW_TVDB = "showTvdb"
         private const val PAYLOAD_SHOW_SIMKL = "showSimkl"
+        private const val PAYLOAD_SHOW_MAL = "showMal"
+        private const val PAYLOAD_SHOW_ANILIST = "showAnilist"
+        private const val PAYLOAD_SHOW_KITSU = "showKitsu"
+        private const val PAYLOAD_SHOW_ANIDB = "showAnidb"
         private const val PAYLOAD_SEASON = "season"
         private const val PAYLOAD_NUMBER = "number"
         private const val PAYLOAD_EPISODE_TITLE = "episodeTitle"
         private const val PAYLOAD_ACTION = "action"
         private const val PAYLOAD_PROGRESS = "progress"
         private const val PAYLOAD_MESSAGE = "message"
+
+        private const val PARENT_KIND_MOVIE = "movie"
+        private const val PARENT_KIND_SHOW = "show"
+        private const val PARENT_KIND_ANIME = "anime"
 
         private const val METADATA_ROLLBACK_ACTIVE = "rollbackActive"
         private const val METADATA_ROLLBACK_TITLE = "rollbackTitle"
@@ -165,28 +180,62 @@ class SimklScrobbleMutationAdapter @Inject constructor(
         }
 
         private fun JsonObject.populateItem(item: TrackingScrobbleItem) {
-            val ids = item.hydratedIds?.toSimklIds() ?: parseSimklIds(item.contentId)
+            val isAnime = item.hasAnimeIds()
             when (item) {
                 is TrackingScrobbleItem.Movie -> {
                     addProperty(PAYLOAD_ITEM_TYPE, "movie")
+                    addProperty(PAYLOAD_PARENT_KIND, if (isAnime) PARENT_KIND_ANIME else PARENT_KIND_MOVIE)
                     item.title?.let { addProperty(PAYLOAD_TITLE, it) }
                     item.year?.let { addProperty(PAYLOAD_YEAR, it) }
-                    ids.imdb?.let { addProperty(PAYLOAD_IMDB, it) }
-                    ids.tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
-                    ids.simkl?.let { addProperty(PAYLOAD_SIMKL, it) }
+                    item.hydratedIds?.let { ids ->
+                        ids.imdb?.let { addProperty(PAYLOAD_IMDB, it) }
+                        ids.tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
+                        ids.tvdb?.let { addProperty(PAYLOAD_TVDB, it) }
+                        ids.simkl?.toLongOrNull()?.let { addProperty(PAYLOAD_SIMKL, it) }
+                        if (isAnime) {
+                            ids.mal?.let { addProperty(PAYLOAD_MAL, it) }
+                            ids.anilist?.let { addProperty(PAYLOAD_ANILIST, it) }
+                            ids.kitsu?.let { addProperty(PAYLOAD_KITSU, it) }
+                            ids.anidb?.let { addProperty(PAYLOAD_ANIDB, it) }
+                        }
+                    } ?: parseSimklIds(item.contentId).let { ids ->
+                        ids.imdb?.let { addProperty(PAYLOAD_IMDB, it) }
+                        ids.tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
+                        ids.simkl?.let { addProperty(PAYLOAD_SIMKL, it) }
+                    }
                 }
                 is TrackingScrobbleItem.Episode -> {
                     addProperty(PAYLOAD_ITEM_TYPE, "episode")
+                    addProperty(PAYLOAD_PARENT_KIND, if (isAnime) PARENT_KIND_ANIME else PARENT_KIND_SHOW)
                     item.showTitle?.let { addProperty(PAYLOAD_SHOW_TITLE, it) }
                     item.showYear?.let { addProperty(PAYLOAD_SHOW_YEAR, it) }
-                    ids.imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
-                    ids.tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
-                    ids.simkl?.let { addProperty(PAYLOAD_SHOW_SIMKL, it) }
+                    item.hydratedIds?.let { ids ->
+                        ids.imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
+                        ids.tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
+                        ids.tvdb?.let { addProperty(PAYLOAD_SHOW_TVDB, it) }
+                        ids.simkl?.toLongOrNull()?.let { addProperty(PAYLOAD_SHOW_SIMKL, it) }
+                        if (isAnime) {
+                            ids.mal?.let { addProperty(PAYLOAD_SHOW_MAL, it) }
+                            ids.anilist?.let { addProperty(PAYLOAD_SHOW_ANILIST, it) }
+                            ids.kitsu?.let { addProperty(PAYLOAD_SHOW_KITSU, it) }
+                            ids.anidb?.let { addProperty(PAYLOAD_SHOW_ANIDB, it) }
+                        }
+                    } ?: parseSimklIds(item.contentId).let { ids ->
+                        ids.imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
+                        ids.tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
+                        ids.simkl?.let { addProperty(PAYLOAD_SHOW_SIMKL, it) }
+                    }
                     addProperty(PAYLOAD_SEASON, item.season)
                     addProperty(PAYLOAD_NUMBER, item.number)
                     item.episodeTitle?.let { addProperty(PAYLOAD_EPISODE_TITLE, it) }
                 }
             }
+        }
+
+        // Anime when any anime-native sidecar id is present on the hydrated bundle.
+        private fun TrackingScrobbleItem.hasAnimeIds(): Boolean {
+            val ids = hydratedIds ?: return false
+            return ids.mal != null || ids.anilist != null || ids.kitsu != null || ids.anidb != null
         }
 
         private fun ProviderIds.toSimklIds(): ParsedSimklIds = ParsedSimklIds(
@@ -226,36 +275,63 @@ class SimklScrobbleMutationAdapter @Inject constructor(
             payload.get(PAYLOAD_ACTION)?.asString ?: "stop"
 
         private fun TraktMutationEnvelope.buildRequestBody(): SimklScrobbleRequestDto {
+            val parentKind = payload.get(PAYLOAD_PARENT_KIND)?.asString ?: when (
+                payload.get(PAYLOAD_ITEM_TYPE)?.asString
+            ) {
+                "movie" -> PARENT_KIND_MOVIE
+                else -> PARENT_KIND_SHOW
+            }
+            val progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat
             return when (payload.get(PAYLOAD_ITEM_TYPE)?.asString) {
-                "movie" -> SimklScrobbleRequestDto(
-                    progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat,
-                    movie = SimklMediaRefDto(
+                "movie" -> {
+                    val movieIds = SimklIdsDto(
+                        simkl = payload.get(PAYLOAD_SIMKL)?.takeIf { !it.isJsonNull }?.asLong,
+                        imdb = payload.get(PAYLOAD_IMDB)?.asString,
+                        tmdb = payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asString,
+                        tvdb = payload.get(PAYLOAD_TVDB)?.asString,
+                        mal = payload.get(PAYLOAD_MAL)?.asString,
+                        anilist = payload.get(PAYLOAD_ANILIST)?.asString,
+                        kitsu = payload.get(PAYLOAD_KITSU)?.asString,
+                        anidb = payload.get(PAYLOAD_ANIDB)?.asString,
+                    )
+                    val movieRef = SimklMediaRefDto(
                         title = payload.get(PAYLOAD_TITLE)?.asString,
                         year = payload.get(PAYLOAD_YEAR)?.takeIf { !it.isJsonNull }?.asInt,
-                        ids = SimklIdsDto(
-                            simkl = payload.get(PAYLOAD_SIMKL)?.takeIf { !it.isJsonNull }?.asLong,
-                            imdb = payload.get(PAYLOAD_IMDB)?.asString,
-                            tmdb = payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asString
-                        )
+                        ids = movieIds,
                     )
-                )
-                else -> SimklScrobbleRequestDto(
-                    progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat,
-                    show = SimklMediaRefDto(
+                    if (parentKind == PARENT_KIND_ANIME) {
+                        SimklScrobbleRequestDto(progress = progress, anime = movieRef)
+                    } else {
+                        SimklScrobbleRequestDto(progress = progress, movie = movieRef)
+                    }
+                }
+                else -> {
+                    val showIds = SimklIdsDto(
+                        simkl = payload.get(PAYLOAD_SHOW_SIMKL)?.takeIf { !it.isJsonNull }?.asLong,
+                        imdb = payload.get(PAYLOAD_SHOW_IMDB)?.asString,
+                        tmdb = payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asString,
+                        tvdb = payload.get(PAYLOAD_SHOW_TVDB)?.asString,
+                        mal = payload.get(PAYLOAD_SHOW_MAL)?.asString,
+                        anilist = payload.get(PAYLOAD_SHOW_ANILIST)?.asString,
+                        kitsu = payload.get(PAYLOAD_SHOW_KITSU)?.asString,
+                        anidb = payload.get(PAYLOAD_SHOW_ANIDB)?.asString,
+                    )
+                    val showRef = SimklMediaRefDto(
                         title = payload.get(PAYLOAD_SHOW_TITLE)?.asString,
                         year = payload.get(PAYLOAD_SHOW_YEAR)?.takeIf { !it.isJsonNull }?.asInt,
-                        ids = SimklIdsDto(
-                            simkl = payload.get(PAYLOAD_SHOW_SIMKL)?.takeIf { !it.isJsonNull }?.asLong,
-                            imdb = payload.get(PAYLOAD_SHOW_IMDB)?.asString,
-                            tmdb = payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asString
-                        )
-                    ),
-                    episode = SimklEpisodeDto(
+                        ids = showIds,
+                    )
+                    val episodeDto = SimklEpisodeDto(
                         season = payload.get(PAYLOAD_SEASON)?.asInt,
                         number = payload.get(PAYLOAD_NUMBER)?.asInt,
-                        title = payload.get(PAYLOAD_EPISODE_TITLE)?.asString
+                        title = payload.get(PAYLOAD_EPISODE_TITLE)?.asString,
                     )
-                )
+                    if (parentKind == PARENT_KIND_ANIME) {
+                        SimklScrobbleRequestDto(progress = progress, anime = showRef, episode = episodeDto)
+                    } else {
+                        SimklScrobbleRequestDto(progress = progress, show = showRef, episode = episodeDto)
+                    }
+                }
             }
         }
 
