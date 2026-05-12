@@ -148,6 +148,10 @@ class DefaultTrackingScrobbleService @Inject constructor(
         return results.any { it }
     }
 
+    // observeWatchingNowState exposes a single-stream "now playing" badge for the UI.
+    // Picking one provider is correct here: only one playback session can be active.
+    // effectiveProvider is the right disambiguator until a merged-display Phase ships.
+    @Suppress("DEPRECATION")
     override fun observeWatchingNowState(): Flow<TrackingWatchingNowState> {
         return trackingProviderStateService.state.flatMapLatest { state ->
             when (state.effectiveProvider) {

@@ -1,3 +1,9 @@
+// effectiveProvider still routes watch-progress mutation envelopes here.
+// Phase 3 of the scrobble + CW dual-provider plan migrates the envelope builders
+// to dual-emit (one per authenticated provider). Suppression tracks that migration.
+// Plan: docs/superpowers/plans/2026-05-12-scrobble-cw-dual-provider-overhaul.md
+@file:Suppress("DEPRECATION")
+
 package com.nexio.tv.data.repository
 
 import android.util.Log
