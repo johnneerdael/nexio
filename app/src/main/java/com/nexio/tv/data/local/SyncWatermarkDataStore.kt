@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.core.sync.AccountSettingsSectionKey
 import com.nexio.tv.core.sync.SyncWatermarkSurface
@@ -38,6 +39,10 @@ class SyncWatermarkDataStore @Inject constructor(
         return longPreferencesKey("watermark.${SyncWatermarkSurface.ACCOUNT_SETTINGS_SECTION.name}:${section.key}")
     }
 
+    private fun accountSettingsSectionBaselineKey(section: AccountSettingsSectionKey): Preferences.Key<String> {
+        return stringPreferencesKey("baseline.${SyncWatermarkSurface.ACCOUNT_SETTINGS_SECTION.name}:${section.key}")
+    }
+
     suspend fun get(surface: SyncWatermarkSurface, profileId: Int?): Long {
         return dataStore.data.first()[key(surface, profileId)] ?: 0L
     }
@@ -52,6 +57,24 @@ class SyncWatermarkDataStore @Inject constructor(
 
     suspend fun setAccountSettingsSection(section: AccountSettingsSectionKey, ms: Long) {
         dataStore.edit { prefs -> prefs[accountSettingsSectionKey(section)] = ms }
+    }
+
+    suspend fun getAccountSettingsSectionBaselines(): Map<AccountSettingsSectionKey, String> {
+        val prefs = dataStore.data.first()
+        return AccountSettingsSectionKey.entries.mapNotNull { section ->
+            prefs[accountSettingsSectionBaselineKey(section)]?.let { baseline ->
+                section to baseline
+            }
+        }.toMap()
+    }
+
+    suspend fun setAccountSettingsSectionBaselines(baselines: Map<AccountSettingsSectionKey, String>) {
+        if (baselines.isEmpty()) return
+        dataStore.edit { prefs ->
+            baselines.forEach { (section, baseline) ->
+                prefs[accountSettingsSectionBaselineKey(section)] = baseline
+            }
+        }
     }
 
     suspend fun clearAll() {
