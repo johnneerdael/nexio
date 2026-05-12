@@ -636,6 +636,16 @@
     <string name="debrid_rd_activation_qr_title">Real-Debrid Activation</string>
     <string name="debrid_rd_activation_qr_subtitle">Scan this QR code to open the activation page on your phone.</string>
     <string name="debrid_rd_activation_qr_instruction">Scan the QR code to automatically authenticate your device against Real-Debrid.</string>
+    <string name="debrid_torbox_pair_action">Authorize via QR</string>
+    <string name="debrid_torbox_pair_or_paste">Or paste API key</string>
+    <string name="debrid_torbox_qr_title">TorBox Activation</string>
+    <string name="debrid_torbox_qr_subtitle">Scan the QR code or open the verification URL to approve this device.</string>
+    <string name="debrid_torbox_qr_instruction">Waiting for approval — this dialog will close automatically once TorBox confirms.</string>
+    <string name="debrid_torbox_qr_expiry">Code expires in about %1$d minutes.</string>
+    <string name="debrid_torbox_qr_expiry_soon">Code expires shortly — restart pairing if it lapses.</string>
+    <string name="debrid_torbox_qr_starting">Requesting a TorBox device code…</string>
+    <string name="cd_torbox_activation_qr">TorBox activation QR code</string>
+    <string name="action_check_now">Check now</string>
     <string name="debrid_data_collection_qr_unavailable">QR code is unavailable</string>
     <string name="debrid_data_collection_qr_code_content_description">Collector dashboard QR code</string>
     <string name="debrid_data_collection_qr_base_url_missing">Collector dashboard base URL is not configured.</string>

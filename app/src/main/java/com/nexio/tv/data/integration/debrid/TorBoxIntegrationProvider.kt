@@ -16,6 +16,9 @@ import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCachedTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCheckCachedRequestDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCreateTorrentDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceCodeDataDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceTokenDataDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceTokenRequestDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxEnvelopeDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxUserDto
@@ -51,6 +54,61 @@ class TorBoxIntegrationProvider @Inject constructor(
                         )
                     } else {
                         IntegrationCallResult.Success(body)
+                    }
+                }
+            )
+        )
+
+    suspend fun startDeviceCode(): IntegrationCallResult<TorBoxEnvelopeDto<TorBoxDeviceCodeDataDto>> =
+        runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TORBOX,
+                apiShapeId = "torbox.device.start",
+                operationKey = "torbox.device.start",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.ProviderConfig("torbox:device-code"),
+                call = {
+                    val response = runCatching { torBoxApi.startDeviceCode() }
+                        .getOrElse {
+                            if (it is CancellationException) throw it
+                            return@IntegrationCallSpec IntegrationCallResult.NetworkError(it)
+                        }
+                    val body = response.body()
+                    if (!response.isSuccessful || body == null || body.success == false) {
+                        IntegrationCallResult.HttpError(
+                            response.code(),
+                            reason = body?.detail ?: body?.error ?: "Failed to start TorBox device-code flow"
+                        )
+                    } else {
+                        IntegrationCallResult.Success(body)
+                    }
+                }
+            )
+        )
+
+    suspend fun pollDeviceToken(deviceCode: String): IntegrationCallResult<TorBoxEnvelopeDto<TorBoxDeviceTokenDataDto>> =
+        runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TORBOX,
+                apiShapeId = "torbox.device.token",
+                operationKey = "torbox.device.token",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.ProviderConfig("torbox:device-code:${deviceCode.hashCode()}"),
+                call = {
+                    val response = runCatching {
+                        torBoxApi.pollDeviceToken(TorBoxDeviceTokenRequestDto(deviceCode))
+                    }.getOrElse {
+                        if (it is CancellationException) throw it
+                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(it)
+                    }
+                    val body = response.body()
+                    if (response.isSuccessful && body != null && body.success != false) {
+                        IntegrationCallResult.Success(body)
+                    } else {
+                        IntegrationCallResult.HttpError(
+                            response.code(),
+                            reason = body?.detail ?: body?.error
+                        )
                     }
                 }
             )

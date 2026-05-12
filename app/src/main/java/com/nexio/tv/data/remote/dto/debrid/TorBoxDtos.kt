@@ -11,8 +11,12 @@ data class TorBoxEnvelopeDto<T>(
 
 data class TorBoxUserDto(
     @Json(name = "email") val email: String? = null,
-    @Json(name = "plan") val plan: String? = null
-)
+    // TorBox returns `plan` as a numeric tier (0=free, 1=essential, etc.) in some responses.
+    // Accept any JSON scalar; callers should use [planString] to coerce.
+    @Json(name = "plan") val plan: Any? = null
+) {
+    val planString: String? get() = plan?.toString()?.trim()?.takeIf { it.isNotBlank() }
+}
 
 data class TorBoxCheckCachedRequestDto(
     @Json(name = "hashes") val hashes: List<String>
@@ -38,6 +42,30 @@ data class TorBoxCreateTorrentDto(
     @Json(name = "id") val id: Int? = null
 ) {
     fun resolvedTorrentId(): Int? = torrentId ?: legacyTorrentId ?: id
+}
+
+data class TorBoxDeviceCodeDataDto(
+    @Json(name = "device_code") val deviceCode: String? = null,
+    @Json(name = "code") val code: String? = null,
+    @Json(name = "interval") val interval: Int? = null,
+    @Json(name = "expires_at") val expiresAt: String? = null,
+    @Json(name = "verification_url") val verificationUrl: String? = null,
+    @Json(name = "friendly_verification_url") val friendlyVerificationUrl: String? = null
+)
+
+data class TorBoxDeviceTokenRequestDto(
+    @Json(name = "device_code") val deviceCode: String
+)
+
+// TorBox doesn't pin the success field name across docs/versions.
+data class TorBoxDeviceTokenDataDto(
+    @Json(name = "token") val token: String? = null,
+    @Json(name = "access_token") val accessToken: String? = null,
+    @Json(name = "api_token") val apiToken: String? = null,
+    @Json(name = "api_key") val apiKey: String? = null
+) {
+    fun resolvedApiKey(): String? =
+        (token ?: accessToken ?: apiToken ?: apiKey)?.trim()?.takeIf { it.isNotBlank() }
 }
 
 data class TorBoxTorrentListItemDto(
