@@ -59,7 +59,9 @@ Add a new optional parameter `prepreparedMediaSource: MediaSource?`. When non-nu
 
 ### Failure handling
 
-`DefaultPreloadManager`'s status callback signals success/failure per item. On failure, the preload manager adds the playback key to a session-shared `failedPlaybackKeys` set (already plumbed in the overlay). `resolveNextIdleTrailerPlayback` already filters by `skippedPlaybackKeys`, so no new skip logic is required in the overlay.
+A preload failure (network error during pre-buffer, source-extraction error) is *not* listened to directly in v1. The simpler approach: hand the still-failing source to `ExoPlayer.setMediaSource()` on advance. The player's existing `onError` callback (`IdleTrailerScreensaverOverlay.kt:304`) catches it, adds the playback key to `failedPlaybackKeys`, and `resolveNextIdleTrailerPlayback` skips it on the next advance — the same path that catches non-preload failures today. Cost: a broken stream takes ~5s of attempted-cold-start (covered by the bumped 15s timeout) before being blacklisted, versus near-instant skip if we wired the preload listener.
+
+Out of scope for v1: wiring a `BasePreloadManager.Listener.onError(MediaItem, Throwable)` to surface preload-side failures earlier. Add later if smoke tests show preload-side errors are common enough to matter.
 
 ## Data Flow
 
@@ -109,7 +111,7 @@ Rationale:
 | Case | Behaviour |
 |---|---|
 | Preload still in flight at advance time | `consume()` returns `null` → `TrailerPlayer` cold-starts the source. Same as today. 15s timeout covers it. |
-| Preload errored | Playback key added to `failedPlaybackKeys` via the `DefaultPreloadManager` status callback. Existing `resolveNextIdleTrailerPlayback` skips it on advance. |
+| Preload errored | Still passed to `ExoPlayer.setMediaSource()` on advance. Player's `onError` fires (existing handler), adds the key to `failedPlaybackKeys`, and `resolveNextIdleTrailerPlayback` skips on the next advance. Up-front preload-listener wiring deferred to a later iteration. |
 | Very short trailer (current ends before preload completes) | Same as "preload still in flight" — cold-start fallback. |
 | User opens details (`KEYCODE_DPAD_CENTER`) | `currentOnOpenDetails(candidate)` runs; overlay tears down. `preloadManager.clear()` releases everything in the existing dismiss path. |
 | User backs out | Same — `preloadManager.clear()` in the dismiss path. |
