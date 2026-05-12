@@ -1036,7 +1036,21 @@ fun NexioNavHost(
                             )
                         )
                     }
-                }
+                },
+                onOpenTorBoxFile = { args ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = args.url,
+                            title = args.fileName,
+                            streamName = args.fileName,
+                            filename = args.fileName,
+                            videoId = "tb:torrent:${args.torrentId}:file:${args.fileId}",
+                            launchSource = PlayerLaunchSource.TORBOX,
+                            deterministicAutoplay = args.deterministicAutoplay,
+                            resumePositionMs = args.resumePositionMs.takeIf { it > 0L },
+                        )
+                    )
+                },
             )
         }
 
