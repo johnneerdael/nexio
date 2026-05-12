@@ -43,9 +43,7 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
-import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
-import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayloadJson
 import com.nexio.tv.data.remote.supabase.AccountConfigV7PushResult
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
@@ -114,7 +112,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
+import com.nexio.tv.data.remote.supabase.V13AccountSnapshotEnvelope
 import com.nexio.tv.data.remote.supabase.V10PushResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -584,24 +582,28 @@ class AccountSettingsSyncService @Inject constructor(
             val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
             val switchGenAtPullStart = suppressPushForSwitchGeneration
             val envelope = withJwtRefreshRetry {
-                postgrest.rpc("sync_pull_account_snapshot_v10")
-                    .decodeAs<V10AccountSnapshotEnvelope>()
+                postgrest.rpc("sync_pull_account_snapshot_v13")
+                    .decodeAs<V13AccountSnapshotEnvelope>()
+            }
+            var settings = AccountConfigSyncPayload(schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
+            val appliedSections = mutableListOf<Pair<AccountSettingsSectionKey, Long>>()
+            envelope.settings.sections.forEach { section ->
+                val key = AccountSettingsSectionKey.fromKey(section.sectionKey)
+                if (key == null) {
+                    Log.d(TAG, "Ignoring unknown account settings section ${section.sectionKey}")
+                    return@forEach
+                }
+                settings = key.applyToPayload(settings, section.payload)
+                appliedSections += key to section.updatedAtMs
             }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
+            appliedSections.forEach { (key, updatedAtMs) ->
+                syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
+            }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
-            val snapshot = AccountConfigSnapshotRpcResponse(
-                userId = null,
-                revision = envelope.settings.syncRevision,
-                settingsRevision = envelope.settings.syncRevision,
-                updatedAt = null,
-                settings = AccountConfigSyncPayloadJson.decodeFromJsonElement(
-                    AccountConfigSyncPayload.serializer(),
-                    envelope.settings.payload
-                ),
-                addons = envelope.addons.items
-            )
-            val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)
+            val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
+            val resolvedSecrets = resolveRemoteSecretsForApply(settings)
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -610,9 +612,9 @@ class AccountSettingsSyncService @Inject constructor(
                 }
                 isApplyingRemote = true
                 try {
-                    applySharedAccountConfigSyncSettings(snapshot.settings)
+                    applySharedAccountConfigSyncSettings(settings)
                     applyResolvedRemoteSecrets(resolvedSecrets)
-                    lastAppliedRemoteRevision = snapshot.settingsRevision
+                    lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)
                     if (clearPendingChanges) {
                         synchronized(pendingChangedPaths) {
@@ -637,7 +639,7 @@ class AccountSettingsSyncService @Inject constructor(
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
-            val remoteAddonConfigs = buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl)
+            val remoteAddonConfigs = buildRemoteAddonInstallConfigs(envelope.addons.items, ::resolveRemoteAddonUrl)
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }

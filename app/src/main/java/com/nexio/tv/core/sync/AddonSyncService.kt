@@ -5,9 +5,8 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.SyncWatermarkDataStore
-import com.nexio.tv.data.remote.supabase.V10AccountSnapshotEnvelope
+import com.nexio.tv.data.remote.supabase.V13AccountSnapshotEnvelope
 import com.nexio.tv.domain.model.AddonParserPreset
-import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
@@ -196,12 +195,11 @@ class AddonSyncService @Inject constructor(
     suspend fun getRemoteAddonConfigs(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             val envelope = withJwtRefreshRetry {
-                postgrest.rpc("sync_pull_account_snapshot_v10")
-                    .decodeAs<V10AccountSnapshotEnvelope>()
+                postgrest.rpc("sync_pull_account_snapshot_v13")
+                    .decodeAs<V13AccountSnapshotEnvelope>()
             }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
-            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
 
             Result.success(
                 envelope.addons.items
