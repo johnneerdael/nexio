@@ -30,7 +30,8 @@ internal data class AssSsaTranslationSurface(
                 "Expected ${segments.size} translated ASS/SSA segments, got ${translatedSegments.size}"
             }
 
-            val sourceLiteralMarkers = sourceLiteralMarkers()
+            val generatedMarkersBySegment = generatedMarkersBySegment()
+            val literalMarkersBySegment = literalMarkersBySegment()
             val repaired = translatedSegments.mapIndexed { index, segment ->
                 require(!segment.contains('\n') && !segment.contains('\r')) {
                     "Translated ASS/SSA segment contains a raw line break"
@@ -49,24 +50,37 @@ internal data class AssSsaTranslationSurface(
                 require(!RAW_ASS_ESCAPE_PATTERN.containsMatchIn(normalized)) {
                     "Translated ASS/SSA segment introduced raw ASS/SSA escape syntax"
                 }
-                MARKER_PATTERN.findAll(normalized).forEach { match ->
-                    require(inlineMarkers.containsKey(match.value) || match.value in sourceLiteralMarkers) {
-                        "Translated ASS/SSA segment contains unknown marker ${match.value}"
+
+                val markerCounts = MARKER_PATTERN
+                    .findAll(normalized)
+                    .map { match -> match.value }
+                    .groupingBy { marker -> marker }
+                    .eachCount()
+                val expectedGeneratedMarkers = generatedMarkersBySegment[index]
+                val expectedLiteralMarkers = literalMarkersBySegment[index]
+                markerCounts.forEach { (marker, count) ->
+                    if (inlineMarkers.containsKey(marker)) {
+                        require(marker in expectedGeneratedMarkers) {
+                            "Translated ASS/SSA segment $index contains misplaced marker $marker"
+                        }
+                        require(count == 1) {
+                            "Translated ASS/SSA segment $index must contain marker $marker exactly once"
+                        }
+                    } else {
+                        require(marker in expectedLiteralMarkers) {
+                            "Translated ASS/SSA segment contains unknown marker $marker"
+                        }
+                    }
+                }
+                expectedGeneratedMarkers.forEach { marker ->
+                    require(markerCounts[marker] == 1) {
+                        "Translated ASS/SSA segment $index must contain marker $marker exactly once"
                     }
                 }
                 require(segments[index].isBlank() || normalized.isNotBlank()) {
                     "Translated ASS/SSA segment $index is empty"
                 }
                 normalized
-            }
-
-            inlineMarkers.keys.forEach { marker ->
-                val count = repaired.sumOf { segment ->
-                    Regex.escape(marker).toRegex().findAll(segment).count()
-                }
-                require(count == 1) {
-                    "Translated ASS/SSA segments must contain marker $marker exactly once"
-                }
             }
 
             repaired
@@ -100,11 +114,25 @@ internal data class AssSsaTranslationSurface(
             .put("segments", JSONArray(segments))
     }
 
-    private fun sourceLiteralMarkers(): Set<String> {
+    private fun generatedMarkersBySegment(): List<Set<String>> {
+        return segments.map { segment ->
+            MARKER_PATTERN
+                .findAll(segment)
+                .map { match -> match.value }
+                .filter { marker -> inlineMarkers.containsKey(marker) }
+                .toSet()
+        }
+    }
+
+    private fun literalMarkersBySegment(): List<Set<String>> {
         return segments
-            .flatMap { segment -> MARKER_PATTERN.findAll(segment).map { it.value } }
-            .filterNot { marker -> inlineMarkers.containsKey(marker) }
-            .toSet()
+            .map { segment ->
+                MARKER_PATTERN
+                    .findAll(segment)
+                    .map { match -> match.value }
+                    .filterNot { marker -> inlineMarkers.containsKey(marker) }
+                    .toSet()
+            }
     }
 }
 
@@ -208,7 +236,11 @@ internal object AssSsaSegmentSurfaceParser {
             val rawSyntax = tokens.subList(runStart, runEnd).joinToString("") { it.raw }
             val previousChar = tokens.getOrNull(runStart - 1)?.raw?.lastOrNull()
             val nextChar = tokens.getOrNull(runEnd)?.raw?.firstOrNull()
-            val isIntraword = previousChar.isSurfaceWordChar() && nextChar.isSurfaceWordChar()
+            val isOverrideBlockRun = tokens.subList(runStart, runEnd)
+                .all { it is AssSsaTextToken.OverrideBlock }
+            val isIntraword = isOverrideBlockRun &&
+                previousChar.isSurfaceWordChar() &&
+                nextChar.isSurfaceWordChar()
 
             if (isIntraword) {
                 val marker = nextInlineMarker()
