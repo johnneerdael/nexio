@@ -44,6 +44,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.AccountKitsuAccessSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountKitsuRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
@@ -180,6 +182,11 @@ private val ACCOUNT_SECRET_SECTION_KEYS = setOf(
     AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
 )
 
+private val SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS = setOf(
+    AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+    AccountSettingsSectionKey.INTEGRATIONS_GEMINI
+)
+
 private fun Set<AccountSettingsSectionKey>?.includesSection(section: AccountSettingsSectionKey): Boolean {
     return this == null || section in this
 }
@@ -243,7 +250,8 @@ internal data class AccountSecretPushSnapshot(
     val easyDebridApiKey: String,
     val realDebrid: RealDebridSecretPushSnapshot,
     val trakt: TraktSecretPushSnapshot,
-    val simkl: SimklSecretPushSnapshot
+    val simkl: SimklSecretPushSnapshot,
+    val kitsu: KitsuSecretPushSnapshot
 )
 
 internal data class RealDebridSecretPushSnapshot(
@@ -265,6 +273,11 @@ internal data class TraktSecretPushSnapshot(
 
 internal data class SimklSecretPushSnapshot(
     val accessToken: String
+)
+
+internal data class KitsuSecretPushSnapshot(
+    val accessToken: String,
+    val refreshToken: String
 )
 
 internal fun dirtyAccountSecretSectionKeys(
@@ -315,6 +328,9 @@ internal fun dirtyAccountSecretSectionKeys(
         if (normalizedCurrent.simkl != normalizedBaseline.simkl) {
             add(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
         }
+        if (normalizedCurrent.kitsu != normalizedBaseline.kitsu) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)
+        }
     }
 }
 
@@ -356,6 +372,12 @@ internal fun configuredAccountSecretSectionKeys(
             add(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
         }
         if (normalized.simkl.accessToken.isNotBlank()) add(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
+        if (
+            normalized.kitsu.accessToken.isNotBlank() ||
+            normalized.kitsu.refreshToken.isNotBlank()
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)
+        }
     }
 }
 
@@ -381,7 +403,11 @@ private fun AccountSecretPushSnapshot.normalizedForPush(): AccountSecretPushSnap
             accessToken = trakt.accessToken.trim(),
             refreshToken = trakt.refreshToken.trim()
         ),
-        simkl = simkl.copy(accessToken = simkl.accessToken.trim())
+        simkl = simkl.copy(accessToken = simkl.accessToken.trim()),
+        kitsu = kitsu.copy(
+            accessToken = kitsu.accessToken.trim(),
+            refreshToken = kitsu.refreshToken.trim()
+        )
     )
 }
 
@@ -412,7 +438,8 @@ internal fun emptyAccountSecretPushSnapshot(): AccountSecretPushSnapshot {
             createdAt = 0L,
             expiresIn = 0
         ),
-        simkl = SimklSecretPushSnapshot(accessToken = "")
+        simkl = SimklSecretPushSnapshot(accessToken = ""),
+        kitsu = KitsuSecretPushSnapshot(accessToken = "", refreshToken = "")
     )
 }
 
@@ -464,6 +491,8 @@ private fun AccountSecretPushSnapshot.withSectionsFrom(
                 merged.copy(trakt = source.trakt)
             AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH ->
                 merged.copy(simkl = source.simkl)
+            AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH ->
+                merged.copy(kitsu = source.kitsu)
             else -> merged
         }
     }
@@ -725,6 +754,7 @@ class AccountSettingsSyncService @Inject constructor(
         val realDebrid: ResolvedRemoteRealDebridSecrets?,
         val trakt: ResolvedRemoteTraktSecrets?,
         val simkl: ResolvedRemoteSimklSecrets?,
+        val kitsu: ResolvedRemoteKitsuSecrets?,
         val preservedLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet(),
         val unresolvedRemoteSecretSectionKeys: Set<AccountSettingsSectionKey> = emptySet(),
         val followUpLocalSecretSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
@@ -746,6 +776,12 @@ class AccountSettingsSyncService @Inject constructor(
     private data class ResolvedRemoteSimklSecrets(
         val accessPayload: AccountSimklAccessSecretPayload?,
         val remote: SimklAuthSyncSettings
+    )
+
+    private data class ResolvedRemoteKitsuSecrets(
+        val accessPayload: AccountKitsuAccessSecretPayload?,
+        val refreshPayload: AccountKitsuRefreshSecretPayload?,
+        val remote: KitsuAuthSyncSettings
     )
 
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -874,6 +910,27 @@ class AccountSettingsSyncService @Inject constructor(
                 if (dirtySecretSectionKeys.isNotEmpty()) {
                     lastSyncedAccountSecretSnapshot = snapshot.secrets.normalizedForPush()
                 }
+            } else {
+                val baseBeforeRecovery = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+                val preserveLocalSectionKeys = synchronized(pendingChangedPaths) {
+                    buildStaleRecoveryPreserveLocalSectionKeys(
+                        pendingChangedPaths = pendingChangedPaths.toSet(),
+                        dirtySecretSectionKeys = dirtySecretSectionKeys
+                    )
+                }
+                Log.w(TAG, "Account secret push did not fully apply; pulling remote before retrying dirty secrets")
+                val recoveryResult = pullFromRemoteAndApply(
+                    clearPendingChanges = false,
+                    preserveLocalSectionKeys = preserveLocalSectionKeys
+                )
+                if (recoveryResult.isFailure) {
+                    return@withContext Result.failure(
+                        recoveryResult.exceptionOrNull()
+                            ?: IllegalStateException("Account secret stale recovery pull failed")
+                    )
+                }
+                val baseAfterRecovery = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+                scheduleFollowUpPush = baseAfterRecovery > baseBeforeRecovery
             }
 
             if (scheduleFollowUpPush) {
@@ -923,12 +980,10 @@ class AccountSettingsSyncService @Inject constructor(
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
             val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
-            val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)
             val preservedPullSecretSectionKeys = preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
-            if (
-                resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty() &&
-                preservedPullSecretSectionKeys.isEmpty()
-            ) {
+            val sectionKeysToResolveSecretsFor = sectionKeysToApply + preservedPullSecretSectionKeys
+            val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)
+            if (resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()) {
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
             } else {
                 Log.w(
@@ -950,7 +1005,7 @@ class AccountSettingsSyncService @Inject constructor(
                         settings = settings,
                         sectionKeys = sectionKeysToApply
                     )
-                    applyResolvedRemoteSecrets(resolvedSecrets)
+                    applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)
                     updateLastSyncedAccountSecretBaselineAfterPull(
                         current = buildAccountSecretPushSnapshot(),
                         appliedSectionKeys = sectionKeysToApply,
@@ -1527,6 +1582,7 @@ class AccountSettingsSyncService @Inject constructor(
         val realDebrid = realDebridAuthDataStore.state.first()
         val trakt = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val simkl = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
+        val kitsu = kitsuAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         return AccountSecretPushSnapshot(
             mdbListApiKey = mdbListSettingsDataStore.settings.first().apiKey,
             omdbApiKey = omdbSettingsDataStore.settings.first().apiKey,
@@ -1558,6 +1614,10 @@ class AccountSettingsSyncService @Inject constructor(
             ),
             simkl = SimklSecretPushSnapshot(
                 accessToken = simkl.accessToken?.trim().orEmpty()
+            ),
+            kitsu = KitsuSecretPushSnapshot(
+                accessToken = kitsu.accessToken?.trim().orEmpty(),
+                refreshToken = kitsu.refreshToken?.trim().orEmpty()
             )
         )
     }
@@ -1609,6 +1669,9 @@ class AccountSettingsSyncService @Inject constructor(
         }
         if (AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH in dirtySectionKeys) {
             allApplied = syncSimklSecretsToRemote(snapshot.simkl) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH in dirtySectionKeys) {
+            allApplied = syncKitsuSecretsToRemote(snapshot.kitsu) && allApplied
         }
         return allApplied
     }
@@ -1777,6 +1840,55 @@ class AccountSettingsSyncService @Inject constructor(
                 })
     }
 
+    private suspend fun syncKitsuSecretsToRemote(kitsuState: KitsuSecretPushSnapshot): Boolean {
+        val accessToken = kitsuState.accessToken
+        val refreshToken = kitsuState.refreshToken
+
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            val accessApplied = deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", KITSU_ACCESS_SECRET_TYPE)
+                put("p_secret_ref", KITSU_SECRET_REF)
+                put("p_source", "app")
+            })
+            val refreshApplied = deleteAccountSecretV10(buildJsonObject {
+                put("p_secret_type", KITSU_REFRESH_SECRET_TYPE)
+                put("p_secret_ref", KITSU_SECRET_REF)
+                put("p_source", "app")
+            })
+            return accessApplied && refreshApplied
+        }
+
+        val accessApplied = setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", KITSU_ACCESS_SECRET_TYPE)
+            put("p_secret_ref", KITSU_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountKitsuAccessSecretPayload.serializer(),
+                    AccountKitsuAccessSecretPayload(accessToken = accessToken)
+                )
+            )
+            put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
+        val refreshApplied = setAccountSecretV10(buildJsonObject {
+            put("p_secret_type", KITSU_REFRESH_SECRET_TYPE)
+            put("p_secret_ref", KITSU_SECRET_REF)
+            put(
+                "p_secret_payload",
+                Json.encodeToJsonElement(
+                    AccountKitsuRefreshSecretPayload.serializer(),
+                    AccountKitsuRefreshSecretPayload(refreshToken = refreshToken)
+                )
+            )
+            put("p_masked_preview", "Stored ••••${refreshToken.takeLast(4)}")
+            put("p_status", "configured")
+            put("p_source", "app")
+        })
+        return accessApplied && refreshApplied
+    }
+
     private suspend fun resolveRemoteSecretsForApply(
         settings: AccountConfigSyncPayload,
         sectionKeys: Set<AccountSettingsSectionKey>? = null
@@ -1809,9 +1921,7 @@ class AccountSettingsSyncService @Inject constructor(
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB) && omdbApiKey == null) {
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)
         }
-        val resolveSubtitleTranslation = sectionKeys.includesSection(
-            AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
-        )
+        val resolveSubtitleTranslation = sectionKeys.includesAnySection(SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS)
         val genericTranslationKey = if (resolveSubtitleTranslation) {
             resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
         } else {
@@ -1920,6 +2030,14 @@ class AccountSettingsSyncService @Inject constructor(
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH) && resolvedSimkl == null) {
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
         }
+        val resolvedKitsu = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
+            resolveRemoteKitsuSecrets(settings.integrations.kitsuAuth)
+        } else {
+            null
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH) && resolvedKitsu == null) {
+            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)
+        }
         return ResolvedRemoteSecretsForApply(
             mdbListApiKey = mdbListApiKey,
             omdbApiKey = omdbApiKey,
@@ -1941,25 +2059,54 @@ class AccountSettingsSyncService @Inject constructor(
             realDebrid = resolvedRealDebrid,
             trakt = resolvedTrakt,
             simkl = resolvedSimkl,
+            kitsu = resolvedKitsu,
             preservedLocalSectionKeys = preservedLocalSecretSections,
             unresolvedRemoteSecretSectionKeys = unresolvedRemoteSecretSections,
             followUpLocalSecretSectionKeys = followUpLocalSecretSections
         )
     }
 
-    private suspend fun applyResolvedRemoteSecrets(secrets: ResolvedRemoteSecretsForApply) {
-        secrets.mdbListApiKey?.let { mdbListSettingsDataStore.setApiKey(it) }
-        secrets.omdbApiKey?.let { omdbSettingsDataStore.setApiKey(it) }
-        secrets.subtitleTranslationApiKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
-        secrets.animeSkipClientId?.let { animeSkipSettingsDataStore.setClientId(it) }
-        secrets.rpdbApiKey?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
-        secrets.topPostersApiKey?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
-        secrets.premiumizeApiKey?.let { premiumizeSettingsDataStore.setApiKey(it) }
-        secrets.torBoxApiKey?.let { torBoxSettingsDataStore.setApiKey(it) }
-        secrets.easyDebridApiKey?.let { easyDebridSettingsDataStore.setApiKey(it) }
-        secrets.realDebrid?.let { applyResolvedRemoteRealDebridSecrets(it) }
-        secrets.trakt?.let { applyResolvedRemoteTraktSecrets(it) }
-        secrets.simkl?.let { applyResolvedRemoteSimklSecrets(it) }
+    private suspend fun applyResolvedRemoteSecrets(
+        secrets: ResolvedRemoteSecretsForApply,
+        sectionKeys: Set<AccountSettingsSectionKey>
+    ) {
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
+            secrets.mdbListApiKey?.let { mdbListSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
+            secrets.omdbApiKey?.let { omdbSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesAnySection(SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS)) {
+            secrets.subtitleTranslationApiKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
+            secrets.animeSkipClientId?.let { animeSkipSettingsDataStore.setClientId(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+            secrets.rpdbApiKey?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
+            secrets.topPostersApiKey?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
+            secrets.premiumizeApiKey?.let { premiumizeSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
+            secrets.torBoxApiKey?.let { torBoxSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
+            secrets.easyDebridApiKey?.let { easyDebridSettingsDataStore.setApiKey(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
+            secrets.realDebrid?.let { applyResolvedRemoteRealDebridSecrets(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
+            secrets.trakt?.let { applyResolvedRemoteTraktSecrets(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
+            secrets.simkl?.let { applyResolvedRemoteSimklSecrets(it) }
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
+            secrets.kitsu?.let { applyResolvedRemoteKitsuSecrets(it) }
+        }
     }
 
     /**
@@ -2152,6 +2299,71 @@ class AccountSettingsSyncService @Inject constructor(
         if (!secrets.remote.pending) {
             simklAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
         }
+    }
+
+    private suspend fun resolveRemoteKitsuSecrets(remote: KitsuAuthSyncSettings): ResolvedRemoteKitsuSecrets? {
+        val accessResult = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", KITSU_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", KITSU_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountKitsuAccessSecretPayload>()
+            }
+        }
+
+        val refreshResult = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", KITSU_REFRESH_SECRET_TYPE)
+                        put("p_secret_ref", KITSU_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountKitsuRefreshSecretPayload>()
+            }
+        }
+
+        if (accessResult.isFailure || refreshResult.isFailure) {
+            return null
+        }
+
+        return ResolvedRemoteKitsuSecrets(
+            accessPayload = accessResult.getOrNull(),
+            refreshPayload = refreshResult.getOrNull(),
+            remote = remote
+        )
+    }
+
+    private suspend fun applyResolvedRemoteKitsuSecrets(secrets: ResolvedRemoteKitsuSecrets) {
+        val accessToken = secrets.accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = secrets.refreshPayload?.refreshToken?.trim().orEmpty()
+        val remote = secrets.remote
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            if (!remote.connected) {
+                kitsuAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
+            }
+            return
+        }
+
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
+        kitsuAuthDataStore.saveForProfile(
+            defaultProfileId,
+            currentKitsu.copy(
+                enabled = true,
+                username = remote.username.takeIf { it.isNotBlank() },
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresAtEpochSeconds = remote.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
+                includeNsfw = remote.includeNsfw,
+                password = null
+            )
+        )
     }
 
     private suspend fun resolveRemoteRealDebridSecrets(remote: RealDebridSyncSettings): ResolvedRemoteRealDebridSecrets? {
