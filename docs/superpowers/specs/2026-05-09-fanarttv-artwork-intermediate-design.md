@@ -1,5 +1,7 @@
 # Fanart.tv Artwork Intermediate Provider Design
 
+> **SUPERSEDED 2026-05-12** by `2026-05-12-fanarttv-peer-selectable-provider-design.md`. The Nexio artwork architecture refactored away from router-rank candidate selection toward a per-type `ArtworkProviderResolver`, and the routing decision was changed from auto-injected intermediate to peer-selectable provider. Read the newer spec.
+
 Date: 2026-05-09
 
 ## Purpose
