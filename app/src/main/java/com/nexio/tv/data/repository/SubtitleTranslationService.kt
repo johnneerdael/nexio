@@ -565,6 +565,7 @@ class SubtitleTranslationService @Inject constructor(
                 markerPayload = null,
                 settings = normalizedSettings,
                 includeSchema = true,
+                responseSchema = SubtitleTranslationResponseSchema.AssSsaSegmentItems,
                 systemPromptOverride = buildAssSsaSegmentSystemPromptForTest()
             ) ?: throw IllegalStateException("Subtitle translation provider did not return an ASS/SSA segment payload.")
 
@@ -1134,7 +1135,8 @@ class SubtitleTranslationService @Inject constructor(
     private fun buildGeminiGenerationRequest(
         promptPayload: JSONObject,
         systemPrompt: String,
-        includeSchema: Boolean
+        includeSchema: Boolean,
+        responseSchema: SubtitleTranslationResponseSchema = SubtitleTranslationResponseSchema.TextItems
     ): JSONObject {
         val generationConfig = JSONObject()
             .put("temperature", 0)
@@ -1145,23 +1147,7 @@ class SubtitleTranslationService @Inject constructor(
             .put("responseMimeType", "application/json")
 
         if (includeSchema) {
-            generationConfig.put(
-                "responseSchema",
-                JSONObject()
-                    .put("type", "array")
-                    .put(
-                        "items",
-                        JSONObject()
-                            .put("type", "object")
-                            .put(
-                                "properties",
-                                JSONObject()
-                                    .put("id", JSONObject().put("type", "integer"))
-                                    .put("text", JSONObject().put("type", "string"))
-                            )
-                            .put("required", JSONArray().put("id").put("text"))
-                    )
-            )
+            generationConfig.put("responseSchema", buildGeminiResponseSchema(responseSchema))
         }
 
         return JSONObject()
@@ -1189,6 +1175,59 @@ class SubtitleTranslationService @Inject constructor(
                 )
             )
             .put("generationConfig", generationConfig)
+    }
+
+    private fun buildGeminiResponseSchema(responseSchema: SubtitleTranslationResponseSchema): JSONObject {
+        return when (responseSchema) {
+            SubtitleTranslationResponseSchema.TextItems -> {
+                JSONObject()
+                    .put("type", "array")
+                    .put("items", buildGeminiTextItemSchema())
+            }
+            SubtitleTranslationResponseSchema.AssSsaSegmentItems -> {
+                JSONObject()
+                    .put("type", "object")
+                    .put(
+                        "properties",
+                        JSONObject().put(
+                            "items",
+                            JSONObject()
+                                .put("type", "array")
+                                .put("items", buildGeminiAssSsaSegmentItemSchema())
+                        )
+                    )
+                    .put("required", JSONArray().put("items"))
+            }
+        }
+    }
+
+    private fun buildGeminiTextItemSchema(): JSONObject {
+        return JSONObject()
+            .put("type", "object")
+            .put(
+                "properties",
+                JSONObject()
+                    .put("id", JSONObject().put("type", "integer"))
+                    .put("text", JSONObject().put("type", "string"))
+            )
+            .put("required", JSONArray().put("id").put("text"))
+    }
+
+    private fun buildGeminiAssSsaSegmentItemSchema(): JSONObject {
+        return JSONObject()
+            .put("type", "object")
+            .put(
+                "properties",
+                JSONObject()
+                    .put("id", JSONObject().put("type", "string"))
+                    .put(
+                        "segments",
+                        JSONObject()
+                            .put("type", "array")
+                            .put("items", JSONObject().put("type", "string"))
+                    )
+            )
+            .put("required", JSONArray().put("id").put("segments"))
     }
 
     private fun buildGeminiRawGenerationRequest(
@@ -1234,6 +1273,7 @@ class SubtitleTranslationService @Inject constructor(
         markerPayload: String?,
         settings: SubtitleTranslationSettings,
         includeSchema: Boolean,
+        responseSchema: SubtitleTranslationResponseSchema = SubtitleTranslationResponseSchema.TextItems,
         systemPromptOverride: String? = null,
         onRateLimited: () -> Unit = {}
     ): String? {
@@ -1254,6 +1294,7 @@ class SubtitleTranslationService @Inject constructor(
                     userPayload = userPayload,
                     includeJsonMode = includeSchema,
                     strictJsonSchemaItemCount = itemCount,
+                    responseSchema = responseSchema,
                     isReasoningModel = reasoningModels.isReasoningModel(settings.model)
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
@@ -1270,7 +1311,8 @@ class SubtitleTranslationService @Inject constructor(
                 val body = buildGeminiGenerationRequest(
                     promptPayload = promptPayload,
                     systemPrompt = systemPrompt,
-                    includeSchema = includeSchema
+                    includeSchema = includeSchema,
+                    responseSchema = responseSchema
                 )
                 geminiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }

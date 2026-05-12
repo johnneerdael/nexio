@@ -566,6 +566,82 @@ class SubtitleTranslationServiceProviderTest {
             )
             assertFalse(requestBody.contains("⟦ASS_"))
             assertFalse(requestBody.contains("{\\i1}"))
+            val itemProperties = JSONObject(requestBody)
+                .getJSONObject("response_format")
+                .getJSONObject("json_schema")
+                .getJSONObject("schema")
+                .getJSONObject("properties")
+                .getJSONObject("items")
+                .getJSONObject("items")
+                .getJSONObject("properties")
+            assertEquals("string", itemProperties.getJSONObject("id").getString("type"))
+            val segmentsSchema = itemProperties.getJSONObject("segments")
+            assertEquals("array", segmentsSchema.getString("type"))
+            assertEquals("string", segmentsSchema.getJSONObject("items").getString("type"))
+            assertFalse(itemProperties.has("text"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun assSsaSegmentTranslationSendsGeminiSegmentResponseSchema() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "candidates": [
+                        {
+                          "content": {
+                            "parts": [
+                              {
+                                "text": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Hallo\"]}]}"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val surface = (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello") as AssSsaSurfaceParseResult.Translatable).surface
+
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = listOf(surface),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.GEMINI,
+                    apiKey = "test-key",
+                    model = "gemini-2.5-flash",
+                    baseUrl = server.url("/v1beta").toString()
+                )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo")), result)
+            val itemProperties = JSONObject(server.takeRequest().body.readUtf8())
+                .getJSONObject("generationConfig")
+                .getJSONObject("responseSchema")
+                .getJSONObject("properties")
+                .getJSONObject("items")
+                .getJSONObject("items")
+                .getJSONObject("properties")
+            assertEquals("string", itemProperties.getJSONObject("id").getString("type"))
+            val segmentsSchema = itemProperties.getJSONObject("segments")
+            assertEquals("array", segmentsSchema.getString("type"))
+            assertEquals("string", segmentsSchema.getJSONObject("items").getString("type"))
+            assertFalse(itemProperties.has("text"))
         } finally {
             server.shutdown()
         }
