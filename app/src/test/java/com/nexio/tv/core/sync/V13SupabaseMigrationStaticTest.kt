@@ -126,11 +126,52 @@ class V13SupabaseMigrationStaticTest {
     @Test
     fun `legacy account settings RPCs are adapters over sections`() {
         val sql = migration.readText()
+        val pull = functionBlock(sql, "sync_pull_account_snapshot_v10")
+        val push = functionBlock(sql, "sync_push_account_settings_v10")
+        val pushSections = legacyPushSectionMappingBlock(push)
 
-        assertTrue(sql.contains("account_settings_sections_to_payload"))
-        assertTrue(sql.contains("sync_push_account_settings_v10"))
-        assertTrue(sql.contains("sync_pull_account_snapshot_v10"))
-        assertTrue(sql.contains("sync_push_account_settings_sections_v13"))
+        assertTrue("legacy pull must rebuild settings from sections", pull.contains("account_settings_sections_to_payload(v_user_id)"))
+        assertTrue("legacy pull must count section rows before falling back", pull.contains("v_settings_section_count"))
+        assertTrue("legacy pull must count section rows before falling back", pull.contains("count(*)"))
+        assertTrue(
+            "legacy pull fallback must distinguish no section rows from an empty object payload",
+            pull.contains("coalesce(v_settings_section_count, 0) = 0"),
+        )
+        assertTrue("legacy pull must fallback to public full-payload settings", pull.contains("from public.account_settings_public"))
+        assertTrue("legacy pull must report current legacy envelope contract", pull.contains("'contract_version', 12"))
+        assertTrue("legacy pull must preserve addon base URL envelope marker", pull.contains("'url', a.base_url"))
+        assertTrue("legacy pull must preserve addon manifest URL envelope marker", pull.contains("'manifest_url'"))
+        assertTrue("legacy pull must preserve addon transport schema envelope marker", pull.contains("'transport_schema_version'"))
+        assertFalse("legacy pull must not expose raw addon rows", pull.contains("row_to_json(a)"))
+
+        assertTrue(
+            "legacy push must preserve the v10 signature",
+            push.contains(
+                """
+                create or replace function public.sync_push_account_settings_v10(
+                  p_base_updated_at_ms bigint,
+                  p_settings_payload jsonb,
+                  p_base_revision bigint,
+                  p_changed_paths text[],
+                  p_source text default 'app'
+                )
+                """.trimIndent(),
+            ),
+        )
+        assertTrue("legacy push must delegate to v13 section batch push", push.contains("sync_push_account_settings_sections_v13"))
+        assertEquals(expectedSections, sectionKeysIn(pushSections))
+        assertTrue("legacy push must map current IMDb integration section", pushSections.contains("'integrations.imdb'"))
+        assertTrue("legacy push must map current Gemini integration section", pushSections.contains("'integrations.gemini'"))
+        assertFalse("legacy push mapping must not include removed Wyzie integration", pushSections.contains("'integrations.wyzie'"))
+        assertFalse("legacy push mapping must not include removed TheIntroDb integration", pushSections.contains("'integrations.theIntroDb'"))
+        assertFalse("legacy push mapping must not include removed TVDB integration", pushSections.contains("'integrations.tvdb'"))
+        assertFalse("legacy push mapping must not include removed Wyzie API key surface", pushSections.contains("wyzie_api_key"))
+        assertFalse("legacy push mapping must not include removed TMDB API key surface", pushSections.contains("tmdb_api_key"))
+        assertFalse("legacy push mapping must not include removed TVDB API key surface", pushSections.contains("tvdb_api_key"))
+        assertTrue("legacy push must preserve stale-base compatibility responses", push.contains("v_failure_reason = 'stale_base'"))
+        assertTrue("legacy push must report non-stale section push failures", push.contains("coalesce(v_failure_reason, 'section_push_failed')"))
+        assertTrue("legacy push must no-op successfully when no sections are affected", push.contains("if v_sections = '[]'::jsonb then"))
+        assertTrue("legacy push no-op must report applied success", push.contains("'applied', true"))
     }
 
     private fun sectionKeysIn(sql: String): Set<String> =
@@ -146,6 +187,10 @@ class V13SupabaseMigrationStaticTest {
     private fun backfillBlock(sql: String): String =
         sql.substringAfter("with section_keys(section_key) as (")
             .substringBefore(")\ninsert into public.account_settings_sections")
+
+    private fun legacyPushSectionMappingBlock(sql: String): String =
+        sql.substringAfter("section_keys(section_key) as (")
+            .substringBefore("  )\n  select coalesce(jsonb_agg")
 
     private fun functionBlock(sql: String, functionName: String): String {
         val startMarker = "create or replace function public.$functionName"
