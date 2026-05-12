@@ -10,6 +10,7 @@ import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.data.repository.extractYear
 import com.nexio.tv.data.repository.TrackingScrobbleItem
+import com.nexio.tv.data.repository.withHydratedIds
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -334,6 +335,25 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? 
     return item
 }
 
+/**
+ * Resolves the full ProviderIds bundle for the current contentId via the hydrator and caches
+ * it on the controller. Called lazily from inside the scrobble-emit coroutine launches so
+ * the synchronous emit entry points stay non-suspending. Cached per-contentId to avoid
+ * repeating the resolver call on every heartbeat tick.
+ */
+private suspend fun PlayerRuntimeController.prehydrateScrobbleIds(): com.nexio.tv.domain.model.ProviderIds? {
+    val raw = contentId ?: run {
+        currentHydratedIds = null
+        hydratedIdsForContentId = null
+        return null
+    }
+    if (hydratedIdsForContentId == raw && currentHydratedIds != null) return currentHydratedIds
+    val ids = scrobbleIdBundleHydrator.hydrate(raw, contentType)
+    currentHydratedIds = ids
+    hydratedIdsForContentId = raw
+    return ids
+}
+
 internal fun PlayerRuntimeController.emitScrobbleStart() {
     val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it }
     if (item == null) return
@@ -343,9 +363,10 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     startScrobbleHeartbeat()
     val requestGeneration = ++scrobbleStartRequestGeneration
     scope.launch {
+        val hydrated = prehydrateScrobbleIds()
         val progressPercent = currentPlaybackProgressPercent()
         trackingScrobbleService.scrobbleStart(
-            item = item,
+            item = item.withHydratedIds(hydrated),
             progressPercent = progressPercent,
             owner = playbackOwnerContext
         )
@@ -366,8 +387,9 @@ internal fun PlayerRuntimeController.emitScrobbleStop(
 
     val percent = provided ?: currentPlaybackProgressPercent()
     scope.launch {
+        val hydrated = prehydrateScrobbleIds()
         trackingScrobbleService.scrobbleStop(
-            item = item,
+            item = item.withHydratedIds(hydrated),
             progressPercent = percent,
             owner = playbackOwnerContext
         )

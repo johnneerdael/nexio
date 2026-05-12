@@ -64,6 +64,7 @@ class PlayerRuntimeController(
     internal val addonRepository: AddonRepository,
     internal val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
     internal val trackingScrobbleService: TrackingScrobbleService,
+    internal val scrobbleIdBundleHydrator: com.nexio.tv.data.repository.ScrobbleIdBundleHydrator,
     internal val skipSegmentResolver: SkipSegmentResolver,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
@@ -361,6 +362,10 @@ class PlayerRuntimeController(
     internal var pendingSeekTelemetryAwaitingFirstFrame: Boolean = false
     internal var pendingSeekTelemetryReadyAssumed: Boolean = false
     internal var currentScrobbleItem: TrackingScrobbleItem? = null
+    // Caches the most recently resolved hydrated ProviderIds for the current contentId.
+    // Reset on contentId change in prehydrateScrobbleIds().
+    internal var currentHydratedIds: com.nexio.tv.domain.model.ProviderIds? = null
+    internal var hydratedIdsForContentId: String? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
