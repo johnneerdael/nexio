@@ -25,19 +25,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface TrackingScrobbleItem {
+    val contentId: String
+    /**
+     * Full provider-id bundle resolved at scrobble-emit time. When present, the per-provider
+     * mutation adapter prefers this over re-parsing [contentId]. Null when the player path
+     * has not yet called [ScrobbleIdBundleHydrator] for this item.
+     */
+    val hydratedIds: com.nexio.tv.domain.model.ProviderIds?
+
     data class Movie(
-        val contentId: String,
+        override val contentId: String,
         val title: String?,
-        val year: Int?
+        val year: Int?,
+        override val hydratedIds: com.nexio.tv.domain.model.ProviderIds? = null,
     ) : TrackingScrobbleItem
 
     data class Episode(
-        val contentId: String,
+        override val contentId: String,
         val showTitle: String?,
         val showYear: Int?,
         val season: Int,
         val number: Int,
-        val episodeTitle: String?
+        val episodeTitle: String?,
+        override val hydratedIds: com.nexio.tv.domain.model.ProviderIds? = null,
     ) : TrackingScrobbleItem
 }
 
@@ -182,7 +192,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
     }
 
     private suspend fun toTraktItem(item: TrackingScrobbleItem): TraktScrobbleItem? {
-        val contentId = item.contentId()
+        val contentId = item.contentId
         val animeId = AnimeStremioId.parse(contentId)?.takeIf { it.source in ANIME_NATIVE_SOURCES }
 
         if (animeId != null) {
@@ -221,7 +231,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
             is TrackingScrobbleItem.Movie -> {
                 val ids = work.providerIds.toTraktIds()
                 if (!ids.hasAnyId()) {
-                    rejectionReporter.reportRejection(item.contentId(), ScrobbleRejectionReason.EMPTY_ID_BUNDLE, TrackingProvider.TRAKT)
+                    rejectionReporter.reportRejection(item.contentId, ScrobbleRejectionReason.EMPTY_ID_BUNDLE, TrackingProvider.TRAKT)
                     null
                 } else TraktScrobbleItem.Movie(item.title, item.year, ids)
             }
@@ -234,7 +244,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
                 val coord = projection.scrobbleCoordinate
                 if (coord == null) {
                     rejectionReporter.reportRejection(
-                        contentId = item.contentId(),
+                        contentId = item.contentId,
                         reason = ScrobbleRejectionReason.ANIME_COORDINATE_UNRESOLVED,
                         provider = TrackingProvider.TRAKT,
                     )
@@ -264,12 +274,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
         trakt = trakt?.toIntOrNull(),
     )
 
-    private fun TrackingScrobbleItem.contentId(): String = when (this) {
-        is TrackingScrobbleItem.Movie -> contentId
-        is TrackingScrobbleItem.Episode -> contentId
-    }
-
-    private suspend fun providerState(owner: PlaybackOwnerContext): EffectiveTrackingProviderState =
+private suspend fun providerState(owner: PlaybackOwnerContext): EffectiveTrackingProviderState =
         trackingProviderStateService.currentState(owner.ownerProfileId)
 
     private suspend fun providerState(ownerProfileId: Int?): EffectiveTrackingProviderState =
