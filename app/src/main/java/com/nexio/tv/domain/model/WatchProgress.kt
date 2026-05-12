@@ -33,6 +33,8 @@ data class WatchProgress(
         const val SOURCE_TRAKT_PLAYBACK = "trakt_playback"
         const val SOURCE_TRAKT_HISTORY = "trakt_history"
         const val SOURCE_TRAKT_SHOW_PROGRESS = "trakt_show_progress"
+        const val SOURCE_SIMKL_PLAYBACK = "simkl_playback"
+        const val SOURCE_SIMKL_HISTORY = "simkl_history"
     }
 
     /**
