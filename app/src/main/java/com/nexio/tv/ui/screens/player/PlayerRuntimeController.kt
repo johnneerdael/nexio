@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicLong
 class PlayerRuntimeController(
     internal val context: Context,
     internal val watchProgressRepository: WatchProgressRepository,
+    internal val torBoxResumeStore: com.nexio.tv.data.local.TorBoxResumeStore,
     internal val metaRepository: MetaRepository,
     internal val streamRepository: StreamRepository,
     internal val addonRepository: AddonRepository,
@@ -111,6 +112,14 @@ class PlayerRuntimeController(
     )
 
     internal val navigationArgs = PlayerNavigationArgs.from(savedStateHandle)
+
+    /** Non-null when the user launched playback from the TorBox library tab. */
+    internal val torBoxContext: com.nexio.tv.domain.model.TorBoxPlaybackContext? =
+        com.nexio.tv.domain.model.TorBoxPlaybackContext.fromRouteArgs(
+            launchSource = navigationArgs.launchSource.routeValue,
+            videoId = navigationArgs.videoId,
+            filename = navigationArgs.filename,
+        )
     internal val playerBackendPreference: PlayerPreference =
         runCatching { PlayerPreference.valueOf(navigationArgs.playerBackend) }
             .getOrDefault(PlayerPreference.INTERNAL)

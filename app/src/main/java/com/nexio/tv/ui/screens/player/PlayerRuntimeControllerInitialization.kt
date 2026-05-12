@@ -1027,6 +1027,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             emitCompletionScrobbleStop(progressPercent = 99.5f)
                             saveWatchProgress()
                             resetNextEpisodeCardState(clearEpisode = false)
+                            torBoxContext?.let { ctx ->
+                                scope.launch {
+                                    torBoxResumeStore.clear(torrentId = ctx.torrentId, fileId = ctx.fileId)
+                                }
+                            }
                         }
                     }
 
