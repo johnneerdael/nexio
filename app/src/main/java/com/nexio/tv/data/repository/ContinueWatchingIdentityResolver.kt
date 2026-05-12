@@ -97,7 +97,8 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 primaryResumeLookupKey = resumeIdentity.lookupKey(),
                 identityConfidence = if (streamFetchIdentity != null) IdentityConfidence.HIGH else IdentityConfidence.MEDIUM,
                 identityWarnings = warnings,
-                languageTag = input.languageTag
+                languageTag = input.languageTag,
+                idBundle = identity.providerIds.toContinueWatchingIdBundle(episodeContext),
             )
         }.getOrElse { error ->
             if (error is CancellationException) throw error
@@ -174,9 +175,26 @@ class ContinueWatchingIdentityResolver @Inject constructor(
             primaryResumeLookupKey = resumeIdentity.lookupKey(),
             identityConfidence = IdentityConfidence.LOW,
             identityWarnings = listOf("identity resolution failed: ${error.javaClass.simpleName}: ${error.message.orEmpty()}"),
-            languageTag = input.languageTag
+            languageTag = input.languageTag,
+            idBundle = observedIds(progress).toContinueWatchingIdBundle(episodeContext),
         )
     }
+
+    private fun ProviderIds.toContinueWatchingIdBundle(
+        episodeContext: ContinueWatchingRecord.EpisodeContext?,
+    ): ContinueWatchingIdBundle = ContinueWatchingIdBundle(
+        imdb = imdb?.takeIf { it.isNotBlank() },
+        tmdb = tmdb?.takeIf { it.isNotBlank() },
+        tvdb = tvdb?.takeIf { it.isNotBlank() },
+        kitsu = kitsu?.takeIf { it.isNotBlank() },
+        mal = mal?.takeIf { it.isNotBlank() },
+        anilist = anilist?.takeIf { it.isNotBlank() },
+        anidb = anidb?.takeIf { it.isNotBlank() },
+        trakt = trakt?.takeIf { it.isNotBlank() },
+        simkl = simkl?.takeIf { it.isNotBlank() },
+        season = episodeContext?.season,
+        episode = episodeContext?.number,
+    )
 
     private fun StableIdBundle.toContentIdentity(): ContentIdentity {
         val observed = source.observedIds
