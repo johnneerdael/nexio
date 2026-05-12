@@ -71,7 +71,7 @@ internal fun subtitleTranslationDiskCacheKey(
 ): String {
     return sha256(
         "file|$sourceUrl|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|" +
-            "assRaw=${settings.assSsaSystemPromptEnabled}|srtRaw=${settings.subRipSystemPromptEnabled}|v3"
+            "assRaw=false|srtRaw=${settings.subRipSystemPromptEnabled}|v3"
     )
 }
 

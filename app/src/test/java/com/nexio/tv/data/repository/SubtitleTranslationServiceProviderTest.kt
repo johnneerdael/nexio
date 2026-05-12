@@ -981,8 +981,7 @@ class SubtitleTranslationServiceProviderTest {
                     provider = SubtitleTranslationProvider.OPENAI,
                     apiKey = "test-key",
                     model = "gpt-5-nano",
-                    baseUrl = server.url("/v1").toString(),
-                    assSsaSystemPromptEnabled = true
+                    baseUrl = server.url("/v1").toString()
                 )
             ).getOrThrow()
 
