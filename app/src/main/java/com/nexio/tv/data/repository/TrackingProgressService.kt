@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
@@ -110,12 +111,20 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeAllProgress(): Flow<List<WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            if (!state.canReadEffectiveProvider) {
-                return@flatMapLatest flowOf(emptyList())
-            }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
-                TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
+            val active = state.activeProviders
+            when {
+                active.isEmpty() -> flowOf(emptyList())
+                active.size == 1 -> when (active.single()) {
+                    TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
+                    TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
+                }
+                // Both authed: concatenate both providers. Downstream
+                // ContinueWatchingMerger collapses cross-provider duplicates by idBundle
+                // and routes conflicts through ContinueWatchingProgressDiffPlanner.
+                else -> combine(
+                    traktProgressService.observeAllProgress(),
+                    simklProgressService.observeAllProgress(),
+                ) { traktItems, simklItems -> traktItems + simklItems }
             }
         }
 
