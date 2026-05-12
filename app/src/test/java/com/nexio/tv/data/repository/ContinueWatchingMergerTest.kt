@@ -210,6 +210,143 @@ class ContinueWatchingMergerTest {
         )
     }
 
+    @Test
+    fun `cross-id merge collapses records sharing IMDB across different parentIds`() {
+        val tmdbResume = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tmdb:1396",
+            videoId = "tmdb:1396:5:14",
+            positionMs = 5_000L,
+            lastWatchedMs = 100L,
+        )
+        val imdbResume = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:14",
+            positionMs = 10_000L,
+            lastWatchedMs = 200L,
+        )
+
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = tmdbResume,
+                    positionMs = 5_000L,
+                    updatedAt = 100L,
+                    parentId = "series:tmdb:1396",
+                    contentIdKey = "series:tmdb:1396:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(
+                        imdb = "tt0903747", tmdb = "1396", season = 5, episode = 14,
+                    ),
+                ),
+                record(
+                    resumeIdentity = imdbResume,
+                    positionMs = 10_000L,
+                    updatedAt = 200L,
+                    parentId = "series:imdb:tt0903747",
+                    contentIdKey = "series:imdb:tt0903747:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(
+                        imdb = "tt0903747", season = 5, episode = 14,
+                    ),
+                ),
+            )
+        )
+
+        assertEquals(1, merged.size)
+        assertEquals(
+            setOf(tmdbResume.lookupKey(), imdbResume.lookupKey()),
+            merged.single().resumeLookupKeys
+        )
+    }
+
+    @Test
+    fun `cross-id merge handles tmdb only overlap when imdb absent on one side`() {
+        val onlyTmdb = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tmdb:1396",
+            videoId = "tmdb:1396:5:14",
+            positionMs = 5_000L,
+            lastWatchedMs = 100L,
+        )
+        val tmdbAndImdb = resumeIdentity(
+            source = ContinueWatchingSource.TRAKT_PLAYBACK,
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:14",
+            positionMs = 10_000L,
+            lastWatchedMs = 200L,
+        )
+
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = onlyTmdb,
+                    positionMs = 5_000L,
+                    updatedAt = 100L,
+                    parentId = "x",
+                    contentIdKey = "x:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(tmdb = "1396", season = 5, episode = 14),
+                ),
+                record(
+                    resumeIdentity = tmdbAndImdb,
+                    positionMs = 10_000L,
+                    updatedAt = 200L,
+                    parentId = "y",
+                    contentIdKey = "y:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(
+                        imdb = "tt0903747", tmdb = "1396", season = 5, episode = 14,
+                    ),
+                ),
+            )
+        )
+        assertEquals(1, merged.size)
+    }
+
+    @Test
+    fun `episode records only merge when season and episode also match`() {
+        val s5e14 = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:14",
+            positionMs = 5_000L,
+            lastWatchedMs = 100L,
+        )
+        val s5e15 = resumeIdentity(
+            source = ContinueWatchingSource.LOCAL,
+            contentId = "tt0903747",
+            videoId = "tt0903747:5:15",
+            positionMs = 6_000L,
+            lastWatchedMs = 200L,
+        )
+
+        val merged = ContinueWatchingMerger.merge(
+            listOf(
+                record(
+                    resumeIdentity = s5e14,
+                    positionMs = 5_000L,
+                    updatedAt = 100L,
+                    parentId = "series:imdb:tt0903747",
+                    contentIdKey = "series:imdb:tt0903747:s5e14",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt0903747", season = 5, episode = 14),
+                ),
+                record(
+                    resumeIdentity = s5e15,
+                    positionMs = 6_000L,
+                    updatedAt = 200L,
+                    parentId = "series:imdb:tt0903747",
+                    contentIdKey = "series:imdb:tt0903747:s5e15",
+                    canonicalKey = null,
+                    idBundle = ContinueWatchingIdBundle(imdb = "tt0903747", season = 5, episode = 15),
+                ),
+            )
+        )
+        assertEquals(2, merged.size)
+    }
+
     private fun record(
         resumeIdentity: ResumeIdentity,
         positionMs: Long,
@@ -217,17 +354,25 @@ class ContinueWatchingMergerTest {
         streamFetchIdentity: StreamFetchIdentity? = null,
         trackingIdentity: TrackingIdentity? = null,
         identityConfidence: IdentityConfidence = IdentityConfidence.HIGH,
-        identityWarnings: List<String> = emptyList()
+        identityWarnings: List<String> = emptyList(),
+        parentId: String = "series:tvdb:393268",
+        contentIdKey: String = "series:tvdb:393268:s2e1",
+        canonicalKey: ContinueWatchingCanonicalKey? = canonicalKey(),
+        idBundle: ContinueWatchingIdBundle = ContinueWatchingIdBundle(),
     ): ContinueWatchingRecord =
         ContinueWatchingRecord(
             profileId = 1,
-            parentId = "series:tvdb:393268",
-            contentId = "series:tvdb:393268:s2e1",
+            parentId = parentId,
+            contentId = contentIdKey,
             provider = TrackingProvider.TRAKT,
             routingVersion = 1,
             positionMs = positionMs,
             durationMs = resumeIdentity.durationMs ?: 2_958_656L,
-            episodeContext = ContinueWatchingRecord.EpisodeContext(2, 1),
+            episodeContext = resumeIdentity.season?.let { season ->
+                resumeIdentity.episode?.let { number ->
+                    ContinueWatchingRecord.EpisodeContext(season, number)
+                }
+            },
             clickTimeDisplayMetadata = null,
             source = when (resumeIdentity.source) {
                 ContinueWatchingSource.LOCAL -> ContinueWatchingRecord.Source.LOCAL
@@ -237,14 +382,15 @@ class ContinueWatchingMergerTest {
                 ContinueWatchingSource.TRAKT_SHOW_PROGRESS -> ContinueWatchingRecord.Source.REMOTE
             },
             updatedAt = updatedAt,
-            canonicalKey = canonicalKey(),
+            canonicalKey = canonicalKey,
             displayIdentity = displayIdentity(),
             streamFetchIdentity = streamFetchIdentity,
             trackingIdentity = trackingIdentity,
             resumeIdentities = listOf(resumeIdentity),
             primaryResumeLookupKey = resumeIdentity.lookupKey(),
             identityConfidence = identityConfidence,
-            identityWarnings = identityWarnings
+            identityWarnings = identityWarnings,
+            idBundle = idBundle,
         )
 
     private fun canonicalKey(): ContinueWatchingCanonicalKey =
