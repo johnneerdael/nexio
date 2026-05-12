@@ -1,5 +1,7 @@
 # Contract v10 — Handoff Notes
 
+> Superseded on 2026-05-13 by the v13 sectioned account-settings rollout. This note is retained for historical context; its cross-client status and web handoff sections describe the pre-v13 state.
+
 Plan source: `docs/superpowers/plans/2026-05-12-supabase-contract-v10-timestamps.md`
 Executed: 2026-05-12
 
