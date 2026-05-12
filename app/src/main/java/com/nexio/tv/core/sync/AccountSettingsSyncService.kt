@@ -653,9 +653,7 @@ class AccountSettingsSyncService @Inject constructor(
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
 
-            premiumizeService.refreshAccountState()
-            torBoxService.refreshAccountState()
-            easyDebridService.refreshAccountState()
+            refreshDebridAccountStatesForAppliedSections(appliedSectionKeys)
 
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
@@ -668,6 +666,18 @@ class AccountSettingsSyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun refreshDebridAccountStatesForAppliedSections(sectionKeys: Set<AccountSettingsSectionKey>) {
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
+            premiumizeService.refreshAccountState()
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
+            torBoxService.refreshAccountState()
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
+            easyDebridService.refreshAccountState()
         }
     }
 
