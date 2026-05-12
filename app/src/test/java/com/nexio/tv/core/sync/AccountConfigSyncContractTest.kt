@@ -764,16 +764,26 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `stale secret v10 handlers preserve local dirty secrets instead of bare pulling`() {
+    fun `stale secret v10 handlers keep old base instead of advancing without remote payload`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val setStart = source.indexOf("private suspend fun setAccountSecretV10")
         val deleteStart = source.indexOf("private suspend fun deleteAccountSecretV10")
         val jwtStart = source.indexOf("private suspend fun <T> withJwtRefreshRetry", startIndex = deleteStart)
         val setBlock = source.substring(setStart, deleteStart)
         val deleteBlock = source.substring(deleteStart, jwtStart)
+        val setStaleBlock = setBlock.substring(
+            setBlock.indexOf("is V10PushOutcome.StaleBase"),
+            setBlock.indexOf("is V10PushOutcome.Failed")
+        )
+        val deleteStaleBlock = deleteBlock.substring(
+            deleteBlock.indexOf("is V10PushOutcome.StaleBase"),
+            deleteBlock.indexOf("is V10PushOutcome.Failed")
+        )
 
-        assertTrue(setBlock.contains("handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)"))
-        assertTrue(deleteBlock.contains("handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)"))
+        assertFalse(setStaleBlock.contains("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS"))
+        assertFalse(deleteStaleBlock.contains("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS"))
+        assertFalse(setBlock.contains("handleStaleAccountSecretPush("))
+        assertFalse(deleteBlock.contains("handleStaleAccountSecretPush("))
         assertFalse(setBlock.contains("pullFromRemoteAndApply()"))
         assertFalse(deleteBlock.contains("pullFromRemoteAndApply()"))
     }
@@ -795,6 +805,20 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `pull advances account secrets watermark only after all remote secrets are known`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val refreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, refreshStart)
+        val resolveIndex = pullBlock.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)")
+        val secretsWatermarkIndex = pullBlock.indexOf("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS")
+
+        assertTrue("account secrets watermark must be decided after secret resolution", secretsWatermarkIndex > resolveIndex)
+        assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
+        assertTrue(pullBlock.contains("preservedPullSecretSectionKeys.isEmpty()"))
+    }
+
+    @Test
     fun `secret resolve failures preserve baseline dirty state`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val resolveStart = source.indexOf("private suspend fun resolveRemoteSecretsForApply")
@@ -804,11 +828,15 @@ class AccountConfigSyncContractTest {
         assertTrue(resolveBlock.contains("if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST) && mdbListApiKey == null)"))
         assertTrue(resolveBlock.contains("if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB) && omdbApiKey == null)"))
         assertTrue(resolveBlock.contains("genericTranslationKey == null"))
+        assertTrue(resolveBlock.contains("subtitleTranslationSecretUnresolved"))
+        assertTrue(resolveBlock.contains("subtitleTranslationApiKey = if (subtitleTranslationSecretUnresolved)"))
+        assertTrue(resolveBlock.contains("selectSubtitleTranslationApiKeySecret("))
         assertTrue(resolveBlock.contains("rpdbApiKey == null || topPostersApiKey == null"))
         assertTrue(resolveBlock.contains("resolvedRealDebrid == null"))
         assertTrue(resolveBlock.contains("resolvedTrakt == null"))
         assertTrue(resolveBlock.contains("resolvedSimkl == null"))
         assertTrue(resolveBlock.contains("preservedLocalSectionKeys = preservedLocalSecretSections"))
+        assertTrue(resolveBlock.contains("unresolvedRemoteSecretSectionKeys = unresolvedRemoteSecretSections"))
     }
 
     @Test
@@ -823,6 +851,7 @@ class AccountConfigSyncContractTest {
 
         assertTrue(pushBlock.contains("val dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)"))
         assertTrue(pushBlock.contains("syncAccountSecretPushSnapshotToRemote(snapshot.secrets, dirtySecretSectionKeys)"))
+        assertFalse(pushBlock.contains("else {\n                scheduleFollowUpPush = true\n            }"))
         assertTrue(syncBlock.contains("dirtySectionKeys: Set<AccountSettingsSectionKey>"))
         assertFalse(
             "secret sync must not blindly push every account secret",
@@ -1152,6 +1181,17 @@ class AccountConfigSyncContractTest {
             selectSubtitleTranslationApiKeySecret(
                 genericTranslationKey = "",
                 legacyGeminiKey = "legacy-key",
+                allowLegacyFallback = true
+            )
+        )
+    }
+
+    @Test
+    fun `selectSubtitleTranslationApiKeySecret returns null for blank generic with failed legacy fallback`() {
+        assertNull(
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = "",
+                legacyGeminiKey = null,
                 allowLegacyFallback = true
             )
         )
