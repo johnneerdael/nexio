@@ -1820,8 +1820,14 @@ class TraktProgressService @Inject constructor(
         hiddenProgress: HiddenProgressSnapshot
     ): TraktNextUpValidationResult {
         return try {
+            // Trakt's /shows/{id}/... endpoints accept trakt-numeric-id, trakt-slug, or IMDB
+            // (apiblueprints/trakt.apib line 142). They do NOT accept tvdb: form, which is
+            // what canonicalContentId for SHOW kind returns. Prefer the numeric Trakt ID we
+            // already have on the WatchedShowIndexEntry; fall back to toTraktPathId only if
+            // somehow missing (which would itself have parsed imdb/tmdb/trakt out).
+            val pathId = candidate.traktShowId?.toString() ?: toTraktPathId(candidate.contentId)
             val progress = when (val result = traktIntegrationProvider.getShowProgressWatched(
-                id = toTraktPathId(candidate.contentId),
+                id = pathId,
                 lastActivity = "watched"
             )) {
                 is IntegrationCallResult.Success -> result.value
