@@ -10,7 +10,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HomeLayout
+import com.nexio.tv.domain.model.sanitizeHomeCatalogRails
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -66,6 +68,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val heroCatalogKeysKey = stringPreferencesKey("hero_catalog_keys")
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
+    private val homeCatalogRailsJsonKey = stringPreferencesKey("home_catalog_rails_json")
     private val homeRailOrderStateKey = stringPreferencesKey("home_rail_order_state")
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
@@ -130,6 +133,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val disabledHomeCatalogKeys: Flow<List<String>> = profileFlow { prefs ->
         parseCatalogKeys(prefs[disabledHomeCatalogKeysKey])
+    }
+
+    val homeCatalogRails: Flow<List<HomeCatalogRail>> = profileFlow { prefs ->
+        parseHomeCatalogRails(prefs[homeCatalogRailsJsonKey])
     }
 
     val homeRailOrderStateJson: Flow<String?> = profileFlow { prefs ->
@@ -260,6 +267,17 @@ class LayoutPreferenceDataStore @Inject constructor(
                 prefs.remove(disabledHomeCatalogKeysKey)
             } else {
                 prefs[disabledHomeCatalogKeysKey] = gson.toJson(normalizedKeys)
+            }
+        }
+    }
+
+    suspend fun setHomeCatalogRails(rails: List<HomeCatalogRail>) {
+        val normalized = sanitizeHomeCatalogRails(rails)
+        store().edit { prefs ->
+            if (normalized.isEmpty()) {
+                prefs.remove(homeCatalogRailsJsonKey)
+            } else {
+                prefs[homeCatalogRailsJsonKey] = gson.toJson(normalized)
             }
         }
     }
@@ -420,6 +438,17 @@ class LayoutPreferenceDataStore @Inject constructor(
             val type = object : TypeToken<List<String>>() {}.type
             val parsed = gson.fromJson<List<String>>(json, type).orEmpty()
             normalizeCatalogOrderKeys(parsed)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun parseHomeCatalogRails(json: String?): List<HomeCatalogRail> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<HomeCatalogRail>>() {}.type
+            val parsed = gson.fromJson<List<HomeCatalogRail>>(json, type).orEmpty()
+            sanitizeHomeCatalogRails(parsed)
         } catch (_: Exception) {
             emptyList()
         }
