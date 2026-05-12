@@ -49,7 +49,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -71,6 +70,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import javax.inject.Inject
@@ -445,11 +445,37 @@ class TraktProgressService @Inject constructor(
 
     init {
         scope.launch {
-            refreshSignals.collectLatest {
+            // Coalescing inflight guard. The earlier `collectLatest` implementation
+            // cancelled the in-flight refresh on every new emit, which combined with rapid
+            // emits from MainActivity / ContinueWatchingSnapshotService / scrobble outbox /
+            // settings screens meant refreshRemoteSnapshot() — which paginates
+            // /sync/history/episodes across ~100+ pages and then runs per-show next-up
+            // validation — NEVER COMPLETED. myShowsNextUp stayed empty.
+            //
+            // New semantics:
+            //   - If no refresh is running, start one.
+            //   - If a refresh is running when a signal arrives, mark a "pending" flag
+            //     and let the current run finish; afterwards, run one more pass to pick
+            //     up whatever the signal would have triggered.
+            //   - Multiple signals during a refresh coalesce into a single follow-up pass.
+            val inProgress = AtomicBoolean(false)
+            val pending = AtomicBoolean(false)
+            refreshSignals.collect {
+                if (!inProgress.compareAndSet(false, true)) {
+                    pending.set(true)
+                    return@collect
+                }
                 try {
-                    refreshRemoteSnapshot()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to refresh remote snapshot", e)
+                    do {
+                        pending.set(false)
+                        try {
+                            refreshRemoteSnapshot()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to refresh remote snapshot", e)
+                        }
+                    } while (pending.compareAndSet(true, false))
+                } finally {
+                    inProgress.set(false)
                 }
             }
         }

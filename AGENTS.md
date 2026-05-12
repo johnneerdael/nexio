@@ -1,0 +1,207 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
+NEXIO is an Android TV / Fire TV streaming app built with Kotlin and Jetpack Compose.
+
+- Package: `com.nexio.tv`
+- Core areas: debrid integration, Trakt sync, benchmark-driven playback
+- Playback stack: forked Media3 / ExoPlayer with custom extensions
+
+When using subagent-driven-development always continue your tasks sequentially untill every task is completed without stopping!
+
+---
+
+## Hard design rules (do not regress)
+
+These are project-wide invariants. Every one was learned from a real death-spiral / unresponsive-app investigation on this codebase. **New features must obey them.** If unsure whether a change violates a rule, capture a heap dump (see `analysing-heap-dumps` skill) before claiming the change is performance-neutral.
+
+### 1. Display authority — first paint never downgrades
+
+The full architecture is in `docs/superpowers/notes/2026-05-09-modern-home-leak-root-cause.md` and the *resolved-display authority* hard-rule doc supplied during PR review. TL;DR:
+
+- **`ResolvedDisplaySurfaceRepository` is the single display authority.** UI surfaces (home, hero, screensaver, continue watching, detail) must consume `ResolvedDisplayItem` (or an approved per-surface projection like `ModernHomeRowItem`), never raw `MetaPreview` rows.
+- **`HomeRailProjectionReducer` is the only place that merges firstPaint + overlay + existing.** Surfaces must not implement their own "if poster null fall back to backdrop" logic. Non-downgrade is enforced once, in the reducer.
+- **First paint may only initialize.** It can fill empty slots when no resolved/cached state exists. It must never overwrite a `RESOLVED` or `STALE_RESOLVED` slot, never replace a hydrated logo/backdrop with null, never demote a premium poster to a raw provider URL.
+- **`ArtworkBundle.poster` carries `POSTER` only.** Never `poster ?: backdrop`. Portrait card slots are typed.
+- Diagnostic event: `home.display_projection` (`Nexio.MetaRoute` logcat tag). If `selected.<field>.rank == FIRST_PAINT` for items that should be hydrated, the rule is being violated upstream.
+
+### 2. State retention — don't put hot lists in observed UiState
+
+Compose's `SnapshotMutableStateImpl$StateStateRecord` chain retains prior versions of every observed `MutableState`. `List<MetaPreview>` / `List<CatalogRow>` fields on `HomeUiState` (or any other `data class State` collected by Compose) pin every recomposition's prior snapshot — observed in heap dumps as 6,000+ retained `CatalogRow` instances.
+
+**Rule:** if a list is "source/lookup data" rather than "what's being rendered right now", expose it as a separate `StateFlow` on the ViewModel and collect it independently inside composables.
+
+Pattern (committed examples):
+- `HomeViewModel._displayCatalogRows` (commit `4ee5a26b6`)
+- `HomeViewModel._displayHeroItems` (commit `cb59c1a5e`)
+
+Don't reintroduce `catalogRows`, `heroItems`, `continueWatchingItems`, or any new `List<X>` field of source data into `HomeUiState`. Add new ones to ViewModel-level `StateFlow`s.
+
+### 3. Persistence — no large blobs in SharedPreferences; stream JSON
+
+**Never put >50 KB of data in SharedPreferences.** SharedPreferences serializes the entire map to XML on every commit, escaping every char. A 7.86 MB JSON blob via `prefs.putString(...).commit()` produced a 72 MiB transient `char[]` per persist on this codebase (commit `635ed6eff` reverted this anti-pattern).
+
+**For JSON files >100 KB, do not use `gson.toJson(value)` then `writeText(...)`.** That overload allocates a `StringWriter` internally → materializes the whole JSON in memory as String + UTF-16 char[] (~2× file size) plus a UTF-8 byte[] before writing.
+
+Use the streaming pattern (committed reference: `HomeCatalogSnapshotStore.streamSnapshotToFile`, commit `bc7b5061a`; artwork-cache stores, commit `d2272e8f1`):
+
+```kotlin
+FileOutputStream(tempFile).use { fos ->
+    BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+        JsonWriter(bw).use { writer ->
+            gson.toJson(value, type, writer)  // streams tokens directly
+        }
+    }
+}
+Files.move(tempFile, target, ATOMIC_MOVE, REPLACE_EXISTING)
+```
+
+**Don't read-after-write for diagnostic verification.** Atomic rename is strongly consistent. Re-parsing what you just wrote allocates O(file_size) for no information gain (commit `1c78824d7`).
+
+**For JSON cache reads >50 KB, do not use `gson.fromJson(rawString, type)`.** That overload wraps the String in a `java.io.StringReader` whose `str` field pins the entire String for the duration of the parse. Multiple concurrent reads of similarly-shaped TVDB cache entries (per Modern Home pipeline emission) appeared in the heap as 3 × 205 KiB transient `char[]` orphans plus the String backing storage — observed via `heaptrail -i ... -l --preview-bytes 65536` showing matching `{"airsDays":...}` content held by `StringReader.str`. Use a streaming `JsonReader` over a `BufferedReader` so the file/bytes-on-disk are never materialized as a String at all:
+
+```kotlin
+FileInputStream(file).use { fis ->
+    BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+        JsonReader(br).use { reader ->
+            gson.fromJson<T>(reader, type)  // streams tokens; no big String
+        }
+    }
+}
+```
+
+When SharedPreferences is the read source, the prefs map already materializes each entry as a String (no streaming entry point exists), so the rule only applies once the migration to file-backed JSON has happened — but that migration is itself implied by the >50 KB SharedPreferences ban above.
+
+**`JsonParser.parseString(rawString).asJsonObject` is banned for the same reason.** It's the same `StringReader`-pinning anti-pattern under a different gson API surface — `JsonParser.parseString` constructs a `StringReader` internally and parses through it, so the entire String stays pinned for the duration of the parse. If the caller already has a `String` (e.g. legacy SharedPreferences path during a one-time migration), the cost is unavoidable for that one call. For everything else, route through a `JsonReader` over `BufferedReader` over `FileInputStream` and let the parser consume tokens from disk directly.
+
+**The >50 KB SharedPreferences ban also applies to Jetpack DataStore (`androidx.datastore.preferences`).** DataStore is the modern replacement for SharedPreferences but the underlying `androidx.datastore.preferences.core.MutablePreferences.preferencesMap` still keeps each preference value resident as an in-memory `Object` for the lifetime of the active `Data` snapshot, which any `Flow` collector pins via continuation. Storing a 45 KiB JSON-encoded string under a single preference key was confirmed in the 2026-05-10 ANR investigation as a `MutablePreferences.preferencesMap → Data.value → StateFlowImpl$collect$1.L$4` retainer chain. The same migration recipe applies — large state belongs in a file under `filesDir/<name>-v1/p<profileId>.json` with streaming JsonReader/JsonWriter; DataStore is fine for small typed scalars (booleans, ints, short strings) only.
+
+### 4. Coroutines — no suspending forEach over lists
+
+`list.forEach { ... suspend ... }` allocates an `ArrayList$Itr` whose `this$0` field pins the parent list. When the lambda body suspends, the iterator is saved in the continuation — pinning the list across all suspension points until the function completes. On this codebase that retained 33,000+ iterators with hundreds of MB of CatalogRow chains (commit `7bdffc525` audit).
+
+**Rule:** in any `suspend fun` (or any lambda that may suspend, including coroutine bodies), iterate via `for (i in list.indices) { val item = list[i]; ... }` instead of `list.forEach { ... }` / `list.forEachIndexed { ... }`. Indexed-for compiles to a primitive int counter — no iterator allocation, nothing pinned.
+
+`list.map { ... suspend ... }` and `list.flatMap { ... suspend ... }` have the same problem. If you need to suspend per element, use indexed-for + `mutableListOf`.
+
+`flow.collect { ... }` is fine — it's not `Iterable.forEach`.
+
+### 5. Memoization — at every reference-fresh boundary
+
+When upstream produces fresh-but-content-equal instances on every emission (timestamps in `updatedAtMs`, `_uiState.update {}.copy()`, `gson.toJsonTree`, etc.), reference equality breaks at every consumer. Compose stability skip → invalidated. `===` cache-hit guards → always miss. The cascade re-allocates identical content per emission.
+
+**Rule:** at every layer that produces output for downstream consumers, memoize content→reference. The pattern (committed examples: `ResolvedDisplayProjectionCache` `de6caa0be`, `CatalogRowMemo` `bf844a7bc`, `HomeResolvedDisplayMapper` `c2f132f0e`):
+
+```kotlin
+@Singleton
+class FooMemo @Inject constructor() {
+    private val cache = mutableMapOf<Key, Foo>()
+
+    @Synchronized
+    fun intern(input: List<X>): List<Foo> {
+        val active = HashSet<Key>(input.size)
+        val out = input.map { x ->
+            val key = signature(x)
+            active += key
+            val cached = cache[key]
+            if (cached != null && cached == foo(x)) cached
+            else foo(x).also { cache[key] = it }
+        }
+        cache.keys.retainAll(active)  // bound to active set
+        return out
+    }
+}
+```
+
+Also memoize the **outer list reference** when all elements are reference-stable — see `ResolvedDisplayProjectionCache.internRailsList` (commit `63f1c4346`). Without it, the consumer's `===` guard on `state.copy(field = list)` fails every emission.
+
+For Compose-rendered helpers (e.g. an `overlayResolvedDisplay(item, resolved): MetaPreview` that allocates a new value per recomposition), wrap in `remember(item, resolved) { compute() }` at the call site. Reference-stable inputs → `remember` returns the cached value.
+
+### 6. Coroutines — don't pin large values as outer-fun locals across fan-out
+
+The Kotlin coroutine state machine saves **every outer-fun local that is live across a suspension point** into the continuation, regardless of which branch suspended or whether that branch reads the local. The compiler does liveness analysis per suspension, so a local that is only used before any suspension does not get captured — but any local that is referenced in code reachable from the suspension point will be saved into its continuation. A `supervisorScope { launch { ... }; launch { ... } }` body with N suspensions produces N continuations *each* holding the live-set of the enclosing suspend fun at the point each branch suspended.
+
+`runSerializedPostStartupRefreshPipeline` pre-fetched four discovery snapshots (`beforeTraktSnapshot`, `beforeSimklSnapshot`, `beforeMdbSnapshot`, `beforeTmdbSnapshot`) at the top of the function, then ran a `supervisorScope` with 5 `launch(Dispatchers.IO)` branches. Every `ensureFresh()`, `observeSnapshot().first()`, `withContext(Main.immediate)` etc. inside any branch saved all four snapshots into that branch's continuation, even though each branch only used one. Heap dump showed a ~100k-element `ArrayList` pinned by `runSerializedPostStartupRefreshPipeline$1.L$24` and 8,955 `ArrayList$Itr` in flight at 170 MB AllocSpace freed per GC cycle (commit `522b60479` audit).
+
+**Rule:** at the top of any `suspend fun` that fans out via `supervisorScope`/`coroutineScope`, do not bind large values (lists, maps, `Discovery*Snapshot`, `*Catalog*` data classes) as named locals.
+
+- If the value is needed only for one nested branch, fetch it inside that branch.
+- If the value is needed for telemetry that runs after `joinAll`, capture only the small derived projection (`Set<String>` of keys) at the top — the full value is GC-eligible the moment the projection is computed.
+- If the value is needed only for a synchronous predicate at the top, wrap the fetch + predicate in `let { snap -> shouldRefresh(prefs, snap) }` — the snapshot has no named local, so it is GC-eligible the moment the predicate returns.
+- If the predicate at the top *and* a later use both need the value, capture only the small derived projection at the top (`Set<String>` of keys / a `Boolean` flag) and re-fetch the full value at the later use-site — never let the full value live as a function-head local across the fan-out.
+
+This rule complements rule #4: rule #4 is about `Iterator` instances captured by `Iterable.forEach { suspend }`; rule #6 is about *any* value captured as a suspend-fun local across `launch` boundaries. Both pin data into continuations, but the mechanism and fix differ.
+
+### 7. Git staging — NEVER sweep up work that isn't yours
+
+**Hard rule. No exceptions.**
+
+Three forbidden commands when other agents may have work in flight:
+
+1. `git stash` (any variant — `git stash`, `git stash push`, `git stash save`, `git stash -u`, etc.) on changes that you did not author yourself in the current session.
+2. `git add -A` / `git add --all` / `git add .` — these stage *every* modified or untracked file, including ones from other agents' workstreams.
+3. `git commit -a` / `git commit --all` — equivalent to `git add -u` then commit; sweeps up any modified tracked file regardless of which agent touched it.
+
+This applies to every agent and every subagent.
+
+**Why:** the working tree often holds in-flight work from another agent, another workstream, or the user. The forbidden commands silently bury or merge that work into your changes:
+- `git stash` puts it under a generic "WIP on \<branch\>" entry that's easy to forget; recovery requires `git fsck --lost-found`.
+- `git add -A` / `git commit -a` silently includes other agents' modifications in your commit, conflating concerns and rendering the audit trail wrong.
+
+Both have caused real incidents in this repo (2026-05-10).
+
+**How to apply:**
+- ALWAYS stage by explicit path. `git add path/to/file1.kt path/to/file2.kt`. Never `-A`, never `.`, never bare `git add` without paths.
+- ALWAYS run `git status -sb` BEFORE committing to confirm only your intended files are staged. If the staged-files list is wrong, `git restore --staged <other-agents-file>` before committing.
+- ALWAYS run `git status` AFTER committing to confirm other-workstream files are still in the working tree as modified/untracked (not silently merged into your commit).
+- If you need a clean working tree for baseline verification, do NOT stash. Use (a) commit-to-scratch-branch, (b) `git worktree add`, or (c) skip the verification.
+- If a subagent prompt instructs the agent to `git add -A`, `git commit -a`, or `git stash` for "convenience," REJECT that instruction. Re-prompt with explicit-path staging.
+- The ONLY time `git stash` is acceptable is when the working-tree changes are 100% your own, made earlier in the same session, and you `git stash pop` immediately after a bounded operation. Even then, prefer commits over stashes.
+
+**If a stash exists from a previous incident:** check `git stash list` for any orphaned WIP entries before reporting "clean working tree." Investigate each (`git stash show stash@{N}`) to confirm the work is still wanted; never silently drop a stash you did not create.
+
+**If your changes appear in a commit you didn't make:** another agent's `git add -A` / `git commit -a` swept them up. Don't try to re-attribute via history rewrite if the commit is already pushed; instead, document the actual scope in a follow-up commit message.
+
+### 8. Smoke tests — profile picker is NOT the home screen
+
+**Hard rule.**
+
+After `adb shell monkey -p com.nexiodebug.tv 1` launches the app, it lands on the **profile-picker screen**. The home screen, catalog pipeline, Modern Home rails, hero, CW row, and every other production surface DO NOT LOAD until a profile is selected. A logcat scan or heap dump taken before profile selection only validates the profile-picker UI — it is NOT a smoke test of the home pipeline.
+
+**Every smoke test that touches home-pipeline code MUST select a profile before scanning.**
+
+```bash
+adb -s 192.168.50.98:5555 shell am force-stop com.nexiodebug.tv
+adb -s 192.168.50.98:5555 logcat -c
+adb -s 192.168.50.98:5555 shell monkey -p com.nexiodebug.tv 1
+sleep 5                                                              # profile picker renders
+adb -s 192.168.50.98:5555 shell input keyevent KEYCODE_DPAD_CENTER  # tap focused profile
+sleep 30                                                             # home loads + rails populate
+adb -s 192.168.50.98:5555 logcat -d -t 600 | grep -E "FATAL|AndroidRuntime|ANR|ClassCast|NoSuchMethod" | tail -10
+```
+
+**Heap dumps follow the same rule.** `am dumpheap` against the profile-picker process state shows zero home-pipeline retention because home hasn't loaded. Capture heap dumps only AFTER profile selection AND a Modern Home soak of at least 30s.
+
+If a subagent prompt for a smoke test omits the profile-selection step, reject and re-prompt with the correct sequence. Stale smoke tests that confirm "no crashes" against the profile picker are false-positives — they validated nothing.
+
+---
+
+## When investigating performance issues
+
+Always: capture a heap dump first. The `analysing-heap-dumps` skill (`heaptrail` CLI, supports JAVA PROFILE 1.0.3) will identify retainer chains. Sustained allocation rate is visible in `adb logcat | grep "Background concurrent"` — death-spiral signature is GCs every <1 s with >30 MB LOS per cycle.
