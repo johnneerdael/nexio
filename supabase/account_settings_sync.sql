@@ -2300,7 +2300,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_user_id uuid := auth.uid();
+  v_user_id uuid := public.sync_owner_id();
   v_settings_payload jsonb;
   v_settings_revision bigint;
   v_settings_ms bigint;
@@ -2399,14 +2399,81 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_user_id uuid := auth.uid();
+  v_user_id uuid := public.sync_owner_id();
   v_sections jsonb;
-  v_batch_result jsonb;
-  v_failure_reason text;
-  v_current_updated_at_ms bigint;
+  v_invalid_sections jsonb;
+  v_current_updated_at_ms bigint := 0;
+  v_current_revision bigint := 0;
+  v_current_section_count bigint := 0;
+  v_revision bigint;
+  v_updated_at timestamptz;
+  v_lock_key text;
+  v_source text := coalesce(nullif(trim(p_source), ''), 'legacy-adapter');
 begin
   if v_user_id is null then
     raise exception 'Authentication required';
+  end if;
+
+  for v_lock_key in
+    select section_key
+    from (
+      values
+        ('integrations.subtitleTranslation'),
+        ('integrations.imdb'),
+        ('integrations.gemini'),
+        ('integrations.tmdb'),
+        ('integrations.omdb'),
+        ('integrations.posterRatings'),
+        ('integrations.animeSkip'),
+        ('integrations.mdblist'),
+        ('integrations.kitsu'),
+        ('integrations.traktAuth'),
+        ('integrations.simklAuth'),
+        ('integrations.kitsuAuth'),
+        ('integrations.debrid.premiumize'),
+        ('integrations.debrid.realDebrid'),
+        ('integrations.debrid.torBox'),
+        ('integrations.debrid.easyDebrid'),
+        ('catalogs.mdblist'),
+        ('catalogs.trakt'),
+        ('catalogs.simkl'),
+        ('catalogs.tmdb'),
+        ('catalogs.kitsu'),
+        ('catalogs.home'),
+        ('playback.streamSelection'),
+        ('formatter')
+    ) as section_keys(section_key)
+    order by section_key
+  loop
+    perform pg_advisory_xact_lock(hashtextextended(v_user_id::text || ':' || v_lock_key, 0));
+  end loop;
+
+  select coalesce(max(public.sync_to_ms(updated_at)), 0),
+         coalesce(max(sync_revision), 0),
+         count(*)
+  into v_current_updated_at_ms, v_current_revision, v_current_section_count
+  from public.account_settings_sections
+  where user_id = v_user_id;
+
+  if coalesce(v_current_section_count, 0) = 0 then
+    select coalesce(public.sync_to_ms(updated_at), 0),
+           coalesce(sync_revision, 0)
+    into v_current_updated_at_ms, v_current_revision
+    from public.account_settings_public
+    where user_id = v_user_id;
+  end if;
+
+  v_current_updated_at_ms := coalesce(v_current_updated_at_ms, 0);
+  v_current_revision := coalesce(v_current_revision, 0);
+
+  -- legacy aggregate stale-base guard: full-payload callers must not miss unselected section changes.
+  if coalesce(p_base_updated_at_ms, 0) < v_current_updated_at_ms
+    or coalesce(p_base_revision, 0) < v_current_revision then
+    return jsonb_build_object(
+      'applied', false,
+      'reason', 'stale_base',
+      'current_updated_at_ms', v_current_updated_at_ms
+    );
   end if;
 
   with changed(path) as (
@@ -2466,48 +2533,57 @@ begin
     );
   end if;
 
-  v_batch_result := public.sync_push_account_settings_sections_v13(
-    v_sections,
-    coalesce(nullif(trim(p_source), ''), 'legacy-adapter')
-  );
+  -- legacy section payload preflight: validate every selected section before writing any section.
+  select coalesce(jsonb_agg(item->>'section_key'), '[]'::jsonb)
+  into v_invalid_sections
+  from jsonb_array_elements(v_sections) item
+  where jsonb_typeof(item->'payload') <> 'object';
 
-  if coalesce((v_batch_result->>'applied')::boolean, false) = false then
-    select item->>'reason'
-    into v_failure_reason
-    from jsonb_array_elements(coalesce(v_batch_result->'sections', '[]'::jsonb)) item
-    where coalesce((item->>'applied')::boolean, false) = false
-    limit 1;
-
-    select coalesce(max((item->>'current_updated_at_ms')::bigint), 0)
-    into v_current_updated_at_ms
-    from jsonb_array_elements(coalesce(v_batch_result->'sections', '[]'::jsonb)) item
-    where item ? 'current_updated_at_ms';
-
-    if v_failure_reason = 'stale_base' then
-      return jsonb_build_object(
-        'applied', false,
-        'reason', 'stale_base',
-        'current_updated_at_ms', coalesce(v_current_updated_at_ms, 0)
-      );
-    end if;
-
+  if v_invalid_sections <> '[]'::jsonb then
     return jsonb_build_object(
       'applied', false,
-      'reason', coalesce(v_failure_reason, 'section_push_failed'),
-      'current_updated_at_ms', coalesce(v_current_updated_at_ms, 0)
+      'reason', 'field_conflict',
+      'conflict_paths', v_invalid_sections,
+      'sync_revision', v_current_revision,
+      'current_updated_at_ms', v_current_updated_at_ms,
+      'section_failure_reason', 'invalid_payload'
     );
   end if;
 
+  v_revision := greatest(public.next_sync_revision(), v_current_revision + 1);
+  v_updated_at := greatest(now(), to_timestamp((v_current_updated_at_ms + 1)::double precision / 1000.0));
+
+  insert into public.account_settings_sections (
+    user_id,
+    section_key,
+    payload,
+    schema_version,
+    sync_revision,
+    updated_at,
+    updated_from
+  )
+  select
+    v_user_id,
+    item->>'section_key',
+    item->'payload',
+    1,
+    v_revision,
+    v_updated_at,
+    v_source
+  from jsonb_array_elements(v_sections) item
+  on conflict (user_id, section_key) do update
+    set payload = excluded.payload,
+        schema_version = excluded.schema_version,
+        sync_revision = excluded.sync_revision,
+        updated_at = excluded.updated_at,
+        updated_from = excluded.updated_from;
+
+  perform public.publish_account_sync_event(v_user_id, v_revision, 'settings_public', v_source);
+
   return jsonb_build_object(
     'applied', true,
-    'sync_revision', (
-      select coalesce(max((item->>'sync_revision')::bigint), 0)
-      from jsonb_array_elements(v_batch_result->'sections') item
-    ),
-    'current_updated_at_ms', (
-      select coalesce(max((item->>'current_updated_at_ms')::bigint), public.sync_now_ms())
-      from jsonb_array_elements(v_batch_result->'sections') item
-    )
+    'sync_revision', v_revision,
+    'current_updated_at_ms', public.sync_to_ms(v_updated_at)
   );
 end;
 $$;

@@ -158,7 +158,9 @@ class V13SupabaseMigrationStaticTest {
                 """.trimIndent(),
             ),
         )
-        assertTrue("legacy push must delegate to v13 section batch push", push.contains("sync_push_account_settings_sections_v13"))
+        assertTrue("legacy pull must use canonical sync owner identity", pull.contains("v_user_id uuid := public.sync_owner_id()"))
+        assertTrue("legacy push must use canonical sync owner identity", push.contains("v_user_id uuid := public.sync_owner_id()"))
+        assertFalse("legacy push must not delegate to non-atomic v13 section batch push", push.contains("sync_push_account_settings_sections_v13"))
         assertEquals(expectedSections, sectionKeysIn(pushSections))
         assertTrue("legacy push must map current IMDb integration section", pushSections.contains("'integrations.imdb'"))
         assertTrue("legacy push must map current Gemini integration section", pushSections.contains("'integrations.gemini'"))
@@ -168,10 +170,41 @@ class V13SupabaseMigrationStaticTest {
         assertFalse("legacy push mapping must not include removed Wyzie API key surface", pushSections.contains("wyzie_api_key"))
         assertFalse("legacy push mapping must not include removed TMDB API key surface", pushSections.contains("tmdb_api_key"))
         assertFalse("legacy push mapping must not include removed TVDB API key surface", pushSections.contains("tvdb_api_key"))
-        assertTrue("legacy push must preserve stale-base compatibility responses", push.contains("v_failure_reason = 'stale_base'"))
-        assertTrue("legacy push must report non-stale section push failures", push.contains("coalesce(v_failure_reason, 'section_push_failed')"))
+        assertTrue("legacy push must preflight aggregate stale-base timestamps", push.contains("legacy aggregate stale-base guard"))
+        assertTrue(
+            "legacy push must reject stale aggregate timestamps before writes",
+            push.indexOf("legacy aggregate stale-base guard") in 0 until push.indexOf("insert into public.account_settings_sections"),
+        )
+        assertTrue(
+            "legacy push must reject stale aggregate revisions before writes",
+            push.contains("coalesce(p_base_revision, 0) < v_current_revision"),
+        )
+        assertTrue(
+            "legacy push must validate selected section payloads before writes",
+            push.indexOf("legacy section payload preflight") in 0 until push.indexOf("insert into public.account_settings_sections"),
+        )
+        assertTrue(
+            "legacy push must write sections directly after preflight for atomic legacy behavior",
+            push.contains("insert into public.account_settings_sections"),
+        )
+        assertTrue("legacy push must preserve stale-base compatibility responses", push.contains("'reason', 'stale_base'"))
+        assertTrue("legacy push must normalize section validation failures as field conflicts", push.contains("'reason', 'field_conflict'"))
+        assertTrue("legacy push must preserve raw section failure detail separately", push.contains("'section_failure_reason', 'invalid_payload'"))
+        assertFalse("legacy push must not expose raw section-only failure reasons", push.contains("coalesce(v_failure_reason, 'section_push_failed')"))
         assertTrue("legacy push must no-op successfully when no sections are affected", push.contains("if v_sections = '[]'::jsonb then"))
         assertTrue("legacy push no-op must report applied success", push.contains("'applied', true"))
+    }
+
+    @Test
+    fun `legacy push mapping extraction fails when marker is missing`() {
+        try {
+            legacyPushSectionMappingBlock("create or replace function public.sync_push_account_settings_v10()")
+        } catch (expected: AssertionError) {
+            assertTrue(expected.message.orEmpty().contains("legacy section mapping start marker must exist"))
+            return
+        }
+
+        throw AssertionError("missing legacy section mapping marker must fail explicitly")
     }
 
     private fun sectionKeysIn(sql: String): Set<String> =
@@ -188,9 +221,15 @@ class V13SupabaseMigrationStaticTest {
         sql.substringAfter("with section_keys(section_key) as (")
             .substringBefore(")\ninsert into public.account_settings_sections")
 
-    private fun legacyPushSectionMappingBlock(sql: String): String =
-        sql.substringAfter("section_keys(section_key) as (")
-            .substringBefore("  )\n  select coalesce(jsonb_agg")
+    private fun legacyPushSectionMappingBlock(sql: String): String {
+        val startMarker = "section_keys(section_key) as ("
+        val endMarker = "  )\n  select coalesce(jsonb_agg"
+        val start = sql.indexOf(startMarker)
+        assertTrue("legacy section mapping start marker must exist", start >= 0)
+        val end = sql.indexOf(endMarker, start + startMarker.length)
+        assertTrue("legacy section mapping end marker must exist", end > start)
+        return sql.substring(start + startMarker.length, end)
+    }
 
     private fun functionBlock(sql: String, functionName: String): String {
         val startMarker = "create or replace function public.$functionName"
