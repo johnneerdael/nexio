@@ -107,7 +107,6 @@ import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.core.player.AndroidFrameRateSettings
-import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.theme.NexioColors
@@ -184,9 +183,6 @@ internal fun PlaybackSettingsContent(
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
-    val trackingProviderSelectorState by viewModel.trackingProviderSelectorState.collectAsStateWithLifecycle(
-        initialValue = TrackingProviderSelectorState()
-    )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
     val externalPlayerCandidates = remember(context) {
@@ -202,7 +198,6 @@ internal fun PlaybackSettingsContent(
     var showSecondaryAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
-    var showTrackingProviderDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
@@ -219,7 +214,6 @@ internal fun PlaybackSettingsContent(
         showSecondaryAudioLanguageDialog = false
         showDecoderPriorityDialog = false
         showIecPackerChannelLayoutDialog = false
-        showTrackingProviderDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
@@ -262,13 +256,6 @@ internal fun PlaybackSettingsContent(
                 onShowSubtitleStartupModeDialog = { openDialog { showSubtitleStartupModeDialog = true } },
                 onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
-                onShowTrackingProviderDialog = { openDialog { showTrackingProviderDialog = true } },
-                trackingProviderLabel = when (trackingProviderSelectorState.effectiveProvider) {
-                    TrackingProvider.TRAKT -> stringResource(R.string.playback_tracking_provider_trakt)
-                    TrackingProvider.SIMKL -> stringResource(R.string.playback_tracking_provider_simkl)
-                },
-                trackingProviderEnabled = trackingProviderSelectorState.canChoose,
-                trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
                 onSetDeterministicAutoplayEnabled = { enabled ->
@@ -537,64 +524,6 @@ internal fun PlaybackSettingsContent(
         )
     }
 
-    if (showTrackingProviderDialog) {
-        NexioDialog(
-            onDismiss = { showTrackingProviderDialog = false },
-            title = stringResource(R.string.playback_tracking_provider_dialog_title),
-            subtitle = stringResource(R.string.playback_tracking_provider_dialog_subtitle),
-            width = 620.dp,
-            suppressFirstKeyUp = false
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (trackingProviderSelectorState.traktConfigured) {
-                    val selected = trackingProviderSelectorState.effectiveProvider == TrackingProvider.TRAKT
-                    Button(
-                        onClick = {
-                            coroutineScope.launch { viewModel.setTrackingProvider(TrackingProvider.TRAKT) }
-                            showTrackingProviderDialog = false
-                        },
-                        colors = ButtonDefaults.colors(
-                            containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
-                            contentColor = if (selected) Color.Black else NexioColors.TextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.playback_tracking_provider_trakt))
-                    }
-                }
-                if (trackingProviderSelectorState.simklConfigured) {
-                    val selected = trackingProviderSelectorState.effectiveProvider == TrackingProvider.SIMKL
-                    Button(
-                        onClick = {
-                            coroutineScope.launch { viewModel.setTrackingProvider(TrackingProvider.SIMKL) }
-                            showTrackingProviderDialog = false
-                        },
-                        colors = ButtonDefaults.colors(
-                            containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
-                            contentColor = if (selected) Color.Black else NexioColors.TextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.playback_tracking_provider_simkl))
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = { showTrackingProviderDialog = false },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NexioColors.BackgroundCard,
-                            contentColor = NexioColors.TextPrimary
-                        )
-                    ) {
-                        Text(stringResource(R.string.action_cancel))
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
