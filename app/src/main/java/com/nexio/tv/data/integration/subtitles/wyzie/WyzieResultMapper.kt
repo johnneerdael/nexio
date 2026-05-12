@@ -26,6 +26,7 @@ object WyzieResultMapper {
     private fun logoFor(source: WyzieSource?): String = when (source) {
         WyzieSource.OPENSUBTITLES -> resourceUri(R.drawable.ic_wyzie_opensubtitles)
         WyzieSource.SUBDL -> resourceUri(R.drawable.ic_wyzie_subdl)
+        WyzieSource.TVSUBTITLES -> resourceUri(R.drawable.ic_wyzie)
         WyzieSource.SUBF2M -> resourceUri(R.drawable.ic_wyzie_subf2m)
         WyzieSource.PODNAPISI -> resourceUri(R.drawable.ic_wyzie_podnapisi)
         WyzieSource.GESTDOWN -> resourceUri(R.drawable.ic_wyzie_gestdown)
