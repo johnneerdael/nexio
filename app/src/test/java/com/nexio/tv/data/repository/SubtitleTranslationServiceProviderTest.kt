@@ -85,6 +85,31 @@ class SubtitleTranslationServiceProviderTest {
             subtitleTranslationDiskCacheKey("https://subs.example/movie.srt", "nl", baseline),
             subtitleTranslationDiskCacheKey("https://subs.example/movie.srt", "nl", baseline.copy(baseUrl = "https://openrouter.ai/api/v1"))
         )
+        assertNotEquals(
+            subtitleTranslationDiskCacheKey("https://subs.example/movie.ass", "nl", baseline),
+            subtitleTranslationDiskCacheKey("https://subs.example/movie.ass", "nl", baseline.copy(subRipSystemPromptEnabled = true))
+        )
+    }
+
+    @Test
+    fun diskCacheKeyUsesSegmentSurfaceVersion() {
+        val key = subtitleTranslationDiskCacheKey(
+            sourceUrl = "https://subs.example/movie.ass",
+            targetLanguage = "nl",
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-5-nano",
+                baseUrl = "https://api.openai.com/v1"
+            )
+        )
+
+        assertEquals(64, key.length)
+        assertNotEquals(
+            key,
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest("file|https://subs.example/movie.ass|nl|OPENAI|gpt-5-nano|https://api.openai.com/v1|srtRaw=false|v3".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        )
     }
 
     @Test
@@ -457,7 +482,7 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
-    fun protectedAssBatchTranslationSendsPlaceholderContractAndMapsItems() = runTest {
+    fun assSsaSegmentTranslationSendsSegmentArraysAndRecomposesValidItems() = runTest {
         val server = MockWebServer()
         server.enqueue(
             MockResponse()
@@ -468,7 +493,7 @@ class SubtitleTranslationServiceProviderTest {
                       "choices": [
                         {
                           "message": {
-                            "content": "{\"items\":[{\"id\":\"evt_1\",\"text\":\"Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos\"}]}"
+                            "content": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Hallo\",\"wereld\"]}]}"
                           }
                         }
                       ]
@@ -483,13 +508,10 @@ class SubtitleTranslationServiceProviderTest {
                 subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
                 subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
-            val unit = AssSsaProtectedTranslationUnit.fromTokens(
-                id = "evt_1",
-                tokens = AssSsaTextTokenizer.tokenize("""I am {\i1}not{\i0} angry""")
-            )
+            val surface = (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello {\\i1}world{\\i0}") as AssSsaSurfaceParseResult.Translatable).surface
 
-            val result = service.translateProtectedAssSsaUnits(
-                units = listOf(unit),
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = listOf(surface),
                 targetLanguageCode = "nl",
                 sourceLanguageCode = "en",
                 settings = SubtitleTranslationSettings(
@@ -498,16 +520,261 @@ class SubtitleTranslationServiceProviderTest {
                     model = "gpt-5-nano",
                     baseUrl = server.url("/v1").toString()
                 )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo", "wereld")), result)
+            val requestBody = server.takeRequest().body.readUtf8()
+            assertTrue(
+                requestBody.contains(""""segments":["Hello","world"]""") ||
+                    requestBody.contains("""\"segments\":[\"Hello\",\"world\"]""")
+            )
+            assertTrue(
+                requestBody.contains(""""context":"Hello world"""") ||
+                    requestBody.contains("""\"context\":\"Hello world\"""")
+            )
+            assertFalse(requestBody.contains("\u27E6ASS_"))
+            assertFalse(requestBody.contains("{\\i1}"))
+            val itemProperties = JSONObject(requestBody)
+                .getJSONObject("response_format")
+                .getJSONObject("json_schema")
+                .getJSONObject("schema")
+                .getJSONObject("properties")
+                .getJSONObject("items")
+                .getJSONObject("items")
+                .getJSONObject("properties")
+            assertEquals("string", itemProperties.getJSONObject("id").getString("type"))
+            val segmentsSchema = itemProperties.getJSONObject("segments")
+            assertEquals("array", segmentsSchema.getString("type"))
+            assertEquals("string", segmentsSchema.getJSONObject("items").getString("type"))
+            assertFalse(itemProperties.has("text"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun assSsaSegmentTranslationSendsGeminiSegmentResponseSchema() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "candidates": [
+                        {
+                          "content": {
+                            "parts": [
+                              {
+                                "text": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Hallo\"]}]}"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val surface = (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello") as AssSsaSurfaceParseResult.Translatable).surface
+
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = listOf(surface),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.GEMINI,
+                    apiKey = "test-key",
+                    model = "gemini-2.5-flash",
+                    baseUrl = server.url("/v1beta").toString()
+                )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo")), result)
+            val itemProperties = JSONObject(server.takeRequest().body.readUtf8())
+                .getJSONObject("generationConfig")
+                .getJSONObject("responseSchema")
+                .getJSONObject("properties")
+                .getJSONObject("items")
+                .getJSONObject("items")
+                .getJSONObject("properties")
+            assertEquals("string", itemProperties.getJSONObject("id").getString("type"))
+            val segmentsSchema = itemProperties.getJSONObject("segments")
+            assertEquals("array", segmentsSchema.getString("type"))
+            assertEquals("string", segmentsSchema.getJSONObject("items").getString("type"))
+            assertFalse(itemProperties.has("text"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun assSsaSegmentTranslationFallsBackWhenOpenAiSegmentSchemaIsRejected() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(400)
+                .setBody("""{"error":{"message":"response_format unsupported"}}""")
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Hallo\"]}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val surface = (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello") as AssSsaSurfaceParseResult.Translatable).surface
+
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = listOf(surface),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo")), result)
+            assertEquals(2, server.requestCount)
+            val structuredRequestBody = server.takeRequest().body.readUtf8()
+            val fallbackRequestBody = server.takeRequest().body.readUtf8()
+            assertTrue(structuredRequestBody.contains("response_format"))
+            assertFalse(fallbackRequestBody.contains("response_format"))
+            assertTrue(fallbackRequestBody.contains("ass_0"))
+            assertTrue(fallbackRequestBody.contains("segments"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun assSsaSegmentTranslationUsesDashScopeMarkerPayloadForSegments() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "output": {
+                        "choices": [
+                          {
+                            "message": {
+                              "content": "[[0]] Hallo\\n[[1]] wereld"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val surface = (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello {\\i1}world{\\i0}") as AssSsaSurfaceParseResult.Translatable).surface
+
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = listOf(surface),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.DASHSCOPE,
+                    apiKey = "dashscope-key",
+                    model = "qwen-mt-flash",
+                    baseUrl = server.url("/api/v1").toString()
+                )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo", "wereld")), result)
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body.contains(""""source_lang":"English""""))
+            assertTrue(body.contains(""""target_lang":"Dutch""""))
+            assertTrue(body.contains("[[0]] Hello"))
+            assertTrue(body.contains("[[1]] world"))
+            assertFalse(body.contains("{\\i1}"))
+            assertFalse(body.contains("response_format"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun assSsaSegmentTranslationDropsInvalidItemButKeepsValidItem() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Hallo\"]},{\"id\":\"ass_1\",\"segments\":[\"{\\\\i1}Wereld\"]}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val surfaces = listOf(
+                (AssSsaSegmentSurfaceParser.parse("ass_0", "Hello") as AssSsaSurfaceParseResult.Translatable).surface,
+                (AssSsaSegmentSurfaceParser.parse("ass_1", "World") as AssSsaSurfaceParseResult.Translatable).surface
             )
 
-            assertEquals(
-                mapOf("evt_1" to "Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos"),
-                result.getOrThrow()
-            )
-            val body = server.takeRequest().body.readUtf8()
-            assertTrue(body.contains("Translate subtitle text from the source language to the target language."))
-            assertTrue(body.contains("⟦[A-Z_]+_[0-9]+⟧"))
-            assertTrue(body.contains("I am ⟦ASS_000⟧not⟦ASS_001⟧ angry"))
+            val result = service.translateAssSsaSegmentSurfaces(
+                surfaces = surfaces,
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                )
+            ).getOrThrow()
+
+            assertEquals(mapOf("ass_0" to listOf("Hallo")), result)
         } finally {
             server.shutdown()
         }
@@ -612,7 +879,7 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
-    fun assSsaSystemPromptModeSendsRawAssBatchAndWritesTranslatedAss() = runTest {
+    fun assSsaFileTranslationSendsSegmentSurfacesAndWritesTranslatedAss() = runTest {
         val server = MockWebServer()
         val sourceAss = """
             [Script Info]
@@ -647,7 +914,7 @@ class SubtitleTranslationServiceProviderTest {
                               "choices": [
                                 {
                                   "message": {
-                                    "content": ${JSONObject.quote(translatedAss)}
+                                    "content": "{\"items\":[{\"id\":\"ass_0\",\"segments\":[\"Bordtekst\"]},{\"id\":\"ass_1\",\"segments\":[\"Hallo daar.\"]}]}"
                                   }
                                 }
                               ]
@@ -682,24 +949,24 @@ class SubtitleTranslationServiceProviderTest {
                     provider = SubtitleTranslationProvider.OPENAI,
                     apiKey = "test-key",
                     model = "gpt-5-nano",
-                    baseUrl = server.url("/v1").toString(),
-                    assSsaSystemPromptEnabled = true
+                    baseUrl = server.url("/v1").toString()
                 )
             ).getOrThrow()
 
             val translatedFile = File(result.translatedSubtitle.url.removePrefix("file:"))
-            assertEquals(translatedAss, translatedFile.readText())
+            assertEquals(translatedAss + "\n", translatedFile.readText())
 
             val downloadRequest = server.takeRequest()
             assertEquals("/subtitle.ass", downloadRequest.path)
             val providerRequest = server.takeRequest()
             val body = providerRequest.body.readUtf8()
-            assertTrue(body.contains("ASS_SSA_SUBTITLE_TRANSLATOR"))
-            assertTrue(body.contains("Dialogue: 0,0:00:01.00,0:00:02.00,Default,SIGN"))
-            assertTrue(body.contains("""{\\pos(475.43,40)}Sign text"""))
+            assertTrue(body.contains("Translate subtitle segments to the target language."))
+            assertTrue(body.contains(""""items""""))
+            assertTrue(body.contains(""""segments":["Sign text"]""") || body.contains("""\"segments\":[\"Sign text\"]"""))
             assertTrue(body.contains("Hello there."))
-            assertFalse(body.contains(""""items""""))
-            assertFalse(body.contains("response_format"))
+            assertTrue(body.contains("response_format"))
+            assertFalse(body.contains("ASS_SSA_SUBTITLE_TRANSLATOR"))
+            assertFalse(body.contains("""{\\pos(475.43,40)}Sign text"""))
         } finally {
             server.shutdown()
             cacheDir.deleteRecursively()

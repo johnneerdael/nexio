@@ -28,7 +28,11 @@ internal fun parseAssSsaTimedTextDocument(
             continue
         }
 
-        if (inEventsSection && trimmed.startsWith("Dialogue:", ignoreCase = true) && textFieldIndex >= 0) {
+        if (inEventsSection &&
+            textFieldIndex >= 0 &&
+            (trimmed.startsWith("Dialogue:", ignoreCase = true) ||
+                trimmed.startsWith("Comment:", ignoreCase = true))
+        ) {
             val parsedDialogue = parseAssSsaDialogueLine(
                 line = line,
                 eventFieldCount = eventFormat.size,
@@ -78,35 +82,35 @@ internal data class AssSsaDialogueBlock(
     }
 
     override fun render(translations: Map<Int, String>): String {
-        val text = textSegments.joinToString("") { segment -> segment.render(translations) }
+        return renderWithText(textSegments.joinToString("") { segment -> segment.render(translations) })
+    }
+
+    fun rawText(): String {
+        return textSegments.joinToString("") { segment -> segment.render(emptyMap()) }
+    }
+
+    fun segmentSurface(id: String): AssSsaTranslationSurface? {
+        return when (val result = AssSsaSegmentSurfaceParser.parse(id, rawText())) {
+            is AssSsaSurfaceParseResult.Translatable -> result.surface
+            is AssSsaSurfaceParseResult.PreserveOnly -> null
+        }
+    }
+
+    fun renderSegmentSurface(surface: AssSsaTranslationSurface?, translatedSegments: List<String>?): String {
+        val nextText = if (surface != null && translatedSegments != null) {
+            runCatching { surface.recomposeOrThrow(translatedSegments) }.getOrDefault(rawText())
+        } else {
+            rawText()
+        }
+        return renderWithText(nextText)
+    }
+
+    private fun renderWithText(text: String): String {
         return if (fieldsBeforeText.isEmpty()) {
             prefix + text
         } else {
             prefix + fieldsBeforeText.joinToString(",") + "," + text
         }
-    }
-
-    fun toProtectedTranslationUnit(id: String): AssSsaProtectedTranslationUnit {
-        return AssSsaProtectedTranslationUnit.fromTokens(
-            id = id,
-            tokens = AssSsaTextTokenizer.tokenize(rawText())
-        )
-    }
-
-    fun renderProtected(translatedProtectedText: String?): String {
-        if (translatedProtectedText.isNullOrBlank()) return render(emptyMap())
-        val translatedText = toProtectedTranslationUnit("render")
-            .reconstruct(translatedProtectedText)
-            .getOrElse { return render(emptyMap()) }
-        return if (fieldsBeforeText.isEmpty()) {
-            prefix + translatedText
-        } else {
-            prefix + fieldsBeforeText.joinToString(",") + "," + translatedText
-        }
-    }
-
-    private fun rawText(): String {
-        return textSegments.joinToString("") { segment -> segment.render(emptyMap()) }
     }
 }
 

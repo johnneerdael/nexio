@@ -54,16 +54,17 @@ internal data class TimedTextDocument(
         return blocks.joinToString(separator) { it.render(translations) }.trim() + "\n"
     }
 
-    fun assSsaProtectedUnits(): List<AssSsaProtectedTranslationUnit> {
+    fun assSsaSegmentSurfaces(): List<AssSsaTranslationSurface> {
         if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) return emptyList()
+        var dialogueIndex = 0
         return blocks
             .filterIsInstance<AssSsaDialogueBlock>()
-            .mapIndexed { index, block ->
-                block.toProtectedTranslationUnit("ass_$index")
+            .mapNotNull { block ->
+                block.segmentSurface("ass_${dialogueIndex++}")
             }
     }
 
-    fun renderAssSsaProtected(translations: Map<String, String>): String {
+    fun renderAssSsaSegmentSurfaces(translations: Map<String, List<String>>): String {
         if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) {
             return render(emptyMap())
         }
@@ -71,7 +72,8 @@ internal data class TimedTextDocument(
         return blocks.joinToString("\n") { block ->
             if (block is AssSsaDialogueBlock) {
                 val id = "ass_${dialogueIndex++}"
-                block.renderProtected(translations[id])
+                val surface = block.segmentSurface(id)
+                block.renderSegmentSurface(surface, translations[id])
             } else {
                 block.render(emptyMap())
             }
