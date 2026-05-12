@@ -803,6 +803,9 @@ class AccountConfigSyncContractTest {
         assertTrue(pullBlock.contains("if (scheduleSecretFollowUpPush && hasLiveFullAccountSession())"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
+        assertTrue(resolveBlock.contains("resolvedSimkl?.preserveLocalTokens == true"))
+        assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH"))
+        assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH"))
         assertTrue(resolveBlock.contains("resolvedKitsu.preserveLocalTokens"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
@@ -844,6 +847,25 @@ class AccountConfigSyncContractTest {
         assertTrue(resolveBlock.contains("resolvedKitsu == null"))
         assertTrue(resolveBlock.contains("preservedLocalSectionKeys = preservedLocalSecretSections"))
         assertTrue(resolveBlock.contains("unresolvedRemoteSecretSectionKeys = unresolvedRemoteSecretSections"))
+    }
+
+    @Test
+    fun `blank connected remote auth secrets preserve local tokens for repair push`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val traktStart = source.indexOf("private suspend fun resolveRemoteTraktSecrets")
+        val simklStart = source.indexOf("private suspend fun resolveRemoteSimklSecrets")
+        val kitsuStart = source.indexOf("private suspend fun resolveRemoteKitsuSecrets")
+        val realDebridStart = source.indexOf("private suspend fun resolveRemoteRealDebridSecrets")
+        val traktBlock = source.substring(traktStart, simklStart)
+        val simklBlock = source.substring(simklStart, kitsuStart)
+        val kitsuBlock = source.substring(kitsuStart, realDebridStart)
+
+        assertTrue(traktBlock.contains("accessToken.isBlank() || refreshToken.isBlank()"))
+        assertTrue(traktBlock.contains("remote.connected || remote.pending"))
+        assertTrue(simklBlock.contains("accessToken.isBlank()"))
+        assertTrue(simklBlock.contains("remote.connected || remote.pending"))
+        assertTrue(kitsuBlock.contains("!remoteHasTokens && remote.connected"))
+        assertTrue(kitsuBlock.contains("preserveLocalTokens = preserveLocalTokens"))
     }
 
     @Test
