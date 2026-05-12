@@ -672,8 +672,70 @@ class AccountConfigSyncContractTest {
         assertTrue(pushBlock.contains("currentUpdatedAtMs != null"))
         assertTrue(pushBlock.contains("setAccountSettingsSection(sectionKey, result.currentUpdatedAtMs)"))
         assertTrue(pushBlock.contains("changedPathsBySection"))
-        assertTrue(pushBlock.contains("pendingChangedPaths.removeAll(appliedChangedPaths)"))
+        assertTrue(pushBlock.contains("clearAppliedChangedPathsForGeneration("))
+        assertTrue(pushBlock.contains("appliedChangedPaths = appliedChangedPaths"))
         assertFalse(pushBlock.contains("pendingChangedPaths.removeAll(snapshot.changedPaths.toSet())"))
+    }
+
+    @Test
+    fun `mixed v13 stale push clears applied section paths before stale pull`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBlock = source.substring(pushStart, pullStart)
+
+        val clearIndex = pushBlock.indexOf("clearAppliedChangedPathsForGeneration(")
+        val staleIndex = pushBlock.indexOf("if (hasStaleSection)")
+        val staleFollowUpIndex = pushBlock.indexOf("if (scheduleFollowUpPush)", startIndex = staleIndex)
+        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(clearPendingChanges = false)", startIndex = staleIndex)
+
+        assertTrue("v13 push must attempt applied-path clearing", clearIndex >= 0)
+        assertTrue("applied paths must be cleared before stale recovery returns", clearIndex < staleIndex)
+        assertTrue("generation races must still schedule a follow-up before stale return", staleFollowUpIndex in (staleIndex + 1)..<stalePullIndex)
+        assertTrue("stale recovery must pull without clearing stale pending paths", stalePullIndex > staleIndex)
+    }
+
+    @Test
+    fun `applied path clearing removes only applied paths when generation matches`() {
+        val pending = linkedSetOf(
+            "integrations.tmdb.useArtwork",
+            "catalogs.home.heroCatalogKeys",
+            "playback.streamSelection.trackingProvider"
+        )
+
+        val cleared = clearAppliedChangedPathsForGeneration(
+            pendingChangedPaths = pending,
+            pendingChangedPathsGeneration = 7L,
+            snapshotChangedPathsGeneration = 7L,
+            appliedChangedPaths = setOf(
+                "integrations.tmdb.useArtwork",
+                "playback.streamSelection.trackingProvider"
+            )
+        )
+
+        assertTrue(cleared)
+        assertEquals(listOf("catalogs.home.heroCatalogKeys"), pending.toList())
+    }
+
+    @Test
+    fun `applied path clearing preserves paths when generation changed`() {
+        val pending = linkedSetOf(
+            "integrations.tmdb.useArtwork",
+            "catalogs.home.heroCatalogKeys"
+        )
+
+        val cleared = clearAppliedChangedPathsForGeneration(
+            pendingChangedPaths = pending,
+            pendingChangedPathsGeneration = 8L,
+            snapshotChangedPathsGeneration = 7L,
+            appliedChangedPaths = setOf("integrations.tmdb.useArtwork")
+        )
+
+        assertFalse(cleared)
+        assertEquals(
+            listOf("integrations.tmdb.useArtwork", "catalogs.home.heroCatalogKeys"),
+            pending.toList()
+        )
     }
 
     @Test
