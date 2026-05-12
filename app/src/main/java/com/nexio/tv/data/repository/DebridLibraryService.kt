@@ -555,8 +555,17 @@ class DebridLibraryService @Inject constructor(
         if (apiKey.isBlank()) return@withContext null
         val response = torBoxProvider.fetchTorrentList(apiKey = apiKey, id = torrentId, limit = 1)
             ?: return@withContext null
-        val torrent = response.data.orEmpty().firstOrNull { it.id == torrentId }
-            ?: return@withContext null
+        // CLAUDE.md #4: indexed-for inside suspend fun — no Iterable.firstOrNull / forEach.
+        val items = response.data.orEmpty()
+        var torrent: TorBoxTorrentListItemDto? = null
+        for (i in items.indices) {
+            val candidate = items[i]
+            if (candidate.id == torrentId) {
+                torrent = candidate
+                break
+            }
+        }
+        if (torrent == null) return@withContext null
         pickNextFileInTorrent(torrent, currentFileId)
     }
 
