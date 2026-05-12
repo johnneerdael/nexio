@@ -3,6 +3,9 @@ package com.nexio.tv.data.remote.api
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCachedTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCheckCachedRequestDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCreateTorrentDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceCodeDataDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceTokenDataDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxDeviceTokenRequestDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxEnvelopeDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxUserDto
@@ -21,6 +24,16 @@ interface TorBoxApi {
     suspend fun getCurrentUser(
         @Header("Authorization") authorization: String
     ): Response<TorBoxEnvelopeDto<TorBoxUserDto>>
+
+    @GET("v1/api/user/auth/device/start")
+    suspend fun startDeviceCode(
+        @Query("app") app: String = "Nexio"
+    ): Response<TorBoxEnvelopeDto<TorBoxDeviceCodeDataDto>>
+
+    @POST("v1/api/user/auth/device/token")
+    suspend fun pollDeviceToken(
+        @Body body: TorBoxDeviceTokenRequestDto
+    ): Response<TorBoxEnvelopeDto<TorBoxDeviceTokenDataDto>>
 
     @POST("v1/api/torrents/checkcached")
     suspend fun checkCachedTorrents(

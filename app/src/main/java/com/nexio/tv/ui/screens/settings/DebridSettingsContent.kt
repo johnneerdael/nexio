@@ -67,7 +67,11 @@ import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridSettingsAuthGateway
 import com.nexio.tv.data.repository.RealDebridTokenPollResult
+import com.nexio.tv.data.repository.TorBoxAuthService
+import com.nexio.tv.data.repository.TorBoxDeviceFlow
 import com.nexio.tv.data.repository.TorBoxService
+import com.nexio.tv.data.repository.TorBoxStartDeviceFlowResult
+import com.nexio.tv.data.repository.TorBoxTokenPollResult
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkResult
 import com.nexio.tv.core.qr.QrCodeGenerator
@@ -313,18 +317,27 @@ internal fun DebridSettingsContent(
         )
     }
 
+    val torBoxPairing by viewModel.torBoxPairing.collectAsStateWithLifecycle()
+
     if (showTorBoxDialog) {
-        DebridApiKeyDialog(
-            title = stringResource(R.string.debrid_torbox_key_title),
-            subtitle = stringResource(R.string.debrid_torbox_key_subtitle),
+        TorBoxConnectionDialog(
             currentValue = torBoxApiKey,
             saving = savingTorBox,
+            onPair = { viewModel.startTorBoxDevicePairing() },
             onSave = { value, onSuccess -> viewModel.saveTorBoxApiKey(value, onSuccess) },
             onClear = {
                 viewModel.saveTorBoxApiKey("") { }
                 showTorBoxDialog = false
             },
             onDismiss = { showTorBoxDialog = false }
+        )
+    }
+
+    if (torBoxPairing !is TorBoxPairingUiState.Idle) {
+        TorBoxDevicePairingDialog(
+            state = torBoxPairing,
+            onCheckNow = { viewModel.pollTorBoxNow() },
+            onDismiss = { viewModel.cancelTorBoxDevicePairing() }
         )
     }
 
@@ -400,6 +413,273 @@ private fun RealDebridActivationQrDialog(
         ) {
             Text(text = stringResource(R.string.action_cancel))
         }
+    }
+}
+
+@Composable
+private fun TorBoxConnectionDialog(
+    currentValue: String,
+    saving: Boolean,
+    onPair: () -> Unit,
+    onSave: (String, onSuccess: () -> Unit) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember(currentValue) { mutableStateOf(currentValue) }
+    var pasteExpanded by remember { mutableStateOf(currentValue.isNotBlank()) }
+    var isInputFocused by remember { mutableStateOf(false) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.debrid_torbox_key_title),
+        subtitle = stringResource(R.string.debrid_torbox_key_subtitle),
+        width = 700.dp
+    ) {
+        SettingsActionButton(
+            onClick = {
+                onPair()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.debrid_torbox_pair_action))
+        }
+
+        SettingsActionButton(
+            onClick = { pasteExpanded = !pasteExpanded },
+            surface = SettingsButtonSurface.BackgroundElevated,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.debrid_torbox_pair_or_paste))
+        }
+
+        if (pasteExpanded) {
+            Card(
+                onClick = { inputFocusRequester.requestFocus() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
+                colors = CardDefaults.colors(
+                    containerColor = NexioColors.BackgroundElevated,
+                    focusedContainerColor = NexioColors.BackgroundElevated
+                ),
+                border = CardDefaults.border(
+                    border = Border(
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
+                        shape = RoundedCornerShape(10.dp)
+                    ),
+                    focusedBorder = Border(
+                        border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                ),
+                shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+                scale = CardDefaults.scale(focusedScale = 1f)
+            ) {
+                Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(inputFocusRequester)
+                            .onKeyEvent { event ->
+                                event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER &&
+                                    event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                            },
+                        singleLine = true,
+                        keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
+                        cursorBrush = SolidColor(
+                            if (isInputFocused) NexioColors.Primary
+                            else Color.Transparent
+                        ),
+                        decorationBox = { innerTextField ->
+                            if (value.isBlank()) {
+                                Text(
+                                    text = stringResource(R.string.debrid_api_key_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = NexioColors.TextTertiary
+                                )
+                            }
+                            innerTextField()
+                        }
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                SettingsActionButton(
+                    onClick = onDismiss,
+                    surface = SettingsButtonSurface.BackgroundElevated
+                ) { Text(stringResource(R.string.action_cancel)) }
+                Spacer(modifier = Modifier.width(8.dp))
+                SettingsActionButton(
+                    onClick = onClear,
+                    surface = SettingsButtonSurface.BackgroundElevated
+                ) { Text(stringResource(R.string.action_clear)) }
+                Spacer(modifier = Modifier.width(8.dp))
+                SettingsActionButton(
+                    onClick = {
+                        if (!saving) {
+                            onSave(value) { onDismiss() }
+                        }
+                    },
+                    enabled = !saving
+                ) {
+                    Text(if (saving) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
+                }
+            }
+        } else {
+            SettingsActionButton(
+                onClick = onDismiss,
+                surface = SettingsButtonSurface.BackgroundElevated,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TorBoxDevicePairingDialog(
+    state: TorBoxPairingUiState,
+    onCheckNow: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.debrid_torbox_qr_title),
+        subtitle = stringResource(R.string.debrid_torbox_qr_subtitle),
+        width = 700.dp
+    ) {
+        when (state) {
+            is TorBoxPairingUiState.Idle -> Unit
+
+            is TorBoxPairingUiState.Starting -> {
+                Text(
+                    text = stringResource(R.string.debrid_torbox_qr_starting),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NexioColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                SettingsActionButton(
+                    onClick = onDismiss,
+                    surface = SettingsButtonSurface.BackgroundElevated,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.action_cancel)) }
+            }
+
+            is TorBoxPairingUiState.Error -> {
+                Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Red,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                SettingsActionButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.action_cancel)) }
+            }
+
+            is TorBoxPairingUiState.AwaitingApproval -> {
+                val flow = state.flow
+                // Prefer the friendly verification URL for QR — it's shorter and renders crisper.
+                val qrTarget = flow.friendlyVerificationUrl.ifBlank { flow.verificationUrl }
+                val qrBitmap = remember(qrTarget) {
+                    runCatching { QrCodeGenerator.generate(qrTarget, 420) }.getOrNull()
+                }
+
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = stringResource(R.string.cd_torbox_activation_qr),
+                        modifier = Modifier
+                            .heightIn(max = 260.dp)
+                            .fillMaxWidth(),
+                        alignment = Alignment.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                Text(
+                    text = flow.userCode,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = NexioColors.TextPrimary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = qrTarget,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NexioColors.TextTertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.debrid_torbox_qr_instruction),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NexioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Live, second-grained countdown without retaining the millisecond timestamp in continuations.
+                val expiryLabel = produceTorBoxExpiryLabel(flow.expiresAtMillis)
+                Text(
+                    text = expiryLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NexioColors.TextTertiary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    SettingsActionButton(
+                        onClick = onDismiss,
+                        surface = SettingsButtonSurface.BackgroundElevated
+                    ) { Text(stringResource(R.string.action_cancel)) }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SettingsActionButton(onClick = onCheckNow) {
+                        Text(stringResource(R.string.action_check_now))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun produceTorBoxExpiryLabel(expiresAtMillis: Long): String {
+    val remainingMinutes by androidx.compose.runtime.produceState(
+        initialValue = ((expiresAtMillis - System.currentTimeMillis()) / 60_000L).toInt().coerceAtLeast(0),
+        key1 = expiresAtMillis
+    ) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            value = ((expiresAtMillis - now) / 60_000L).toInt().coerceAtLeast(0)
+            if (now >= expiresAtMillis) break
+            delay(30_000L)
+        }
+    }
+    return if (remainingMinutes <= 0) {
+        stringResource(R.string.debrid_torbox_qr_expiry_soon)
+    } else {
+        stringResource(R.string.debrid_torbox_qr_expiry, remainingMinutes)
     }
 }
 
@@ -589,6 +869,13 @@ private fun maskApiKey(key: String, notSetLabel: String): String {
     return if (trimmed.length <= 4) "••••" else "••••••${trimmed.takeLast(4)}"
 }
 
+internal sealed interface TorBoxPairingUiState {
+    data object Idle : TorBoxPairingUiState
+    data object Starting : TorBoxPairingUiState
+    data class AwaitingApproval(val flow: TorBoxDeviceFlow) : TorBoxPairingUiState
+    data class Error(val message: String) : TorBoxPairingUiState
+}
+
 @HiltViewModel
 internal class DebridSettingsViewModel @Inject internal constructor(
     @ApplicationContext private val appContext: Context,
@@ -597,6 +884,7 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private val premiumizeService: PremiumizeService,
     premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val torBoxService: TorBoxService,
+    private val torBoxAuthService: TorBoxAuthService,
     torBoxSettingsDataStore: TorBoxSettingsDataStore,
     private val easyDebridService: EasyDebridService,
     easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
@@ -605,6 +893,8 @@ internal class DebridSettingsViewModel @Inject internal constructor(
 ) : ViewModel() {
 
     private var rdPollingJob: Job? = null
+    private var torBoxPairingJob: Job? = null
+    internal val torBoxPairing = MutableStateFlow<TorBoxPairingUiState>(TorBoxPairingUiState.Idle)
     private val _uiState = MutableStateFlow(DebridUiState())
     private val collectorDashboardLink = MutableStateFlow<CollectorPublicDashboardLinkResult>(
         CollectorPublicDashboardLinkResult.Unavailable(
@@ -877,6 +1167,102 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                     messages.tryEmit(error.message ?: "Failed to save TorBox API key")
                 }
             savingTorBox.value = false
+        }
+    }
+
+    fun startTorBoxDevicePairing() {
+        if (torBoxPairingJob?.isActive == true) return
+        torBoxPairingJob = viewModelScope.launch {
+            torBoxPairing.value = TorBoxPairingUiState.Starting
+            when (val started = torBoxAuthService.startDeviceAuth()) {
+                is TorBoxStartDeviceFlowResult.Success -> {
+                    torBoxPairing.value = TorBoxPairingUiState.AwaitingApproval(started.flow)
+                    pollTorBoxUntilApprovedOrExpired(started.flow)
+                }
+                is TorBoxStartDeviceFlowResult.Failed -> {
+                    torBoxPairing.value = TorBoxPairingUiState.Error(started.message)
+                    messages.tryEmit(started.message)
+                }
+            }
+        }
+    }
+
+    fun cancelTorBoxDevicePairing() {
+        torBoxPairingJob?.cancel()
+        torBoxPairingJob = null
+        torBoxPairing.value = TorBoxPairingUiState.Idle
+    }
+
+    private suspend fun pollTorBoxUntilApprovedOrExpired(flow: TorBoxDeviceFlow) {
+        val intervalMillis = flow.intervalSeconds.coerceAtLeast(1) * 1000L
+        while (true) {
+            if (System.currentTimeMillis() >= flow.expiresAtMillis) {
+                torBoxPairing.value = TorBoxPairingUiState.Error("TorBox device code expired.")
+                messages.tryEmit("TorBox device code expired.")
+                return
+            }
+            delay(intervalMillis)
+            when (val result = torBoxAuthService.pollDeviceToken(flow.deviceCode)) {
+                TorBoxTokenPollResult.Pending -> continue
+                TorBoxTokenPollResult.Expired -> {
+                    torBoxPairing.value = TorBoxPairingUiState.Error("TorBox device code expired.")
+                    messages.tryEmit("TorBox device code expired.")
+                    return
+                }
+                is TorBoxTokenPollResult.Failed -> {
+                    torBoxPairing.value = TorBoxPairingUiState.Error(result.message)
+                    messages.tryEmit(result.message)
+                    return
+                }
+                is TorBoxTokenPollResult.Approved -> {
+                    savingTorBox.value = true
+                    torBoxService.validateAndSaveApiKey(result.apiKey)
+                        .onSuccess {
+                            messages.tryEmit("TorBox connected")
+                            torBoxPairing.value = TorBoxPairingUiState.Idle
+                        }
+                        .onFailure { error ->
+                            val message = error.message ?: "Failed to save TorBox API key"
+                            torBoxPairing.value = TorBoxPairingUiState.Error(message)
+                            messages.tryEmit(message)
+                        }
+                    savingTorBox.value = false
+                    return
+                }
+            }
+        }
+    }
+
+    fun pollTorBoxNow() {
+        val current = torBoxPairing.value as? TorBoxPairingUiState.AwaitingApproval ?: return
+        // Replace any pending background poll with an immediate one — the existing job's delay will be cancelled.
+        torBoxPairingJob?.cancel()
+        torBoxPairingJob = viewModelScope.launch {
+            when (val result = torBoxAuthService.pollDeviceToken(current.flow.deviceCode)) {
+                TorBoxTokenPollResult.Pending -> pollTorBoxUntilApprovedOrExpired(current.flow)
+                TorBoxTokenPollResult.Expired -> {
+                    torBoxPairing.value = TorBoxPairingUiState.Error("TorBox device code expired.")
+                    messages.tryEmit("TorBox device code expired.")
+                }
+                is TorBoxTokenPollResult.Failed -> {
+                    torBoxPairing.value = TorBoxPairingUiState.Error(result.message)
+                    messages.tryEmit(result.message)
+                }
+                is TorBoxTokenPollResult.Approved -> {
+                    savingTorBox.value = true
+                    torBoxService.validateAndSaveApiKey(result.apiKey)
+                        .onSuccess {
+                            messages.tryEmit("TorBox connected")
+                            torBoxPairing.value = TorBoxPairingUiState.Idle
+                        }
+                        .onFailure { error ->
+                            val message = error.message ?: "Failed to save TorBox API key"
+                            torBoxPairing.value = TorBoxPairingUiState.Error(message)
+                            messages.tryEmit(message)
+                        }
+                    savingTorBox.value = false
+                }
+            }
         }
     }
 

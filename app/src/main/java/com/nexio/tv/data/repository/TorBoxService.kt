@@ -86,7 +86,7 @@ class TorBoxService @Inject constructor(
                     val state = TorBoxAccountState(
                         apiKey = apiKey,
                         email = body.data?.email,
-                        plan = body.data?.plan,
+                        plan = body.data?.planString,
                         isConnected = true
                     )
                     replaceAccountState(state)
@@ -154,7 +154,7 @@ class TorBoxService @Inject constructor(
                 state = TorBoxAccountState(
                     apiKey = apiKey,
                     email = result.value?.data?.email,
-                    plan = result.value?.data?.plan,
+                    plan = result.value?.data?.planString,
                     isConnected = true
                 )
             )
