@@ -587,6 +587,11 @@ class AccountSettingsSyncService @Inject constructor(
                     }
 
                     if (hasStaleSection) {
+                        synchronized(pendingChangedPaths) {
+                            if (pendingChangedPathsGeneration != snapshot.changedPathsGeneration) {
+                                scheduleFollowUpPush = true
+                            }
+                        }
                         if (scheduleFollowUpPush) {
                             pushJob = scope.launch {
                                 delay(500)

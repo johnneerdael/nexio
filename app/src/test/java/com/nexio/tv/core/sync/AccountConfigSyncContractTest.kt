@@ -696,6 +696,29 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `all stale v13 push checks generation race before stale pull`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBlock = source.substring(pushStart, pullStart)
+
+        val staleIndex = pushBlock.indexOf("if (hasStaleSection)")
+        val generationCheckIndex = pushBlock.indexOf(
+            "if (pendingChangedPathsGeneration != snapshot.changedPathsGeneration)",
+            startIndex = staleIndex
+        )
+        val staleFollowUpIndex = pushBlock.indexOf("if (scheduleFollowUpPush)", startIndex = staleIndex)
+        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(clearPendingChanges = false)", startIndex = staleIndex)
+
+        assertTrue("v13 push must handle stale sections", staleIndex >= 0)
+        assertTrue(
+            "all-stale pushes must compare the live generation with the push snapshot before stale recovery",
+            generationCheckIndex in (staleIndex + 1)..<staleFollowUpIndex
+        )
+        assertTrue("generation race follow-up must be scheduled before stale recovery pull", staleFollowUpIndex < stalePullIndex)
+    }
+
+    @Test
     fun `applied path clearing removes only applied paths when generation matches`() {
         val pending = linkedSetOf(
             "integrations.tmdb.useArtwork",
