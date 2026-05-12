@@ -192,6 +192,10 @@ class V13SupabaseMigrationStaticTest {
             push.contains("account_settings_preserve_catalog_option_pins"),
         )
         assertTrue(
+            "v13 migration must create catalog option pin preservation helper before legacy push uses it",
+            helperIsDefinedBeforeUse(sql, "account_settings_preserve_catalog_option_pins", "sync_push_account_settings_v10"),
+        )
+        assertTrue(
             "legacy push must select section payloads from the normalized legacy payload",
             push.contains("public.account_settings_section_payload(v_next_payload, section_key)"),
         )
@@ -217,6 +221,8 @@ class V13SupabaseMigrationStaticTest {
         assertFalse("legacy push must not expose raw section-only failure reasons", push.contains("coalesce(v_failure_reason, 'section_push_failed')"))
         assertTrue("legacy push must no-op successfully when no sections are affected", push.contains("if v_sections = '[]'::jsonb then"))
         assertTrue("legacy push no-op must report applied success", push.contains("'applied', true"))
+        assertTrue("legacy push no-op must return current aggregate state timestamp", push.contains("'current_updated_at_ms', v_current_updated_at_ms"))
+        assertFalse("legacy push no-op must not report a fresh clock timestamp", push.contains("'current_updated_at_ms', public.sync_now_ms()"))
     }
 
     @Test
@@ -267,5 +273,20 @@ class V13SupabaseMigrationStaticTest {
         assertTrue("$functionName block must end before the next function", nextFunction == -1 || end < nextFunction)
 
         return sql.substring(start, end)
+    }
+
+    private fun helperIsDefinedBeforeUse(sql: String, helperName: String, usingFunctionName: String): Boolean {
+        val helperDefinition = "create or replace function public.$helperName"
+        val usingFunction = "create or replace function public.$usingFunctionName"
+        val definitionStart = sql.indexOf(helperDefinition)
+        val usingFunctionStart = sql.indexOf(usingFunction)
+        assertTrue("$helperName definition marker must exist", definitionStart >= 0)
+        assertTrue("$usingFunctionName marker must exist", usingFunctionStart >= 0)
+        assertTrue("$helperName must be defined before $usingFunctionName starts", definitionStart < usingFunctionStart)
+
+        val usingBlock = functionBlock(sql, usingFunctionName)
+        assertTrue("$usingFunctionName must use $helperName", usingBlock.contains(helperName))
+
+        return true
     }
 }

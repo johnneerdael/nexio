@@ -566,6 +566,44 @@ begin
 end;
 $$;
 
+create or replace function public.account_settings_preserve_catalog_option_pins(
+  p_existing_payload jsonb,
+  p_incoming_payload jsonb,
+  p_normalized_payload jsonb
+)
+returns jsonb
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_result jsonb := coalesce(p_normalized_payload, '{}'::jsonb);
+  v_existing jsonb := coalesce(p_existing_payload, '{}'::jsonb);
+  v_incoming jsonb := coalesce(p_incoming_payload, '{}'::jsonb);
+begin
+  if v_incoming#>'{catalogs,trakt,pinnedListOptions}' is null
+      and v_existing#>'{catalogs,trakt,pinnedListOptions}' is not null then
+    v_result := jsonb_set(
+      v_result,
+      '{catalogs,trakt,pinnedListOptions}',
+      v_existing#>'{catalogs,trakt,pinnedListOptions}',
+      true
+    );
+  end if;
+
+  if v_incoming#>'{catalogs,mdblist,pinnedTopListOptions}' is null
+      and v_existing#>'{catalogs,mdblist,pinnedTopListOptions}' is not null then
+    v_result := jsonb_set(
+      v_result,
+      '{catalogs,mdblist,pinnedTopListOptions}',
+      v_existing#>'{catalogs,mdblist,pinnedTopListOptions}',
+      true
+    );
+  end if;
+
+  return v_result;
+end;
+$$;
+
 create or replace function public.sync_push_account_settings_v10(
   p_base_updated_at_ms bigint,
   p_settings_payload jsonb,
@@ -757,7 +795,7 @@ begin
     return jsonb_build_object(
       'applied', true,
       'sync_revision', 0,
-      'current_updated_at_ms', public.sync_now_ms()
+      'current_updated_at_ms', v_current_updated_at_ms
     );
   end if;
 
@@ -830,6 +868,8 @@ grant execute on function public.sync_push_account_settings_sections_v13(jsonb, 
 
 revoke all on function public.sync_pull_account_snapshot_v10() from public;
 grant execute on function public.sync_pull_account_snapshot_v10() to authenticated;
+
+revoke all on function public.account_settings_preserve_catalog_option_pins(jsonb, jsonb, jsonb) from public;
 
 revoke all on function public.sync_push_account_settings_v10(bigint, jsonb, bigint, text[], text) from public;
 grant execute on function public.sync_push_account_settings_v10(bigint, jsonb, bigint, text[], text) to authenticated;
