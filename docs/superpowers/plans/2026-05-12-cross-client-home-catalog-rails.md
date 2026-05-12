@@ -4,7 +4,7 @@
 
 **Goal:** Make Android and nexio-web manage and render the same Modern Home catalog rails through one profile-scoped `catalogs.home.rails[]` contract, including web-visible TMDB and Kitsu stock catalogs.
 
-**Architecture:** Android stores the shared rails list as `layout_settings.home_catalog_rails_json`. Web exposes the same data as typed `catalogs.home.rails[]` and maps it to/from that Android preference key in `server/utils/profile-settings-blob.ts`. For profile 1/default-profile, the v13 sectioned account-settings work should store that typed shape in the `catalogs.home` section; for profiles 2-4, the existing profile-settings blob remains the remote storage until profile settings are sectioned. Modern Home and both catalog-management UIs treat the rails array as the displayed list; provider settings and addon manifests only provide candidate inventory for Add Catalog.
+**Architecture:** Android stores the local rails list as `layout_settings.home_catalog_rails_json`. Web exposes the same data as typed `catalogs.home.rails[]`; profile 1/default-profile syncs it through the v13 `catalogs.home` account-settings section, while profiles 2-4 map it to/from the Android preference key in `server/utils/profile-settings-blob.ts`. Modern Home and both catalog-management UIs treat the rails array as the displayed list; provider settings and addon manifests only provide candidate inventory for Add Catalog.
 
 **Tech Stack:** Kotlin, Jetpack DataStore Preferences, kotlinx.serialization/Gson, Android TV Compose, Hilt, JUnit/MockK coroutine tests, Nuxt 4/Vue 3, TypeScript, node:test, vuedraggable, Supabase v12 profile-settings RPCs, and the v13 `catalogs.home` account-settings section for profile 1.
 
@@ -13,6 +13,14 @@
 ## Scope Check
 
 This plan covers Android and nexio-web together because the work is not independently releasable: the key acceptance criterion is that both clients interpret the same profile-scoped rails contract identically. The plan keeps the shared data contract first, then adapts Android rendering/management, then adapts web rendering/management, then adds parity fixtures.
+
+## Current v13 Alignment Notes
+
+- Execute this plan on top of `docs/superpowers/plans/2026-05-12-supabase-v13-sectioned-account-settings.md`, or execute that plan first. The base branch for this plan should have `ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 13`, `sync_pull_account_snapshot_v13`, `sync_push_account_settings_sections_v13`, and `nexio-web/utils/account-settings-sections.ts`.
+- Profile 1/default-profile catalog rails are account settings and must sync as the v13 `catalogs.home` section. A web change to `catalogs.home.rails` must become a section payload pushed through `sync_push_account_settings_sections_v13`, not a profile-settings blob write.
+- Profiles 2-4 still use `sync_pull_profile_settings_blob_v10` and `sync_push_profile_settings_blob_v10`. The profile-settings blob bridge remains necessary there because Android stores the profile-scoped rails list as `layout_settings.home_catalog_rails_json`.
+- The legacy `homeCatalogOrderKeys` and `disabledHomeCatalogKeys` fields stay in the payload for compatibility and migration only. New visible-list/add-modal mutations must write `rails` and mark `catalogs.home.rails` dirty.
+- TMDB and Kitsu stock catalog settings are v13 sections (`catalogs.tmdb`, `catalogs.kitsu`) for profile 1 and profile-settings feature blobs (`tmdb_catalog_settings`, `kitsu_catalog_settings`) for profiles 2-4.
 
 ## File Structure
 
@@ -24,6 +32,10 @@ This plan covers Android and nexio-web together because the work is not independ
   - Add `railsVersion` and `rails` fields to `HomeCatalogSyncSettings`.
 - Modify `app/src/main/java/com/nexio/tv/data/local/LayoutPreferenceDataStore.kt`
   - Read/write `home_catalog_rails_json` under `layout_settings`.
+- Modify `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt`
+  - Include rails in the v13 `catalogs.home` section and mark `catalogs.home.rails` as the dirty path for visible-list mutations.
+- Modify `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt`
+  - Read/write rails when building and applying the v13 account settings payload for profile 1/default-profile.
 - Create `app/src/main/java/com/nexio/tv/ui/screens/home/order/HomeCatalogRailContract.kt`
   - Sanitize rails, derive visible keys from live definitions, and migrate legacy effective order into rail entries.
 - Modify `app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt`
@@ -39,6 +51,7 @@ This plan covers Android and nexio-web together because the work is not independ
 - Tests:
   - Create `app/src/test/java/com/nexio/tv/domain/model/HomeCatalogRailTest.kt`
   - Create `app/src/test/java/com/nexio/tv/ui/screens/home/order/HomeCatalogRailContractTest.kt`
+  - Modify `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt`
   - Modify `app/src/test/java/com/nexio/tv/data/remote/supabase/TmdbKitsuCatalogSyncModelsTest.kt`
   - Modify `app/src/test/java/com/nexio/tv/ui/screens/addon/CatalogOrderViewModelTest.kt`
   - Create `app/src/test/java/com/nexio/tv/ui/screens/home/HomeCatalogRailsProjectionTest.kt`
@@ -51,10 +64,12 @@ This plan covers Android and nexio-web together because the work is not independ
   - Add default TMDB/Kitsu catalog order and empty/default enabled sets.
 - Modify `nexio-web/utils/portal-settings.ts`
   - Sanitize `catalogs.home.rails[]`, `catalogs.tmdb`, and `catalogs.kitsu`.
+- Modify `nexio-web/utils/account-settings-sections.ts`
+  - Include `catalogs.home`, `catalogs.tmdb`, and `catalogs.kitsu` in v13 section extraction/composition for profile 1/default-profile.
 - Modify `nexio-web/server/utils/profile-settings-blob.ts`
-  - Map `catalogs.home.rails[]` to/from Android `layout_settings.home_catalog_rails_json`; map TMDB/Kitsu provider settings to/from their Android feature blobs.
+  - Map `catalogs.home.rails[]` to/from Android `layout_settings.home_catalog_rails_json` for profiles 2-4; map TMDB/Kitsu provider settings to/from their Android feature blobs for profile-settings blob sync.
 - Modify `nexio-web/utils/portal-sync-paths.ts`
-  - Add synced paths for `catalogs.home.rails`, `catalogs.tmdb`, and `catalogs.kitsu`.
+  - Add synced paths for `catalogs.home.rails`, `catalogs.tmdb`, and `catalogs.kitsu`; v13 path mapping groups these under section keys.
 - Modify `nexio-web/utils/portal-metadata.ts`
   - Add TMDB/Kitsu labels.
 - Create `nexio-web/utils/home-catalog-rails.ts`
@@ -69,6 +84,7 @@ This plan covers Android and nexio-web together because the work is not independ
   - Visible List + Add Catalog UI.
 - Tests:
   - Create `nexio-web/tests/home-catalog-rails.test.ts`
+  - Modify `nexio-web/tests/account-settings-sections.test.ts`
   - Modify `nexio-web/tests/profile-settings-blob.test.ts`
   - Modify `nexio-web/tests/portal-contract-v4.test.ts`
   - Modify `nexio-web/tests/portal-sync-paths.test.ts`
@@ -413,6 +429,211 @@ Expected: PASS.
 ```bash
 git add app/src/main/java/com/nexio/tv/data/local/LayoutPreferenceDataStore.kt app/src/test/java/com/nexio/tv/data/local/LayoutPreferenceDataStoreHomeCatalogRailsTest.kt
 git commit -m "feat(android): persist home catalog rails in layout settings"
+```
+
+## Task 2A: Android V13 Account Sync Carries Home Rails
+
+**Files:**
+- Modify: `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt`
+- Modify: `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt`
+- Modify: `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt`
+
+- [ ] **Step 1: Write the failing v13 section contract tests**
+
+Add these imports to `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` near the existing imports:
+
+```kotlin
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+```
+
+Append these tests inside `AccountConfigSyncContractTest`:
+
+```kotlin
+@Test
+fun `home catalog rails are included in the v13 catalogs home section payload`() {
+    val rails = listOf(
+        com.nexio.tv.domain.model.HomeCatalogRail(
+            key = "tmdb_trending_movies",
+            family = "tmdb",
+            source = "provider_catalog",
+            title = "Trending Movies",
+            addedAtMs = 1778544000000L
+        )
+    )
+
+    val payload = buildAccountConfigSyncPayload(
+        integrations = IntegrationSettings(),
+        heroCatalogKeys = emptyList(),
+        homeCatalogOrderKeys = emptyList(),
+        disabledHomeCatalogKeys = emptyList(),
+        homeCatalogRails = rails,
+        traktCatalogEnabledSet = emptyList(),
+        traktCatalogOrder = emptyList(),
+        traktSelectedPopularListKeys = emptyList(),
+        simklCatalogEnabledSet = emptyList(),
+        simklCatalogOrder = emptyList(),
+        mdbListHiddenPersonalListKeys = emptyList(),
+        mdbListSelectedTopListKeys = emptyList(),
+        mdbListCatalogOrder = emptyList(),
+        trackingProvider = TrackingProvider.TRAKT,
+        formatter = FormatterSyncSettings()
+    )
+
+    assertEquals(1, payload.catalogs.home?.railsVersion)
+    assertEquals("tmdb_trending_movies", payload.catalogs.home?.rails?.single()?.key)
+}
+
+@Test
+fun `home catalog rail changes are marked as catalogs home section dirty path`() = runTest {
+    val railsEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val paths = mutableListOf<String>()
+    val job = launch {
+        observeAccountConfigSyncChangedPaths(
+            heroCatalogSelections = emptyFlow(),
+            homeCatalogOrderKeys = emptyFlow(),
+            disabledHomeCatalogKeys = emptyFlow(),
+            homeCatalogRails = railsEvents,
+            tmdbSettings = emptyFlow(),
+            mdbListSettings = emptyFlow(),
+            mdbListCatalogPreferences = emptyFlow(),
+            omdbSettings = emptyFlow(),
+            animeSkipEnabled = emptyFlow(),
+            subtitleTranslationSettings = emptyFlow(),
+            posterRatingsSettings = emptyFlow(),
+            premiumizeSettings = emptyFlow(),
+            premiumizeAccountState = emptyFlow(),
+            torBoxSettings = emptyFlow(),
+            torBoxAccountState = emptyFlow(),
+            easyDebridSettings = emptyFlow(),
+            easyDebridAccountState = emptyFlow(),
+            realDebridState = emptyFlow(),
+            kitsuAuthState = emptyFlow(),
+            traktAuthState = emptyFlow(),
+            traktCatalogPreferences = emptyFlow(),
+            simklCatalogPreferences = emptyFlow(),
+            simklAuthState = emptyFlow(),
+            playerSettings = emptyFlow()
+        ).take(1).toList(paths)
+    }
+
+    railsEvents.emit(Unit)
+
+    assertEquals(listOf("catalogs.home.rails"), paths)
+    job.cancel()
+}
+```
+
+- [ ] **Step 2: Run the failing contract tests**
+
+Run:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest
+```
+
+Expected: FAIL because `buildAccountConfigSyncPayload` does not accept `homeCatalogRails`, and `observeAccountConfigSyncChangedPaths` does not accept a `homeCatalogRails` flow.
+
+- [ ] **Step 3: Add rails to the account-config payload builder**
+
+Modify `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt`:
+
+```kotlin
+import com.nexio.tv.domain.model.HOME_CATALOG_RAILS_VERSION
+import com.nexio.tv.domain.model.HomeCatalogRail
+```
+
+Add `homeCatalogRails` to `buildAccountConfigSyncPayload` after `disabledHomeCatalogKeys`:
+
+```kotlin
+homeCatalogRails: List<HomeCatalogRail>,
+```
+
+Set it inside `HomeCatalogSyncSettings`:
+
+```kotlin
+home = HomeCatalogSyncSettings(
+    railsVersion = HOME_CATALOG_RAILS_VERSION,
+    rails = homeCatalogRails,
+    heroCatalogKeys = heroCatalogKeys,
+    homeCatalogOrderKeys = homeCatalogOrderKeys,
+    disabledHomeCatalogKeys = disabledHomeCatalogKeys
+),
+```
+
+- [ ] **Step 4: Observe rails as the v13 `catalogs.home` dirty path**
+
+Add a `homeCatalogRails: Flow<Unit>` parameter to both `observeAccountConfigSyncChanges` and `observeAccountConfigSyncChangedPaths`.
+
+In `observeAccountConfigSyncChanges`, include it in the `merge` call next to the other home catalog flows:
+
+```kotlin
+heroCatalogSelections,
+homeCatalogOrderKeys,
+disabledHomeCatalogKeys,
+homeCatalogRails,
+```
+
+In `observeAccountConfigSyncChangedPaths`, map it to the exact dirty path that v13 section extraction uses:
+
+```kotlin
+homeCatalogRails.map { "catalogs.home.rails" },
+```
+
+Keep the existing legacy mappings for `catalogs.home.homeCatalogOrderKeys` and `catalogs.home.disabledHomeCatalogKeys`; those remain migration/compatibility fields in the same `catalogs.home` section.
+
+- [ ] **Step 5: Wire rails into account sync service local read/apply**
+
+In `AccountSettingsSyncService.observeLocalChanges`, pass the new flow:
+
+```kotlin
+homeCatalogRails = layoutPreferenceDataStore.homeCatalogRails.drop(1).map { Unit },
+```
+
+In `buildLocalPayload`, read rails only for the default legacy profile:
+
+```kotlin
+val homeCatalogRails = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogRails.first() else emptyList()
+```
+
+Pass it into `buildAccountConfigSyncPayload`:
+
+```kotlin
+homeCatalogRails = homeCatalogRails,
+```
+
+In `applyCatalogsSection`, write incoming rails before applying the legacy order fields:
+
+```kotlin
+catalogs.home?.let { home ->
+    home.rails?.let { layoutPreferenceDataStore.setHomeCatalogRails(it) }
+    home.heroCatalogKeys?.let { layoutPreferenceDataStore.setHeroCatalogKeys(it) }
+    home.homeCatalogOrderKeys?.let { layoutPreferenceDataStore.setHomeCatalogOrderKeys(it) }
+    home.disabledHomeCatalogKeys?.let { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(it) }
+}
+```
+
+This ensures Android pulls profile 1/default-profile rails from the v13 `catalogs.home` section and pushes local visible-list changes back as the same section.
+
+- [ ] **Step 6: Run focused Android sync tests**
+
+Run:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.data.local.LayoutPreferenceDataStoreHomeCatalogRailsTest
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt
+git commit -m "feat(android): sync home catalog rails through v13 catalogs home"
 ```
 
 ## Task 3: Android Rail Contract Helpers And Legacy Migration
@@ -1014,19 +1235,21 @@ git add app/src/main/java/com/nexio/tv/ui/screens/addon/CatalogOrderViewModel.kt
 git commit -m "feat(android): manage visible home catalog rails"
 ```
 
-## Task 6: Web Contract Types, Defaults, Sanitizers, And Profile Blob Bridge
+## Task 6: Web Contract Types, V13 Section Helpers, And Secondary Profile Blob Bridge
 
 **Files:**
 - Modify: `nexio-web/types/portal.ts`
 - Modify: `nexio-web/utils/portal-defaults.ts`
 - Modify: `nexio-web/utils/portal-settings.ts`
+- Modify: `nexio-web/utils/account-settings-sections.ts`
 - Modify: `nexio-web/server/utils/profile-settings-blob.ts`
 - Modify: `nexio-web/utils/portal-sync-paths.ts`
+- Modify: `nexio-web/tests/account-settings-sections.test.ts`
 - Modify: `nexio-web/tests/profile-settings-blob.test.ts`
 - Modify: `nexio-web/tests/portal-contract-v4.test.ts`
 - Modify: `nexio-web/tests/portal-sync-paths.test.ts`
 
-- [ ] **Step 1: Write failing web contract tests**
+- [ ] **Step 1: Write failing web v13 and profile-blob contract tests**
 
 Append to `nexio-web/tests/portal-contract-v4.test.ts`:
 
@@ -1034,6 +1257,7 @@ Append to `nexio-web/tests/portal-contract-v4.test.ts`:
 test('default settings expose home rails and TMDB Kitsu catalog sections', () => {
   const settings = defaultSettings()
 
+  assert.equal(settings.schemaVersion, 13)
   assert.equal(settings.catalogs.home.railsVersion, 1)
   assert.deepEqual(settings.catalogs.home.rails, [])
   assert.equal(settings.catalogs.tmdb.catalogOrder.length, 8)
@@ -1048,10 +1272,98 @@ test('default settings expose home rails and TMDB Kitsu catalog sections', () =>
 })
 ```
 
+Ensure `nexio-web/tests/account-settings-sections.test.ts` uses the repo's `node:test` style. Create the file with these imports and helper when it does not exist; when the v13 plan already created it, keep any existing tests and add these imports/helper if absent:
+
+```ts
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { defaultSettings } from '../utils/portal-defaults.ts'
+import type { PortalSettings } from '../types/portal.ts'
+import {
+  composePortalSettingsFromSections,
+  dirtyPathsToSectionKeys,
+  extractPortalSettingsSections
+} from '../utils/account-settings-sections.ts'
+
+function portalSettings(overrides: Partial<PortalSettings> = {}): PortalSettings {
+  const settings = defaultSettings()
+  return {
+    ...settings,
+    ...overrides,
+    catalogs: {
+      ...settings.catalogs,
+      ...(overrides.catalogs ?? {}),
+      home: {
+        ...settings.catalogs.home,
+        ...(overrides.catalogs?.home ?? {})
+      },
+      tmdb: {
+        ...settings.catalogs.tmdb,
+        ...(overrides.catalogs?.tmdb ?? {})
+      },
+      kitsu: {
+        ...settings.catalogs.kitsu,
+        ...(overrides.catalogs?.kitsu ?? {})
+      }
+    }
+  }
+}
+```
+
+Append to `nexio-web/tests/account-settings-sections.test.ts`:
+
+```ts
+test('v13 sections extract and compose home rails and stock catalog settings', () => {
+  const rails = [
+    {
+      key: 'tmdb_trending_movies',
+      family: 'tmdb',
+      source: 'provider_catalog',
+      title: 'Trending Movies',
+      enabled: true,
+      addedAtMs: 1778544000000
+    }
+  ] as const
+  const settings = portalSettings({
+    catalogs: {
+      ...defaultSettings().catalogs,
+      home: {
+        ...defaultSettings().catalogs.home,
+        railsVersion: 1,
+        rails: [...rails]
+      },
+      tmdb: {
+        catalogEnabledSet: ['tmdb_trending_movies'],
+        catalogOrder: ['tmdb_trending_movies', 'tmdb_popular_movies']
+      },
+      kitsu: {
+        catalogEnabledSet: ['kitsu_trending_anime'],
+        catalogOrder: ['kitsu_trending_anime', 'kitsu_popular_anime']
+      }
+    }
+  })
+
+  const sectionKeys = dirtyPathsToSectionKeys([
+    'catalogs.home.rails',
+    'catalogs.tmdb.catalogOrder',
+    'catalogs.kitsu.catalogEnabledSet'
+  ])
+  const sections = extractPortalSettingsSections(settings, sectionKeys)
+  const composed = composePortalSettingsFromSections(defaultSettings(), sections)
+
+  assert.deepEqual(sectionKeys, ['catalogs.home', 'catalogs.tmdb', 'catalogs.kitsu'])
+  assert.deepEqual(sections.map((section) => section.section_key), ['catalogs.home', 'catalogs.tmdb', 'catalogs.kitsu'])
+  assert.deepEqual(sections[0].payload, settings.catalogs.home)
+  assert.deepEqual(composed.catalogs.home.rails, settings.catalogs.home.rails)
+  assert.deepEqual(composed.catalogs.tmdb.catalogEnabledSet, ['tmdb_trending_movies'])
+  assert.deepEqual(composed.catalogs.kitsu.catalogEnabledSet, ['kitsu_trending_anime'])
+})
+```
+
 Append to `nexio-web/tests/profile-settings-blob.test.ts`:
 
 ```ts
-test('profile settings blob round-trips home catalog rails through Android layout preference', () => {
+test('secondary profile settings blob round-trips home catalog rails through Android layout preference', () => {
   const settings = portalSettings({
     catalogs: {
       ...defaultSettings().catalogs,
@@ -1103,16 +1415,18 @@ Run:
 
 ```bash
 cd nexio-web
-npx tsx --test tests/portal-contract-v4.test.ts tests/profile-settings-blob.test.ts tests/portal-sync-paths.test.ts
+npx tsx --test tests/portal-contract-v4.test.ts tests/account-settings-sections.test.ts tests/profile-settings-blob.test.ts tests/portal-sync-paths.test.ts
 ```
 
-Expected: FAIL because the new types/defaults/blob mappings are missing.
+Expected: FAIL because the new types/defaults, v13 section mappings, and secondary-profile blob mappings are missing.
 
 - [ ] **Step 3: Add web rail and stock catalog types**
 
 Modify `nexio-web/types/portal.ts`:
 
 ```ts
+export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 13
+
 export type TmdbCatalogId =
   | 'tmdb_trending_movies'
   | 'tmdb_trending_series'
@@ -1180,6 +1494,8 @@ export type PortalCatalogs = {
   kitsu: KitsuCatalogSyncSettings
 }
 ```
+
+If the v13 plan already changed `ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION` to `13`, leave that line as-is. This task must not set the constant back to `12`.
 
 - [ ] **Step 4: Add defaults**
 
@@ -1297,7 +1613,120 @@ function sanitizeRailSource(value: unknown, key: string): PortalSettings['catalo
 
 Use `sanitizeHomeCatalogRails(input?.catalogs?.home?.rails)` in the returned `catalogs.home`, and sanitize TMDB/Kitsu with `normalizedKnownStringList` and `normalizedKnownOrder`.
 
-- [ ] **Step 6: Map rails in the profile blob bridge**
+- [ ] **Step 6: Add the v13 section mappings for profile 1**
+
+Modify `nexio-web/utils/account-settings-sections.ts`.
+
+Ensure the section-key union includes:
+
+```ts
+export type AccountSettingsSectionKey =
+  | 'integrations.subtitleTranslation'
+  | 'integrations.tmdb'
+  | 'integrations.omdb'
+  | 'integrations.posterRatings'
+  | 'integrations.animeSkip'
+  | 'integrations.mdblist'
+  | 'integrations.kitsu'
+  | 'integrations.traktAuth'
+  | 'integrations.simklAuth'
+  | 'integrations.kitsuAuth'
+  | 'integrations.debrid.premiumize'
+  | 'integrations.debrid.realDebrid'
+  | 'integrations.debrid.torBox'
+  | 'integrations.debrid.easyDebrid'
+  | 'catalogs.mdblist'
+  | 'catalogs.trakt'
+  | 'catalogs.simkl'
+  | 'catalogs.tmdb'
+  | 'catalogs.kitsu'
+  | 'catalogs.home'
+  | 'playback.streamSelection'
+  | 'formatter'
+```
+
+Ensure `payloadFor` handles catalog sections:
+
+```ts
+function payloadFor(settings: PortalSettings, sectionKey: AccountSettingsSectionKey): Record<string, unknown> | null {
+  switch (sectionKey) {
+    case 'catalogs.home': return settings.catalogs.home
+    case 'catalogs.tmdb': return settings.catalogs.tmdb
+    case 'catalogs.kitsu': return settings.catalogs.kitsu
+    case 'catalogs.trakt': return settings.catalogs.trakt
+    case 'catalogs.simkl': return settings.catalogs.simkl
+    case 'catalogs.mdblist': return settings.catalogs.mdblist
+    case 'formatter': return settings.formatter
+    case 'playback.streamSelection': return settings.playback.streamSelection
+    case 'integrations.subtitleTranslation': return settings.integrations.subtitleTranslation
+    case 'integrations.tmdb': return settings.integrations.tmdb
+    case 'integrations.omdb': return settings.integrations.omdb
+    case 'integrations.posterRatings': return settings.integrations.posterRatings
+    case 'integrations.animeSkip': return settings.integrations.animeSkip
+    case 'integrations.mdblist': return settings.integrations.mdblist
+    case 'integrations.kitsu': return settings.integrations.kitsu
+    case 'integrations.traktAuth': return settings.integrations.traktAuth
+    case 'integrations.simklAuth': return settings.integrations.simklAuth
+    case 'integrations.kitsuAuth': return settings.integrations.kitsuAuth
+    case 'integrations.debrid.premiumize': return settings.integrations.debrid.premiumize
+    case 'integrations.debrid.realDebrid': return settings.integrations.debrid.realDebrid
+    case 'integrations.debrid.torBox': return settings.integrations.debrid.torBox
+    case 'integrations.debrid.easyDebrid': return settings.integrations.debrid.easyDebrid
+  }
+}
+```
+
+Ensure `composePortalSettingsFromSections` handles the three catalog sections:
+
+```ts
+case 'catalogs.home':
+  next.catalogs.home = sanitizePortalSettings({
+    ...next,
+    catalogs: {
+      ...next.catalogs,
+      home: { ...next.catalogs.home, ...payload }
+    }
+  }).catalogs.home
+  break
+case 'catalogs.tmdb':
+  next.catalogs.tmdb = sanitizePortalSettings({
+    ...next,
+    catalogs: {
+      ...next.catalogs,
+      tmdb: { ...next.catalogs.tmdb, ...payload }
+    }
+  }).catalogs.tmdb
+  break
+case 'catalogs.kitsu':
+  next.catalogs.kitsu = sanitizePortalSettings({
+    ...next,
+    catalogs: {
+      ...next.catalogs,
+      kitsu: { ...next.catalogs.kitsu, ...payload }
+    }
+  }).catalogs.kitsu
+  break
+```
+
+Ensure dirty paths map to their owning sections:
+
+```ts
+export function dirtyPathsToSectionKeys(paths: string[]): AccountSettingsSectionKey[] {
+  const keys = new Set<AccountSettingsSectionKey>()
+  for (const path of paths) {
+    const normalized = path.trim()
+    const match = validAccountSettingsSectionKeys
+      .filter((sectionKey) => normalized === sectionKey || normalized.startsWith(`${sectionKey}.`))
+      .sort((a, b) => b.length - a.length)[0]
+    if (match) keys.add(match)
+  }
+  return [...keys]
+}
+```
+
+After this step, profile 1 writes to `catalogs.home`, `catalogs.tmdb`, and `catalogs.kitsu` through `sync_push_account_settings_sections_v13`.
+
+- [ ] **Step 7: Map rails in the secondary-profile blob bridge**
 
 Modify `nexio-web/server/utils/profile-settings-blob.ts`:
 
@@ -1355,7 +1784,7 @@ layoutSettings[HOME_CATALOG_RAILS_KEY] = encodedString(
 
 Write TMDB/Kitsu `catalog_enabled_set` and `catalog_order_csv` into `tmdb_catalog_settings` and `kitsu_catalog_settings`, then assign them to `merged[TMDB_SETTINGS]` and `merged[KITSU_SETTINGS]`.
 
-- [ ] **Step 7: Add sync paths**
+- [ ] **Step 8: Add sync paths**
 
 In `nexio-web/utils/portal-sync-paths.ts`, add:
 
@@ -1370,22 +1799,22 @@ In `nexio-web/utils/portal-sync-paths.ts`, add:
 'catalogs.kitsu.catalogOrder',
 ```
 
-- [ ] **Step 8: Run web contract tests**
+- [ ] **Step 9: Run web contract tests**
 
 Run:
 
 ```bash
 cd nexio-web
-npx tsx --test tests/portal-contract-v4.test.ts tests/profile-settings-blob.test.ts tests/portal-sync-paths.test.ts
+npx tsx --test tests/portal-contract-v4.test.ts tests/account-settings-sections.test.ts tests/profile-settings-blob.test.ts tests/portal-sync-paths.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add nexio-web/types/portal.ts nexio-web/utils/portal-defaults.ts nexio-web/utils/portal-settings.ts nexio-web/server/utils/profile-settings-blob.ts nexio-web/utils/portal-sync-paths.ts nexio-web/tests/profile-settings-blob.test.ts nexio-web/tests/portal-contract-v4.test.ts nexio-web/tests/portal-sync-paths.test.ts
-git commit -m "feat(web): add home catalog rails profile contract"
+git add nexio-web/types/portal.ts nexio-web/utils/portal-defaults.ts nexio-web/utils/portal-settings.ts nexio-web/utils/account-settings-sections.ts nexio-web/server/utils/profile-settings-blob.ts nexio-web/utils/portal-sync-paths.ts nexio-web/tests/account-settings-sections.test.ts nexio-web/tests/profile-settings-blob.test.ts nexio-web/tests/portal-contract-v4.test.ts nexio-web/tests/portal-sync-paths.test.ts
+git commit -m "feat(web): add v13 home catalog rails contract"
 ```
 
 ## Task 7: Web Inventory Helpers Include TMDB And Kitsu
@@ -1605,9 +2034,10 @@ export function reorderHomeCatalogRails(rails: HomeCatalogRail[], orderedKeys: s
   return [...next, ...byKey.values()]
 }
 
+// Enumerate stock catalog order, not only provider-enabled catalogs. Removing
+// a rail only hides it from Modern Home and must not mutate provider settings.
 export function buildTmdbCatalogs(settings: PortalSettings): AddonCatalogRecord[] {
   return settings.catalogs.tmdb.catalogOrder
-    .filter((key) => settings.catalogs.tmdb.catalogEnabledSet.includes(key))
     .map((key) => ({
       key,
       disableKey: '',
@@ -1624,7 +2054,6 @@ export function buildTmdbCatalogs(settings: PortalSettings): AddonCatalogRecord[
 
 export function buildKitsuCatalogs(settings: PortalSettings): AddonCatalogRecord[] {
   return settings.catalogs.kitsu.catalogOrder
-    .filter((key) => settings.catalogs.kitsu.catalogEnabledSet.includes(key))
     .map((key) => ({
       key,
       disableKey: '',
@@ -1727,13 +2156,17 @@ git commit -m "feat(web): build visible and available home rail inventory"
 **Files:**
 - Modify: `nexio-web/components/portal/ProfileCatalogsTab.vue`
 - Modify: `nexio-web/components/portal/CatalogInventory.vue`
-- Modify: `nexio-web/tests/profile-settings-blob.test.ts`
+- Create: `nexio-web/tests/catalog-inventory-component.test.ts`
 
 - [ ] **Step 1: Add a source test for the Add Catalog UI contract**
 
-Append to `nexio-web/tests/profile-settings-blob.test.ts`:
+Create `nexio-web/tests/catalog-inventory-component.test.ts`:
 
 ```ts
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
 test('CatalogInventory exposes Add Catalog modal contract', () => {
   const source = readFileSync('components/portal/CatalogInventory.vue', 'utf8')
 
@@ -1750,7 +2183,7 @@ Run:
 
 ```bash
 cd nexio-web
-npx tsx --test tests/profile-settings-blob.test.ts
+npx tsx --test tests/catalog-inventory-component.test.ts
 ```
 
 Expected: FAIL because the component does not expose `availableCatalogs`, `add-catalog`, `remove-catalog`, or `showAddCatalog`.
@@ -1900,7 +2333,7 @@ Run:
 
 ```bash
 cd nexio-web
-npx tsx --test tests/profile-settings-blob.test.ts tests/home-catalog-rails.test.ts
+npx tsx --test tests/catalog-inventory-component.test.ts tests/home-catalog-rails.test.ts
 npx vue-tsc --noEmit
 ```
 
@@ -1909,7 +2342,7 @@ Expected: PASS and `vue-tsc` exits 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nexio-web/components/portal/ProfileCatalogsTab.vue nexio-web/components/portal/CatalogInventory.vue nexio-web/tests/profile-settings-blob.test.ts
+git add nexio-web/components/portal/ProfileCatalogsTab.vue nexio-web/components/portal/CatalogInventory.vue nexio-web/tests/catalog-inventory-component.test.ts
 git commit -m "feat(web): add visible rail manager and add catalog modal"
 ```
 
@@ -2111,9 +2544,9 @@ Expected: both commands PASS.
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.domain.model.HomeCatalogRailTest --tests com.nexio.tv.data.local.LayoutPreferenceDataStoreHomeCatalogRailsTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailContractTest --tests com.nexio.tv.ui.screens.home.HomeCatalogRailsProjectionTest --tests com.nexio.tv.ui.screens.addon.CatalogOrderViewModelTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.domain.model.HomeCatalogRailTest --tests com.nexio.tv.data.local.LayoutPreferenceDataStoreHomeCatalogRailsTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailContractTest --tests com.nexio.tv.ui.screens.home.HomeCatalogRailsProjectionTest --tests com.nexio.tv.ui.screens.addon.CatalogOrderViewModelTest
 cd nexio-web
-npx tsx --test tests/home-catalog-rails.test.ts tests/home-catalog-rails-fixtures.test.ts tests/profile-settings-blob.test.ts tests/portal-contract-v4.test.ts tests/portal-sync-paths.test.ts
+npx tsx --test tests/home-catalog-rails.test.ts tests/home-catalog-rails-fixtures.test.ts tests/account-settings-sections.test.ts tests/catalog-inventory-component.test.ts tests/profile-settings-blob.test.ts tests/portal-contract-v4.test.ts tests/portal-sync-paths.test.ts
 npx vue-tsc --noEmit
 ```
 
@@ -2143,7 +2576,7 @@ Expected: only unrelated pre-existing local changes remain. No files from this p
 Run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests com.nexio.tv.domain.model.HomeCatalogRailTest --tests com.nexio.tv.data.local.LayoutPreferenceDataStoreHomeCatalogRailsTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailContractTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailFixtureTest --tests com.nexio.tv.ui.screens.home.HomeCatalogRailsProjectionTest --tests com.nexio.tv.ui.screens.addon.CatalogOrderViewModelTest --tests com.nexio.tv.data.remote.supabase.TmdbKitsuCatalogSyncModelsTest
+./gradlew :app:testDebugUnitTest --tests com.nexio.tv.domain.model.HomeCatalogRailTest --tests com.nexio.tv.data.local.LayoutPreferenceDataStoreHomeCatalogRailsTest --tests com.nexio.tv.core.sync.AccountConfigSyncContractTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailContractTest --tests com.nexio.tv.ui.screens.home.order.HomeCatalogRailFixtureTest --tests com.nexio.tv.ui.screens.home.HomeCatalogRailsProjectionTest --tests com.nexio.tv.ui.screens.addon.CatalogOrderViewModelTest --tests com.nexio.tv.data.remote.supabase.TmdbKitsuCatalogSyncModelsTest
 ```
 
 Expected: PASS.
@@ -2154,7 +2587,7 @@ Run:
 
 ```bash
 cd nexio-web
-npx tsx --test tests/home-catalog-rails.test.ts tests/home-catalog-rails-fixtures.test.ts tests/profile-settings-blob.test.ts tests/portal-contract-v4.test.ts tests/portal-sync-paths.test.ts
+npx tsx --test tests/home-catalog-rails.test.ts tests/home-catalog-rails-fixtures.test.ts tests/account-settings-sections.test.ts tests/catalog-inventory-component.test.ts tests/profile-settings-blob.test.ts tests/portal-contract-v4.test.ts tests/portal-sync-paths.test.ts
 npx vue-tsc --noEmit
 ```
 
