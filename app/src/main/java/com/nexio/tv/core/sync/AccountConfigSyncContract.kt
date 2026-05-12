@@ -11,12 +11,14 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
+import com.nexio.tv.data.local.SyncWatermarkDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.local.normalizeSubtitleTranslationSettings
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayloadJson
 import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
@@ -48,8 +50,12 @@ import kotlinx.coroutines.flow.transform
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -278,6 +284,95 @@ internal fun buildAccountConfigSyncPushParamsV7(
             )
         )
         put("p_source", "app")
+    }
+}
+
+internal fun AccountConfigSyncPayload.sectionPayload(
+    sectionKey: AccountSettingsSectionKey
+): JsonElement? {
+    val root = AccountConfigSyncPayloadJson
+        .encodeToJsonElement(AccountConfigSyncPayload.serializer(), this)
+        .jsonObject
+
+    return when (sectionKey) {
+        AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION ->
+            root["integrations"]?.jsonObject?.get("subtitleTranslation")
+        AccountSettingsSectionKey.INTEGRATIONS_IMDB ->
+            root["integrations"]?.jsonObject?.get("imdb")
+        AccountSettingsSectionKey.INTEGRATIONS_GEMINI ->
+            root["integrations"]?.jsonObject?.get("gemini")
+        AccountSettingsSectionKey.INTEGRATIONS_TMDB ->
+            root["integrations"]?.jsonObject?.get("tmdb")
+        AccountSettingsSectionKey.INTEGRATIONS_OMDB ->
+            root["integrations"]?.jsonObject?.get("omdb")
+        AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS ->
+            root["integrations"]?.jsonObject?.get("posterRatings")
+        AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP ->
+            root["integrations"]?.jsonObject?.get("animeSkip")
+        AccountSettingsSectionKey.INTEGRATIONS_MDBLIST ->
+            root["integrations"]?.jsonObject?.get("mdblist")
+        AccountSettingsSectionKey.INTEGRATIONS_KITSU -> null
+        AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH ->
+            root["integrations"]?.jsonObject?.get("traktAuth")
+        AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH ->
+            root["integrations"]?.jsonObject?.get("simklAuth")
+        AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH ->
+            root["integrations"]?.jsonObject?.get("kitsuAuth")
+        AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE ->
+            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("premiumize")
+        AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID ->
+            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("realDebrid")
+        AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX ->
+            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("torBox")
+        AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID ->
+            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("easyDebrid")
+        AccountSettingsSectionKey.CATALOGS_MDBLIST ->
+            root["catalogs"]?.jsonObject?.get("mdblist")
+        AccountSettingsSectionKey.CATALOGS_TRAKT ->
+            root["catalogs"]?.jsonObject?.get("trakt")
+        AccountSettingsSectionKey.CATALOGS_SIMKL ->
+            root["catalogs"]?.jsonObject?.get("simkl")
+        AccountSettingsSectionKey.CATALOGS_TMDB ->
+            root["catalogs"]?.jsonObject?.get("tmdb")
+        AccountSettingsSectionKey.CATALOGS_KITSU ->
+            root["catalogs"]?.jsonObject?.get("kitsu")
+        AccountSettingsSectionKey.CATALOGS_HOME ->
+            root["catalogs"]?.jsonObject?.get("home")
+        AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION ->
+            root["playback"]?.jsonObject?.get("streamSelection")
+        AccountSettingsSectionKey.FORMATTER -> root["formatter"]
+    }
+}
+
+internal suspend fun buildAccountSettingsSectionsPushParamsV13(
+    payload: AccountConfigSyncPayload,
+    changedPaths: List<String>,
+    watermarkStore: SyncWatermarkDataStore
+): JsonObject {
+    val sectionKeys = changedPaths
+        .mapNotNull(AccountSettingsSectionKey::fromChangedPath)
+        .distinct()
+
+    return buildJsonObject {
+        put(
+            "p_sections",
+            buildJsonArray {
+                sectionKeys.forEach { sectionKey ->
+                    val sectionPayload = payload.sectionPayload(sectionKey) ?: return@forEach
+                    add(
+                        buildJsonObject {
+                            put("section_key", sectionKey.key)
+                            put("payload", sectionPayload)
+                            put(
+                                "base_updated_at_ms",
+                                watermarkStore.getAccountSettingsSection(sectionKey)
+                            )
+                        }
+                    )
+                }
+            }
+        )
+        put("p_source", "android-v13")
     }
 }
 

@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
+import com.nexio.tv.data.local.SyncWatermarkDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -17,6 +18,7 @@ import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
+import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.KitsuCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
@@ -41,6 +43,7 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.TrackingProvider
 import java.io.File
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -60,6 +63,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.decodeFromString
 import org.json.JSONObject
@@ -544,6 +548,132 @@ class AccountConfigSyncContractTest {
         assertEquals("123", params["p_base_revision"].toString())
         assertEquals("\"app\"", params["p_source"].toString())
         assertTrue(params["p_changed_paths"].toString().contains("integrations.omdb.enabled"))
+    }
+
+    @Test
+    fun `sectionPayload extracts representative v13 sections and skips unsupported integrations kitsu`() {
+        val payload = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            integrations = IntegrationSettings(
+                debrid = DebridSyncSettings(
+                    premiumize = PremiumizeSyncSettings(configured = true, customerId = 42),
+                    realDebrid = RealDebridSyncSettings(connected = true, username = "rd-user")
+                ),
+                tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = true,
+                    provider = "DASHSCOPE",
+                    model = "qwen-mt-flash",
+                    baseUrl = "https://dashscope-intl.aliyuncs.com/api/v1"
+                ),
+                kitsuAuth = KitsuAuthSyncSettings(connected = true, username = "kitsu-user")
+            ),
+            catalogs = CatalogSyncSettings(
+                home = HomeCatalogSyncSettings(
+                    heroCatalogKeys = listOf("hero-a"),
+                    homeCatalogOrderKeys = listOf("row-a"),
+                    disabledHomeCatalogKeys = listOf("row-b")
+                ),
+                tmdb = TmdbCatalogSyncSettings(catalogOrder = listOf("tmdb-popular")),
+                kitsu = KitsuCatalogSyncSettings(catalogOrder = listOf("kitsu-trending"))
+            ),
+            playback = com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings(
+                streamSelection = com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings(
+                    trackingProvider = "SIMKL"
+                )
+            ),
+            formatter = FormatterSyncSettings(enabled = false, selectedTemplateId = "compact")
+        )
+
+        val tmdb = payload.sectionPayload(AccountSettingsSectionKey.INTEGRATIONS_TMDB)!!.jsonObject
+        val subtitle = payload.sectionPayload(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)!!.jsonObject
+        val premiumize = payload.sectionPayload(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)!!.jsonObject
+        val home = payload.sectionPayload(AccountSettingsSectionKey.CATALOGS_HOME)!!.jsonObject
+        val playback = payload.sectionPayload(AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION)!!.jsonObject
+        val formatter = payload.sectionPayload(AccountSettingsSectionKey.FORMATTER)!!.jsonObject
+
+        assertEquals("false", tmdb["useArtwork"].toString())
+        assertEquals("\"DASHSCOPE\"", subtitle["provider"].toString())
+        assertEquals("42", premiumize["customerId"].toString())
+        assertEquals("\"hero-a\"", home["heroCatalogKeys"]!!.jsonArray.first().toString())
+        assertEquals("\"SIMKL\"", playback["trackingProvider"].toString())
+        assertEquals("\"compact\"", formatter["selectedTemplateId"].toString())
+        assertNull(payload.sectionPayload(AccountSettingsSectionKey.INTEGRATIONS_KITSU))
+    }
+
+    @Test
+    fun `buildAccountSettingsSectionsPushParamsV13 groups dirty paths into distinct serializable sections`() = runTest {
+        val payload = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            integrations = IntegrationSettings(
+                tmdb = TmdbSyncSettings(useArtwork = false, useDetails = false)
+            ),
+            catalogs = CatalogSyncSettings(
+                home = HomeCatalogSyncSettings(
+                    heroCatalogKeys = listOf("hero-a"),
+                    homeCatalogOrderKeys = listOf("row-a"),
+                    disabledHomeCatalogKeys = emptyList()
+                )
+            ),
+            playback = com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings(
+                streamSelection = com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings(
+                    trackingProvider = "SIMKL"
+                )
+            )
+        )
+        val watermarkStore = mockk<SyncWatermarkDataStore>()
+        coEvery { watermarkStore.getAccountSettingsSection(AccountSettingsSectionKey.INTEGRATIONS_TMDB) } returns 111L
+        coEvery { watermarkStore.getAccountSettingsSection(AccountSettingsSectionKey.CATALOGS_HOME) } returns 222L
+        coEvery { watermarkStore.getAccountSettingsSection(AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION) } returns 333L
+
+        val params = buildAccountSettingsSectionsPushParamsV13(
+            payload = payload,
+            changedPaths = listOf(
+                "integrations.tmdb.useArtwork",
+                "integrations.tmdb.useDetails",
+                "catalogs.home.heroCatalogKeys",
+                "integrations.kitsu.enabled",
+                "playback.streamSelection.trackingProvider",
+                "integrations.tvdb.apiKey"
+            ),
+            watermarkStore = watermarkStore
+        )
+
+        val sections = params["p_sections"]!!.jsonArray.map { it.jsonObject }
+
+        assertEquals("\"android-v13\"", params["p_source"].toString())
+        assertEquals(
+            listOf(
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB.key,
+                AccountSettingsSectionKey.CATALOGS_HOME.key,
+                AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION.key
+            ),
+            sections.map { it["section_key"]!!.jsonPrimitive.content }
+        )
+        assertEquals("111", sections[0]["base_updated_at_ms"].toString())
+        assertEquals("false", sections[0]["payload"]!!.jsonObject["useArtwork"].toString())
+        assertEquals("222", sections[1]["base_updated_at_ms"].toString())
+        assertEquals("\"hero-a\"", sections[1]["payload"]!!.jsonObject["heroCatalogKeys"]!!.jsonArray.first().toString())
+        assertEquals("333", sections[2]["base_updated_at_ms"].toString())
+        assertEquals("\"SIMKL\"", sections[2]["payload"]!!.jsonObject["trackingProvider"].toString())
+    }
+
+    @Test
+    fun `account settings push routes through v13 section batch rpc and handles partial outcomes`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBlock = source.substring(pushStart, pullStart)
+
+        assertTrue(pushBlock.contains("sync_push_account_settings_sections_v13"))
+        assertTrue(pushBlock.contains("decodeAs<V13BatchPushResult>()"))
+        assertFalse(pushBlock.contains("sync_push_account_settings_v10"))
+        assertTrue(pushBlock.contains("pullFromRemoteAndApply(clearPendingChanges = false)"))
+        assertTrue(pushBlock.contains("currentUpdatedAtMs != null"))
+        assertTrue(pushBlock.contains("setAccountSettingsSection(sectionKey, result.currentUpdatedAtMs)"))
+        assertTrue(pushBlock.contains("changedPathsBySection"))
+        assertTrue(pushBlock.contains("pendingChangedPaths.removeAll(appliedChangedPaths)"))
+        assertFalse(pushBlock.contains("pendingChangedPaths.removeAll(snapshot.changedPaths.toSet())"))
     }
 
     @Test
