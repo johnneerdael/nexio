@@ -214,7 +214,8 @@ class DefaultTrackingScrobbleService @Inject constructor(
             return projectAnimeToTraktItem(item, resolvedKitsuId)
         }
 
-        val ids = toTraktIds(parseContentIds(contentId))
+        val ids = item.hydratedIds?.toTraktIds()
+            ?: toTraktIds(parseContentIds(contentId))
         if (!ids.hasAnyId()) {
             rejectionReporter.reportRejection(contentId, ScrobbleRejectionReason.NO_PARSEABLE_IDS, TrackingProvider.TRAKT)
             return null
