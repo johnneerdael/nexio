@@ -707,7 +707,8 @@ class AccountSettingsSyncService @Inject constructor(
         val realDebrid: ResolvedRemoteRealDebridSecrets?,
         val trakt: ResolvedRemoteTraktSecrets?,
         val simkl: ResolvedRemoteSimklSecrets?,
-        val preservedLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
+        val preservedLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet(),
+        val followUpLocalSecretSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
     )
 
     private data class ResolvedRemoteRealDebridSecrets(
@@ -908,6 +909,7 @@ class AccountSettingsSyncService @Inject constructor(
             val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
             val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)
             val secretBaselinePreserveSectionKeys = preserveLocalSectionKeys + resolvedSecrets.preservedLocalSectionKeys
+            val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty()
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -945,6 +947,12 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             refreshDebridAccountStatesForAppliedSections(sectionKeysToApply)
+            if (scheduleSecretFollowUpPush && hasLiveFullAccountSession()) {
+                pushJob = scope.launch {
+                    delay(500)
+                    pushToRemote()
+                }
+            }
 
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
@@ -1749,15 +1757,24 @@ class AccountSettingsSyncService @Inject constructor(
         // JWT, decode). Only overwrite the local API key when we have an authoritative
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
+        val preservedLocalSecretSections = linkedSetOf<AccountSettingsSectionKey>()
+        val followUpLocalSecretSections = linkedSetOf<AccountSettingsSectionKey>()
+
         val mdbListApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
             resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
         } else {
             null
         }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST) && mdbListApiKey == null) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_MDBLIST
+        }
         val omdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
             resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
         } else {
             null
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB) && omdbApiKey == null) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_OMDB
         }
         val resolveSubtitleTranslation = sectionKeys.includesSection(
             AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
@@ -1774,20 +1791,98 @@ class AccountSettingsSyncService @Inject constructor(
         } else {
             null
         }
+        if (
+            resolveSubtitleTranslation &&
+            (genericTranslationKey == null || (allowLegacyFallback && genericTranslationKey.isBlank() && legacyGeminiKey == null))
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
+        }
+        val animeSkipClientId = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
+            resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)
+        } else {
+            null
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP) && animeSkipClientId == null) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP
+        }
+        val rpdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+            resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)
+        } else {
+            null
+        }
+        val topPostersApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+            resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)
+        } else {
+            null
+        }
+        if (
+            sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS) &&
+            (rpdbApiKey == null || topPostersApiKey == null)
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS
+        }
+        val premiumizeApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
+            resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)
+        } else {
+            null
+        }
+        if (
+            sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE) &&
+            premiumizeApiKey == null
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE
+        }
+        val torBoxApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
+            resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)
+        } else {
+            null
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX) && torBoxApiKey == null) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX
+        }
+        val easyDebridApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
+            resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)
+        } else {
+            null
+        }
+        if (
+            sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID) &&
+            easyDebridApiKey == null
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID
+        }
         val resolvedRealDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
             resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
         } else {
             null
+        }
+        if (
+            sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID) &&
+            resolvedRealDebrid == null
+        ) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
         }
         val resolvedTrakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
             resolveRemoteTraktSecrets(settings.integrations.traktAuth)
         } else {
             null
         }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
+            when {
+                resolvedTrakt == null -> preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+                resolvedTrakt.preserveLocalTokens -> {
+                    preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+                    followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+                }
+            }
+        }
         val resolvedSimkl = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
             resolveRemoteSimklSecrets(settings.integrations.simklAuth)
         } else {
             null
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH) && resolvedSimkl == null) {
+            preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
         }
         return ResolvedRemoteSecretsForApply(
             mdbListApiKey = mdbListApiKey,
@@ -1797,44 +1892,17 @@ class AccountSettingsSyncService @Inject constructor(
                 legacyGeminiKey = legacyGeminiKey,
                 allowLegacyFallback = allowLegacyFallback
             ),
-            animeSkipClientId = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
-                resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)
-            } else {
-                null
-            },
-            rpdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
-                resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)
-            } else {
-                null
-            },
-            topPostersApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
-                resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)
-            } else {
-                null
-            },
-            premiumizeApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
-                resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)
-            } else {
-                null
-            },
-            torBoxApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
-                resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)
-            } else {
-                null
-            },
-            easyDebridApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
-                resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)
-            } else {
-                null
-            },
+            animeSkipClientId = animeSkipClientId,
+            rpdbApiKey = rpdbApiKey,
+            topPostersApiKey = topPostersApiKey,
+            premiumizeApiKey = premiumizeApiKey,
+            torBoxApiKey = torBoxApiKey,
+            easyDebridApiKey = easyDebridApiKey,
             realDebrid = resolvedRealDebrid,
             trakt = resolvedTrakt,
             simkl = resolvedSimkl,
-            preservedLocalSectionKeys = buildSet {
-                if (resolvedTrakt?.preserveLocalTokens == true) {
-                    add(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
-                }
-            }
+            preservedLocalSectionKeys = preservedLocalSecretSections,
+            followUpLocalSecretSectionKeys = followUpLocalSecretSections
         )
     }
 

@@ -779,6 +779,39 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `pull schedules follow up when remote resolve preserves newer local secrets`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val refreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, refreshStart)
+        val resolveStart = source.indexOf("private suspend fun resolveRemoteSecretsForApply")
+        val applyStart = source.indexOf("private suspend fun applyResolvedRemoteSecrets", startIndex = resolveStart)
+        val resolveBlock = source.substring(resolveStart, applyStart)
+
+        assertTrue(pullBlock.contains("val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty()"))
+        assertTrue(pullBlock.contains("if (scheduleSecretFollowUpPush && hasLiveFullAccountSession())"))
+        assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
+        assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
+    }
+
+    @Test
+    fun `secret resolve failures preserve baseline dirty state`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val resolveStart = source.indexOf("private suspend fun resolveRemoteSecretsForApply")
+        val applyStart = source.indexOf("private suspend fun applyResolvedRemoteSecrets", startIndex = resolveStart)
+        val resolveBlock = source.substring(resolveStart, applyStart)
+
+        assertTrue(resolveBlock.contains("if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST) && mdbListApiKey == null)"))
+        assertTrue(resolveBlock.contains("if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB) && omdbApiKey == null)"))
+        assertTrue(resolveBlock.contains("genericTranslationKey == null"))
+        assertTrue(resolveBlock.contains("rpdbApiKey == null || topPostersApiKey == null"))
+        assertTrue(resolveBlock.contains("resolvedRealDebrid == null"))
+        assertTrue(resolveBlock.contains("resolvedTrakt == null"))
+        assertTrue(resolveBlock.contains("resolvedSimkl == null"))
+        assertTrue(resolveBlock.contains("preservedLocalSectionKeys = preservedLocalSecretSections"))
+    }
+
+    @Test
     fun `account secret push syncs only baseline dirty secret sections`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pushStart = source.indexOf("suspend fun pushToRemote")
