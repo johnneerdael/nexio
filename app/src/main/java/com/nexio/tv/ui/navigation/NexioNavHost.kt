@@ -44,7 +44,9 @@ import com.nexio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
 import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
@@ -179,50 +181,64 @@ fun NexioNavHost(
                     navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 },
                 onContinueWatchingClick = { item ->
+                    // homeScope is rememberCoroutineScope() — defaults to Dispatchers.Main.immediate.
+                    // The hydration chain (resolveContinueWatchingRuntimeMinutes / enrichContinueWatching*)
+                    // calls metadataRouterFacade.fetchTvEpisodeEnrichment which hits TVDB/network.
+                    // Without an explicit dispatcher these run on Main, blocking input dispatch and
+                    // producing a 5s+ ANR ("waited 5003ms for KeyEvent DPAD_CENTER"). Detail-page play
+                    // works because that handler runs on viewModelScope where the metadata calls
+                    // already withContext(IO). For symmetry, run the hydration off-Main and only the
+                    // navController.navigate() on Main.
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = buildContinueWatchingStreamRouteWithHydration(
-                            item = item,
-                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                            resolveRuntimeMinutes = { candidate ->
-                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                            },
-                            resolveOriginalLanguageEnrichment = { candidate ->
-                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                            }
-                        )
+                        val route = withContext(Dispatchers.IO) {
+                            buildContinueWatchingStreamRouteWithHydration(
+                                item = item,
+                                deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                                resolveRuntimeMinutes = { candidate ->
+                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                                },
+                                resolveOriginalLanguageEnrichment = { candidate ->
+                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
+                                }
+                            )
+                        }
                         navController.navigate(route)
                     }
                 },
                 onContinueWatchingStartFromBeginning = { item ->
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = buildContinueWatchingStreamRouteWithHydration(
-                            item = item,
-                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                            startFromBeginning = true,
-                            resolveRuntimeMinutes = { candidate ->
-                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                            },
-                            resolveOriginalLanguageEnrichment = { candidate ->
-                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                            }
-                        )
+                        val route = withContext(Dispatchers.IO) {
+                            buildContinueWatchingStreamRouteWithHydration(
+                                item = item,
+                                deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                                startFromBeginning = true,
+                                resolveRuntimeMinutes = { candidate ->
+                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                                },
+                                resolveOriginalLanguageEnrichment = { candidate ->
+                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
+                                }
+                            )
+                        }
                         navController.navigate(route)
                     }
                 },
                 onContinueWatchingManualStreamSelection = { item ->
                     homeScope.launch {
                         homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
-                        val route = buildContinueWatchingManualSelectionStreamRouteWithHydration(
-                            item = item,
-                            resolveRuntimeMinutes = { candidate ->
-                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
-                            },
-                            resolveOriginalLanguageEnrichment = { candidate ->
-                                homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
-                            }
-                        )
+                        val route = withContext(Dispatchers.IO) {
+                            buildContinueWatchingManualSelectionStreamRouteWithHydration(
+                                item = item,
+                                resolveRuntimeMinutes = { candidate ->
+                                    homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                                },
+                                resolveOriginalLanguageEnrichment = { candidate ->
+                                    homeViewModel.enrichContinueWatchingItemWithProvider(candidate)
+                                }
+                            )
+                        }
                         navController.navigate(route)
                     }
                 },
