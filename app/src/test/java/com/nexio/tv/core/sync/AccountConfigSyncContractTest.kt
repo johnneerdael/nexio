@@ -203,8 +203,8 @@ class AccountConfigSyncContractTest {
             pullBlock.contains("val appliedSectionKeys = appliedSections.map { it.first }.toSet()")
         )
         assertTrue(
-            "v13 pull must resolve secrets only for sections present in the sparse snapshot",
-            pullBlock.contains("resolveRemoteSecretsForApply(settings, sectionKeysToApply)")
+            "v13 pull must resolve sparse snapshot secrets plus preserved dirty secret sections",
+            pullBlock.contains("resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)")
         )
         assertTrue(
             "v13 pull must pass section presence into local settings application",
@@ -810,12 +810,13 @@ class AccountConfigSyncContractTest {
         val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
         val refreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
         val pullBlock = source.substring(pullStart, refreshStart)
-        val resolveIndex = pullBlock.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)")
+        val resolveIndex = pullBlock.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)")
         val secretsWatermarkIndex = pullBlock.indexOf("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS")
 
         assertTrue("account secrets watermark must be decided after secret resolution", secretsWatermarkIndex > resolveIndex)
+        assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = sectionKeysToApply + preservedPullSecretSectionKeys"))
         assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
-        assertTrue(pullBlock.contains("preservedPullSecretSectionKeys.isEmpty()"))
+        assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)"))
     }
 
     @Test
@@ -835,6 +836,7 @@ class AccountConfigSyncContractTest {
         assertTrue(resolveBlock.contains("resolvedRealDebrid == null"))
         assertTrue(resolveBlock.contains("resolvedTrakt == null"))
         assertTrue(resolveBlock.contains("resolvedSimkl == null"))
+        assertTrue(resolveBlock.contains("resolvedKitsu == null"))
         assertTrue(resolveBlock.contains("preservedLocalSectionKeys = preservedLocalSecretSections"))
         assertTrue(resolveBlock.contains("unresolvedRemoteSecretSectionKeys = unresolvedRemoteSecretSections"))
     }
@@ -852,7 +854,10 @@ class AccountConfigSyncContractTest {
         assertTrue(pushBlock.contains("val dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)"))
         assertTrue(pushBlock.contains("syncAccountSecretPushSnapshotToRemote(snapshot.secrets, dirtySecretSectionKeys)"))
         assertFalse(pushBlock.contains("else {\n                scheduleFollowUpPush = true\n            }"))
+        assertTrue(pushBlock.contains("val baseBeforeRecovery = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS"))
+        assertTrue(pushBlock.contains("scheduleFollowUpPush = baseAfterRecovery > baseBeforeRecovery"))
         assertTrue(syncBlock.contains("dirtySectionKeys: Set<AccountSettingsSectionKey>"))
+        assertTrue(syncBlock.contains("syncKitsuSecretsToRemote(snapshot.kitsu)"))
         assertFalse(
             "secret sync must not blindly push every account secret",
             syncBlock.contains("syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, snapshot.mdbListApiKey)\n" +
@@ -898,7 +903,8 @@ class AccountConfigSyncContractTest {
                 AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
                 AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
                 AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
-                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH,
+                AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
             ),
             dirtyAccountSecretSectionKeys(accountSecretSnapshot(), baseline = null)
         )
@@ -965,7 +971,8 @@ class AccountConfigSyncContractTest {
                 AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID,
                 AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
                 AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH,
-                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+                AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH,
+                AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
             ),
             dirtyAccountSecretSectionKeys(current, baseline)
         )
@@ -1077,7 +1084,11 @@ class AccountConfigSyncContractTest {
                 createdAt = 1000L,
                 expiresIn = 7200
             ),
-            simkl = SimklSecretPushSnapshot(accessToken = "remote-simkl-access")
+            simkl = SimklSecretPushSnapshot(accessToken = "remote-simkl-access"),
+            kitsu = KitsuSecretPushSnapshot(
+                accessToken = "remote-kitsu-access",
+                refreshToken = "remote-kitsu-refresh"
+            )
         )
     }
 

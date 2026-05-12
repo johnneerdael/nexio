@@ -544,6 +544,16 @@ data class AccountSimklAccessSecretPayload(
 )
 
 @Serializable
+data class AccountKitsuAccessSecretPayload(
+    val accessToken: String = ""
+)
+
+@Serializable
+data class AccountKitsuRefreshSecretPayload(
+    val refreshToken: String = ""
+)
+
+@Serializable
 data class AccountRealDebridAccessSecretPayload(
     val accessToken: String = "",
     val tokenType: String = "Bearer",
