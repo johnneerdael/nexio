@@ -78,6 +78,32 @@ internal data class TimedTextDocument(
         }.trim() + "\n"
     }
 
+    fun assSsaSegmentSurfaces(): List<AssSsaTranslationSurface> {
+        if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) return emptyList()
+        var dialogueIndex = 0
+        return blocks
+            .filterIsInstance<AssSsaDialogueBlock>()
+            .mapNotNull { block ->
+                block.segmentSurface("ass_${dialogueIndex++}")
+            }
+    }
+
+    fun renderAssSsaSegmentSurfaces(translations: Map<String, List<String>>): String {
+        if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) {
+            return render(emptyMap())
+        }
+        var dialogueIndex = 0
+        return blocks.joinToString("\n") { block ->
+            if (block is AssSsaDialogueBlock) {
+                val id = "ass_${dialogueIndex++}"
+                val surface = block.segmentSurface(id)
+                block.renderSegmentSurface(surface, translations[id])
+            } else {
+                block.render(emptyMap())
+            }
+        }.trim() + "\n"
+    }
+
     companion object {
         fun parse(raw: String, url: String): TimedTextDocument? {
             val normalized = raw

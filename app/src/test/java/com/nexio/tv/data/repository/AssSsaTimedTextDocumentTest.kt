@@ -177,4 +177,60 @@ class AssSsaTimedTextDocumentTest {
             )
         )
     }
+
+    @Test
+    fun segmentSurfaceRenderTranslatesDialogueAndCommentEvents() {
+        val document = TimedTextDocument.parse(
+            raw = """
+                [Events]
+                Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+                Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello {\i1}world{\i0}
+                Comment: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Sign {\b1}text{\b0}
+            """.trimIndent(),
+            url = "file:///tmp/subtitle.ass"
+        )!!
+
+        val surfaces = document.assSsaSegmentSurfaces()
+
+        assertEquals(listOf("ass_0", "ass_1"), surfaces.map { it.id })
+        assertEquals(listOf("Hello", "world"), surfaces[0].segments)
+        assertEquals(listOf("Sign", "text"), surfaces[1].segments)
+        assertEquals(
+            """
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hallo {\i1}wereld{\i0}
+            Comment: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Bord {\b1}tekst{\b0}
+            """.trimIndent() + "\n",
+            document.renderAssSsaSegmentSurfaces(
+                mapOf(
+                    "ass_0" to listOf("Hallo", "wereld"),
+                    "ass_1" to listOf("Bord", "tekst")
+                )
+            )
+        )
+    }
+
+    @Test
+    fun segmentSurfaceRenderPreservesOneFailedEventOnly() {
+        val document = TimedTextDocument.parse(
+            raw = """
+                [Events]
+                Format: Start, End, Text
+                Dialogue: 0:00:01.00,0:00:02.00,Hello
+                Dialogue: 0:00:03.00,0:00:04.00,World
+            """.trimIndent(),
+            url = "file:///tmp/subtitle.ass"
+        )!!
+
+        assertEquals(
+            """
+            [Events]
+            Format: Start, End, Text
+            Dialogue: 0:00:01.00,0:00:02.00,Hallo
+            Dialogue: 0:00:03.00,0:00:04.00,World
+            """.trimIndent() + "\n",
+            document.renderAssSsaSegmentSurfaces(mapOf("ass_0" to listOf("Hallo")))
+        )
+    }
 }
