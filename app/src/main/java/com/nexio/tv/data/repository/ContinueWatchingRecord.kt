@@ -24,7 +24,11 @@ data class ContinueWatchingRecord(
     val primaryResumeLookupKey: String? = resumeIdentities.firstOrNull()?.lookupKey(),
     val identityConfidence: IdentityConfidence = IdentityConfidence.LOW,
     val identityWarnings: List<String> = emptyList(),
-    val languageTag: String? = null
+    val languageTag: String? = null,
+    // Multi-provider ID bundle used by ContinueWatchingMerger for cross-source dedup.
+    // Defaults empty for back-compat; ContinueWatchingIdentityResolver populates it from
+    // the StableIdBundle so records arriving via different parentIds (TMDB vs IMDB) merge.
+    val idBundle: ContinueWatchingIdBundle = ContinueWatchingIdBundle()
 ) {
     val resumeLookupKeys: Set<String> = resumeIdentities.map { it.lookupKey() }.toSet()
 
