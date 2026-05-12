@@ -107,6 +107,71 @@ class TraktScrobbleMutationAdapterTest {
         coVerify(exactly = 0) { traktProgressService.refreshNow() }
     }
 
+    @Test
+    fun `pause action below 80 percent stays pause`() {
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "pause",
+            progressPercent = 79f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+        assertEquals("pause", envelope.payload.get("action").asString)
+    }
+
+    @Test
+    fun `pause action at exactly 80 percent coerces to stop`() {
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "pause",
+            progressPercent = 80f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+        assertEquals("stop", envelope.payload.get("action").asString)
+    }
+
+    @Test
+    fun `pause action above 80 percent coerces to stop`() {
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "pause",
+            progressPercent = 95f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+        assertEquals("stop", envelope.payload.get("action").asString)
+    }
+
+    @Test
+    fun `start action at high progress stays start`() {
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "start",
+            progressPercent = 95f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+        assertEquals("start", envelope.payload.get("action").asString)
+    }
+
+    @Test
+    fun `stop action above 80 percent stays stop`() {
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "stop",
+            progressPercent = 95f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+        assertEquals("stop", envelope.payload.get("action").asString)
+    }
+
     private fun movieItem(title: String) = TraktScrobbleItem.Movie(
         title = title,
         year = 2025,
