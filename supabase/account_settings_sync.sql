@@ -2402,6 +2402,10 @@ declare
   v_user_id uuid := public.sync_owner_id();
   v_sections jsonb;
   v_invalid_sections jsonb;
+  v_current_payload jsonb := '{}'::jsonb;
+  v_incoming_payload jsonb := '{}'::jsonb;
+  v_merged_payload jsonb := '{}'::jsonb;
+  v_next_payload jsonb := '{}'::jsonb;
   v_current_updated_at_ms bigint := 0;
   v_current_revision bigint := 0;
   v_current_section_count bigint := 0;
@@ -2409,6 +2413,15 @@ declare
   v_updated_at timestamptz;
   v_lock_key text;
   v_source text := coalesce(nullif(trim(p_source), ''), 'legacy-adapter');
+  v_changed_paths text[] := coalesce(
+    array(
+      select distinct trim(path)
+      from unnest(coalesce(p_changed_paths, array[]::text[])) as path
+      where trim(path) <> ''
+      order by trim(path)
+    ),
+    array[]::text[]
+  );
 begin
   if v_user_id is null then
     raise exception 'Authentication required';
@@ -2457,14 +2470,18 @@ begin
 
   if coalesce(v_current_section_count, 0) = 0 then
     select coalesce(public.sync_to_ms(updated_at), 0),
-           coalesce(sync_revision, 0)
-    into v_current_updated_at_ms, v_current_revision
+           coalesce(sync_revision, 0),
+           coalesce(settings_payload, '{}'::jsonb)
+    into v_current_updated_at_ms, v_current_revision, v_current_payload
     from public.account_settings_public
     where user_id = v_user_id;
+  else
+    v_current_payload := public.account_settings_sections_to_payload(v_user_id);
   end if;
 
   v_current_updated_at_ms := coalesce(v_current_updated_at_ms, 0);
   v_current_revision := coalesce(v_current_revision, 0);
+  v_current_payload := coalesce(v_current_payload, '{}'::jsonb);
 
   -- legacy aggregate stale-base guard: full-payload callers must not miss unselected section changes.
   if coalesce(p_base_updated_at_ms, 0) < v_current_updated_at_ms
@@ -2476,8 +2493,41 @@ begin
     );
   end if;
 
+  -- Legacy adapter normalization mirrors the v7 storage path before section extraction.
+  v_incoming_payload := public.account_settings_public_storage_payload(
+    p_payload => p_settings_payload,
+    p_existing_payload => v_current_payload,
+    p_contract_version => 6
+  );
+  v_incoming_payload := public.account_settings_preserve_catalog_option_pins(
+    p_existing_payload => v_current_payload,
+    p_incoming_payload => p_settings_payload,
+    p_normalized_payload => v_incoming_payload
+  );
+
+  if cardinality(v_changed_paths) = 0 then
+    v_next_payload := v_incoming_payload;
+  else
+    v_merged_payload := public.account_settings_merge_changed_paths(
+      p_current_payload => v_current_payload,
+      p_incoming_payload => v_incoming_payload,
+      p_changed_paths => v_changed_paths
+    );
+
+    v_next_payload := public.account_settings_public_storage_payload(
+      p_payload => v_merged_payload,
+      p_existing_payload => v_current_payload,
+      p_contract_version => 6
+    );
+    v_next_payload := public.account_settings_preserve_catalog_option_pins(
+      p_existing_payload => v_current_payload,
+      p_incoming_payload => v_merged_payload,
+      p_normalized_payload => v_next_payload
+    );
+  end if;
+
   with changed(path) as (
-    select unnest(coalesce(p_changed_paths, array[]::text[]))
+    select unnest(v_changed_paths)
   ),
   section_keys(section_key) as (
     values
@@ -2508,20 +2558,18 @@ begin
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'section_key', section_key,
-    'payload', public.account_settings_section_payload(p_settings_payload, section_key),
+    'payload', public.account_settings_section_payload(v_next_payload, section_key),
     'base_updated_at_ms', p_base_updated_at_ms
   )), '[]'::jsonb)
   into v_sections
   from section_keys
-  where public.account_settings_section_payload(p_settings_payload, section_key) is not null
+  where public.account_settings_section_payload(v_next_payload, section_key) is not null
     and (
       not exists (select 1 from changed)
       or exists (
         select 1
         from changed
-        where path = section_key
-           or path like section_key || '.%'
-           or section_key like path || '.%'
+        where public.account_settings_paths_overlap(section_key, path)
       )
     );
 
