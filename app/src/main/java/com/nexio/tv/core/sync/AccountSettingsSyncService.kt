@@ -156,6 +156,23 @@ private const val KITSU_ACCESS_SECRET_TYPE = "kitsu_access_token"
 private const val KITSU_REFRESH_SECRET_TYPE = "kitsu_refresh_token"
 private const val KITSU_SECRET_REF = "integration:kitsu"
 
+private val CATALOG_SECTION_KEYS = setOf(
+    AccountSettingsSectionKey.CATALOGS_MDBLIST,
+    AccountSettingsSectionKey.CATALOGS_TRAKT,
+    AccountSettingsSectionKey.CATALOGS_SIMKL,
+    AccountSettingsSectionKey.CATALOGS_TMDB,
+    AccountSettingsSectionKey.CATALOGS_KITSU,
+    AccountSettingsSectionKey.CATALOGS_HOME
+)
+
+private fun Set<AccountSettingsSectionKey>?.includesSection(section: AccountSettingsSectionKey): Boolean {
+    return this == null || section in this
+}
+
+private fun Set<AccountSettingsSectionKey>?.includesAnySection(sections: Set<AccountSettingsSectionKey>): Boolean {
+    return this == null || sections.any { it in this }
+}
+
 internal fun selectSubtitleTranslationApiKeySecret(
     genericTranslationKey: String?,
     legacyGeminiKey: String?,
@@ -596,6 +613,7 @@ class AccountSettingsSyncService @Inject constructor(
                 settings = key.applyToPayload(settings, section.payload)
                 appliedSections += key to section.updatedAtMs
             }
+            val appliedSectionKeys = appliedSections.map { it.first }.toSet()
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
             appliedSections.forEach { (key, updatedAtMs) ->
                 syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
@@ -603,7 +621,7 @@ class AccountSettingsSyncService @Inject constructor(
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
-            val resolvedSecrets = resolveRemoteSecretsForApply(settings)
+            val resolvedSecrets = resolveRemoteSecretsForApply(settings, appliedSectionKeys)
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -612,7 +630,10 @@ class AccountSettingsSyncService @Inject constructor(
                 }
                 isApplyingRemote = true
                 try {
-                    applySharedAccountConfigSyncSettings(settings)
+                    applySharedAccountConfigSyncSettings(
+                        settings = settings,
+                        sectionKeys = appliedSectionKeys
+                    )
                     applyResolvedRemoteSecrets(resolvedSecrets)
                     lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)
@@ -824,67 +845,78 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun applySharedAccountConfigSyncSettings(
         settings: AccountConfigSyncPayload,
-        resolveRemoteInlineSecrets: Boolean = true
+        resolveRemoteInlineSecrets: Boolean = true,
+        sectionKeys: Set<AccountSettingsSectionKey>? = null
     ) {
         // Null catalog sections / null inner fields = absent in payload, leave target unchanged.
         // Empty list ([]) = present and intentionally empty, apply as cleared.
         // pinnedListOptions / pinnedTopListOptions remain non-null typed-object
         // lists; when their sub-section is null we fall back to the
         // last-known value.
-        settings.catalogs.trakt?.let {
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.CATALOGS_TRAKT)) settings.catalogs.trakt?.let {
             lastRemoteTraktPinnedListOptions = it.pinnedListOptions
         }
-        settings.catalogs.mdblist?.let {
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.CATALOGS_MDBLIST)) settings.catalogs.mdblist?.let {
             lastRemoteMDBListPinnedTopListOptions = it.pinnedTopListOptions
         }
 
         if (isDefaultLegacyActive()) {
-            applyCatalogsSection(
-                payload = settings,
-                layoutPreferenceDataStore = layoutPreferenceDataStore,
-                traktSettingsDataStore = traktSettingsDataStore,
-                simklSettingsDataStore = simklSettingsDataStore,
-                mdbListSettingsDataStore = mdbListSettingsDataStore,
-                tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
-                kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
-                homeRailOrderStore = homeRailOrderStore
-            )
-            playerSettingsDataStore.setTrackingProvider(
-                runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
-                    .getOrDefault(TrackingProvider.TRAKT)
-            )
-            playerSettingsDataStore.setSyncedFormatterEnabled(settings.formatter.enabled)
-            playerSettingsDataStore.setSyncedFormatterSelectedTemplateId(settings.formatter.selectedTemplateId)
-            playerSettingsDataStore.setSyncedFormatterCustomTemplate(
-                label = settings.formatter.customTemplate?.label,
-                nameTemplate = settings.formatter.customTemplate?.nameTemplate,
-                descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
-                badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
-            )
+            if (sectionKeys.includesAnySection(CATALOG_SECTION_KEYS)) {
+                applyCatalogsSection(
+                    payload = settings,
+                    layoutPreferenceDataStore = layoutPreferenceDataStore,
+                    traktSettingsDataStore = traktSettingsDataStore,
+                    simklSettingsDataStore = simklSettingsDataStore,
+                    mdbListSettingsDataStore = mdbListSettingsDataStore,
+                    tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+                    kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
+                    homeRailOrderStore = homeRailOrderStore
+                )
+            }
+            if (sectionKeys.includesSection(AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION)) {
+                playerSettingsDataStore.setTrackingProvider(
+                    runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
+                        .getOrDefault(TrackingProvider.TRAKT)
+                )
+            }
+            if (sectionKeys.includesSection(AccountSettingsSectionKey.FORMATTER)) {
+                playerSettingsDataStore.setSyncedFormatterEnabled(settings.formatter.enabled)
+                playerSettingsDataStore.setSyncedFormatterSelectedTemplateId(settings.formatter.selectedTemplateId)
+                playerSettingsDataStore.setSyncedFormatterCustomTemplate(
+                    label = settings.formatter.customTemplate?.label,
+                    nameTemplate = settings.formatter.customTemplate?.nameTemplate,
+                    descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
+                    badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
+                )
+            }
         }
 
-        tmdbSettingsDataStore.setEnabled(true)
-        tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
-        tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
-        tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)
-        tmdbSettingsDataStore.setUseCredits(settings.integrations.tmdb.useCredits)
-        tmdbSettingsDataStore.setUseProductions(settings.integrations.tmdb.useProductions)
-        tmdbSettingsDataStore.setUseNetworks(settings.integrations.tmdb.useNetworks)
-        tmdbSettingsDataStore.setUseEpisodes(settings.integrations.tmdb.useEpisodes)
-        tmdbSettingsDataStore.setUseMoreLikeThis(settings.integrations.tmdb.useMoreLikeThis)
-        tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TMDB)) {
+            tmdbSettingsDataStore.setEnabled(true)
+            tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
+            tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
+            tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)
+            tmdbSettingsDataStore.setUseCredits(settings.integrations.tmdb.useCredits)
+            tmdbSettingsDataStore.setUseProductions(settings.integrations.tmdb.useProductions)
+            tmdbSettingsDataStore.setUseNetworks(settings.integrations.tmdb.useNetworks)
+            tmdbSettingsDataStore.setUseEpisodes(settings.integrations.tmdb.useEpisodes)
+            tmdbSettingsDataStore.setUseMoreLikeThis(settings.integrations.tmdb.useMoreLikeThis)
+            tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
+        }
 
-        mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
-        mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
-        mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
-        mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
-        mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd)
-        mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
-        mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
-        mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
+            mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
+            mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
+            mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
+            mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
+            mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd)
+            mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
+            mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
+            mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
+        }
         // Null catalogs.mdblist / null inner fields = absent in payload, leave target unchanged.
         // Empty list ([]) = present and intentionally empty, apply as cleared.
-        settings.catalogs.mdblist?.let { mdblist ->
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.CATALOGS_MDBLIST)) settings.catalogs.mdblist?.let { mdblist ->
             val hidden = mdblist.hiddenPersonalListKeys
             val selected = mdblist.selectedTopListKeys
             val order = mdblist.catalogOrder
@@ -897,36 +929,46 @@ class AccountSettingsSyncService @Inject constructor(
             }
         }
 
-        omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
-
-        animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
-        if (resolveRemoteInlineSecrets) resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)?.let {
-            animeSkipSettingsDataStore.setClientId(it)
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
+            omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
         }
 
-        val remoteTranslation = settings.integrations.subtitleTranslation
-        subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
-            enabled = remoteTranslation.enabled,
-            provider = remoteTranslation.toDomainSettings().provider,
-            model = remoteTranslation.model,
-            baseUrl = remoteTranslation.baseUrl
-        )
-        applyPosterRatingsProviderSelection(
-            settings = settings.integrations.posterRatings,
-            posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
-        )
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
+            animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
+            if (resolveRemoteInlineSecrets) resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)?.let {
+                animeSkipSettingsDataStore.setClientId(it)
+            }
+        }
 
-        val remoteKitsu = settings.integrations.kitsuAuth
-        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
-        val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
-        kitsuAuthDataStore.save(
-            currentKitsu.copy(
-                enabled = true,
-                username = remoteKitsu.username,
-                expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
-                includeNsfw = remoteKitsu.includeNsfw
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)) {
+            val remoteTranslation = settings.integrations.subtitleTranslation
+            subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
+                enabled = remoteTranslation.enabled,
+                provider = remoteTranslation.toDomainSettings().provider,
+                model = remoteTranslation.model,
+                baseUrl = remoteTranslation.baseUrl
             )
-        )
+        }
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+            applyPosterRatingsProviderSelection(
+                settings = settings.integrations.posterRatings,
+                posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+            )
+        }
+
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
+            val remoteKitsu = settings.integrations.kitsuAuth
+            val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+            val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
+            kitsuAuthDataStore.save(
+                currentKitsu.copy(
+                    enabled = true,
+                    username = remoteKitsu.username,
+                    expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
+                    includeNsfw = remoteKitsu.includeNsfw
+                )
+            )
+        }
 
         // Moved to v8 per-profile blob sync: Trakt catalog preferences
         // Moved to v8 per-profile blob sync: Simkl catalog preferences
@@ -1346,15 +1388,34 @@ class AccountSettingsSyncService @Inject constructor(
                 })
     }
 
-    private suspend fun resolveRemoteSecretsForApply(settings: AccountConfigSyncPayload): ResolvedRemoteSecretsForApply {
+    private suspend fun resolveRemoteSecretsForApply(
+        settings: AccountConfigSyncPayload,
+        sectionKeys: Set<AccountSettingsSectionKey>? = null
+    ): ResolvedRemoteSecretsForApply {
         // Each helper returns null when the resolve RPC fails transiently (network,
         // JWT, decode). Only overwrite the local API key when we have an authoritative
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
-        val mdbListApiKey = resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
-        val omdbApiKey = resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
-        val genericTranslationKey = resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
-        val allowLegacyFallback = settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
+        val mdbListApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
+            resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
+        } else {
+            null
+        }
+        val omdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
+            resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
+        } else {
+            null
+        }
+        val resolveSubtitleTranslation = sectionKeys.includesSection(
+            AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
+        )
+        val genericTranslationKey = if (resolveSubtitleTranslation) {
+            resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
+        } else {
+            null
+        }
+        val allowLegacyFallback = resolveSubtitleTranslation &&
+            settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
         val legacyGeminiKey = if (genericTranslationKey != null && genericTranslationKey.isBlank() && allowLegacyFallback) {
             resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF)
         } else {
@@ -1368,15 +1429,51 @@ class AccountSettingsSyncService @Inject constructor(
                 legacyGeminiKey = legacyGeminiKey,
                 allowLegacyFallback = allowLegacyFallback
             ),
-            animeSkipClientId = resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF),
-            rpdbApiKey = resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF),
-            topPostersApiKey = resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF),
-            premiumizeApiKey = resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF),
-            torBoxApiKey = resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF),
-            easyDebridApiKey = resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF),
-            realDebrid = resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid),
-            trakt = resolveRemoteTraktSecrets(settings.integrations.traktAuth),
-            simkl = resolveRemoteSimklSecrets(settings.integrations.simklAuth)
+            animeSkipClientId = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
+                resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)
+            } else {
+                null
+            },
+            rpdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+                resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)
+            } else {
+                null
+            },
+            topPostersApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
+                resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)
+            } else {
+                null
+            },
+            premiumizeApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
+                resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)
+            } else {
+                null
+            },
+            torBoxApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
+                resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)
+            } else {
+                null
+            },
+            easyDebridApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
+                resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)
+            } else {
+                null
+            },
+            realDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
+                resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
+            } else {
+                null
+            },
+            trakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
+                resolveRemoteTraktSecrets(settings.integrations.traktAuth)
+            } else {
+                null
+            },
+            simkl = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
+                resolveRemoteSimklSecrets(settings.integrations.simklAuth)
+            } else {
+                null
+            }
         )
     }
 
