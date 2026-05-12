@@ -1,3 +1,9 @@
+// effectiveProvider still routes progress sync (add/remove/setProgress) here.
+// Phase 3 of the scrobble + CW dual-provider plan migrates this file to read
+// from both providers and write to every authenticated provider via fan-out.
+// Plan: docs/superpowers/plans/2026-05-12-scrobble-cw-dual-provider-overhaul.md
+@file:Suppress("DEPRECATION")
+
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason

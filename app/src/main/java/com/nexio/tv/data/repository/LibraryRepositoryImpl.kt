@@ -1,3 +1,9 @@
+// effectiveProvider still routes library writes here (watchlist, collections, etc).
+// Phase 3 of the scrobble + CW dual-provider plan migrates this file to fan-out
+// across activeProviders. Suppression is provisional and tracks that migration.
+// Plan: docs/superpowers/plans/2026-05-12-scrobble-cw-dual-provider-overhaul.md
+@file:Suppress("DEPRECATION")
+
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.domain.model.LibraryEntry

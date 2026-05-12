@@ -20,6 +20,13 @@ import javax.inject.Singleton
 
 data class EffectiveTrackingProviderState(
     val storedProvider: TrackingProvider = TrackingProvider.TRAKT,
+    @Deprecated(
+        message = "effectiveProvider is no longer the source of truth for routing scrobble " +
+            "or sync writes. Use activeProviders for fan-out. effectiveProvider is retained " +
+            "only for surfaces that must pick one provider for display (e.g. ContinueWatching " +
+            "provider tag, library write routing during Phase 0; migrated in Phase 3).",
+        level = DeprecationLevel.WARNING,
+    )
     val effectiveProvider: TrackingProvider = TrackingProvider.TRAKT,
     val traktAuthenticated: Boolean = false,
     val simklAuthenticated: Boolean = false
