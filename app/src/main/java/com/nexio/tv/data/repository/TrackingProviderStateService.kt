@@ -27,6 +27,14 @@ data class EffectiveTrackingProviderState(
     val hasAuthenticatedProvider: Boolean
         get() = traktAuthenticated || simklAuthenticated
 
+    // Every authenticated provider. Source of truth for scrobble fan-out routing.
+    // effectiveProvider remains for display-only surfaces that need a single tag.
+    val activeProviders: Set<TrackingProvider>
+        get() = buildSet {
+            if (traktAuthenticated) add(TrackingProvider.TRAKT)
+            if (simklAuthenticated) add(TrackingProvider.SIMKL)
+        }
+
     val canReadEffectiveProvider: Boolean
         get() = hasAuthenticatedProvider
 
