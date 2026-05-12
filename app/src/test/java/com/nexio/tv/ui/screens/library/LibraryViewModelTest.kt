@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.library
 
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -54,7 +55,8 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore()
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
         )
 
         advanceUntilIdle()
@@ -99,7 +101,8 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore()
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
         )
 
         advanceUntilIdle()
@@ -121,7 +124,8 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore()
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
         )
 
         advanceUntilIdle()
@@ -150,7 +154,8 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore()
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
         )
 
         advanceUntilIdle()
