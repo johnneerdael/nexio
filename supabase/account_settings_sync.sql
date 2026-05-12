@@ -2036,3 +2036,271 @@ on conflict (user_id, section_key) do update
       sync_revision = excluded.sync_revision,
       updated_at = excluded.updated_at,
       updated_from = excluded.updated_from;
+
+create or replace function public.sync_pull_account_settings_sections_v13()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := public.sync_owner_id();
+  v_sections jsonb;
+  v_settings_ms bigint;
+begin
+  select
+    coalesce(jsonb_agg(jsonb_build_object(
+      'section_key', section_key,
+      'payload', payload,
+      'schema_version', schema_version,
+      'sync_revision', sync_revision,
+      'updated_at_ms', public.sync_to_ms(updated_at)
+    ) order by section_key), '[]'::jsonb),
+    coalesce(max(public.sync_to_ms(updated_at)), 0)
+  into v_sections, v_settings_ms
+  from public.account_settings_sections
+  where user_id = v_user_id;
+
+  return jsonb_build_object(
+    'contract_version', 13,
+    'settings', jsonb_build_object(
+      'sections', v_sections,
+      'updated_at_ms', v_settings_ms
+    )
+  );
+end;
+$$;
+
+create or replace function public.sync_pull_account_snapshot_v13()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := public.sync_owner_id();
+  v_settings jsonb;
+  v_addons jsonb;
+  v_addons_ms bigint;
+  v_secrets jsonb;
+  v_secrets_ms bigint;
+begin
+  v_settings := public.sync_pull_account_settings_sections_v13()->'settings';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id,
+           'url', a.base_url,
+           'manifest_url', coalesce(a.manifest_url, a.base_url || '/manifest.json'),
+           'parser_preset', a.parser_preset,
+           'is_anime', coalesce(a.is_anime, false),
+           'name', a.name,
+           'description', a.description,
+           'enabled', a.enabled,
+           'sort_order', a.sort_order,
+           'public_query_params', a.public_query_params,
+           'install_kind', a.install_kind,
+           'secret_ref', a.secret_ref,
+           'transport_schema_version', coalesce(a.transport_schema_version, 1),
+           'transport_base_url', coalesce(a.transport_base_url, a.base_url),
+           'transport_secret_ref', a.transport_secret_ref
+         ) order by a.sort_order), '[]'::jsonb),
+         coalesce(max(public.sync_to_ms(a.updated_at)), 0)
+  into v_addons, v_addons_ms
+  from public.account_addons_public a
+  where a.user_id = v_user_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'secret_type', s.secret_type,
+           'secret_ref', s.secret_ref,
+           'masked_preview', s.masked_preview,
+           'status', s.status,
+           'updated_at_ms', public.sync_to_ms(s.updated_at)
+         )), '[]'::jsonb),
+         coalesce(max(public.sync_to_ms(s.updated_at)), 0)
+  into v_secrets, v_secrets_ms
+  from public.account_secrets s
+  where s.user_id = v_user_id;
+
+  return jsonb_build_object(
+    'contract_version', 13,
+    'settings', v_settings,
+    'addons', jsonb_build_object('items', v_addons, 'updated_at_ms', v_addons_ms),
+    'secrets', jsonb_build_object('items', v_secrets, 'updated_at_ms', v_secrets_ms)
+  );
+end;
+$$;
+
+create or replace function public.sync_push_account_settings_section_v13(
+  p_section_key text,
+  p_payload jsonb,
+  p_base_updated_at_ms bigint,
+  p_source text default 'app'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := public.sync_owner_id();
+  v_key text := coalesce(p_section_key, '');
+  v_current_ms bigint := 0;
+  v_revision bigint;
+  v_updated_at timestamptz;
+begin
+  if not public.account_settings_section_key_allowed(v_key) then
+    raise exception 'Unsupported account settings section: %', v_key using errcode = '22023';
+  end if;
+
+  if jsonb_typeof(coalesce(p_payload, 'null'::jsonb)) <> 'object' then
+    raise exception 'Account settings section payload must be a JSON object' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_user_id::text || ':' || v_key, 0));
+
+  select coalesce(public.sync_to_ms(updated_at), 0)
+  into v_current_ms
+  from public.account_settings_sections
+  where user_id = v_user_id and section_key = v_key;
+
+  v_current_ms := coalesce(v_current_ms, 0);
+
+  -- current section updated_at stale-base guard
+  if coalesce(p_base_updated_at_ms, 0) < v_current_ms then
+    return jsonb_build_object(
+      'applied', false,
+      'section_key', v_key,
+      'reason', 'stale_base',
+      'current_updated_at_ms', v_current_ms
+    );
+  end if;
+
+  v_revision := public.next_sync_revision();
+  v_updated_at := greatest(now(), to_timestamp((v_current_ms + 1)::double precision / 1000.0));
+
+  insert into public.account_settings_sections (
+    user_id,
+    section_key,
+    payload,
+    schema_version,
+    sync_revision,
+    updated_at,
+    updated_from
+  )
+  values (
+    v_user_id,
+    v_key,
+    p_payload,
+    1,
+    v_revision,
+    v_updated_at,
+    coalesce(nullif(trim(p_source), ''), 'app')
+  )
+  on conflict (user_id, section_key) do update
+    set payload = excluded.payload,
+        schema_version = excluded.schema_version,
+        sync_revision = excluded.sync_revision,
+        updated_at = excluded.updated_at,
+        updated_from = excluded.updated_from;
+
+  perform public.publish_account_sync_event(v_user_id, v_revision, 'settings_public', coalesce(nullif(trim(p_source), ''), 'app'));
+
+  return jsonb_build_object(
+    'applied', true,
+    'section_key', v_key,
+    'sync_revision', v_revision,
+    'current_updated_at_ms', public.sync_to_ms(v_updated_at)
+  );
+end;
+$$;
+
+create or replace function public.sync_push_account_settings_sections_v13(
+  p_sections jsonb,
+  p_source text default 'app'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_item jsonb;
+  v_section_key text;
+  v_payload jsonb;
+  v_base_updated_at_ms_text text;
+  v_base_updated_at_ms bigint;
+  v_result jsonb;
+  v_results jsonb := '[]'::jsonb;
+  v_all_applied boolean := true;
+begin
+  if jsonb_typeof(coalesce(p_sections, 'null'::jsonb)) <> 'array' then
+    raise exception 'p_sections must be a JSON array' using errcode = '22023';
+  end if;
+
+  for v_item in select value from jsonb_array_elements(p_sections)
+  loop
+    v_section_key := coalesce(v_item->>'section_key', '');
+    v_payload := v_item->'payload';
+    v_base_updated_at_ms_text := v_item->>'base_updated_at_ms';
+    v_base_updated_at_ms := 0;
+
+    if not public.account_settings_section_key_allowed(v_section_key) then
+      v_result := jsonb_build_object(
+        'applied', false,
+        'section_key', v_section_key,
+        'reason', 'unsupported_section'
+      );
+    elsif not (v_item ? 'payload') or v_item->'payload' = 'null'::jsonb or jsonb_typeof(v_payload) <> 'object' then
+      v_result := jsonb_build_object(
+        'applied', false,
+        'section_key', v_section_key,
+        'reason', 'invalid_payload'
+      );
+    elsif (v_item ? 'base_updated_at_ms')
+      and (
+        coalesce(v_base_updated_at_ms_text, '') !~ '^[0-9]+$'
+        or length(v_base_updated_at_ms_text) > 19
+        or (length(v_base_updated_at_ms_text) = 19 and v_base_updated_at_ms_text > '9223372036854775807')
+      ) then
+      v_result := jsonb_build_object(
+        'applied', false,
+        'section_key', v_section_key,
+        'reason', 'invalid_base_updated_at_ms'
+      );
+    else
+      if v_base_updated_at_ms_text ~ '^[0-9]+$' then
+        v_base_updated_at_ms := v_base_updated_at_ms_text::bigint;
+      end if;
+
+      v_result := public.sync_push_account_settings_section_v13(
+        p_section_key => v_section_key,
+        p_payload => v_payload,
+        p_base_updated_at_ms => v_base_updated_at_ms,
+        p_source => p_source
+      );
+    end if;
+
+    v_results := v_results || jsonb_build_array(v_result);
+    if coalesce((v_result->>'applied')::boolean, false) = false then
+      v_all_applied := false;
+    end if;
+  end loop;
+
+  return jsonb_build_object(
+    'applied', v_all_applied,
+    'sections', v_results
+  );
+end;
+$$;
+
+revoke all on function public.sync_pull_account_settings_sections_v13() from public;
+grant execute on function public.sync_pull_account_settings_sections_v13() to authenticated;
+
+revoke all on function public.sync_pull_account_snapshot_v13() from public;
+grant execute on function public.sync_pull_account_snapshot_v13() to authenticated;
+
+revoke all on function public.sync_push_account_settings_section_v13(text, jsonb, bigint, text) from public;
+grant execute on function public.sync_push_account_settings_section_v13(text, jsonb, bigint, text) to authenticated;
+
+revoke all on function public.sync_push_account_settings_sections_v13(jsonb, text) from public;
+grant execute on function public.sync_push_account_settings_sections_v13(jsonb, text) to authenticated;
