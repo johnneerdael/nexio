@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -41,6 +42,46 @@ class ContinueWatchingIdentityResolverIdBundleTest {
 
         assertEquals("1396", record.idBundle.tmdb)
         assertNull(record.idBundle.imdb)
+    }
+
+    @Test
+    fun `Simkl-sourced WatchProgress tags record provider as SIMKL`() = runTest {
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = movieProgress(contentId = "tt1").copy(
+                    source = WatchProgress.SOURCE_SIMKL_PLAYBACK,
+                ),
+                languageTag = "en",
+            )
+        )
+        assertEquals(TrackingProvider.SIMKL, record.provider)
+    }
+
+    @Test
+    fun `Trakt-sourced WatchProgress tags record provider as TRAKT`() = runTest {
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = movieProgress(contentId = "tt1").copy(
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK,
+                ),
+                languageTag = "en",
+            )
+        )
+        assertEquals(TrackingProvider.TRAKT, record.provider)
+    }
+
+    @Test
+    fun `local WatchProgress defaults provider tag to TRAKT for legacy display`() = runTest {
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = movieProgress(contentId = "tt1"),
+                languageTag = "en",
+            )
+        )
+        assertEquals(TrackingProvider.TRAKT, record.provider)
     }
 
     @Test
