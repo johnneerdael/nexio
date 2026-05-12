@@ -1847,6 +1847,40 @@ class TraktProgressService @Inject constructor(
             }
 
             val episodeInfo = findEpisodeInfo(candidate.contentId, season, episode)
+            // Air-date gate: the next episode must already have aired in real time.
+            //
+            // Trakt's first_aired is ISO 8601 with TZ (e.g. "2026-05-16T02:00:00.000Z"); Instant.parse
+            // gives us the exact epoch ms. Comparing against System.currentTimeMillis() is
+            // timezone-independent — the user in any local TZ sees it once the broadcast moment has
+            // passed for them. ISO date-only strings ("2026-05-16") get parsed as well; they're
+            // treated as midnight UTC of that day.
+            //
+            // Conservative policy: when findEpisodeInfo returned no released string (typical for
+            // genuinely unaired/unannounced episodes — TVDB doesn't have a date yet), suppress the
+            // entry. Surfacing "next episode whose date we don't know" risks showing future-air
+            // teasers on Continue Watching, which is the bug we're fixing here.
+            val firstAiredMs = episodeInfo.released
+                ?.takeIf { it.isNotBlank() }
+                ?.let { raw ->
+                    runCatching { java.time.Instant.parse(raw).toEpochMilli() }.getOrNull()
+                        ?: runCatching {
+                            // Fallback for date-only strings ("YYYY-MM-DD"): midnight UTC of that day.
+                            java.time.LocalDate.parse(raw.substringBefore('T'))
+                                .atStartOfDay(java.time.ZoneOffset.UTC)
+                                .toInstant()
+                                .toEpochMilli()
+                        }.getOrNull()
+                }
+                ?: 0L
+            val nowMs = System.currentTimeMillis()
+            if (firstAiredMs <= 0L) {
+                trace("next-up validation suppressed unknown-air-date episode: show=$canonicalId s${season}e$episode")
+                return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            }
+            if (firstAiredMs > nowMs) {
+                trace("next-up validation suppressed unaired episode: show=$canonicalId s${season}e$episode airs=${episodeInfo.released}")
+                return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            }
             TraktNextUpValidationResult.CurrentAiredNextEpisode(
                 candidate.copy(
                     season = season,
@@ -1854,7 +1888,7 @@ class TraktProgressService @Inject constructor(
                     episodeTitle = nextEpisode.title ?: candidate.episodeTitle,
                     videoId = episodeInfo.videoId,
                     firstAired = episodeInfo.released,
-                    firstAiredMs = 0L,
+                    firstAiredMs = firstAiredMs,
                     traktEpisodeId = nextEpisode.ids?.trakt ?: candidate.traktEpisodeId
                 )
             )
