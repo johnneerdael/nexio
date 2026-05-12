@@ -278,7 +278,8 @@ internal data class SimklSecretPushSnapshot(
 
 internal data class KitsuSecretPushSnapshot(
     val accessToken: String,
-    val refreshToken: String
+    val refreshToken: String,
+    val expiresAtEpochSeconds: Long?
 )
 
 internal fun dirtyAccountSecretSectionKeys(
@@ -440,7 +441,7 @@ internal fun emptyAccountSecretPushSnapshot(): AccountSecretPushSnapshot {
             expiresIn = 0
         ),
         simkl = SimklSecretPushSnapshot(accessToken = ""),
-        kitsu = KitsuSecretPushSnapshot(accessToken = "", refreshToken = "")
+        kitsu = KitsuSecretPushSnapshot(accessToken = "", refreshToken = "", expiresAtEpochSeconds = null)
     )
 }
 
@@ -646,6 +647,7 @@ class AccountSettingsSyncService @Inject constructor(
             path.startsWith("catalogs.home") ||
             path.startsWith("catalogs.trakt") ||
             path.startsWith("catalogs.simkl") ||
+            path == "integrations.kitsuAuth" ||
             path == "integrations.traktAuth" ||
             path == "integrations.simklAuth" ||
             path.startsWith("playback.streamSelection")
@@ -782,6 +784,7 @@ class AccountSettingsSyncService @Inject constructor(
     private data class ResolvedRemoteKitsuSecrets(
         val accessPayload: AccountKitsuAccessSecretPayload?,
         val refreshPayload: AccountKitsuRefreshSecretPayload?,
+        val preserveLocalTokens: Boolean,
         val remote: KitsuAuthSyncSettings
     )
 
@@ -1373,7 +1376,8 @@ class AccountSettingsSyncService @Inject constructor(
             val remoteKitsu = settings.integrations.kitsuAuth
             val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
             val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
-            kitsuAuthDataStore.save(
+            kitsuAuthDataStore.saveForProfile(
+                defaultProfileId,
                 currentKitsu.copy(
                     enabled = true,
                     username = remoteKitsu.username,
@@ -1513,7 +1517,8 @@ class AccountSettingsSyncService @Inject constructor(
         val remoteKitsu = settings.integrations.kitsuAuth
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
         val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
-        kitsuAuthDataStore.save(
+        kitsuAuthDataStore.saveForProfile(
+            defaultProfileId,
             currentKitsu.copy(
                 enabled = true,
                 username = remoteKitsu.username,
@@ -1619,7 +1624,8 @@ class AccountSettingsSyncService @Inject constructor(
             ),
             kitsu = KitsuSecretPushSnapshot(
                 accessToken = kitsu.accessToken?.trim().orEmpty(),
-                refreshToken = kitsu.refreshToken?.trim().orEmpty()
+                refreshToken = kitsu.refreshToken?.trim().orEmpty(),
+                expiresAtEpochSeconds = kitsu.expiresAtEpochSeconds
             )
         )
     }
@@ -1867,7 +1873,10 @@ class AccountSettingsSyncService @Inject constructor(
                 "p_secret_payload",
                 Json.encodeToJsonElement(
                     AccountKitsuAccessSecretPayload.serializer(),
-                    AccountKitsuAccessSecretPayload(accessToken = accessToken)
+                    AccountKitsuAccessSecretPayload(
+                        accessToken = accessToken,
+                        expiresAtEpochSeconds = kitsuState.expiresAtEpochSeconds
+                    )
                 )
             )
             put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
@@ -2037,8 +2046,14 @@ class AccountSettingsSyncService @Inject constructor(
         } else {
             null
         }
-        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH) && resolvedKitsu == null) {
-            preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
+            when {
+                resolvedKitsu == null -> preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)
+                resolvedKitsu.preserveLocalTokens -> {
+                    preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
+                    followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
+                }
+            }
         }
         return ResolvedRemoteSecretsForApply(
             mdbListApiKey = mdbListApiKey,
@@ -2334,9 +2349,31 @@ class AccountSettingsSyncService @Inject constructor(
             return null
         }
 
+        val accessPayload = accessResult.getOrNull()
+        val refreshPayload = refreshResult.getOrNull()
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+        val remoteExpiresAt = accessPayload?.expiresAtEpochSeconds ?: remote.expiresAtEpochSeconds ?: 0L
+        val localState = kitsuAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
+        val localExpiresAt = localState.expiresAtEpochSeconds ?: 0L
+        val localHasTokens = !localState.accessToken.isNullOrBlank() &&
+            !localState.refreshToken.isNullOrBlank()
+        val preserveLocalTokens = accessToken.isNotBlank() &&
+            refreshToken.isNotBlank() &&
+            localHasTokens &&
+            localExpiresAt >= remoteExpiresAt
+        if (preserveLocalTokens) {
+            Log.w(
+                TAG,
+                "resolveRemoteKitsuSecrets: local token (expiresAt=$localExpiresAt) is newer " +
+                    "than remote (expiresAt=$remoteExpiresAt); preserving local"
+            )
+        }
+
         return ResolvedRemoteKitsuSecrets(
-            accessPayload = accessResult.getOrNull(),
-            refreshPayload = refreshResult.getOrNull(),
+            accessPayload = accessPayload,
+            refreshPayload = refreshPayload,
+            preserveLocalTokens = preserveLocalTokens,
             remote = remote
         )
     }
@@ -2354,6 +2391,18 @@ class AccountSettingsSyncService @Inject constructor(
 
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
         val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
+        if (secrets.preserveLocalTokens) {
+            kitsuAuthDataStore.saveForProfile(
+                defaultProfileId,
+                currentKitsu.copy(
+                    enabled = true,
+                    username = remote.username.takeIf { it.isNotBlank() },
+                    includeNsfw = remote.includeNsfw,
+                    password = null
+                )
+            )
+            return
+        }
         kitsuAuthDataStore.saveForProfile(
             defaultProfileId,
             currentKitsu.copy(
@@ -2361,7 +2410,9 @@ class AccountSettingsSyncService @Inject constructor(
                 username = remote.username.takeIf { it.isNotBlank() },
                 accessToken = accessToken,
                 refreshToken = refreshToken,
-                expiresAtEpochSeconds = remote.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
+                expiresAtEpochSeconds = secrets.accessPayload?.expiresAtEpochSeconds
+                    ?: remote.expiresAtEpochSeconds
+                    ?: currentKitsu.expiresAtEpochSeconds,
                 includeNsfw = remote.includeNsfw,
                 password = null
             )

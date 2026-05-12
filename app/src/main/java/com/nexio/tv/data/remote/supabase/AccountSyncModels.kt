@@ -545,7 +545,8 @@ data class AccountSimklAccessSecretPayload(
 
 @Serializable
 data class AccountKitsuAccessSecretPayload(
-    val accessToken: String = ""
+    val accessToken: String = "",
+    val expiresAtEpochSeconds: Long? = null
 )
 
 @Serializable

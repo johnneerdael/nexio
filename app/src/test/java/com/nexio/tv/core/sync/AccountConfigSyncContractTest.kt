@@ -803,6 +803,9 @@ class AccountConfigSyncContractTest {
         assertTrue(pullBlock.contains("if (scheduleSecretFollowUpPush && hasLiveFullAccountSession())"))
         assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
         assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH"))
+        assertTrue(resolveBlock.contains("resolvedKitsu.preserveLocalTokens"))
+        assertTrue(resolveBlock.contains("followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
+        assertTrue(resolveBlock.contains("preservedLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH"))
     }
 
     @Test
@@ -1089,7 +1092,8 @@ class AccountConfigSyncContractTest {
             simkl = SimklSecretPushSnapshot(accessToken = "remote-simkl-access"),
             kitsu = KitsuSecretPushSnapshot(
                 accessToken = "remote-kitsu-access",
-                refreshToken = "remote-kitsu-refresh"
+                refreshToken = "remote-kitsu-refresh",
+                expiresAtEpochSeconds = 9999L
             )
         )
     }
@@ -1130,6 +1134,25 @@ class AccountConfigSyncContractTest {
         advanceUntilIdle()
 
         assertEquals("integrations.kitsuAuth", emission.await())
+    }
+
+    @Test
+    fun `kitsu auth account sync is default profile scoped`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val primaryPathStart = source.indexOf("private fun isPrimaryProfileAccountPath")
+        val primaryPathEnd = source.indexOf("private fun isDefaultLegacyActive", startIndex = primaryPathStart)
+        val primaryPathBlock = source.substring(primaryPathStart, primaryPathEnd)
+        val publicApplyIndex = source.indexOf("if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH))")
+        val publicApplyEnd = source.indexOf("// Moved to v8 per-profile blob sync: Trakt catalog preferences", startIndex = publicApplyIndex)
+        val publicApplyBlock = source.substring(publicApplyIndex, publicApplyEnd)
+        val resolvedApplyIndex = source.indexOf("private suspend fun applyResolvedRemoteKitsuSecrets")
+        val realDebridIndex = source.indexOf("private suspend fun resolveRemoteRealDebridSecrets", startIndex = resolvedApplyIndex)
+        val resolvedApplyBlock = source.substring(resolvedApplyIndex, realDebridIndex)
+
+        assertTrue(primaryPathBlock.contains("path == \"integrations.kitsuAuth\""))
+        assertTrue(publicApplyBlock.contains("kitsuAuthDataStore.saveForProfile("))
+        assertTrue(resolvedApplyBlock.contains("kitsuAuthDataStore.saveForProfile("))
+        assertFalse(source.contains("kitsuAuthDataStore.save(\n"))
     }
 
     @Test
