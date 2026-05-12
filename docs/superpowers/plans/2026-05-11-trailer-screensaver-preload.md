@@ -306,12 +306,14 @@ interface TrailerPreloadGate {
     fun enqueue(source: TrailerPlaybackSource)
 
     /**
-     * Returns the prepared `MediaSource` if [source] equals the
-     * currently-enqueued source AND preload reached the
-     * `TRACKS_LOADED`-or-better state. Returns `null` otherwise (not
-     * enqueued, source mismatch, still in flight, failed). After a
-     * successful return the slot is cleared and the caller owns the
-     * returned `MediaSource`.
+     * Returns the preloaded `MediaSource` for [source] when [source]
+     * equals the currently-enqueued source. The returned source may be
+     * partially preloaded — `ExoPlayer` continues prep from whichever
+     * state Media3 has reached (even a partial buffer is faster than
+     * none). Returns `null` only when [source] is not the
+     * currently-enqueued source (mismatch, never enqueued, or already
+     * consumed). After a successful return the slot is cleared and the
+     * preload entry is removed from the underlying manager.
      */
     fun consume(source: TrailerPlaybackSource): MediaSource?
 
@@ -384,6 +386,7 @@ Append to `app/src/main/java/com/nexio/tv/ui/screensaver/TrailerPreloadGate.kt`:
 package com.nexio.tv.ui.screensaver
 
 import android.content.Context
+import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
@@ -400,7 +403,7 @@ private const val SLOT_RANK = 0
 /**
  * Target preload status: load tracks + a small initial buffer so the
  * decoder has enough to produce a first frame immediately on
- * setMediaSource(). LOADED_TO_POSITION_MS keeps the buffer bounded.
+ * setMediaSource(). Bounded to keep memory cost predictable.
  */
 private const val PRELOAD_BUFFER_MS = 2_000L
 
@@ -413,42 +416,56 @@ class DefaultTrailerPreloadGate(
 
     private val targetStatusControl =
         TargetPreloadStatusControl<Int, DefaultPreloadManager.PreloadStatus> { _ ->
-            DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(0L, PRELOAD_BUFFER_MS)
+            DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(PRELOAD_BUFFER_MS)
         }
 
     private val preloadManager: DefaultPreloadManager =
         DefaultPreloadManager.Builder(context, targetStatusControl).build()
 
+    // We track MediaItem (NOT the original MediaSource reference). The
+    // preload manager wraps the source in an internal MediaSourceHolder
+    // whose getMediaSource() returns the preloaded wrapper that owns the
+    // SampleQueue. BasePreloadManager.getMediaSource(MediaItem) is the
+    // only public path to retrieve that wrapper. If we kept the original
+    // source reference and passed it to ExoPlayer.setMediaSource(), the
+    // player would NOT use the preload buffer — zero speedup.
+    //
+    // We rely on MergingMediaSource.getMediaItem() returning the video
+    // source's MediaItem (which it does — Media3 fork inspected
+    // 2026-05-12). Within a screensaver session of 40 distinct trailers
+    // the videoUrls are all distinct YouTube CDN URLs, so MediaItems are
+    // unique. If that assumption ever breaks, switch the key to a
+    // synthetic MediaItem we construct from a stable per-source id.
     private var enqueuedSource: TrailerPlaybackSource? = null
-    private var enqueuedMediaSource: MediaSource? = null
+    private var enqueuedMediaItem: MediaItem? = null
 
     override fun enqueue(source: TrailerPlaybackSource) {
         if (enqueuedSource == source) return
-        val previous = enqueuedMediaSource
-        if (previous != null) {
-            preloadManager.remove(previous)
-        }
+        enqueuedMediaItem?.let { preloadManager.remove(it) }
         val mediaSource = factory.createMediaSource(source)
         preloadManager.add(mediaSource, SLOT_RANK)
         preloadManager.invalidate()
         enqueuedSource = source
-        enqueuedMediaSource = mediaSource
+        enqueuedMediaItem = mediaSource.mediaItem
     }
 
     override fun consume(source: TrailerPlaybackSource): MediaSource? {
         if (enqueuedSource != source) return null
-        val mediaSource = enqueuedMediaSource ?: return null
-        // Returns whatever preload state has been achieved. The caller
-        // hands this back to ExoPlayer.setMediaSource() which can play
-        // even if only partially preloaded (it'll continue buffering).
+        val mediaItem = enqueuedMediaItem ?: return null
+        val prepared = preloadManager.getMediaSource(mediaItem) ?: return null
+        // Remove the entry so the manager stops preloading it and frees
+        // the SampleQueue buffer for the NEXT preload. The returned
+        // `prepared` MediaSource is now owned by the caller (passed to
+        // ExoPlayer.setMediaSource); the player drives it independently.
+        preloadManager.remove(mediaItem)
         enqueuedSource = null
-        enqueuedMediaSource = null
-        return mediaSource
+        enqueuedMediaItem = null
+        return prepared
     }
 
     override fun release() {
         enqueuedSource = null
-        enqueuedMediaSource = null
+        enqueuedMediaItem = null
         preloadManager.release()
     }
 }
@@ -840,7 +857,7 @@ git commit -m "feat(trailer/screensaver): consume preloaded MediaSource on advan
 - Modify: `app/src/main/java/com/nexio/tv/ui/screensaver/TrailerPreloadGate.kt`
 - Modify: `app/src/main/java/com/nexio/tv/ui/screensaver/IdleTrailerScreensaverOverlay.kt`
 
-Per the spec, a single event with `{itemKey, status, elapsedMs}`. Status values: `queued | consumed_hit | consumed_miss`. (`ready` / `failed` from DefaultPreloadManager listeners are out of scope for the first pass — those require wiring into `BasePreloadManager.addListener` which we can add later if needed.)
+Per the spec, a single event with `{itemKey, status, elapsedMs}`. Status values: `queued | consumed_hit | consumed_miss`. Preload-side `ready` / `failed` from `BasePreloadManager.Listener` is intentionally not wired in v1 — the spec's failure-handling section delegates to the player's existing `onError` path. Add the listener later only if smoke tests show preload-side errors materially affect rotation feel.
 
 - [ ] **Step 1: Add the emit method**
 
@@ -1056,3 +1073,5 @@ In the commit message of the last code-touching task, append a line:
 **Type consistency:** `TrailerPreloadGate` interface used in Tasks 3, 4, 6, 7, 8, with the same `enqueue(source) / consume(source) / release()` signature throughout. `prepreparedMediaSource: MediaSource?` parameter in `TrailerPlayer` introduced in Task 5 and consumed in Task 7. `consumePreloadedSourceForAdvance(gate, source)` helper defined in Task 7 with matching test fixture.
 
 **Naming nit fixed:** spec uses `IdleTrailerPreloadManager`; plan uses `TrailerPreloadGate` (interface) + `DefaultTrailerPreloadGate` (impl). The rename avoids confusion with Media3's `PreloadManager` and clarifies its role as a thin gate, not a full manager rewrite. Spec wording remains correct at the conceptual level.
+
+**Post-audit revisions (2026-05-12):** verified `BasePreloadManager.add(MediaSource, T)` (line 194 of `media/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/source/preload/BasePreloadManager.java`) wraps the source in a `MediaSourceHolder` whose `getMediaSource()` returns the preloaded wrapper, not the original. Task 4 now tracks `MediaItem` (via `mediaSource.mediaItem`) and retrieves the prepared source via `preloadManager.getMediaSource(mediaItem)`; without this fix `setMediaSource(originalSource)` would have produced zero speedup. `consume()` now also calls `preloadManager.remove(mediaItem)` to release the `SampleQueue` buffer between rotations — without this, a 40-trailer session would leak 40 holders. Interface KDoc clarified to match implementation (returns partial preloads, returns null only on source mismatch). `specifiedRangeLoaded` switched to the 1-arg idiom. Spec's failure-handling section updated to match the v1 simplification (rely on player `onError` rather than wiring `BasePreloadManager.Listener`).
