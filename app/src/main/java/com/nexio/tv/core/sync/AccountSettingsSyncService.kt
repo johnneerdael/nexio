@@ -206,12 +206,168 @@ internal fun clearAppliedChangedPathsForGeneration(
 
 internal fun buildStaleRecoveryPreserveLocalSectionKeys(
     pendingChangedPaths: Set<String>,
-    appliedSectionKeysWithPendingSecrets: Set<AccountSettingsSectionKey>
+    dirtySecretSectionKeys: Set<AccountSettingsSectionKey>
 ): Set<AccountSettingsSectionKey> {
     return linkedSetOf<AccountSettingsSectionKey>().apply {
         pendingChangedPaths.mapNotNullTo(this, AccountSettingsSectionKey::fromChangedPath)
-        addAll(appliedSectionKeysWithPendingSecrets)
+        addAll(dirtySecretSectionKeys)
     }
+}
+
+internal data class AccountSecretPushSnapshot(
+    val mdbListApiKey: String,
+    val omdbApiKey: String,
+    val subtitleTranslationApiKey: String,
+    val legacyGeminiApiKey: String?,
+    val animeSkipClientId: String,
+    val rpdbApiKey: String,
+    val topPostersApiKey: String,
+    val premiumizeApiKey: String,
+    val torBoxApiKey: String,
+    val easyDebridApiKey: String,
+    val realDebrid: RealDebridSecretPushSnapshot,
+    val trakt: TraktSecretPushSnapshot,
+    val simkl: SimklSecretPushSnapshot
+)
+
+internal data class RealDebridSecretPushSnapshot(
+    val accessToken: String,
+    val refreshToken: String,
+    val tokenType: String,
+    val expiresIn: Int,
+    val userClientId: String,
+    val userClientSecret: String
+)
+
+internal data class TraktSecretPushSnapshot(
+    val accessToken: String,
+    val refreshToken: String,
+    val tokenType: String,
+    val createdAt: Long,
+    val expiresIn: Int
+)
+
+internal data class SimklSecretPushSnapshot(
+    val accessToken: String
+)
+
+internal fun dirtyAccountSecretSectionKeys(
+    current: AccountSecretPushSnapshot,
+    baseline: AccountSecretPushSnapshot?
+): Set<AccountSettingsSectionKey> {
+    if (baseline == null) return emptySet()
+
+    val normalizedCurrent = current.normalizedForPush()
+    val normalizedBaseline = baseline.normalizedForPush()
+    return linkedSetOf<AccountSettingsSectionKey>().apply {
+        if (normalizedCurrent.mdbListApiKey != normalizedBaseline.mdbListApiKey) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)
+        }
+        if (normalizedCurrent.omdbApiKey != normalizedBaseline.omdbApiKey) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_OMDB)
+        }
+        if (
+            normalizedCurrent.subtitleTranslationApiKey != normalizedBaseline.subtitleTranslationApiKey ||
+            normalizedCurrent.legacyGeminiApiKey != normalizedBaseline.legacyGeminiApiKey
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)
+        }
+        if (normalizedCurrent.animeSkipClientId != normalizedBaseline.animeSkipClientId) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)
+        }
+        if (
+            normalizedCurrent.rpdbApiKey != normalizedBaseline.rpdbApiKey ||
+            normalizedCurrent.topPostersApiKey != normalizedBaseline.topPostersApiKey
+        ) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)
+        }
+        if (normalizedCurrent.premiumizeApiKey != normalizedBaseline.premiumizeApiKey) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)
+        }
+        if (normalizedCurrent.torBoxApiKey != normalizedBaseline.torBoxApiKey) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)
+        }
+        if (normalizedCurrent.easyDebridApiKey != normalizedBaseline.easyDebridApiKey) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)
+        }
+        if (normalizedCurrent.realDebrid != normalizedBaseline.realDebrid) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)
+        }
+        if (normalizedCurrent.trakt != normalizedBaseline.trakt) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)
+        }
+        if (normalizedCurrent.simkl != normalizedBaseline.simkl) {
+            add(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)
+        }
+    }
+}
+
+private fun AccountSecretPushSnapshot.normalizedForPush(): AccountSecretPushSnapshot {
+    return copy(
+        mdbListApiKey = mdbListApiKey.trim(),
+        omdbApiKey = omdbApiKey.trim(),
+        subtitleTranslationApiKey = subtitleTranslationApiKey.trim(),
+        legacyGeminiApiKey = legacyGeminiApiKey?.trim(),
+        animeSkipClientId = animeSkipClientId.trim(),
+        rpdbApiKey = rpdbApiKey.trim(),
+        topPostersApiKey = topPostersApiKey.trim(),
+        premiumizeApiKey = premiumizeApiKey.trim(),
+        torBoxApiKey = torBoxApiKey.trim(),
+        easyDebridApiKey = easyDebridApiKey.trim(),
+        realDebrid = realDebrid.copy(
+            accessToken = realDebrid.accessToken.trim(),
+            refreshToken = realDebrid.refreshToken.trim(),
+            userClientId = realDebrid.userClientId.trim(),
+            userClientSecret = realDebrid.userClientSecret.trim()
+        ),
+        trakt = trakt.copy(
+            accessToken = trakt.accessToken.trim(),
+            refreshToken = trakt.refreshToken.trim()
+        ),
+        simkl = simkl.copy(accessToken = simkl.accessToken.trim())
+    )
+}
+
+private fun AccountSecretPushSnapshot.withSectionsFrom(
+    source: AccountSecretPushSnapshot,
+    sectionKeys: Set<AccountSettingsSectionKey>
+): AccountSecretPushSnapshot {
+    var merged = this
+    sectionKeys.forEach { sectionKey ->
+        merged = when (sectionKey) {
+            AccountSettingsSectionKey.INTEGRATIONS_MDBLIST ->
+                merged.copy(mdbListApiKey = source.mdbListApiKey)
+            AccountSettingsSectionKey.INTEGRATIONS_OMDB ->
+                merged.copy(omdbApiKey = source.omdbApiKey)
+            AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+            AccountSettingsSectionKey.INTEGRATIONS_GEMINI ->
+                merged.copy(
+                    subtitleTranslationApiKey = source.subtitleTranslationApiKey,
+                    legacyGeminiApiKey = source.legacyGeminiApiKey
+                )
+            AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP ->
+                merged.copy(animeSkipClientId = source.animeSkipClientId)
+            AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS ->
+                merged.copy(
+                    rpdbApiKey = source.rpdbApiKey,
+                    topPostersApiKey = source.topPostersApiKey
+                )
+            AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE ->
+                merged.copy(premiumizeApiKey = source.premiumizeApiKey)
+            AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX ->
+                merged.copy(torBoxApiKey = source.torBoxApiKey)
+            AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID ->
+                merged.copy(easyDebridApiKey = source.easyDebridApiKey)
+            AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID ->
+                merged.copy(realDebrid = source.realDebrid)
+            AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH ->
+                merged.copy(trakt = source.trakt)
+            AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH ->
+                merged.copy(simkl = source.simkl)
+            else -> merged
+        }
+    }
+    return merged
 }
 
 @Singleton
@@ -269,6 +425,8 @@ class AccountSettingsSyncService @Inject constructor(
 
     @Volatile
     private var lastAppliedRemoteRevision: Long = 0L
+    @Volatile
+    private var lastSyncedAccountSecretSnapshot: AccountSecretPushSnapshot? = null
     private var lastRemoteTraktPinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
     private var lastRemoteMDBListPinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList()
 
@@ -381,11 +539,11 @@ class AccountSettingsSyncService @Inject constructor(
     /**
      * v10 wrapper for `sync_set_account_secret`. Reads the current
      * ACCOUNT_SECRETS watermark, injects it as `p_base_updated_at_ms`, and on
-     * applied responses advances the watermark. Stale-base rejections are
-     * logged and silently dropped — the next `pullFromRemoteAndApply` cycle
-     * reconciles.
+     * applied responses advances the watermark. Stale-base rejections advance
+     * to the server watermark and let the caller schedule a retry without
+     * pulling remote secrets over local dirty values.
      */
-    private suspend fun setAccountSecretV10(extraParams: JsonObject) {
+    private suspend fun setAccountSecretV10(extraParams: JsonObject): Boolean {
         val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
         val params = JsonObject(extraParams + ("p_base_updated_at_ms" to JsonPrimitive(baseMs)))
         val outcome = runV10Push {
@@ -394,19 +552,22 @@ class AccountSettingsSyncService @Inject constructor(
             }
         }
         when (outcome) {
-            is V10PushOutcome.Applied ->
+            is V10PushOutcome.Applied -> {
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
+                return true
+            }
             is V10PushOutcome.StaleBase -> {
-                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); pulling — local secret change will be overwritten by remote")
-                pullFromRemoteAndApply()
+                Log.w(TAG, "setAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); retrying after watermark advance")
+                handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)
+                return false
             }
             is V10PushOutcome.Failed -> throw outcome.cause
-            is V10PushOutcome.FieldConflict -> Unit
+            is V10PushOutcome.FieldConflict -> return false
         }
     }
 
     /** v10 wrapper for `sync_delete_account_secret`. See [setAccountSecretV10]. */
-    private suspend fun deleteAccountSecretV10(extraParams: JsonObject) {
+    private suspend fun deleteAccountSecretV10(extraParams: JsonObject): Boolean {
         val baseMs = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
         val params = JsonObject(extraParams + ("p_base_updated_at_ms" to JsonPrimitive(baseMs)))
         val outcome = runV10Push {
@@ -415,15 +576,22 @@ class AccountSettingsSyncService @Inject constructor(
             }
         }
         when (outcome) {
-            is V10PushOutcome.Applied ->
+            is V10PushOutcome.Applied -> {
                 syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = outcome.currentUpdatedAtMs)
+                return true
+            }
             is V10PushOutcome.StaleBase -> {
-                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); pulling — local delete will be overwritten by remote")
-                pullFromRemoteAndApply()
+                Log.w(TAG, "deleteAccountSecretV10 stale (server=${outcome.currentUpdatedAtMs}, base=$baseMs); retrying after watermark advance")
+                handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)
+                return false
             }
             is V10PushOutcome.Failed -> throw outcome.cause
-            is V10PushOutcome.FieldConflict -> Unit
+            is V10PushOutcome.FieldConflict -> return false
         }
+    }
+
+    private suspend fun handleStaleAccountSecretPush(currentUpdatedAtMs: Long) {
+        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = currentUpdatedAtMs)
     }
 
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
@@ -440,43 +608,6 @@ class AccountSettingsSyncService @Inject constructor(
         val changedPaths: List<String>,
         val changedPathsGeneration: Long,
         val secrets: AccountSecretPushSnapshot
-    )
-
-    private data class AccountSecretPushSnapshot(
-        val mdbListApiKey: String,
-        val omdbApiKey: String,
-        val subtitleTranslationApiKey: String,
-        val legacyGeminiApiKey: String?,
-        val animeSkipClientId: String,
-        val rpdbApiKey: String,
-        val topPostersApiKey: String,
-        val premiumizeApiKey: String,
-        val torBoxApiKey: String,
-        val easyDebridApiKey: String,
-        val realDebrid: RealDebridSecretPushSnapshot,
-        val trakt: TraktSecretPushSnapshot,
-        val simkl: SimklSecretPushSnapshot
-    )
-
-    private data class RealDebridSecretPushSnapshot(
-        val accessToken: String,
-        val refreshToken: String,
-        val tokenType: String,
-        val expiresIn: Int,
-        val userClientId: String,
-        val userClientSecret: String
-    )
-
-    private data class TraktSecretPushSnapshot(
-        val accessToken: String,
-        val refreshToken: String,
-        val tokenType: String,
-        val createdAt: Long,
-        val expiresIn: Int
-    )
-
-    private data class SimklSecretPushSnapshot(
-        val accessToken: String
     )
 
     private data class ResolvedRemoteSecretsForApply(
@@ -530,6 +661,7 @@ class AccountSettingsSyncService @Inject constructor(
             } ?: return@withContext Result.success(Unit)
 
             var scheduleFollowUpPush = false
+            val dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)
 
             if (snapshot.changedPaths.isNotEmpty()) {
                 if (!hasLiveFullAccountSession()) return@withContext Result.success(Unit)
@@ -605,15 +737,21 @@ class AccountSettingsSyncService @Inject constructor(
                             }
                             buildStaleRecoveryPreserveLocalSectionKeys(
                                 pendingChangedPaths = pendingChangedPaths.toSet(),
-                                appliedSectionKeysWithPendingSecrets = appliedSectionKeys
+                                dirtySecretSectionKeys = dirtySecretSectionKeys
                             )
                         }
                         scheduleFollowUpPush = true
                         Log.w(TAG, "Account settings section push stale; pulling without clearing pending local changes")
-                        pullFromRemoteAndApply(
+                        val staleRecoveryResult = pullFromRemoteAndApply(
                             clearPendingChanges = false,
                             preserveLocalSectionKeys = preserveLocalSectionKeys
                         )
+                        if (staleRecoveryResult.isFailure) {
+                            return@withContext Result.failure(
+                                staleRecoveryResult.exceptionOrNull()
+                                    ?: IllegalStateException("Account settings stale recovery pull failed")
+                            )
+                        }
                         if (scheduleFollowUpPush) {
                             pushJob = scope.launch {
                                 delay(500)
@@ -626,7 +764,14 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             if (!hasLiveFullAccountSession()) return@withContext Result.success(Unit)
-            syncAccountSecretPushSnapshotToRemote(snapshot.secrets)
+            val secretPushSucceeded = syncAccountSecretPushSnapshotToRemote(snapshot.secrets, dirtySecretSectionKeys)
+            if (secretPushSucceeded) {
+                if (dirtySecretSectionKeys.isNotEmpty()) {
+                    lastSyncedAccountSecretSnapshot = snapshot.secrets.normalizedForPush()
+                }
+            } else {
+                scheduleFollowUpPush = true
+            }
 
             if (scheduleFollowUpPush) {
                 pushJob = scope.launch {
@@ -690,6 +835,11 @@ class AccountSettingsSyncService @Inject constructor(
                         sectionKeys = sectionKeysToApply
                     )
                     applyResolvedRemoteSecrets(resolvedSecrets)
+                    updateLastSyncedAccountSecretBaselineAfterPull(
+                        current = buildAccountSecretPushSnapshot(),
+                        appliedSectionKeys = sectionKeysToApply,
+                        preserveLocalSectionKeys = preserveLocalSectionKeys
+                    )
                     lastAppliedRemoteRevision = settingsRevision
                     clearSuppression(switchGenAtPullStart)
                     if (clearPendingChanges) {
@@ -748,6 +898,29 @@ class AccountSettingsSyncService @Inject constructor(
             authState = authManager.authState.value,
             sessionUserId = authManager.currentSessionUserId
         )
+    }
+
+    private fun dirtyAccountSecretSectionKeys(
+        current: AccountSecretPushSnapshot
+    ): Set<AccountSettingsSectionKey> {
+        return dirtyAccountSecretSectionKeys(current, lastSyncedAccountSecretSnapshot)
+    }
+
+    private fun updateLastSyncedAccountSecretBaselineAfterPull(
+        current: AccountSecretPushSnapshot,
+        appliedSectionKeys: Set<AccountSettingsSectionKey>,
+        preserveLocalSectionKeys: Set<AccountSettingsSectionKey>
+    ) {
+        val normalizedCurrent = current.normalizedForPush()
+        val existing = lastSyncedAccountSecretSnapshot
+        lastSyncedAccountSecretSnapshot = when {
+            preserveLocalSectionKeys.isEmpty() -> normalizedCurrent
+            existing != null -> existing.withSectionsFrom(normalizedCurrent, appliedSectionKeys)
+            else -> {
+                Log.w(TAG, "Skipping partial account-secret baseline update without an existing baseline")
+                null
+            }
+        }
     }
 
     private suspend fun buildLocalPayload(): AccountConfigSyncPayload {
@@ -1271,37 +1444,69 @@ class AccountSettingsSyncService @Inject constructor(
         )
     }
 
-    private suspend fun syncAccountSecretPushSnapshotToRemote(snapshot: AccountSecretPushSnapshot) {
-        syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, snapshot.mdbListApiKey)
-        syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, snapshot.omdbApiKey)
-        syncApiKeySecretToRemote(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF, snapshot.subtitleTranslationApiKey)
-        syncApiKeySecretToRemote(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF, snapshot.animeSkipClientId)
-        snapshot.legacyGeminiApiKey?.let { legacyGeminiKey ->
-            syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
+    private suspend fun syncAccountSecretPushSnapshotToRemote(
+        snapshot: AccountSecretPushSnapshot,
+        dirtySectionKeys: Set<AccountSettingsSectionKey>
+    ): Boolean {
+        if (dirtySectionKeys.isEmpty()) return true
+
+        var allApplied = true
+        if (AccountSettingsSectionKey.INTEGRATIONS_MDBLIST in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, snapshot.mdbListApiKey) && allApplied
         }
-        syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, snapshot.rpdbApiKey)
-        syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, snapshot.topPostersApiKey)
-        syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, snapshot.premiumizeApiKey)
-        syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, snapshot.torBoxApiKey)
-        syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, snapshot.easyDebridApiKey)
-        syncRealDebridSecretsToRemote(snapshot.realDebrid)
-        syncTraktSecretsToRemote(snapshot.trakt)
-        syncSimklSecretsToRemote(snapshot.simkl)
+        if (AccountSettingsSectionKey.INTEGRATIONS_OMDB in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, snapshot.omdbApiKey) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(
+                TRANSLATION_SECRET_TYPE,
+                TRANSLATION_SECRET_REF,
+                snapshot.subtitleTranslationApiKey
+            ) && allApplied
+            snapshot.legacyGeminiApiKey?.let { legacyGeminiKey ->
+                allApplied = syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey) && allApplied
+            }
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF, snapshot.animeSkipClientId) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, snapshot.rpdbApiKey) && allApplied
+            allApplied = syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, snapshot.topPostersApiKey) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, snapshot.premiumizeApiKey) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, snapshot.torBoxApiKey) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID in dirtySectionKeys) {
+            allApplied = syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, snapshot.easyDebridApiKey) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID in dirtySectionKeys) {
+            allApplied = syncRealDebridSecretsToRemote(snapshot.realDebrid) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH in dirtySectionKeys) {
+            allApplied = syncTraktSecretsToRemote(snapshot.trakt) && allApplied
+        }
+        if (AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH in dirtySectionKeys) {
+            allApplied = syncSimklSecretsToRemote(snapshot.simkl) && allApplied
+        }
+        return allApplied
     }
 
-    private suspend fun syncApiKeySecretToRemote(secretType: String, secretRef: String, rawApiKey: String) {
+    private suspend fun syncApiKeySecretToRemote(secretType: String, secretRef: String, rawApiKey: String): Boolean {
         val apiKey = rawApiKey.trim()
 
         if (apiKey.isBlank()) {
-            deleteAccountSecretV10(buildJsonObject {
+            return deleteAccountSecretV10(buildJsonObject {
                         put("p_secret_type", secretType)
                         put("p_secret_ref", secretRef)
                         put("p_source", "app")
                     })
-            return
         }
 
-        setAccountSecretV10(buildJsonObject {
+        return setAccountSecretV10(buildJsonObject {
                     put("p_secret_type", secretType)
                     put("p_secret_ref", secretRef)
                     put("p_secret_payload", Json.encodeToJsonElement(AccountSecretApiKeyPayload.serializer(), AccountSecretApiKeyPayload(apiKey)))
@@ -1311,7 +1516,7 @@ class AccountSettingsSyncService @Inject constructor(
                 })
     }
 
-    private suspend fun syncRealDebridSecretsToRemote(state: RealDebridSecretPushSnapshot) {
+    private suspend fun syncRealDebridSecretsToRemote(state: RealDebridSecretPushSnapshot): Boolean {
         val accessToken = state.accessToken
         val refreshToken = state.refreshToken
         val userClientId = state.userClientId
@@ -1323,20 +1528,20 @@ class AccountSettingsSyncService @Inject constructor(
             userClientId.isBlank() ||
             userClientSecret.isBlank()
         ) {
-            deleteAccountSecretV10(buildJsonObject {
+            val accessApplied = deleteAccountSecretV10(buildJsonObject {
                 put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
                 put("p_secret_ref", REAL_DEBRID_SECRET_REF)
                 put("p_source", "app")
             })
-            deleteAccountSecretV10(buildJsonObject {
+            val refreshApplied = deleteAccountSecretV10(buildJsonObject {
                 put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
                 put("p_secret_ref", REAL_DEBRID_SECRET_REF)
                 put("p_source", "app")
             })
-            return
+            return accessApplied && refreshApplied
         }
 
-        setAccountSecretV10(buildJsonObject {
+        val accessApplied = setAccountSecretV10(buildJsonObject {
             put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
             put("p_secret_ref", REAL_DEBRID_SECRET_REF)
             put(
@@ -1356,7 +1561,7 @@ class AccountSettingsSyncService @Inject constructor(
             put("p_status", "configured")
             put("p_source", "app")
         })
-        setAccountSecretV10(buildJsonObject {
+        val refreshApplied = setAccountSecretV10(buildJsonObject {
             put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
             put("p_secret_ref", REAL_DEBRID_SECRET_REF)
             put(
@@ -1370,27 +1575,28 @@ class AccountSettingsSyncService @Inject constructor(
             put("p_status", "configured")
             put("p_source", "app")
         })
+        return accessApplied && refreshApplied
     }
 
-    private suspend fun syncTraktSecretsToRemote(traktState: TraktSecretPushSnapshot) {
+    private suspend fun syncTraktSecretsToRemote(traktState: TraktSecretPushSnapshot): Boolean {
         val accessToken = traktState.accessToken
         val refreshToken = traktState.refreshToken
 
         if (accessToken.isBlank() || refreshToken.isBlank()) {
-            deleteAccountSecretV10(buildJsonObject {
+            val accessApplied = deleteAccountSecretV10(buildJsonObject {
                 put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
                 put("p_secret_ref", TRAKT_SECRET_REF)
                 put("p_source", "app")
             })
-            deleteAccountSecretV10(buildJsonObject {
+            val refreshApplied = deleteAccountSecretV10(buildJsonObject {
                 put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
                 put("p_secret_ref", TRAKT_SECRET_REF)
                 put("p_source", "app")
             })
-            return
+            return accessApplied && refreshApplied
         }
 
-        setAccountSecretV10(buildJsonObject {
+        val accessApplied = setAccountSecretV10(buildJsonObject {
             put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
             put("p_secret_ref", TRAKT_SECRET_REF)
             put(
@@ -1409,7 +1615,7 @@ class AccountSettingsSyncService @Inject constructor(
             put("p_status", "configured")
             put("p_source", "app")
         })
-        setAccountSecretV10(buildJsonObject {
+        val refreshApplied = setAccountSecretV10(buildJsonObject {
             put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
             put("p_secret_ref", TRAKT_SECRET_REF)
             put(
@@ -1423,21 +1629,21 @@ class AccountSettingsSyncService @Inject constructor(
             put("p_status", "configured")
             put("p_source", "app")
         })
+        return accessApplied && refreshApplied
     }
 
-    private suspend fun syncSimklSecretsToRemote(simklState: SimklSecretPushSnapshot) {
+    private suspend fun syncSimklSecretsToRemote(simklState: SimklSecretPushSnapshot): Boolean {
         val accessToken = simklState.accessToken
 
         if (accessToken.isBlank()) {
-            deleteAccountSecretV10(buildJsonObject {
+            return deleteAccountSecretV10(buildJsonObject {
                         put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
                         put("p_secret_ref", SIMKL_SECRET_REF)
                         put("p_source", "app")
                     })
-            return
         }
 
-        setAccountSecretV10(buildJsonObject {
+        return setAccountSecretV10(buildJsonObject {
                     put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
                     put("p_secret_ref", SIMKL_SECRET_REF)
                     put(
