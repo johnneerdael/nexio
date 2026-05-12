@@ -16,12 +16,15 @@ internal sealed interface SeasonMediaCandidate {
     data class Streailer(val candidate: StreailerTrailerCandidate) : SeasonMediaCandidate
 }
 
-internal fun rankTmdbRecapCandidates(results: List<TmdbVideoResult>): List<TmdbVideoResult> {
+internal fun rankTmdbRecapCandidates(
+    results: List<TmdbVideoResult>,
+    originalLanguage: String? = null
+): List<TmdbVideoResult> {
     return results
         .asSequence()
         .filter { (it.site ?: "").equals("YouTube", ignoreCase = true) }
         .filter { !it.key.isNullOrBlank() }
-        .filter { isEnglishTmdbVideoLanguage(it.iso6391) }
+        .filter { isTmdbVideoLanguageEligible(it.iso6391, originalLanguage) }
         .filter { it.type?.trim()?.lowercase() == "recap" }
         .sortedWith(
             compareBy<TmdbVideoResult> { if (it.official == true) 0 else 1 }
@@ -86,9 +89,10 @@ internal fun selectSeasonStreailerRecapCandidate(
 
 internal fun orderedSeasonRecapCandidates(
     tmdbResults: List<TmdbVideoResult>,
-    streailerRecap: StreailerTrailerCandidate?
+    streailerRecap: StreailerTrailerCandidate?,
+    originalLanguage: String? = null
 ): List<SeasonMediaCandidate> {
-    val tmdbCandidates = rankTmdbRecapCandidates(tmdbResults)
+    val tmdbCandidates = rankTmdbRecapCandidates(tmdbResults, originalLanguage)
         .mapNotNull { result ->
             result.key
                 ?.trim()

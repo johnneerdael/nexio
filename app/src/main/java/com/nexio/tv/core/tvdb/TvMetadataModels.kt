@@ -132,7 +132,8 @@ data class TvdbTrailerCandidate(
     val url: String,
     val name: String? = null,
     val type: String? = null,
-    val seasonNumber: Int? = null
+    val seasonNumber: Int? = null,
+    val language: String? = null
 ) {
     val isRecap: Boolean
         get() = name?.contains("recap", ignoreCase = true) == true ||

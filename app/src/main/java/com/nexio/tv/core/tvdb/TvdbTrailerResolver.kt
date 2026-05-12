@@ -2,6 +2,7 @@ package com.nexio.tv.core.tvdb
 
 import android.util.Log
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.locale.TrailerLanguageMatcher
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
@@ -43,14 +44,18 @@ class TvdbTrailerResolver @Inject constructor(
     ): TvdbTrailerLookupResult = withContext(Dispatchers.IO) {
         if (!isTvdbActiveForTv(type)) return@withContext TvdbTrailerLookupResult.Inactive
 
-        val titleCandidates = fetchDefaultTitleCandidates(contentId)
+        val seriesContext = fetchDefaultTitleContext(contentId)
             ?: return@withContext TvdbTrailerLookupResult.Missing
-        if (titleCandidates.isEmpty()) {
+        if (seriesContext.candidates.isEmpty()) {
             Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=no_title_candidates")
             return@withContext TvdbTrailerLookupResult.Missing
         }
 
-        resolveFirstUsable(titleCandidates, contentId)
+        val filtered = filterByOriginalLanguage(seriesContext.candidates, seriesContext.originalLanguage, contentId)
+        if (filtered.isEmpty()) {
+            return@withContext TvdbTrailerLookupResult.Missing
+        }
+        resolveFirstUsable(filtered, contentId)
     }
 
     suspend fun resolveSeasonTrailer(
@@ -63,16 +68,20 @@ class TvdbTrailerResolver @Inject constructor(
         if (!isTvdbActiveForTv(type)) return@withContext TvdbTrailerLookupResult.Inactive
         if (seasonNumber == null || seasonNumber < 0) return@withContext TvdbTrailerLookupResult.Inactive
 
-        val candidates = fetchAndMapCandidates(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
+        val context = fetchAndMapContext(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
 
-        val seasonTrailers = candidates.filter {
+        val seasonTrailers = context.candidates.filter {
             !it.isRecap && it.seasonNumber == seasonNumber
         }
         if (seasonTrailers.isEmpty()) {
             return@withContext TvdbTrailerLookupResult.Missing
         }
 
-        resolveFirstUsable(seasonTrailers, contentId)
+        val filtered = filterByOriginalLanguage(seasonTrailers, context.originalLanguage, contentId)
+        if (filtered.isEmpty()) {
+            return@withContext TvdbTrailerLookupResult.Missing
+        }
+        resolveFirstUsable(filtered, contentId)
     }
 
     suspend fun resolveSeasonRecap(
@@ -85,16 +94,20 @@ class TvdbTrailerResolver @Inject constructor(
         if (!isTvdbActiveForTv(type)) return@withContext TvdbTrailerLookupResult.Inactive
         if (seasonNumber == null || seasonNumber < 0) return@withContext TvdbTrailerLookupResult.Inactive
 
-        val candidates = fetchAndMapCandidates(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
+        val context = fetchAndMapContext(contentId) ?: return@withContext TvdbTrailerLookupResult.Missing
 
-        val recapCandidates = candidates.filter {
+        val recapCandidates = context.candidates.filter {
             it.isRecap && it.seasonNumber == seasonNumber
         }
         if (recapCandidates.isEmpty()) {
             return@withContext TvdbTrailerLookupResult.Missing
         }
 
-        resolveFirstUsable(recapCandidates, contentId)
+        val filtered = filterByOriginalLanguage(recapCandidates, context.originalLanguage, contentId)
+        if (filtered.isEmpty()) {
+            return@withContext TvdbTrailerLookupResult.Missing
+        }
+        resolveFirstUsable(filtered, contentId)
     }
 
     private suspend fun isTvdbActiveForTv(type: String?): Boolean {
@@ -104,7 +117,7 @@ class TvdbTrailerResolver @Inject constructor(
         return tvdbSettingsDataStore.settings.first().isActive
     }
 
-    private suspend fun fetchAndMapCandidates(contentId: String?): List<TvdbTrailerCandidate>? {
+    private suspend fun fetchAndMapContext(contentId: String?): SeriesTrailerContext? {
         val trimmedId = contentId?.trim()?.takeIf { it.isNotBlank() } ?: return null
 
         val identity = resolveIdentity(trimmedId) ?: run {
@@ -123,10 +136,10 @@ class TvdbTrailerResolver @Inject constructor(
             return null
         }
 
-        return candidates
+        return SeriesTrailerContext(candidates = candidates, originalLanguage = record.originalLanguage)
     }
 
-    private suspend fun fetchDefaultTitleCandidates(contentId: String?): List<TvdbTrailerCandidate>? {
+    private suspend fun fetchDefaultTitleContext(contentId: String?): SeriesTrailerContext? {
         val trimmedId = contentId?.trim()?.takeIf { it.isNotBlank() } ?: return null
 
         val identity = resolveIdentity(trimmedId) ?: run {
@@ -139,9 +152,11 @@ class TvdbTrailerResolver @Inject constructor(
             return null
         }
 
+        val seriesOriginalLanguage = record.originalLanguage
+
         val seasonCandidates = fetchLatestSeasonTrailerCandidates(record)
         if (seasonCandidates.isNotEmpty()) {
-            return seasonCandidates
+            return SeriesTrailerContext(candidates = seasonCandidates, originalLanguage = seriesOriginalLanguage)
         }
 
         val candidates = tvdbTrailerMapper.mapCandidates(record)
@@ -150,8 +165,52 @@ class TvdbTrailerResolver @Inject constructor(
             Log.d(TAG, "tvdb_trailer_missing contentId=$contentId reason=no_trailers_on_record")
             return null
         }
-        return candidates
+        return SeriesTrailerContext(candidates = candidates, originalLanguage = seriesOriginalLanguage)
     }
+
+    /**
+     * Filters candidates so only those whose declared language matches the series'
+     * originalLanguage survive. A candidate with no declared language is **rejected**
+     * (strictest mode — operator decision per CLAUDE.md trailer-eligibility rule).
+     *
+     * When the series carries no originalLanguage (TVDB record incomplete), fall back to
+     * accepting English-tagged candidates only ("eng" / "en"). Treating unknown originals
+     * as "any" reproduces the bug; we instead degrade to the safest assumption (English),
+     * which matches the previous default for the bulk of the catalog.
+     */
+    private fun filterByOriginalLanguage(
+        candidates: List<TvdbTrailerCandidate>,
+        seriesOriginalLanguage: String?,
+        contentId: String?
+    ): List<TvdbTrailerCandidate> {
+        val target = seriesOriginalLanguage?.trim()?.takeIf { it.isNotBlank() }
+        val matched = candidates.filter { candidate ->
+            val candidateLanguage = candidate.language?.trim()?.takeIf { it.isNotBlank() }
+            if (candidateLanguage == null) return@filter false
+            if (target != null) {
+                TrailerLanguageMatcher.matches(candidateLanguage, target)
+            } else {
+                TrailerLanguageMatcher.matches(candidateLanguage, "en")
+            }
+        }
+        if (matched.size < candidates.size) {
+            val rejected = candidates - matched.toSet()
+            for (candidate in rejected) {
+                Log.d(
+                    TAG,
+                    "tvdb_trailer_rejected_language contentId=$contentId " +
+                        "trailerLanguage=${candidate.language.orEmpty()} " +
+                        "seriesOriginalLanguage=${target.orEmpty()} url=${candidate.url}"
+                )
+            }
+        }
+        return matched
+    }
+
+    private data class SeriesTrailerContext(
+        val candidates: List<TvdbTrailerCandidate>,
+        val originalLanguage: String?
+    )
 
     private suspend fun fetchLatestSeasonTrailerCandidates(
         series: TvdbSeriesExtendedRecord

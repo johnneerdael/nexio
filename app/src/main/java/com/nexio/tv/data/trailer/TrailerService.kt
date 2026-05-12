@@ -760,7 +760,7 @@ class TrailerService(
                 preferredLanguage = tmdbLanguage,
                 apiKey = apiKey
             )
-            for (candidate in rankTmdbVideoCandidates(seasonResults)) {
+            for (candidate in rankTmdbVideoCandidates(seasonResults, originalLanguage)) {
                 val key = candidate.key?.trim().orEmpty()
                 if (key.isBlank()) continue
                 resolveYouTubeTrailer(
@@ -814,7 +814,8 @@ class TrailerService(
             "movie" -> trailerTmdbProvider.fetchMovieVideos(
                 tmdbId = numericTmdbId,
                 preferredLanguage = tmdbLanguage,
-                apiKey = apiKey
+                apiKey = apiKey,
+                originalLanguage = originalLanguage
             )
             "tv" -> {
                 val seasonResults = seasonNumber
@@ -829,7 +830,7 @@ class TrailerService(
                         )
                     }
                     .orEmpty()
-                val rankedSeasonResults = rankTmdbVideoCandidates(seasonResults)
+                val rankedSeasonResults = rankTmdbVideoCandidates(seasonResults, originalLanguage)
                 if (rankedSeasonResults.isNotEmpty()) {
                     Log.d(TAG, "Using TMDB season trailer candidates for tmdbId=$numericTmdbId season=$seasonNumber")
                     rankedSeasonResults
@@ -842,22 +843,25 @@ class TrailerService(
                     trailerTmdbProvider.fetchTvVideos(
                         tmdbId = numericTmdbId,
                         preferredLanguage = tmdbLanguage,
-                        apiKey = apiKey
+                        apiKey = apiKey,
+                        originalLanguage = originalLanguage
                     )
                 }
             }
             else -> trailerTmdbProvider.fetchMovieVideos(
                 tmdbId = numericTmdbId,
                 preferredLanguage = tmdbLanguage,
-                apiKey = apiKey
+                apiKey = apiKey,
+                originalLanguage = originalLanguage
             ) + trailerTmdbProvider.fetchTvVideos(
                 tmdbId = numericTmdbId,
                 preferredLanguage = tmdbLanguage,
-                apiKey = apiKey
+                apiKey = apiKey,
+                originalLanguage = originalLanguage
             )
         }
 
-        for (candidate in rankTmdbVideoCandidates(tmdbResults)) {
+        for (candidate in rankTmdbVideoCandidates(tmdbResults, originalLanguage)) {
             val key = candidate.key?.trim().orEmpty()
             if (key.isBlank()) continue
             resolveYouTubeTrailer(
@@ -934,7 +938,7 @@ class TrailerService(
         val streailerRecap = fetchStreailerStreams(contentId = contentId, type = type)
             ?.let { selectSeasonStreailerRecapCandidate(it, normalizedSeason) }
 
-        for (candidate in orderedSeasonRecapCandidates(tmdbRecapResults, streailerRecap)) {
+        for (candidate in orderedSeasonRecapCandidates(tmdbRecapResults, streailerRecap, originalLanguage)) {
             when (candidate) {
                 is SeasonMediaCandidate.TmdbYouTube -> {
                     resolveYouTubeTrailer(
@@ -1136,12 +1140,15 @@ internal fun normalizeStreailerType(type: String?): String? {
     }
 }
 
-internal fun rankTmdbVideoCandidates(results: List<TmdbVideoResult>): List<TmdbVideoResult> {
+internal fun rankTmdbVideoCandidates(
+    results: List<TmdbVideoResult>,
+    originalLanguage: String? = null
+): List<TmdbVideoResult> {
     return results
         .asSequence()
         .filter { (it.site ?: "").equals("YouTube", ignoreCase = true) }
         .filter { !it.key.isNullOrBlank() }
-        .filter { isEnglishTmdbVideoLanguage(it.iso6391) }
+        .filter { isTmdbVideoLanguageEligible(it.iso6391, originalLanguage) }
         .filter {
             when (it.type?.trim()?.lowercase()) {
                 "trailer", "teaser" -> true
@@ -1157,13 +1164,13 @@ internal fun rankTmdbVideoCandidates(results: List<TmdbVideoResult>): List<TmdbV
         .toList()
 }
 
+@Deprecated(
+    "Use isTmdbVideoLanguageEligible(videoLanguage, originalLanguage). " +
+        "Hardcoded English breaks for non-English originals (e.g. anime, foreign films).",
+    ReplaceWith("isTmdbVideoLanguageEligible(languageCode, null)")
+)
 internal fun isEnglishTmdbVideoLanguage(languageCode: String?): Boolean {
-    val normalized = languageCode
-        ?.trim()
-        ?.lowercase()
-        ?.takeIf { it.isNotEmpty() }
-        ?: return false
-    return normalized == "en"
+    return isTmdbVideoLanguageEligible(languageCode, null)
 }
 
 internal fun selectStreailerTrailerCandidate(streams: List<Stream>): StreailerTrailerCandidate? {

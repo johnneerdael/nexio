@@ -7,6 +7,7 @@ import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.isTmdbVideoLanguageEligible
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
@@ -74,13 +75,14 @@ class TrailerTmdbProvider @Inject constructor(
     suspend fun fetchMovieVideos(
         tmdbId: Int,
         preferredLanguage: String,
-        apiKey: String
+        apiKey: String,
+        originalLanguage: String? = null
     ): List<TmdbVideoResult> {
         val localized = fetchMovieVideosOnce(tmdbId, preferredLanguage, apiKey)
         if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
             return localized
         }
-        if (hasTrailerOrTeaserCandidate(localized)) {
+        if (hasTrailerOrTeaserCandidate(localized, originalLanguage)) {
             return localized
         }
         return fetchMovieVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
@@ -89,13 +91,14 @@ class TrailerTmdbProvider @Inject constructor(
     suspend fun fetchTvVideos(
         tmdbId: Int,
         preferredLanguage: String,
-        apiKey: String
+        apiKey: String,
+        originalLanguage: String? = null
     ): List<TmdbVideoResult> {
         val localized = fetchTvVideosOnce(tmdbId, preferredLanguage, apiKey)
         if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
             return localized
         }
-        if (hasTrailerOrTeaserCandidate(localized)) {
+        if (hasTrailerOrTeaserCandidate(localized, originalLanguage)) {
             return localized
         }
         return fetchTvVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
@@ -214,11 +217,14 @@ class TrailerTmdbProvider @Inject constructor(
         }
     }
 
-    private fun hasTrailerOrTeaserCandidate(results: List<TmdbVideoResult>): Boolean {
+    private fun hasTrailerOrTeaserCandidate(
+        results: List<TmdbVideoResult>,
+        originalLanguage: String?
+    ): Boolean {
         return results.any {
             (it.site ?: "").equals("YouTube", ignoreCase = true) &&
                 !it.key.isNullOrBlank() &&
-                isEnglishTmdbVideoLanguage(it.iso6391) &&
+                isTmdbVideoLanguageEligible(it.iso6391, originalLanguage) &&
                 when (it.type?.trim()?.lowercase()) {
                     "trailer", "teaser" -> true
                     else -> false
@@ -226,21 +232,11 @@ class TrailerTmdbProvider @Inject constructor(
         }
     }
 
-    private fun isEnglishTmdbVideoLanguage(languageCode: String?): Boolean {
-        val normalized = languageCode
-            ?.trim()
-            ?.lowercase()
-            ?.takeIf { it.isNotEmpty() }
-            ?: return false
-        return normalized == "en"
-    }
-
     private fun filterCacheableTmdbTrailerVideos(results: List<TmdbVideoResult>): List<TmdbVideoResult> {
         return results
             .asSequence()
             .filter { (it.site ?: "").equals("YouTube", ignoreCase = true) }
             .filter { !it.key.isNullOrBlank() }
-            .filter { isEnglishTmdbVideoLanguage(it.iso6391) }
             .filter { isCacheableTmdbTrailerType(it.type) }
             .toList()
     }

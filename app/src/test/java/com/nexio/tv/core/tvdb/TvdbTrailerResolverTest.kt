@@ -33,7 +33,7 @@ class TvdbTrailerResolverTest {
         } returns TvdbSeriesExtendedRecord(
             id = 100,
             trailers = listOf(
-                TvdbTrailerRecord(url = "https://youtu.be/abcdefghijk")
+                TvdbTrailerRecord(url = "https://youtu.be/abcdefghijk", language = "eng")
             )
         )
         val resolver = TvdbTrailerResolver(
@@ -71,7 +71,7 @@ class TvdbTrailerResolverTest {
         } returns TvdbSeriesExtendedRecord(
             id = 100,
             trailers = listOf(
-                TvdbTrailerRecord(name = "Series Trailer", url = "https://youtu.be/aaaaaaaaaaa")
+                TvdbTrailerRecord(name = "Series Trailer", url = "https://youtu.be/aaaaaaaaaaa", language = "eng")
             ),
             seasons = listOf(
                 tvdbSeason(id = 101, number = 1),
@@ -85,7 +85,7 @@ class TvdbTrailerResolverTest {
             id = 103,
             number = 3,
             trailers = listOf(
-                TvdbTrailerRecord(name = "Trailer", url = "https://youtu.be/ccccccccccc")
+                TvdbTrailerRecord(name = "Trailer", url = "https://youtu.be/ccccccccccc", language = "eng")
             )
         )
         coEvery { provider.fetchSeasonExtended(102) } returns null
@@ -150,7 +150,7 @@ class TvdbTrailerResolverTest {
         } returns TvdbSeriesExtendedRecord(
             id = 100,
             trailers = listOf(
-                TvdbTrailerRecord(name = "Season 5 Trailer", url = "https://youtu.be/abcdefghijk")
+                TvdbTrailerRecord(name = "Season 5 Trailer", url = "https://youtu.be/abcdefghijk", language = "eng")
             )
         )
         val resolver = TvdbTrailerResolver(
@@ -185,7 +185,7 @@ class TvdbTrailerResolverTest {
         } returns TvdbSeriesExtendedRecord(
             id = 100,
             trailers = listOf(
-                TvdbTrailerRecord(name = "Season 5 Recap", url = "https://youtu.be/abcdefghijk")
+                TvdbTrailerRecord(name = "Season 5 Recap", url = "https://youtu.be/abcdefghijk", language = "eng")
             )
         )
         val resolver = TvdbTrailerResolver(

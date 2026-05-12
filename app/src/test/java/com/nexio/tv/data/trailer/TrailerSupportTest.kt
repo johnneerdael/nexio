@@ -61,9 +61,20 @@ class TrailerSupportTest {
     }
 
     @Test
-    fun `isYouTubeTrailerLanguageAcceptable allows english regardless of original language`() {
+    fun `isYouTubeTrailerLanguageAcceptable allows english only when original language is unknown`() {
         assertTrue(isYouTubeTrailerLanguageAcceptable("en", null))
-        assertTrue(isYouTubeTrailerLanguageAcceptable("en-US", "ko"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("en-US", null))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("en", ""))
+    }
+
+    @Test
+    fun `isYouTubeTrailerLanguageAcceptable rejects english trailer for non-english original`() {
+        // Previously accepted unconditionally — now rejected because the title's
+        // original_language is the authoritative gate.
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("en", "ko"))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("en-US", "ko"))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("en", "ja"))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("en", "de"))
     }
 
     @Test
@@ -72,6 +83,8 @@ class TrailerSupportTest {
         assertTrue(isYouTubeTrailerLanguageAcceptable("ko-KR", "ko"))
         assertTrue(isYouTubeTrailerLanguageAcceptable("ko", "KO-KR"))
         assertTrue(isYouTubeTrailerLanguageAcceptable("ja_JP", "ja"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("de", "de"))
+        assertTrue(isYouTubeTrailerLanguageAcceptable("en", "en"))
     }
 
     @Test
@@ -79,6 +92,7 @@ class TrailerSupportTest {
         assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", "ja"))
         assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", null))
         assertTrue(!isYouTubeTrailerLanguageAcceptable("ko", ""))
+        assertTrue(!isYouTubeTrailerLanguageAcceptable("de", "en"))
     }
 
     @Test

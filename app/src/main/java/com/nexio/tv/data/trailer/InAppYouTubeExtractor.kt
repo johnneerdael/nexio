@@ -986,12 +986,31 @@ internal fun isEnglishYouTubeLanguageCode(languageCode: String?): Boolean {
     return normalized == "en" || normalized.startsWith("en-")
 }
 
+/**
+ * Last-line language gate at YouTube extraction time. The provider candidate stage
+ * (Gate A for TVDB, Gate B for TMDB) is expected to gate by declared metadata
+ * language; this gate checks the actual audio language that YouTube reports on the
+ * player response, which is the only signal that catches cases where the provider
+ * metadata is wrong or absent.
+ *
+ * Rules — match the title-level invariant:
+ * - Trailer audio language matches title's `originalLanguage` → accept.
+ * - Title has no resolvable `originalLanguage` → fall back to English-only acceptance.
+ *   (Preserves prior behavior for the bulk of the catalog where original_language was
+ *   never wired through, and matches the operator decision for the unknown-original
+ *   case agreed at fix-design time.)
+ * - Any other case (declared mismatch) → reject.
+ */
 internal fun isYouTubeTrailerLanguageAcceptable(
     trailerLanguageCode: String?,
     originalLanguage: String?
 ): Boolean {
-    if (isEnglishYouTubeLanguageCode(trailerLanguageCode)) return true
-    return youtubeLanguageMatchesOriginalLanguage(trailerLanguageCode, originalLanguage)
+    val normalizedOriginal = normalizeBaseLanguageCode(originalLanguage)
+    return if (normalizedOriginal != null) {
+        youtubeLanguageMatchesOriginalLanguage(trailerLanguageCode, originalLanguage)
+    } else {
+        isEnglishYouTubeLanguageCode(trailerLanguageCode)
+    }
 }
 
 internal fun youtubeLanguageMatchesOriginalLanguage(

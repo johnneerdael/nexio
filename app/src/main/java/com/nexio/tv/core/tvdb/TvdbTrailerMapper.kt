@@ -30,7 +30,8 @@ class TvdbTrailerMapper @Inject constructor() {
                 url = url,
                 name = trailer.name?.trim()?.takeIf { it.isNotBlank() },
                 type = null,
-                seasonNumber = seasonNumber
+                seasonNumber = seasonNumber,
+                language = trailer.language?.trim()?.takeIf { it.isNotBlank() }
             )
         }
     }
