@@ -51,6 +51,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +87,16 @@ import com.nexio.tv.R
 
 private const val KEY_REPEAT_THROTTLE_MS = 80L
 
+/** Args carried from a TorBox library card click out to the navigator. */
+data class TorBoxDirectPlayArgs(
+    val url: String,
+    val torrentId: Int,
+    val fileId: Int,
+    val fileName: String,
+    val resumePositionMs: Long,
+    val deterministicAutoplay: Boolean,
+)
+
 @Composable
 private fun localizedTypeLabel(key: String): String = when (key.lowercase()) {
     LibraryTypeTab.ALL_KEY -> stringResource(R.string.library_type_all)
@@ -99,9 +110,37 @@ private fun localizedTypeLabel(key: String): String = when (key.lowercase()) {
 fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     showBuiltInHeader: Boolean = true,
-    onOpenEntry: (com.nexio.tv.domain.model.LibraryEntry) -> Unit
+    onOpenEntry: (com.nexio.tv.domain.model.LibraryEntry) -> Unit,
+    onOpenTorBoxFile: (TorBoxDirectPlayArgs) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val torBoxRefreshing by viewModel.torBoxRefreshing.collectAsState()
+    val context = LocalContext.current
+
+    val isTorBoxTab = uiState.selectedListKey == com.nexio.tv.data.repository.DebridLibraryService.TORBOX_LIST_KEY
+    LaunchedEffect(uiState.selectedListKey) {
+        if (isTorBoxTab) viewModel.refreshTorBoxLibraryNow()
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.directPlayCommands.collect { command ->
+            when (command) {
+                is DirectPlayCommand.Resolving ->
+                    android.widget.Toast.makeText(context, "Opening ${command.fileName}…", android.widget.Toast.LENGTH_SHORT).show()
+                is DirectPlayCommand.Failed ->
+                    android.widget.Toast.makeText(context, command.message, android.widget.Toast.LENGTH_LONG).show()
+                is DirectPlayCommand.Navigate -> onOpenTorBoxFile(
+                    TorBoxDirectPlayArgs(
+                        url = command.url,
+                        torrentId = command.torBoxTorrentId,
+                        fileId = command.torBoxFileId,
+                        fileName = command.fileName,
+                        resumePositionMs = command.resumePositionMs,
+                        deterministicAutoplay = command.deterministicAutoplay,
+                    )
+                )
+            }
+        }
+    }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val primaryFocusRequester = remember { FocusRequester() }
@@ -333,7 +372,7 @@ fun LibraryScreen(
                     },
                     onClick = {
                         lastFocusedPosterKey = focusKey
-                        onOpenEntry(item)
+                        if (isTorBoxTab) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
                     }
                 )
             }
@@ -351,7 +390,7 @@ fun LibraryScreen(
                     },
                     onClick = {
                         lastFocusedPosterKey = focusKey
-                        onOpenEntry(item)
+                        if (isTorBoxTab) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
                     }
                 )
             }

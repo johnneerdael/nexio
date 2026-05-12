@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 enum class PlayerLaunchSource(val routeValue: String) {
     STREAM("stream"),
     LIBRARY_DIRECT("library_direct"),
+    TORBOX("torbox"),
     OTHER("other");
 
     companion object {
