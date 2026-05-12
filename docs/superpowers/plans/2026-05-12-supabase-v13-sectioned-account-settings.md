@@ -8,11 +8,13 @@
 
 **Tech Stack:** PostgreSQL/PLpgSQL Supabase migrations and RPCs, Kotlin/Hilt/DataStore/kotlinx.serialization on Android, Nuxt server routes and TypeScript tests in `nexio-web`.
 
+**Implementation note:** v13 names the Supabase RPC/envelope contract for sectioned settings. Android's `AccountConfigSyncPayload.schemaVersion` remains `12` by design because it describes the composed compatibility payload shape; per-section rows carry their own schema metadata through the v13 envelope.
+
 ---
 
 ## Current Checkout Notes
 
-- The current app/web contract constant is `12`.
+- At plan start, the current app/web contract constant was `12`.
 - The latest v12 baseline includes `supabase/migrations/20260512050000_v12_remove_tmdb_tvdb_secrets_and_drop_legacy_blocks.sql` and `supabase/migrations/20260512060000_v12_align_pull_rpc_contract_version_label.sql`.
 - The timestamped account snapshot/settings RPC names still end in `_v10` (`sync_pull_account_snapshot_v10`, `sync_push_account_settings_v10`), but their envelope contract label is now `12`. Treat those as the current legacy full-payload compatibility surface.
 - Do not reintroduce `integrations.wyzie`, `integrations.theIntroDb`, `integrations.tvdb`, `wyzie_api_key`, `tmdb_api_key`, or `tvdb_api_key`.
@@ -41,12 +43,12 @@
 | `supabase/account_settings_sync.sql` | Keep canonical SQL snapshot aligned for static tests that read this file. |
 | `app/src/main/java/com/nexio/tv/core/sync/SyncWatermarkSurface.kt` | Add `ACCOUNT_SETTINGS_SECTION` surface. |
 | `app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt` | Add section-key watermark helpers. |
-| `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt` | Bump contract to 13 and add section encode/decode helpers. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountConfigSyncContract.kt` | Keep the Android composed payload schema at 12 and add v13 section encode/decode helpers. |
 | `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | Pull/apply v13 sections and push only dirty sections. |
 | `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt` | Decode v13 account snapshot for addon pull paths. |
 | `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt` | Persist v13 section watermarks on startup pull. |
 | `app/src/test/java/com/nexio/tv/data/local/SyncWatermarkDataStoreTest.kt` | Cover section-key watermark isolation. |
-| `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` | Cover v13 contract constant, section extraction, and Wyzie absence. |
+| `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` | Cover the v13 RPC/envelope split from Android payload schema 12, section extraction, and Wyzie absence. |
 | `app/src/test/java/com/nexio/tv/ui/screens/settings/SettingsViewModelSyncTest.kt` | Keep Sync Now coverage using the account snapshot path. |
 | `nexio-web/types/portal.ts` | Bump contract to 13 and add v13 envelope/push types. |
 | `nexio-web/server/api/account/bootstrap.get.ts` | Pull v13 sections and compose `PortalSettings`. |
@@ -1263,8 +1265,8 @@ Build the payload:
 
 ```kotlin
 var settingsPayload = AccountConfigSyncPayload(schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
-envelope.settings.sections.forEach { section ->
-    val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: return@forEach
+for (section in envelope.settings.sections) {
+    val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: continue
     settingsPayload = key.applyToPayload(settingsPayload, section.payload)
     syncWatermarkStore.setAccountSettingsSection(key, section.updatedAtMs)
 }
