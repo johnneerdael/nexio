@@ -204,6 +204,16 @@ internal fun clearAppliedChangedPathsForGeneration(
     return true
 }
 
+internal fun buildStaleRecoveryPreserveLocalSectionKeys(
+    pendingChangedPaths: Set<String>,
+    appliedSectionKeysWithPendingSecrets: Set<AccountSettingsSectionKey>
+): Set<AccountSettingsSectionKey> {
+    return linkedSetOf<AccountSettingsSectionKey>().apply {
+        pendingChangedPaths.mapNotNullTo(this, AccountSettingsSectionKey::fromChangedPath)
+        addAll(appliedSectionKeysWithPendingSecrets)
+    }
+}
+
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -548,6 +558,7 @@ class AccountSettingsSyncService @Inject constructor(
                     }
 
                     val appliedChangedPaths = linkedSetOf<String>()
+                    val appliedSectionKeys = linkedSetOf<AccountSettingsSectionKey>()
                     var maxAppliedRevision: Long? = null
                     var hasStaleSection = false
                     result.sections.forEach { result ->
@@ -560,6 +571,7 @@ class AccountSettingsSyncService @Inject constructor(
                             result.syncRevision?.let { revision ->
                                 maxAppliedRevision = maxOf(maxAppliedRevision ?: revision, revision)
                             }
+                            appliedSectionKeys += sectionKey
                             appliedChangedPaths += pushableChangedPathsBySection[sectionKey].orEmpty()
                         } else if (result.reason == "stale_base") {
                             hasStaleSection = true
@@ -587,19 +599,27 @@ class AccountSettingsSyncService @Inject constructor(
                     }
 
                     if (hasStaleSection) {
-                        synchronized(pendingChangedPaths) {
+                        val preserveLocalSectionKeys = synchronized(pendingChangedPaths) {
                             if (pendingChangedPathsGeneration != snapshot.changedPathsGeneration) {
                                 scheduleFollowUpPush = true
                             }
+                            buildStaleRecoveryPreserveLocalSectionKeys(
+                                pendingChangedPaths = pendingChangedPaths.toSet(),
+                                appliedSectionKeysWithPendingSecrets = appliedSectionKeys
+                            )
                         }
+                        scheduleFollowUpPush = true
+                        Log.w(TAG, "Account settings section push stale; pulling without clearing pending local changes")
+                        pullFromRemoteAndApply(
+                            clearPendingChanges = false,
+                            preserveLocalSectionKeys = preserveLocalSectionKeys
+                        )
                         if (scheduleFollowUpPush) {
                             pushJob = scope.launch {
                                 delay(500)
                                 pushToRemote()
                             }
                         }
-                        Log.w(TAG, "Account settings section push stale; pulling without clearing pending local changes")
-                        pullFromRemoteAndApply(clearPendingChanges = false)
                         return@withContext Result.success(Unit)
                     }
                 }
@@ -623,7 +643,8 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     suspend fun pullFromRemoteAndApply(
-        clearPendingChanges: Boolean = true
+        clearPendingChanges: Boolean = true,
+        preserveLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
     ): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             if (!hasLiveFullAccountSession()) {
@@ -654,7 +675,8 @@ class AccountSettingsSyncService @Inject constructor(
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
-            val resolvedSecrets = resolveRemoteSecretsForApply(settings, appliedSectionKeys)
+            val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
+            val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToApply)
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -665,7 +687,7 @@ class AccountSettingsSyncService @Inject constructor(
                 try {
                     applySharedAccountConfigSyncSettings(
                         settings = settings,
-                        sectionKeys = appliedSectionKeys
+                        sectionKeys = sectionKeysToApply
                     )
                     applyResolvedRemoteSecrets(resolvedSecrets)
                     lastAppliedRemoteRevision = settingsRevision
@@ -686,7 +708,7 @@ class AccountSettingsSyncService @Inject constructor(
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
 
-            refreshDebridAccountStatesForAppliedSections(appliedSectionKeys)
+            refreshDebridAccountStatesForAppliedSections(sectionKeysToApply)
 
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
