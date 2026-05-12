@@ -63,7 +63,7 @@ class TorBoxIntegrationProvider @Inject constructor(
         runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TORBOX,
-                apiShapeId = "torbox.device.start",
+                apiShapeId = DebridApiShapes.TORBOX_DEVICE_START,
                 operationKey = "torbox.device.start",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 scope = IntegrationScope.ProviderConfig("torbox:device-code"),
@@ -90,7 +90,7 @@ class TorBoxIntegrationProvider @Inject constructor(
         runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TORBOX,
-                apiShapeId = "torbox.device.token",
+                apiShapeId = DebridApiShapes.TORBOX_DEVICE_TOKEN,
                 operationKey = "torbox.device.token",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 scope = IntegrationScope.ProviderConfig("torbox:device-code:${deviceCode.hashCode()}"),
