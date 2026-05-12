@@ -19,20 +19,35 @@ import com.nexio.tv.data.local.normalizeSubtitleTranslationSettings
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayloadJson
-import com.nexio.tv.data.remote.supabase.V10PushResult
+import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
-import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
-import com.nexio.tv.data.remote.supabase.IntegrationSettings
-import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
+import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
+import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
+import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.KitsuAuthSyncSettings
+import com.nexio.tv.data.remote.supabase.KitsuCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
+import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
+import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
+import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
+import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
+import com.nexio.tv.data.remote.supabase.SimklAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
+import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
+import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
+import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
-import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
+import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
@@ -47,6 +62,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.transform
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -55,7 +71,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -290,59 +305,60 @@ internal fun buildAccountConfigSyncPushParamsV7(
 internal fun AccountConfigSyncPayload.sectionPayload(
     sectionKey: AccountSettingsSectionKey
 ): JsonElement? {
-    val root = AccountConfigSyncPayloadJson
-        .encodeToJsonElement(AccountConfigSyncPayload.serializer(), this)
-        .jsonObject
-
     return when (sectionKey) {
         AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION ->
-            root["integrations"]?.jsonObject?.get("subtitleTranslation")
+            encodeSection(SubtitleTranslationSyncSettings.serializer(), integrations.subtitleTranslation)
         AccountSettingsSectionKey.INTEGRATIONS_IMDB ->
-            root["integrations"]?.jsonObject?.get("imdb")
+            encodeSection(ImdbSyncSettings.serializer(), integrations.imdb)
         AccountSettingsSectionKey.INTEGRATIONS_GEMINI ->
-            root["integrations"]?.jsonObject?.get("gemini")
+            encodeSection(GeminiSyncSettings.serializer(), integrations.gemini)
         AccountSettingsSectionKey.INTEGRATIONS_TMDB ->
-            root["integrations"]?.jsonObject?.get("tmdb")
+            encodeSection(TmdbSyncSettings.serializer(), integrations.tmdb)
         AccountSettingsSectionKey.INTEGRATIONS_OMDB ->
-            root["integrations"]?.jsonObject?.get("omdb")
+            encodeSection(OmdbSyncSettings.serializer(), integrations.omdb)
         AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS ->
-            root["integrations"]?.jsonObject?.get("posterRatings")
+            encodeSection(PosterRatingsSyncSettings.serializer(), integrations.posterRatings)
         AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP ->
-            root["integrations"]?.jsonObject?.get("animeSkip")
+            encodeSection(AnimeSkipSyncSettings.serializer(), integrations.animeSkip)
         AccountSettingsSectionKey.INTEGRATIONS_MDBLIST ->
-            root["integrations"]?.jsonObject?.get("mdblist")
+            encodeSection(MDBListSyncSettings.serializer(), integrations.mdblist)
         AccountSettingsSectionKey.INTEGRATIONS_KITSU -> null
         AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH ->
-            root["integrations"]?.jsonObject?.get("traktAuth")
+            encodeSection(TraktAuthSyncSettings.serializer(), integrations.traktAuth)
         AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH ->
-            root["integrations"]?.jsonObject?.get("simklAuth")
+            encodeSection(SimklAuthSyncSettings.serializer(), integrations.simklAuth)
         AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH ->
-            root["integrations"]?.jsonObject?.get("kitsuAuth")
+            encodeSection(KitsuAuthSyncSettings.serializer(), integrations.kitsuAuth)
         AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE ->
-            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("premiumize")
+            encodeSection(PremiumizeSyncSettings.serializer(), integrations.debrid.premiumize)
         AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID ->
-            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("realDebrid")
+            encodeSection(RealDebridSyncSettings.serializer(), integrations.debrid.realDebrid)
         AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX ->
-            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("torBox")
+            encodeSection(TorBoxSyncSettings.serializer(), integrations.debrid.torBox)
         AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID ->
-            root["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.get("easyDebrid")
+            encodeSection(EasyDebridSyncSettings.serializer(), integrations.debrid.easyDebrid)
         AccountSettingsSectionKey.CATALOGS_MDBLIST ->
-            root["catalogs"]?.jsonObject?.get("mdblist")
+            catalogs.mdblist?.let { encodeSection(MDBListCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.CATALOGS_TRAKT ->
-            root["catalogs"]?.jsonObject?.get("trakt")
+            catalogs.trakt?.let { encodeSection(TraktCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.CATALOGS_SIMKL ->
-            root["catalogs"]?.jsonObject?.get("simkl")
+            catalogs.simkl?.let { encodeSection(SimklCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.CATALOGS_TMDB ->
-            root["catalogs"]?.jsonObject?.get("tmdb")
+            catalogs.tmdb?.let { encodeSection(TmdbCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.CATALOGS_KITSU ->
-            root["catalogs"]?.jsonObject?.get("kitsu")
+            catalogs.kitsu?.let { encodeSection(KitsuCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.CATALOGS_HOME ->
-            root["catalogs"]?.jsonObject?.get("home")
+            catalogs.home?.let { encodeSection(HomeCatalogSyncSettings.serializer(), it) }
         AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION ->
-            root["playback"]?.jsonObject?.get("streamSelection")
-        AccountSettingsSectionKey.FORMATTER -> root["formatter"]
+            encodeSection(StreamSelectionConfigSyncSettings.serializer(), playback.streamSelection)
+        AccountSettingsSectionKey.FORMATTER -> encodeSection(FormatterSyncSettings.serializer(), formatter)
     }
 }
+
+private fun <T> encodeSection(
+    serializer: KSerializer<T>,
+    section: T
+): JsonElement = AccountConfigSyncPayloadJson.encodeToJsonElement(serializer, section)
 
 internal suspend fun buildAccountSettingsSectionsPushParamsV13(
     payload: AccountConfigSyncPayload,

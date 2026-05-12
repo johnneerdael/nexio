@@ -204,11 +204,15 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(
             "v13 pull must resolve secrets only for sections present in the sparse snapshot",
-            pullBlock.contains("resolveRemoteSecretsForApply(settings, appliedSectionKeys)")
+            pullBlock.contains("resolveRemoteSecretsForApply(settings, sectionKeysToApply)")
         )
         assertTrue(
             "v13 pull must pass section presence into local settings application",
-            pullBlock.contains("sectionKeys = appliedSectionKeys")
+            pullBlock.contains("sectionKeys = sectionKeysToApply")
+        )
+        assertTrue(
+            "v13 pull must allow stale recovery to preserve locally dirty sections",
+            pullBlock.contains("val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys")
         )
         assertFalse(
             "v13 pull must not apply the default-backed sparse payload as a complete payload",
@@ -237,7 +241,7 @@ class AccountConfigSyncContractTest {
 
         assertTrue(
             "v13 pull must pass sparse section presence to debrid account refreshes",
-            pullBlock.contains("refreshDebridAccountStatesForAppliedSections(appliedSectionKeys)")
+            pullBlock.contains("refreshDebridAccountStatesForAppliedSections(sectionKeysToApply)")
         )
         assertFalse(
             "v13 pull must not refresh Premiumize unconditionally after sparse apply",
@@ -602,6 +606,21 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `sectionPayload serializes default-valued reset sections as objects`() {
+        val payload = AccountConfigSyncPayload(schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
+
+        val formatter = payload.sectionPayload(AccountSettingsSectionKey.FORMATTER)
+        val streamSelection = payload.sectionPayload(AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION)
+
+        assertTrue(formatter is JsonObject)
+        assertTrue(streamSelection is JsonObject)
+        assertTrue(formatter!!.jsonObject.isEmpty())
+        assertTrue(streamSelection!!.jsonObject.isEmpty())
+        assertNull(payload.sectionPayload(AccountSettingsSectionKey.CATALOGS_HOME))
+        assertNull(payload.sectionPayload(AccountSettingsSectionKey.INTEGRATIONS_KITSU))
+    }
+
+    @Test
     fun `buildAccountSettingsSectionsPushParamsV13 groups dirty paths into distinct serializable sections`() = runTest {
         val payload = AccountConfigSyncPayload(
             schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
@@ -668,7 +687,7 @@ class AccountConfigSyncContractTest {
         assertTrue(pushBlock.contains("sync_push_account_settings_sections_v13"))
         assertTrue(pushBlock.contains("decodeAs<V13BatchPushResult>()"))
         assertFalse(pushBlock.contains("sync_push_account_settings_v10"))
-        assertTrue(pushBlock.contains("pullFromRemoteAndApply(clearPendingChanges = false)"))
+        assertTrue(pushBlock.contains("preserveLocalSectionKeys = preserveLocalSectionKeys"))
         assertTrue(pushBlock.contains("currentUpdatedAtMs != null"))
         assertTrue(pushBlock.contains("setAccountSettingsSection(sectionKey, result.currentUpdatedAtMs)"))
         assertTrue(pushBlock.contains("changedPathsBySection"))
@@ -687,12 +706,18 @@ class AccountConfigSyncContractTest {
         val clearIndex = pushBlock.indexOf("clearAppliedChangedPathsForGeneration(")
         val staleIndex = pushBlock.indexOf("if (hasStaleSection)")
         val staleFollowUpIndex = pushBlock.indexOf("if (scheduleFollowUpPush)", startIndex = staleIndex)
-        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(clearPendingChanges = false)", startIndex = staleIndex)
+        val preserveIndex = pushBlock.indexOf("buildStaleRecoveryPreserveLocalSectionKeys(", startIndex = staleIndex)
+        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(", startIndex = staleIndex)
 
         assertTrue("v13 push must attempt applied-path clearing", clearIndex >= 0)
         assertTrue("applied paths must be cleared before stale recovery returns", clearIndex < staleIndex)
-        assertTrue("generation races must still schedule a follow-up before stale return", staleFollowUpIndex in (staleIndex + 1)..<stalePullIndex)
+        assertTrue("stale recovery must compute local sections to preserve after applied-path clearing", preserveIndex in (staleIndex + 1)..<stalePullIndex)
+        assertTrue("generation races and stale sections must schedule a follow-up after stale recovery", staleFollowUpIndex > stalePullIndex)
         assertTrue("stale recovery must pull without clearing stale pending paths", stalePullIndex > staleIndex)
+        assertTrue(
+            "stale recovery must preserve applied sections whose secrets have not been pushed yet",
+            pushBlock.contains("appliedSectionKeysWithPendingSecrets = appliedSectionKeys")
+        )
     }
 
     @Test
@@ -708,14 +733,39 @@ class AccountConfigSyncContractTest {
             startIndex = staleIndex
         )
         val staleFollowUpIndex = pushBlock.indexOf("if (scheduleFollowUpPush)", startIndex = staleIndex)
-        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(clearPendingChanges = false)", startIndex = staleIndex)
+        val stalePullIndex = pushBlock.indexOf("pullFromRemoteAndApply(", startIndex = staleIndex)
 
         assertTrue("v13 push must handle stale sections", staleIndex >= 0)
         assertTrue(
             "all-stale pushes must compare the live generation with the push snapshot before stale recovery",
             generationCheckIndex in (staleIndex + 1)..<staleFollowUpIndex
         )
-        assertTrue("generation race follow-up must be scheduled before stale recovery pull", staleFollowUpIndex < stalePullIndex)
+        assertTrue("generation race follow-up must be scheduled after stale recovery pull", staleFollowUpIndex > stalePullIndex)
+    }
+
+    @Test
+    fun `stale recovery preserve set combines live pending and applied sections with pending secrets`() {
+        val preserveLocalSectionKeys = buildStaleRecoveryPreserveLocalSectionKeys(
+            pendingChangedPaths = setOf(
+                "catalogs.home.heroCatalogKeys",
+                "integrations.tmdb.useArtwork",
+                "unknown.path"
+            ),
+            appliedSectionKeysWithPendingSecrets = setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+                AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
+            )
+        )
+
+        assertEquals(
+            setOf(
+                AccountSettingsSectionKey.CATALOGS_HOME,
+                AccountSettingsSectionKey.INTEGRATIONS_TMDB,
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+                AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
+            ),
+            preserveLocalSectionKeys
+        )
     }
 
     @Test
