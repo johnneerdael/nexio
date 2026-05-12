@@ -396,7 +396,11 @@ fun providerDefaultHeaderPolicy(provider: String, apiShapeId: String?): String? 
         "CUSTOM_IMDB" -> "custom-imdb-json-v1"
         "REAL_DEBRID" -> "real_debrid-json-token-v1"
         "PREMIUMIZE" -> "premiumize-json-token-v1"
-        "TORBOX" -> "torbox-json-token-v1"
+        "TORBOX" -> when (apiShapeId) {
+            "torbox.device.start" -> "public-json-v1"
+            "torbox.device.token" -> "json-body-no-auth-v1"
+            else -> "torbox-json-token-v1"
+        }
         "EASY_DEBRID" -> "easy_debrid-json-token-v1"
         "ADDON" -> "addon-json-v1"
         "SHADOW_COLLECTOR" -> "collector-json-v1"

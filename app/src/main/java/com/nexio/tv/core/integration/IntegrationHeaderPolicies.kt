@@ -54,8 +54,13 @@ object IntegrationHeaderPolicies {
             IntegrationProvider.CUSTOM_IMDB -> CUSTOM_IMDB_JSON_V1
             IntegrationProvider.REAL_DEBRID,
             IntegrationProvider.PREMIUMIZE,
-            IntegrationProvider.TORBOX,
             IntegrationProvider.EASY_DEBRID -> tokenPolicyFor(provider)
+            // TorBox device-code endpoints are unauthenticated; everything else uses the bearer token policy.
+            IntegrationProvider.TORBOX -> when (apiShapeId) {
+                DebridApiShapes.TORBOX_DEVICE_START -> PUBLIC_JSON_V1
+                DebridApiShapes.TORBOX_DEVICE_TOKEN -> JSON_BODY_NO_AUTH_V1
+                else -> TORBOX_JSON_TOKEN_V1
+            }
             IntegrationProvider.ADDON -> ADDON_JSON_V1
             IntegrationProvider.SHADOW_COLLECTOR -> COLLECTOR_JSON_V1
             IntegrationProvider.GITHUB -> GITHUB_JSON_V1

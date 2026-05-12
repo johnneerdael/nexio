@@ -3211,6 +3211,55 @@ apiShapes:
     responseHeaders:
       capture: [Retry-After]
     bestPracticeRules: [runtime-contract-baseline]
+  torbox.device.start:
+    provider: TORBOX
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/user/auth/device/start"
+    headerPolicy: public-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: ProviderConfig
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery:
+        app: app-name
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  torbox.device.token:
+    provider: TORBOX
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/user/auth/device/token"
+    headerPolicy: json-body-no-auth-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: ProviderConfig
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: [device_code]
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
   trakt.calendar.shows:
     provider: TRAKT
     lifecycleStatus: ACTIVE_RUNTIME_COVERED

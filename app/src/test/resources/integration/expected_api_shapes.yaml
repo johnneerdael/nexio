@@ -1439,6 +1439,28 @@ torbox.account:
   expectedRuntimePolicy:
     default: ObserveOnly
 
+torbox.device.start:
+  provider: TORBOX
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/user/auth/device/start"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+torbox.device.token:
+  provider: TORBOX
+  headerPolicy: json-body-no-auth-v1
+  method: POST
+  path: "/user/auth/device/token"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
 trakt.calendar.shows:
   provider: TRAKT
   headerPolicy: trakt-json-v2

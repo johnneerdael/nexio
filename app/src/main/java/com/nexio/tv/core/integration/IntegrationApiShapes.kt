@@ -46,6 +46,8 @@ object DebridApiShapes {
     const val TORBOX_ACCOUNT = "torbox.account"
     const val TORBOX_CHECK_CACHED = "torbox.check_cached"
     const val TORBOX_CREATE_TORRENT = "torbox.create_torrent"
+    const val TORBOX_DEVICE_START = "torbox.device.start"
+    const val TORBOX_DEVICE_TOKEN = "torbox.device.token"
     const val TORBOX_DOWNLOAD_LINK = "torbox.download_link"
     const val TORBOX_TORRENT_LIST = "torbox.torrent_list"
 }
