@@ -473,6 +473,225 @@ begin
 end;
 $$;
 
+create or replace function public.sync_pull_account_snapshot_v10()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_settings_payload jsonb;
+  v_settings_revision bigint;
+  v_settings_ms bigint;
+  v_settings_section_count bigint;
+  v_addons jsonb;
+  v_addons_ms bigint;
+  v_secrets jsonb;
+  v_secrets_ms bigint;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+
+  select public.account_settings_sections_to_payload(v_user_id),
+         coalesce(max(sync_revision), 0),
+         coalesce(max(public.sync_to_ms(updated_at)), 0),
+         count(*)
+  into v_settings_payload, v_settings_revision, v_settings_ms, v_settings_section_count
+  from public.account_settings_sections
+  where user_id = v_user_id;
+
+  if coalesce(v_settings_section_count, 0) = 0 or v_settings_payload is null or v_settings_payload = '{}'::jsonb then
+    select settings_payload, sync_revision, public.sync_to_ms(updated_at)
+    into v_settings_payload, v_settings_revision, v_settings_ms
+    from public.account_settings_public
+    where user_id = v_user_id;
+  end if;
+
+  v_settings_payload := coalesce(v_settings_payload, public.account_settings_v1_default_payload());
+  v_settings_revision := coalesce(v_settings_revision, 0);
+  v_settings_ms := coalesce(v_settings_ms, 0);
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id,
+           'url', a.base_url,
+           'manifest_url', coalesce(a.manifest_url, a.base_url || '/manifest.json'),
+           'parser_preset', a.parser_preset,
+           'is_anime', coalesce(a.is_anime, false),
+           'name', a.name,
+           'description', a.description,
+           'enabled', a.enabled,
+           'sort_order', a.sort_order,
+           'public_query_params', a.public_query_params,
+           'install_kind', a.install_kind,
+           'secret_ref', a.secret_ref,
+           'transport_schema_version', coalesce(a.transport_schema_version, 1),
+           'transport_base_url', coalesce(a.transport_base_url, a.base_url),
+           'transport_secret_ref', a.transport_secret_ref
+         ) order by a.sort_order), '[]'::jsonb),
+         coalesce(max(public.sync_to_ms(a.updated_at)), 0)
+  into v_addons, v_addons_ms
+  from public.account_addons_public a
+  where a.user_id = v_user_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'secret_type', s.secret_type,
+           'secret_ref', s.secret_ref,
+           'masked_preview', s.masked_preview,
+           'status', s.status,
+           'updated_at_ms', public.sync_to_ms(s.updated_at)
+         )), '[]'::jsonb),
+         coalesce(max(public.sync_to_ms(s.updated_at)), 0)
+  into v_secrets, v_secrets_ms
+  from public.account_secrets s
+  where s.user_id = v_user_id;
+
+  return jsonb_build_object(
+    'contract_version', 12,
+    'settings', jsonb_build_object(
+      'payload', v_settings_payload,
+      'sync_revision', v_settings_revision,
+      'updated_at_ms', v_settings_ms
+    ),
+    'addons', jsonb_build_object(
+      'items', v_addons,
+      'updated_at_ms', v_addons_ms
+    ),
+    'secrets', jsonb_build_object(
+      'items', v_secrets,
+      'updated_at_ms', v_secrets_ms
+    )
+  );
+end;
+$$;
+
+create or replace function public.sync_push_account_settings_v10(
+  p_base_updated_at_ms bigint,
+  p_settings_payload jsonb,
+  p_base_revision bigint,
+  p_changed_paths text[],
+  p_source text default 'app'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_sections jsonb;
+  v_batch_result jsonb;
+  v_failure_reason text;
+  v_current_updated_at_ms bigint;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+
+  with changed(path) as (
+    select unnest(coalesce(p_changed_paths, array[]::text[]))
+  ),
+  section_keys(section_key) as (
+    values
+      ('integrations.subtitleTranslation'),
+      ('integrations.imdb'),
+      ('integrations.gemini'),
+      ('integrations.tmdb'),
+      ('integrations.omdb'),
+      ('integrations.posterRatings'),
+      ('integrations.animeSkip'),
+      ('integrations.mdblist'),
+      ('integrations.kitsu'),
+      ('integrations.traktAuth'),
+      ('integrations.simklAuth'),
+      ('integrations.kitsuAuth'),
+      ('integrations.debrid.premiumize'),
+      ('integrations.debrid.realDebrid'),
+      ('integrations.debrid.torBox'),
+      ('integrations.debrid.easyDebrid'),
+      ('catalogs.mdblist'),
+      ('catalogs.trakt'),
+      ('catalogs.simkl'),
+      ('catalogs.tmdb'),
+      ('catalogs.kitsu'),
+      ('catalogs.home'),
+      ('playback.streamSelection'),
+      ('formatter')
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'section_key', section_key,
+    'payload', public.account_settings_section_payload(p_settings_payload, section_key),
+    'base_updated_at_ms', p_base_updated_at_ms
+  )), '[]'::jsonb)
+  into v_sections
+  from section_keys
+  where public.account_settings_section_payload(p_settings_payload, section_key) is not null
+    and (
+      not exists (select 1 from changed)
+      or exists (
+        select 1
+        from changed
+        where path = section_key
+           or path like section_key || '.%'
+           or section_key like path || '.%'
+      )
+    );
+
+  if v_sections = '[]'::jsonb then
+    return jsonb_build_object(
+      'applied', true,
+      'sync_revision', 0,
+      'current_updated_at_ms', public.sync_now_ms()
+    );
+  end if;
+
+  v_batch_result := public.sync_push_account_settings_sections_v13(
+    v_sections,
+    coalesce(nullif(trim(p_source), ''), 'legacy-adapter')
+  );
+
+  if coalesce((v_batch_result->>'applied')::boolean, false) = false then
+    select item->>'reason'
+    into v_failure_reason
+    from jsonb_array_elements(coalesce(v_batch_result->'sections', '[]'::jsonb)) item
+    where coalesce((item->>'applied')::boolean, false) = false
+    limit 1;
+
+    select coalesce(max((item->>'current_updated_at_ms')::bigint), 0)
+    into v_current_updated_at_ms
+    from jsonb_array_elements(coalesce(v_batch_result->'sections', '[]'::jsonb)) item
+    where item ? 'current_updated_at_ms';
+
+    if v_failure_reason = 'stale_base' then
+      return jsonb_build_object(
+        'applied', false,
+        'reason', 'stale_base',
+        'current_updated_at_ms', coalesce(v_current_updated_at_ms, 0)
+      );
+    end if;
+
+    return jsonb_build_object(
+      'applied', false,
+      'reason', coalesce(v_failure_reason, 'section_push_failed'),
+      'current_updated_at_ms', coalesce(v_current_updated_at_ms, 0)
+    );
+  end if;
+
+  return jsonb_build_object(
+    'applied', true,
+    'sync_revision', (
+      select coalesce(max((item->>'sync_revision')::bigint), 0)
+      from jsonb_array_elements(v_batch_result->'sections') item
+    ),
+    'current_updated_at_ms', (
+      select coalesce(max((item->>'current_updated_at_ms')::bigint), public.sync_now_ms())
+      from jsonb_array_elements(v_batch_result->'sections') item
+    )
+  );
+end;
+$$;
+
 revoke all on function public.sync_pull_account_settings_sections_v13() from public;
 grant execute on function public.sync_pull_account_settings_sections_v13() to authenticated;
 
@@ -484,3 +703,9 @@ grant execute on function public.sync_push_account_settings_section_v13(text, js
 
 revoke all on function public.sync_push_account_settings_sections_v13(jsonb, text) from public;
 grant execute on function public.sync_push_account_settings_sections_v13(jsonb, text) to authenticated;
+
+revoke all on function public.sync_pull_account_snapshot_v10() from public;
+grant execute on function public.sync_pull_account_snapshot_v10() to authenticated;
+
+revoke all on function public.sync_push_account_settings_v10(bigint, jsonb, bigint, text[], text) from public;
+grant execute on function public.sync_push_account_settings_v10(bigint, jsonb, bigint, text[], text) to authenticated;

@@ -123,6 +123,16 @@ class V13SupabaseMigrationStaticTest {
         assertTrue("batch push must validate base timestamp before direct RPC call", batchPush.indexOf("'invalid_base_updated_at_ms'") in 0 until batchPush.indexOf("sync_push_account_settings_section_v13"))
     }
 
+    @Test
+    fun `legacy account settings RPCs are adapters over sections`() {
+        val sql = migration.readText()
+
+        assertTrue(sql.contains("account_settings_sections_to_payload"))
+        assertTrue(sql.contains("sync_push_account_settings_v10"))
+        assertTrue(sql.contains("sync_pull_account_snapshot_v10"))
+        assertTrue(sql.contains("sync_push_account_settings_sections_v13"))
+    }
+
     private fun sectionKeysIn(sql: String): Set<String> =
         Regex("'((?:integrations|catalogs|playback)\\.[A-Za-z0-9.]+|formatter)'")
             .findAll(sql)
