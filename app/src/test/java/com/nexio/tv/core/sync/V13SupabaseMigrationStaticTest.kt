@@ -129,6 +129,7 @@ class V13SupabaseMigrationStaticTest {
         val pull = functionBlock(sql, "sync_pull_account_snapshot_v10")
         val push = functionBlock(sql, "sync_push_account_settings_v10")
         val pushSections = legacyPushSectionMappingBlock(push)
+        val noOpReturn = legacyPushNoOpReturnBlock(push)
 
         assertTrue("legacy pull must rebuild settings from sections", pull.contains("account_settings_sections_to_payload(v_user_id)"))
         assertTrue("legacy pull must count section rows before falling back", pull.contains("v_settings_section_count"))
@@ -221,8 +222,9 @@ class V13SupabaseMigrationStaticTest {
         assertFalse("legacy push must not expose raw section-only failure reasons", push.contains("coalesce(v_failure_reason, 'section_push_failed')"))
         assertTrue("legacy push must no-op successfully when no sections are affected", push.contains("if v_sections = '[]'::jsonb then"))
         assertTrue("legacy push no-op must report applied success", push.contains("'applied', true"))
-        assertTrue("legacy push no-op must return current aggregate state timestamp", push.contains("'current_updated_at_ms', v_current_updated_at_ms"))
-        assertFalse("legacy push no-op must not report a fresh clock timestamp", push.contains("'current_updated_at_ms', public.sync_now_ms()"))
+        assertTrue("legacy push no-op must return current aggregate revision", noOpReturn.contains("'sync_revision', v_current_revision"))
+        assertTrue("legacy push no-op must return current aggregate state timestamp", noOpReturn.contains("'current_updated_at_ms', v_current_updated_at_ms"))
+        assertFalse("legacy push no-op must not report a fresh clock timestamp", noOpReturn.contains("'current_updated_at_ms', public.sync_now_ms()"))
     }
 
     @Test
@@ -259,6 +261,16 @@ class V13SupabaseMigrationStaticTest {
         val end = sql.indexOf(endMarker, start + startMarker.length)
         assertTrue("legacy section mapping end marker must exist", end > start)
         return sql.substring(start + startMarker.length, end)
+    }
+
+    private fun legacyPushNoOpReturnBlock(sql: String): String {
+        val startMarker = "if v_sections = '[]'::jsonb then"
+        val endMarker = "  end if;"
+        val start = sql.indexOf(startMarker)
+        assertTrue("legacy no-op return start marker must exist", start >= 0)
+        val end = sql.indexOf(endMarker, start + startMarker.length)
+        assertTrue("legacy no-op return end marker must exist", end > start)
+        return sql.substring(start, end)
     }
 
     private fun functionBlock(sql: String, functionName: String): String {

@@ -2614,7 +2614,7 @@ begin
   if v_sections = '[]'::jsonb then
     return jsonb_build_object(
       'applied', true,
-      'sync_revision', 0,
+      'sync_revision', v_current_revision,
       'current_updated_at_ms', v_current_updated_at_ms
     );
   end if;
