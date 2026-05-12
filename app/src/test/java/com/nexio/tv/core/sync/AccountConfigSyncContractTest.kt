@@ -715,7 +715,11 @@ class AccountConfigSyncContractTest {
         assertTrue("generation races and stale sections must schedule a follow-up after stale recovery", staleFollowUpIndex > stalePullIndex)
         assertTrue("stale recovery must pull without clearing stale pending paths", stalePullIndex > staleIndex)
         assertTrue(
-            "stale recovery must preserve applied sections whose secrets have not been pushed yet",
+            "stale recovery must preserve only dirty secret-backed sections, not every applied section",
+            pushBlock.contains("dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)")
+        )
+        assertFalse(
+            "stale recovery must not treat every applied section as secret-dirty",
             pushBlock.contains("appliedSectionKeysWithPendingSecrets = appliedSectionKeys")
         )
     }
@@ -744,14 +748,97 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `stale recovery preserve set combines live pending and applied sections with pending secrets`() {
+    fun `stale recovery follow-up is scheduled only after recovery pull succeeds`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBlock = source.substring(pushStart, pullStart)
+        val staleIndex = pushBlock.indexOf("if (hasStaleSection)")
+        val stalePullIndex = pushBlock.indexOf("val staleRecoveryResult = pullFromRemoteAndApply(", startIndex = staleIndex)
+        val failedReturnIndex = pushBlock.indexOf("if (staleRecoveryResult.isFailure)", startIndex = stalePullIndex)
+        val followUpIndex = pushBlock.indexOf("if (scheduleFollowUpPush)", startIndex = failedReturnIndex)
+
+        assertTrue("stale recovery must capture pull result", stalePullIndex > staleIndex)
+        assertTrue("failed stale recovery pull must return before scheduling a retry loop", failedReturnIndex > stalePullIndex)
+        assertTrue("follow-up push must be considered only after successful stale recovery pull", followUpIndex > failedReturnIndex)
+    }
+
+    @Test
+    fun `stale secret v10 handlers preserve local dirty secrets instead of bare pulling`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val setStart = source.indexOf("private suspend fun setAccountSecretV10")
+        val deleteStart = source.indexOf("private suspend fun deleteAccountSecretV10")
+        val jwtStart = source.indexOf("private suspend fun <T> withJwtRefreshRetry", startIndex = deleteStart)
+        val setBlock = source.substring(setStart, deleteStart)
+        val deleteBlock = source.substring(deleteStart, jwtStart)
+
+        assertTrue(setBlock.contains("handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)"))
+        assertTrue(deleteBlock.contains("handleStaleAccountSecretPush(outcome.currentUpdatedAtMs)"))
+        assertFalse(setBlock.contains("pullFromRemoteAndApply()"))
+        assertFalse(deleteBlock.contains("pullFromRemoteAndApply()"))
+    }
+
+    @Test
+    fun `account secret push syncs only baseline dirty secret sections`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBlock = source.substring(pushStart, pullStart)
+        val syncStart = source.indexOf("private suspend fun syncAccountSecretPushSnapshotToRemote")
+        val syncEnd = source.indexOf("private suspend fun syncApiKeySecretToRemote", startIndex = syncStart)
+        val syncBlock = source.substring(syncStart, syncEnd)
+
+        assertTrue(pushBlock.contains("val dirtySecretSectionKeys = dirtyAccountSecretSectionKeys(snapshot.secrets)"))
+        assertTrue(pushBlock.contains("syncAccountSecretPushSnapshotToRemote(snapshot.secrets, dirtySecretSectionKeys)"))
+        assertTrue(syncBlock.contains("dirtySectionKeys: Set<AccountSettingsSectionKey>"))
+        assertFalse(
+            "secret sync must not blindly push every account secret",
+            syncBlock.contains("syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, snapshot.mdbListApiKey)\n" +
+                "        syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, snapshot.omdbApiKey)")
+        )
+    }
+
+    @Test
+    fun `dirty account secret sections are derived from baseline changes`() {
+        val baseline = accountSecretSnapshot()
+        val current = baseline.copy(
+            mdbListApiKey = "local-mdblist",
+            subtitleTranslationApiKey = "local-translation",
+            legacyGeminiApiKey = "local-gemini",
+            topPostersApiKey = "local-top-posters",
+            realDebrid = baseline.realDebrid.copy(refreshToken = "local-rd-refresh"),
+            trakt = baseline.trakt.copy(accessToken = "local-trakt-access")
+        )
+
+        assertEquals(
+            setOf(
+                AccountSettingsSectionKey.INTEGRATIONS_MDBLIST,
+                AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
+                AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS,
+                AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID,
+                AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+            ),
+            dirtyAccountSecretSectionKeys(current, baseline)
+        )
+    }
+
+    @Test
+    fun `dirty account secret sections are empty without baseline`() {
+        assertEquals(
+            emptySet<AccountSettingsSectionKey>(),
+            dirtyAccountSecretSectionKeys(accountSecretSnapshot(mdbListApiKey = "local-mdblist"), baseline = null)
+        )
+    }
+
+    @Test
+    fun `stale recovery preserve set combines live pending and dirty secret sections`() {
         val preserveLocalSectionKeys = buildStaleRecoveryPreserveLocalSectionKeys(
             pendingChangedPaths = setOf(
                 "catalogs.home.heroCatalogKeys",
                 "integrations.tmdb.useArtwork",
                 "unknown.path"
             ),
-            appliedSectionKeysWithPendingSecrets = setOf(
+            dirtySecretSectionKeys = setOf(
                 AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
                 AccountSettingsSectionKey.PLAYBACK_STREAM_SELECTION
             )
@@ -808,6 +895,48 @@ class AccountConfigSyncContractTest {
         assertEquals(
             listOf("integrations.tmdb.useArtwork", "catalogs.home.heroCatalogKeys"),
             pending.toList()
+        )
+    }
+
+    private fun accountSecretSnapshot(
+        mdbListApiKey: String = "remote-mdblist",
+        omdbApiKey: String = "remote-omdb",
+        subtitleTranslationApiKey: String = "remote-translation",
+        legacyGeminiApiKey: String? = null,
+        animeSkipClientId: String = "remote-anime-skip",
+        rpdbApiKey: String = "remote-rpdb",
+        topPostersApiKey: String = "remote-top-posters",
+        premiumizeApiKey: String = "remote-premiumize",
+        torBoxApiKey: String = "remote-torbox",
+        easyDebridApiKey: String = "remote-easydebrid",
+    ): AccountSecretPushSnapshot {
+        return AccountSecretPushSnapshot(
+            mdbListApiKey = mdbListApiKey,
+            omdbApiKey = omdbApiKey,
+            subtitleTranslationApiKey = subtitleTranslationApiKey,
+            legacyGeminiApiKey = legacyGeminiApiKey,
+            animeSkipClientId = animeSkipClientId,
+            rpdbApiKey = rpdbApiKey,
+            topPostersApiKey = topPostersApiKey,
+            premiumizeApiKey = premiumizeApiKey,
+            torBoxApiKey = torBoxApiKey,
+            easyDebridApiKey = easyDebridApiKey,
+            realDebrid = RealDebridSecretPushSnapshot(
+                accessToken = "remote-rd-access",
+                refreshToken = "remote-rd-refresh",
+                tokenType = "Bearer",
+                expiresIn = 3600,
+                userClientId = "remote-rd-client",
+                userClientSecret = "remote-rd-secret"
+            ),
+            trakt = TraktSecretPushSnapshot(
+                accessToken = "remote-trakt-access",
+                refreshToken = "remote-trakt-refresh",
+                tokenType = "bearer",
+                createdAt = 1000L,
+                expiresIn = 7200
+            ),
+            simkl = SimklSecretPushSnapshot(accessToken = "remote-simkl-access")
         )
     }
 
