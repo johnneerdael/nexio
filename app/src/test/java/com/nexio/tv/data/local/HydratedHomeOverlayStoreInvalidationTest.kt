@@ -11,6 +11,8 @@ import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
+import java.io.File
+import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -20,9 +22,11 @@ import org.junit.Test
 class HydratedHomeOverlayStoreInvalidationTest {
 
     private fun newStore(
-        prefs: InMemorySharedPreferences = InMemorySharedPreferences()
+        prefs: InMemorySharedPreferences = InMemorySharedPreferences(),
+        filesDir: File = tempDir("overlay-store-invalidation")
     ): Pair<HydratedHomeOverlayStore, InMemorySharedPreferences> {
         val context = mockk<Context>()
+        every { context.filesDir } returns filesDir
         every { context.getSharedPreferences(any(), any()) } returns prefs
         return HydratedHomeOverlayStore(context) to prefs
     }
@@ -154,4 +158,7 @@ class HydratedHomeOverlayStoreInvalidationTest {
         )
         assertEquals(HomeItemHydrationState.CANONICAL_READY, out["movie:tmdb:550"]?.state)
     }
+
+    private fun tempDir(prefix: String): File =
+        Files.createTempDirectory(prefix).toFile()
 }

@@ -2,9 +2,12 @@ package com.nexio.tv.core.media
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.local.FileBackedJsonObjectStore
 import com.nexio.tv.domain.model.ProviderIds
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -121,6 +124,11 @@ class MediaClipStore @Inject constructor(
     private val gson = Gson()
     private val prefsName: String = DEFAULT_PREFS_NAME
     private val clock: () -> Long = { System.currentTimeMillis() }
+    private val entryStore by lazy {
+        FileBackedJsonObjectStore(
+            file = File(context.filesDir, "${fileNamespace()}/entries.json")
+        ).also(::migrateLegacyPrefsIfNeeded)
+    }
 
     internal constructor(
         context: Context,
@@ -151,11 +159,11 @@ class MediaClipStore @Inject constructor(
             }
             .distinctBy { record -> record.key }
         if (records.isEmpty()) return 0
-        val editor = prefs().edit()
-        records.forEach { record ->
-            editor.putString(record.key, gson.toJson(record))
+        val writes = linkedMapOf<String, JsonObject>()
+        for (record in records) {
+            writes[record.key] = gson.toJsonTree(record).asJsonObject
         }
-        val committed = editor.commit()
+        val committed = entryStore.putAll(writes)
         if (committed) {
             records.forEach { record ->
                 traceEvents?.emitMediaClipCandidateStored(
@@ -181,10 +189,10 @@ class MediaClipStore @Inject constructor(
     ): List<StoredMediaClip> {
         val now = nowMs()
         val normalizedLanguage = language?.trim()?.takeIf { it.isNotBlank() }
-        return prefs().all
+        return entryStore.entries()
             .asSequence()
             .filter { (key, _) -> key.startsWith(KEY_PREFIX) }
-            .mapNotNull { (_, raw) -> (raw as? String)?.let(::decodeRecord) }
+            .mapNotNull { (_, raw) -> decodeRecord(raw) }
             .filter { record -> record.matchesIdentity(identity) }
             .filter { record -> record.matchesScope(scope) }
             .filter { record ->
@@ -347,7 +355,36 @@ class MediaClipStore @Inject constructor(
     private fun decodeRecord(raw: String): StoredMediaClipRecord? =
         runCatching { gson.fromJson(raw, StoredMediaClipRecord::class.java) }.getOrNull()
 
+    private fun decodeRecord(raw: JsonObject): StoredMediaClipRecord? =
+        runCatching { gson.fromJson(raw, StoredMediaClipRecord::class.java) }.getOrNull()
+
     private fun prefs() = context.getSharedPreferences(mutablePrefsName ?: prefsName, Context.MODE_PRIVATE)
+
+    private fun fileNamespace(): String = mutablePrefsName ?: DEFAULT_FILE_NAMESPACE
+
+    private fun migrateLegacyPrefsIfNeeded(store: FileBackedJsonObjectStore) {
+        val legacy = prefs()
+        val legacyKeys = legacy.all.keys
+            .filter { key -> key.startsWith(KEY_PREFIX) }
+        if (legacyKeys.isEmpty()) return
+
+        val existingFileKeys = store.keys()
+        val entriesToMigrate = linkedMapOf<String, JsonObject>()
+        for (key in legacyKeys) {
+            if (key in existingFileKeys) continue
+            val raw = legacy.getString(key, null)?.takeIf { it.isNotBlank() } ?: continue
+            val record = decodeRecord(raw) ?: continue
+            entriesToMigrate[key] = gson.toJsonTree(record).asJsonObject
+        }
+
+        if (entriesToMigrate.isNotEmpty() && !store.putAll(entriesToMigrate)) return
+
+        val editor = legacy.edit()
+        for (key in legacyKeys) {
+            editor.remove(key)
+        }
+        editor.commit()
+    }
 
     private fun nowMs(): Long = (mutableClock ?: clock).invoke()
 
@@ -390,6 +427,7 @@ class MediaClipStore @Inject constructor(
 
     private companion object {
         const val DEFAULT_PREFS_NAME = "media_clip_store_v1"
+        const val DEFAULT_FILE_NAMESPACE = "media-clip-store-v1"
         const val KEY_PREFIX = "media-clip:"
         const val SCOPE_TITLE = "title"
         const val SCOPE_SEASON = "season"

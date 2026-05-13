@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.google.gson.JsonObject
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
@@ -11,14 +12,17 @@ import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
+import java.io.File
+import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -26,12 +30,14 @@ class HydratedHomeOverlayStoreTest {
     @Test
     fun `upsert persists canonical overlay and aliases multiple item keys`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val filesDir = tempDir("overlay-store-test")
+        val store = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         val overlay = overlay(itemKey = "movie:tmdb:550")
 
         store.upsert(overlay, aliases = setOf("movie:tmdb:550", "movie:imdb:tt0137523"))
 
-        val recreatedStore = HydratedHomeOverlayStore(mockContext(prefs))
+        FileBackedJsonObjectStore.resetSharedStateForTest(entriesFile(filesDir))
+        val recreatedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         assertEquals(
             "Fight Club",
             recreatedStore.readByCanonicalIdentity(
@@ -63,9 +69,11 @@ class HydratedHomeOverlayStoreTest {
         )
 
         assertEquals(emptyMap<String, HydratedHomeOverlay>(), observedFlow.first())
-        val nextObserved = async { observedFlow.drop(1).first() }
+        val nextObserved = async { observedFlow.first { it.isNotEmpty() } }
         runCurrent()
         store.upsert(overlay, aliases = setOf("movie:imdb:tt0137523"))
+        advanceTimeBy(50L)
+        runCurrent()
 
         assertEquals("Fight Club", nextObserved.await().getValue("movie:imdb:tt0137523").fields.title)
     }
@@ -190,17 +198,14 @@ class HydratedHomeOverlayStoreTest {
     @Test
     fun `corrupted persisted display hash is ignored`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val filesDir = tempDir("overlay-store-corrupt-hash")
+        val store = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         val overlay = overlay(itemKey = "movie:tmdb:550")
         store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
 
-        prefs.edit()
-            .putString(
-                "overlay::${overlay.overlayKey}",
-                prefs.getString("overlay::${overlay.overlayKey}", null)!!
-                    .replace(overlay.displayHash, "corrupted-display-hash")
-            )
-            .apply()
+        mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
+            root.getAsJsonObject("value").addProperty("displayHash", "corrupted-display-hash")
+        }
 
         assertNull(
             store.readByCanonicalIdentity(
@@ -224,17 +229,14 @@ class HydratedHomeOverlayStoreTest {
     @Test
     fun `persisted overlay with mismatched canonical identity is ignored`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val filesDir = tempDir("overlay-store-mismatched-canonical")
+        val store = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         val overlay = overlay(itemKey = "movie:tmdb:550")
         store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
 
-        prefs.edit()
-            .putString(
-                "overlay::${overlay.overlayKey}",
-                prefs.getString("overlay::${overlay.overlayKey}", null)!!
-                    .replace("\"canonicalId\":\"550\"", "\"canonicalId\":\"551\"")
-            )
-            .apply()
+        mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
+            root.getAsJsonObject("value").addProperty("canonicalId", "551")
+        }
 
         assertNull(
             store.readByCanonicalIdentity(
@@ -250,17 +252,14 @@ class HydratedHomeOverlayStoreTest {
     @Test
     fun `persisted overlay with mismatched canonical identity is ignored for aliases`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val filesDir = tempDir("overlay-store-mismatched-alias")
+        val store = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         val overlay = overlay(itemKey = "movie:tmdb:550")
         store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
 
-        prefs.edit()
-            .putString(
-                "overlay::${overlay.overlayKey}",
-                prefs.getString("overlay::${overlay.overlayKey}", null)!!
-                    .replace("\"canonicalId\":\"550\"", "\"canonicalId\":\"551\"")
-            )
-            .apply()
+        mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
+            root.getAsJsonObject("value").addProperty("canonicalId", "551")
+        }
 
         assertEquals(
             emptyMap<String, HydratedHomeOverlay>(),
@@ -275,17 +274,14 @@ class HydratedHomeOverlayStoreTest {
     @Test
     fun `persisted overlay with mismatched language scope is ignored for aliases`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val filesDir = tempDir("overlay-store-mismatched-language")
+        val store = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         val overlay = overlay(itemKey = "movie:tmdb:550")
         store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
 
-        prefs.edit()
-            .putString(
-                "overlay::${overlay.overlayKey}",
-                prefs.getString("overlay::${overlay.overlayKey}", null)!!
-                    .replace("\"languageTag\":\"en\"", "\"languageTag\":\"nl\"")
-            )
-            .apply()
+        mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
+            root.getAsJsonObject("value").addProperty("languageTag", "nl")
+        }
 
         assertEquals(
             emptyMap<String, HydratedHomeOverlay>(),
@@ -340,9 +336,31 @@ class HydratedHomeOverlayStoreTest {
         )
     }
 
-    private fun mockContext(prefs: InMemorySharedPreferences): Context {
+    private fun mockContext(
+        prefs: InMemorySharedPreferences,
+        filesDir: File = tempDir("overlay-store-test")
+    ): Context {
         val context = mockk<Context>()
+        every { context.filesDir } returns filesDir
         every { context.getSharedPreferences(any(), any()) } returns prefs
         return context
     }
+
+    private fun mutateOverlayEntry(
+        filesDir: File,
+        overlayKey: String,
+        mutate: (JsonObject) -> Unit
+    ) {
+        val store = FileBackedJsonObjectStore(File(filesDir, "hydrated-home-overlay-v1/entries.json"))
+        val entries = store.entries().toMutableMap()
+        val root = entries.getValue("overlay::$overlayKey")
+        mutate(root)
+        assertTrue(store.replaceAll(entries))
+    }
+
+    private fun entriesFile(filesDir: File): File =
+        File(filesDir, "hydrated-home-overlay-v1/entries.json")
+
+    private fun tempDir(prefix: String): File =
+        Files.createTempDirectory(prefix).toFile()
 }
