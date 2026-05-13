@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
@@ -35,9 +36,12 @@ import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
+import com.nexio.tv.ui.screens.home.order.EffectiveHomeRailOrder
+import com.nexio.tv.ui.screens.home.order.HomeRailDefinition
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
 import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import com.nexio.tv.ui.screens.home.order.toHomeRailDefinitions
+import com.nexio.tv.ui.screens.home.order.visibleHomeRailKeysFromRails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -79,6 +83,23 @@ private data class SyntheticCatalogOrderGroup(
     val orderKey: String,
     val rows: List<CatalogRow>
 )
+
+internal fun resolveEffectiveHomeOrderForCatalogRails(
+    configuredRails: List<HomeCatalogRail>,
+    liveDefinitions: List<HomeRailDefinition>,
+    legacyEffectiveOrder: EffectiveHomeRailOrder
+): EffectiveHomeRailOrder {
+    val visibleKeys = visibleHomeRailKeysFromRails(
+        rails = configuredRails,
+        liveDefinitions = liveDefinitions
+    )
+    if (visibleKeys.isEmpty() && configuredRails.isEmpty()) return legacyEffectiveOrder
+    return legacyEffectiveOrder.copy(
+        visibleKeys = visibleKeys,
+        newlyDiscoveredKeys = emptyList(),
+        prunedKeys = legacyEffectiveOrder.visibleKeys.filter { it !in visibleKeys }
+    )
+}
 
 internal fun tmdbTrendingScreensaverRows(
     tmdbSnapshot: TmdbDiscoverySnapshot,
@@ -1192,6 +1213,16 @@ internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
             homeCatalogOrderKeys = keys
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_home_catalog_order")
+            scheduleUpdateCatalogRows()
+        }
+    }
+    viewModelScope.launch {
+        layoutPreferenceDataStore.homeCatalogRails.collectLatest { rails ->
+            if (rails == homeCatalogRails) return@collectLatest
+            homeCatalogRails = rails
+            invalidateHomeCatalogConfigurationPipeline("home_catalog_rails")
+            rebuildCatalogOrder(addonsCache)
+            applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_home_catalog_rails")
             scheduleUpdateCatalogRows()
         }
     }
@@ -2792,7 +2823,12 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         homeRailOrderStore.onLiveDefinitionsArrived(liveDefinitions)
 
         // Compute effective order synchronously from the authoritative store.
-        val effectiveOrder = homeRailOrderStore.reconcileNow(liveDefinitions)
+        val legacyEffectiveOrder = homeRailOrderStore.reconcileNow(liveDefinitions)
+        val effectiveOrder = resolveEffectiveHomeOrderForCatalogRails(
+            configuredRails = homeCatalogRails,
+            liveDefinitions = liveDefinitions,
+            legacyEffectiveOrder = legacyEffectiveOrder
+        )
 
         // Build content-by-key maps for the pure materializer. Synthetic groups remain
         // content sources only; their iteration order is no longer authoritative.

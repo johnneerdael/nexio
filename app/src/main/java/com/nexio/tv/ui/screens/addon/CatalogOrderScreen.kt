@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Cast
@@ -68,6 +69,7 @@ fun CatalogOrderScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showAndroidTvDialog by remember { mutableStateOf(false) }
+    var showAddCatalogDialog by remember { mutableStateOf(false) }
 
     BackHandler { onBackPress() }
 
@@ -84,17 +86,49 @@ fun CatalogOrderScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.catalog_order_title),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = NexioColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.catalog_order_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NexioColors.TextSecondary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.catalog_order_title),
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = NexioColors.TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.catalog_order_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = NexioColors.TextSecondary
+                        )
+                    }
+
+                    Button(
+                        onClick = { showAddCatalogDialog = true },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
+                        ),
+                        border = ButtonDefaults.border(
+                            focusedBorder = Border(
+                                border = BorderStroke(2.dp, NexioColors.FocusRing),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.catalog_order_add_catalog))
+                    }
+                }
             }
 
             item(key = "android_tv_launcher_feeds") {
@@ -150,7 +184,7 @@ fun CatalogOrderScreen(
                                     )
                                 }
                             },
-                            onToggleEnabled = { viewModel.toggleCatalogEnabled(item.disableKey) }
+                            onRemove = { viewModel.removeFromHome(item.key) }
                         )
                     }
                 }
@@ -168,6 +202,17 @@ fun CatalogOrderScreen(
             onToggleFeed = viewModel::toggleAndroidTvFeed
         )
     }
+
+    if (showAddCatalogDialog) {
+        AddCatalogDialog(
+            availableItems = uiState.availableItems,
+            onDismiss = { showAddCatalogDialog = false },
+            onAdd = { key ->
+                viewModel.addToHome(key)
+                showAddCatalogDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -175,7 +220,7 @@ private fun CatalogOrderCard(
     item: CatalogOrderItem,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
-    onToggleEnabled: () -> Unit
+    onRemove: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -201,10 +246,10 @@ private fun CatalogOrderCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = NexioColors.TextSecondary
                 )
-                if (item.isToggleable && item.isDisabled) {
+                if (item.isUnavailable) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = stringResource(R.string.catalog_order_disabled_on_home),
+                        text = stringResource(R.string.catalog_order_unavailable),
                         style = MaterialTheme.typography.bodySmall,
                         color = NexioColors.Error
                     )
@@ -261,27 +306,116 @@ private fun CatalogOrderCard(
                     )
                 }
 
-                if (item.isToggleable) {
-                    Button(
-                        onClick = onToggleEnabled,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NexioColors.BackgroundCard,
-                            contentColor = if (item.isDisabled) NexioColors.Success else NexioColors.TextSecondary,
-                            focusedContainerColor = NexioColors.FocusBackground,
-                            focusedContentColor = if (item.isDisabled) NexioColors.Success else NexioColors.Error
-                        ),
-                        border = ButtonDefaults.border(
-                            focusedBorder = Border(
-                                border = BorderStroke(2.dp, NexioColors.FocusRing),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                        ),
-                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                    ) {
-                        Text(text = if (item.isDisabled) stringResource(R.string.catalog_order_enable) else stringResource(R.string.catalog_order_disable))
-                    }
+                Button(
+                    onClick = onRemove,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = NexioColors.Error
+                    ),
+                    border = ButtonDefaults.border(
+                        focusedBorder = Border(
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    ),
+                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                ) {
+                    Text(text = stringResource(R.string.catalog_order_remove_from_home))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AddCatalogDialog(
+    availableItems: List<CatalogOrderItem>,
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.catalog_order_add_catalog),
+        width = 760.dp,
+        suppressFirstKeyUp = false
+    ) {
+        if (availableItems.isEmpty()) {
+            Text(
+                text = stringResource(R.string.catalog_order_add_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NexioColors.TextSecondary
+            )
+            return@NexioDialog
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 440.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(
+                items = availableItems,
+                key = { item -> item.key }
+            ) { item ->
+                AddCatalogOptionCard(
+                    item = item,
+                    onClick = { onAdd(item.key) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddCatalogOptionCard(
+    item: CatalogOrderItem,
+    onClick: () -> Unit
+) {
+    TvCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = TvCardDefaults.colors(
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.BackgroundCard
+        ),
+        border = TvCardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
+                shape = RoundedCornerShape(14.dp)
+            )
+        ),
+        shape = TvCardDefaults.shape(RoundedCornerShape(14.dp)),
+        scale = TvCardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${item.catalogName} - ${item.typeLabel.toDisplayTypeLabel()}",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = NexioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = item.addonName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NexioColors.TextSecondary
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.catalog_order_add_catalog),
+                style = MaterialTheme.typography.labelLarge,
+                color = NexioColors.Primary
+            )
         }
     }
 }

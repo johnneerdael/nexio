@@ -40,6 +40,7 @@ import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.TrackingProvider
 import java.io.File
@@ -50,8 +51,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -75,6 +76,265 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountConfigSyncContractTest {
+    @Test
+    fun `home catalog rails are included in the account home section payload`() {
+        val rails = listOf(
+            HomeCatalogRail(
+                key = "tmdb_trending_movies",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Trending Movies",
+                addedAtMs = 1778544000000L
+            )
+        )
+
+        val payload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(),
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
+            homeCatalogRails = rails,
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        assertEquals(1, payload.catalogs.home?.railsVersion)
+        assertEquals("tmdb_trending_movies", payload.catalogs.home?.rails?.single()?.key)
+    }
+
+    @Test
+    fun `null home catalog rails are absent from the account home section payload`() {
+        val payload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(),
+            heroCatalogKeys = listOf("hero-a"),
+            homeCatalogOrderKeys = listOf("row-a"),
+            disabledHomeCatalogKeys = listOf("row-b"),
+            homeCatalogRails = null,
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        assertNull(payload.catalogs.home?.rails)
+        assertEquals(listOf("hero-a"), payload.catalogs.home?.heroCatalogKeys)
+        assertEquals(listOf("row-a"), payload.catalogs.home?.homeCatalogOrderKeys)
+        assertEquals(listOf("row-b"), payload.catalogs.home?.disabledHomeCatalogKeys)
+    }
+
+    @Test
+    fun `secondary profile account payload rails preserve last remote home rails when known`() {
+        val localRails = listOf(
+            HomeCatalogRail(
+                key = "local",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Local",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val remoteRails = listOf(
+            HomeCatalogRail(
+                key = "remote",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Remote",
+                addedAtMs = 1778544000001L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+        cache.rememberFullRemotePull(remoteRails)
+
+        assertEquals(
+            remoteRails,
+            cache.selectForAccountPayload(
+                isPrimaryProfile = false,
+                localHomeCatalogRails = localRails
+            )
+        )
+    }
+
+    @Test
+    fun `secondary profile account payload rails are absent only when no remote rails are known`() {
+        val localRails = listOf(
+            HomeCatalogRail(
+                key = "local",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Local",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+
+        assertNull(
+            cache.selectForAccountPayload(
+                isPrimaryProfile = false,
+                localHomeCatalogRails = localRails
+            )
+        )
+    }
+
+    @Test
+    fun `default profile account payload rails use local home rails`() {
+        val localRails = listOf(
+            HomeCatalogRail(
+                key = "local",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Local",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val remoteRails = listOf(
+            HomeCatalogRail(
+                key = "remote",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Remote",
+                addedAtMs = 1778544000001L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+        cache.rememberFullRemotePull(remoteRails)
+
+        assertEquals(
+            localRails,
+            cache.selectForAccountPayload(
+                isPrimaryProfile = true,
+                localHomeCatalogRails = localRails
+            )
+        )
+    }
+
+    @Test
+    fun `successful account settings push refreshes cached home rails`() {
+        val oldRails = listOf(
+            HomeCatalogRail(
+                key = "old",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Old",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val newRails = listOf(
+            HomeCatalogRail(
+                key = "new",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "New",
+                addedAtMs = 1778544000001L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+        cache.rememberFullRemotePull(oldRails)
+
+        cache.rememberSuccessfulSettingsPush(newRails)
+
+        assertEquals(
+            newRails,
+            cache.selectForAccountPayload(
+                isPrimaryProfile = false,
+                localHomeCatalogRails = emptyList()
+            )
+        )
+    }
+
+    @Test
+    fun `full remote pull with absent home rails clears cached home rails`() {
+        val oldRails = listOf(
+            HomeCatalogRail(
+                key = "old",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Old",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+        cache.rememberFullRemotePull(oldRails)
+
+        cache.rememberFullRemotePull(null)
+
+        assertNull(
+            cache.selectForAccountPayload(
+                isPrimaryProfile = false,
+                localHomeCatalogRails = emptyList()
+            )
+        )
+    }
+
+    @Test
+    fun `user change clears cached home rails`() {
+        val oldRails = listOf(
+            HomeCatalogRail(
+                key = "old",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Old",
+                addedAtMs = 1778544000000L
+            )
+        )
+        val cache = AccountHomeCatalogRailsSyncCache()
+        cache.rememberFullRemotePull(oldRails)
+
+        cache.clearForUserChange()
+
+        assertNull(
+            cache.selectForAccountPayload(
+                isPrimaryProfile = false,
+                localHomeCatalogRails = emptyList()
+            )
+        )
+    }
+
+    @Test
+    fun `home catalog rail changes are marked as catalogs home section dirty path`() = runTest {
+        val path = observeAccountConfigSyncChangedPaths(
+            heroCatalogSelections = emptyFlow(),
+            homeCatalogOrderKeys = emptyFlow(),
+            disabledHomeCatalogKeys = emptyFlow(),
+            homeCatalogRails = flowOf(Unit),
+            tmdbSettings = emptyFlow(),
+            mdbListSettings = emptyFlow(),
+            mdbListCatalogPreferences = emptyFlow(),
+            omdbSettings = emptyFlow(),
+            animeSkipEnabled = emptyFlow(),
+            subtitleTranslationSettings = emptyFlow(),
+            posterRatingsSettings = emptyFlow(),
+            premiumizeSettings = emptyFlow(),
+            premiumizeAccountState = emptyFlow(),
+            torBoxSettings = emptyFlow(),
+            torBoxAccountState = emptyFlow(),
+            easyDebridSettings = emptyFlow(),
+            easyDebridAccountState = emptyFlow(),
+            realDebridState = emptyFlow(),
+            kitsuAuthState = emptyFlow(),
+            traktAuthState = emptyFlow(),
+            traktCatalogPreferences = emptyFlow(),
+            simklCatalogPreferences = emptyFlow(),
+            simklAuthState = emptyFlow(),
+            playerSettings = emptyFlow()
+        ).first()
+
+        assertEquals("catalogs.home.rails", path)
+    }
+
     @Test
     fun `account sync contract includes kitsu auth settings and secrets`() {
         val contract = File("supabase/account_settings_sync.sql").readText()
@@ -315,6 +575,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = listOf("hero-a"),
             homeCatalogOrderKeys = listOf("row-a", "row-b"),
             disabledHomeCatalogKeys = listOf("row-c"),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
             traktSelectedPopularListKeys = listOf("popular-a"),
@@ -417,6 +678,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = emptyList(),
             homeCatalogOrderKeys = emptyList(),
             disabledHomeCatalogKeys = emptyList(),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = emptyList(),
             traktCatalogOrder = emptyList(),
             traktSelectedPopularListKeys = emptyList(),
@@ -444,6 +706,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = emptyList(),
             homeCatalogOrderKeys = emptyList(),
             disabledHomeCatalogKeys = emptyList(),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = emptyList(),
             traktCatalogOrder = emptyList(),
             traktSelectedPopularListKeys = emptyList(),
@@ -466,6 +729,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = listOf("hero-a"),
             homeCatalogOrderKeys = listOf("row-a"),
             disabledHomeCatalogKeys = emptyList(),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next"),
             traktSelectedPopularListKeys = emptyList(),
@@ -531,6 +795,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = emptyList(),
             homeCatalogOrderKeys = emptyList(),
             disabledHomeCatalogKeys = emptyList(),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = emptyList(),
             traktCatalogOrder = emptyList(),
             traktSelectedPopularListKeys = emptyList(),
@@ -1211,6 +1476,7 @@ class AccountConfigSyncContractTest {
                 heroCatalogSelections = MutableSharedFlow<Unit>(),
                 homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
                 disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                homeCatalogRails = MutableSharedFlow<Unit>(),
                 tmdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = MutableSharedFlow<Unit>(),
                 mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
@@ -1421,6 +1687,7 @@ class AccountConfigSyncContractTest {
                 heroCatalogSelections = heroCatalogSelections,
                 homeCatalogOrderKeys = homeCatalogOrderKeys,
                 disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+                homeCatalogRails = MutableSharedFlow<Unit>(),
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 mdbListCatalogPreferences = mdbListCatalogPreferences,
@@ -1511,6 +1778,81 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `applyCatalogsSection leaves home catalog rails unchanged when rails are absent`() = runTest {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+
+        applyCatalogsSection(
+            payload = AccountConfigSyncPayload(
+                catalogs = CatalogSyncSettings(
+                    home = HomeCatalogSyncSettings(rails = null)
+                )
+            ),
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            traktSettingsDataStore = mockk(relaxed = true),
+            simklSettingsDataStore = mockk(relaxed = true),
+            mdbListSettingsDataStore = mockk(relaxed = true),
+            tmdbCatalogSettingsDataStore = mockk(relaxed = true),
+            kitsuCatalogSettingsDataStore = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true)
+        )
+
+        coVerify(exactly = 0) { layoutPreferenceDataStore.setHomeCatalogRails(any()) }
+    }
+
+    @Test
+    fun `applyCatalogsSection clears home catalog rails when rails are empty`() = runTest {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+
+        applyCatalogsSection(
+            payload = AccountConfigSyncPayload(
+                catalogs = CatalogSyncSettings(
+                    home = HomeCatalogSyncSettings(rails = emptyList())
+                )
+            ),
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            traktSettingsDataStore = mockk(relaxed = true),
+            simklSettingsDataStore = mockk(relaxed = true),
+            mdbListSettingsDataStore = mockk(relaxed = true),
+            tmdbCatalogSettingsDataStore = mockk(relaxed = true),
+            kitsuCatalogSettingsDataStore = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true)
+        )
+
+        coVerify(exactly = 1) { layoutPreferenceDataStore.setHomeCatalogRails(emptyList()) }
+    }
+
+    @Test
+    fun `applyCatalogsSection applies populated home catalog rails`() = runTest {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val rails = listOf(
+            HomeCatalogRail(
+                key = "tmdb_trending_movies",
+                family = "tmdb",
+                source = "provider_catalog",
+                title = "Trending Movies",
+                addedAtMs = 1778544000000L
+            )
+        )
+
+        applyCatalogsSection(
+            payload = AccountConfigSyncPayload(
+                catalogs = CatalogSyncSettings(
+                    home = HomeCatalogSyncSettings(rails = rails)
+                )
+            ),
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            traktSettingsDataStore = mockk(relaxed = true),
+            simklSettingsDataStore = mockk(relaxed = true),
+            mdbListSettingsDataStore = mockk(relaxed = true),
+            tmdbCatalogSettingsDataStore = mockk(relaxed = true),
+            kitsuCatalogSettingsDataStore = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true)
+        )
+
+        coVerify(exactly = 1) { layoutPreferenceDataStore.setHomeCatalogRails(rails) }
+    }
+
+    @Test
     fun `applyAccountConfigSyncSettings routes only synced settings to the synced stores`() = runTest {
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
@@ -1549,6 +1891,7 @@ class AccountConfigSyncContractTest {
             heroCatalogKeys = listOf("hero-a"),
             homeCatalogOrderKeys = listOf("row-a", "row-b"),
             disabledHomeCatalogKeys = listOf("row-c"),
+            homeCatalogRails = emptyList(),
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
             traktSelectedPopularListKeys = listOf("popular-a"),

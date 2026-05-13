@@ -51,6 +51,8 @@ import com.nexio.tv.data.remote.supabase.V10PushResult
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.domain.model.HOME_CATALOG_RAILS_VERSION
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
@@ -81,6 +83,7 @@ internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
     homeCatalogOrderKeys: Flow<Unit>,
     disabledHomeCatalogKeys: Flow<Unit>,
+    homeCatalogRails: Flow<Unit>,
     tmdbSettings: Flow<Unit>,
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
@@ -106,6 +109,7 @@ internal fun observeAccountConfigSyncChanges(
         heroCatalogSelections,
         homeCatalogOrderKeys,
         disabledHomeCatalogKeys,
+        homeCatalogRails,
         tmdbSettings,
         mdbListSettings,
         mdbListCatalogPreferences,
@@ -133,6 +137,7 @@ internal fun observeAccountConfigSyncChangedPaths(
     heroCatalogSelections: Flow<Unit>,
     homeCatalogOrderKeys: Flow<Unit>,
     disabledHomeCatalogKeys: Flow<Unit>,
+    homeCatalogRails: Flow<Unit>,
     tmdbSettings: Flow<Unit>,
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
@@ -158,6 +163,7 @@ internal fun observeAccountConfigSyncChangedPaths(
         heroCatalogSelections.map { "catalogs.home.heroCatalogKeys" },
         homeCatalogOrderKeys.map { "catalogs.home.homeCatalogOrderKeys" },
         disabledHomeCatalogKeys.map { "catalogs.home.disabledHomeCatalogKeys" },
+        homeCatalogRails.map { "catalogs.home.rails" },
         tmdbSettings.map { "integrations.tmdb" },
         mdbListSettings.map { "integrations.mdblist" },
         mdbListCatalogPreferences.map { "catalogs.mdblist" },
@@ -216,6 +222,7 @@ internal fun buildAccountConfigSyncPayload(
     heroCatalogKeys: List<String>,
     homeCatalogOrderKeys: List<String>,
     disabledHomeCatalogKeys: List<String>,
+    homeCatalogRails: List<HomeCatalogRail>?,
     traktCatalogEnabledSet: List<String>,
     traktCatalogOrder: List<String>,
     traktSelectedPopularListKeys: List<String>,
@@ -239,6 +246,8 @@ internal fun buildAccountConfigSyncPayload(
         ),
         catalogs = CatalogSyncSettings(
             home = HomeCatalogSyncSettings(
+                railsVersion = HOME_CATALOG_RAILS_VERSION,
+                rails = homeCatalogRails,
                 heroCatalogKeys = heroCatalogKeys,
                 homeCatalogOrderKeys = homeCatalogOrderKeys,
                 disabledHomeCatalogKeys = disabledHomeCatalogKeys
@@ -580,6 +589,7 @@ internal suspend fun applyCatalogsSection(
     val catalogs = payload.catalogs
 
     catalogs.home?.let { home ->
+        home.rails?.let { layoutPreferenceDataStore.setHomeCatalogRails(it) }
         home.heroCatalogKeys?.let { layoutPreferenceDataStore.setHeroCatalogKeys(it) }
         home.homeCatalogOrderKeys?.let { layoutPreferenceDataStore.setHomeCatalogOrderKeys(it) }
         home.disabledHomeCatalogKeys?.let { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(it) }

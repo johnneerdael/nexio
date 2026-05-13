@@ -963,6 +963,10 @@
     <string name="catalog_order_disabled_on_home">Disabled on Home</string>
     <string name="catalog_order_enable">Enable</string>
     <string name="catalog_order_disable">Disable</string>
+    <string name="catalog_order_add_catalog">Add Catalog</string>
+    <string name="catalog_order_remove_from_home">Remove</string>
+    <string name="catalog_order_unavailable">Unavailable</string>
+    <string name="catalog_order_add_empty">No catalogs available to add.</string>
     <string name="android_tv_channels_title">Android TV Launcher Feeds</string>
     <string name="android_tv_channels_subtitle">Choose which feeds publish to the launcher. Stored only on this device.</string>
     <string name="android_tv_channels_value_off">Off</string>

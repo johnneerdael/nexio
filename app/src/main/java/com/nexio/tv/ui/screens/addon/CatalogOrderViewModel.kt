@@ -31,17 +31,17 @@ import com.nexio.tv.data.repository.kitsuCatalogTitle
 import com.nexio.tv.data.repository.tmdbCatalogTitle
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
+import com.nexio.tv.domain.model.HomeCatalogRail
+import com.nexio.tv.domain.model.homeCatalogRailFamilyForKey
+import com.nexio.tv.domain.model.homeCatalogRailSourceForFamily
+import com.nexio.tv.domain.model.sanitizeHomeCatalogRails
 import com.nexio.tv.domain.repository.AddonRepository
-import com.nexio.tv.ui.screens.home.order.HomeRailKey
-import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
-import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -59,14 +59,12 @@ class CatalogOrderViewModel @Inject constructor(
     private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
     private val androidTvFeedCatalogService: AndroidTvFeedCatalogService,
-    private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier,
-    private val homeRailOrderStore: HomeRailOrderStore
+    private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
     val uiState: StateFlow<CatalogOrderUiState> = _uiState.asStateFlow()
     private var disabledKeysCache: Set<String> = emptySet()
-    private var savedOrderKeysCache: List<String> = emptyList()
     private var kitsuCatalogKeysCache: Set<String> = emptySet()
     private var disabledKitsuCatalogKeysCache: Set<String> = emptySet()
     private var tmdbCatalogKeysCache: Set<String> = emptySet()
@@ -120,54 +118,68 @@ class CatalogOrderViewModel @Inject constructor(
     }
 
     private fun moveCatalog(key: String, direction: Int) {
-        val visibleKeys = _uiState.value.items.map { it.key }
-        val visibleKeySet = visibleKeys.toSet()
-        val currentKeys = buildEffectiveVisibleOrder(
-            savedOrderKeys = savedOrderKeysCache,
-            availableKeys = visibleKeys
-        )
-        val currentIndex = currentKeys.indexOf(key)
+        val currentItems = _uiState.value.items
+        val currentIndex = currentItems.indexOfFirst { it.key == key }
         if (currentIndex == -1) return
 
         val newIndex = currentIndex + direction
-        if (newIndex !in currentKeys.indices) return
+        if (newIndex !in currentItems.indices) return
 
-        val reordered = currentKeys.toMutableList().apply {
+        val reorderedItems = currentItems.toMutableList().apply {
             val item = removeAt(currentIndex)
             add(newIndex, item)
         }
 
         viewModelScope.launch {
-            val hiddenKeys = savedOrderKeysCache
-                .asSequence()
-                .mapNotNull { rawKey -> resolveOrderedKey(rawKey, visibleKeySet) }
-                .distinct()
-                .filter { it !in reordered }
-                .toList()
-            homeRailOrderStore.updateOrder(
-                orderedKeys = (reordered + hiddenKeys).map(::HomeRailKey),
-                source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
-                knownLiveKeys = visibleKeySet.map(::HomeRailKey).toSet(),
-            )
+            layoutPreferenceDataStore.setHomeCatalogRails(reorderedItems.map { it.toHomeCatalogRail() })
         }
+    }
+
+    fun removeFromHome(key: String) {
+        val next = _uiState.value.items
+            .filterNot { it.key == key }
+            .map { item -> item.toHomeCatalogRail() }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHomeCatalogRails(next)
+        }
+    }
+
+    fun addToHome(key: String) {
+        val existing = _uiState.value.items.map { it.toHomeCatalogRail() }
+        val candidate = _uiState.value.availableItems.firstOrNull { it.key == key } ?: return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHomeCatalogRails(existing + candidate.toHomeCatalogRail())
+            catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
+        }
+    }
+
+    private fun CatalogOrderItem.toHomeCatalogRail(): HomeCatalogRail {
+        val family = homeCatalogRailFamilyForKey(key)
+        return HomeCatalogRail(
+            key = key,
+            family = family,
+            source = homeCatalogRailSourceForFamily(family),
+            title = catalogName,
+            enabled = true,
+            addedAtMs = System.currentTimeMillis()
+        )
     }
 
     private fun observeCatalogs() {
         viewModelScope.launch {
             val baseInputsFlow = combine(
                 addonRepository.getInstalledAddons(),
-                homeRailOrderStore.state.map { state -> state.orderedKeys.map { it.value } },
+                layoutPreferenceDataStore.homeCatalogRails,
                 layoutPreferenceDataStore.disabledHomeCatalogKeys,
                 traktDiscoveryService.observeSnapshot(),
                 traktSettingsDataStore.catalogPreferences
-            ) { addons, savedOrderKeys, disabledKeys, traktSnapshot, traktPrefs ->
+            ) { addons, homeCatalogRails, disabledKeys, traktSnapshot, traktPrefs ->
                 BaseCatalogOrderInputs(
                     addons = addons,
-                    savedOrderKeys = savedOrderKeys,
+                    homeCatalogRails = homeCatalogRails,
                     disabledKeys = disabledKeys.toSet(),
                     traktSnapshot = traktSnapshot,
-                    traktPrefs = traktPrefs,
-                    simklPrefs = SimklCatalogPreferences()
+                    traktPrefs = traktPrefs
                 )
             }
 
@@ -186,28 +198,29 @@ class CatalogOrderViewModel @Inject constructor(
                     kitsuPrefs = kitsuPrefs
                 )
             }.combine(tmdbCatalogSettingsDataStore.catalogPreferences) { inputs, tmdbPrefs ->
-                inputs.base.savedOrderKeys to buildOrderedCatalogItems(
-                    addons = inputs.base.addons,
-                    savedOrderKeys = inputs.base.savedOrderKeys,
-                    disabledKeys = inputs.base.disabledKeys,
-                    traktSnapshot = inputs.base.traktSnapshot,
-                    traktPrefs = inputs.base.traktPrefs,
-                    simklPrefs = inputs.simklPrefs,
-                    mdbListSnapshot = inputs.mdbListSnapshot,
-                    mdbListPrefs = inputs.mdbListPrefs,
-                    kitsuPrefs = inputs.kitsuPrefs,
-                    tmdbPrefs = tmdbPrefs
+                val inputsWithTmdb = inputs.copy(tmdbPrefs = tmdbPrefs)
+                val allEntries = buildAllCatalogEntries(inputsWithTmdb)
+                CatalogOrderLists(
+                    visibleItems = buildVisibleCatalogItems(
+                        homeCatalogRails = inputs.base.homeCatalogRails,
+                        allEntries = allEntries
+                    ),
+                    availableItems = buildAvailableCatalogItems(
+                        homeCatalogRails = inputs.base.homeCatalogRails,
+                        allEntries = allEntries
+                    ),
+                    allEntries = allEntries
                 )
-            }.collectLatest { (savedOrderKeys, orderedItems) ->
-                savedOrderKeysCache = savedOrderKeys
-                disabledKeysCache = orderedItems
+            }.collectLatest { lists ->
+                disabledKeysCache = lists.allEntries
                     .filter { it.isDisabled && it.key !in kitsuCatalogKeysCache && it.key !in tmdbCatalogKeysCache }
                     .map { it.disableKey }
                     .toSet()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        items = orderedItems
+                        items = lists.visibleItems,
+                        availableItems = lists.availableItems
                     )
                 }
             }
@@ -245,56 +258,65 @@ class CatalogOrderViewModel @Inject constructor(
         }
     }
 
-    private fun buildOrderedCatalogItems(
-        addons: List<Addon>,
-        savedOrderKeys: List<String>,
-        disabledKeys: Set<String>,
-        traktSnapshot: TraktDiscoverySnapshot,
-        traktPrefs: TraktCatalogPreferences,
-        simklPrefs: SimklCatalogPreferences,
-        mdbListSnapshot: MDBListDiscoverySnapshot,
-        mdbListPrefs: MDBListCatalogPreferences,
-        kitsuPrefs: KitsuCatalogPreferences,
-        tmdbPrefs: TmdbCatalogPreferences
-    ): List<CatalogOrderItem> {
-        val kitsuEntries = buildAllKitsuCatalogEntries(kitsuPrefs)
+    private fun buildAllCatalogEntries(inputs: ExtendedCatalogOrderInputs): List<CatalogOrderEntry> {
+        val kitsuEntries = buildAllKitsuCatalogEntries(inputs.kitsuPrefs)
         kitsuCatalogKeysCache = kitsuEntries.map { it.key }.toSet()
         disabledKitsuCatalogKeysCache = kitsuEntries.filter { it.isDisabled }.map { it.key }.toSet()
-        val tmdbEntries = buildAllTmdbCatalogEntries(tmdbPrefs)
+        val tmdbEntries = buildAllTmdbCatalogEntries(inputs.tmdbPrefs)
         tmdbCatalogKeysCache = tmdbEntries.map { it.key }.toSet()
         disabledTmdbCatalogKeysCache = tmdbEntries.filter { it.isDisabled }.map { it.key }.toSet()
-        val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
-            .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs, disabledKeys))
-            .plus(buildActiveSimklCatalogEntries(simklPrefs, disabledKeys))
-            .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs, disabledKeys))
+        return buildDefaultCatalogEntries(inputs.base.addons, inputs.base.disabledKeys)
+            .plus(buildActiveTraktCatalogEntries(inputs.base.traktSnapshot, inputs.base.traktPrefs, inputs.base.disabledKeys))
+            .plus(buildActiveSimklCatalogEntries(inputs.simklPrefs, inputs.base.disabledKeys))
+            .plus(buildActiveMdbListCatalogEntries(inputs.mdbListSnapshot, inputs.mdbListPrefs, inputs.base.disabledKeys))
             .plus(kitsuEntries)
             .plus(tmdbEntries)
-        val availableMap = defaultEntries.associateBy { it.key }
-        val defaultOrderKeys = defaultEntries.map { it.key }
-        val savedValid = savedOrderKeys
-            .asSequence()
-            .mapNotNull { rawKey -> resolveOrderedKey(rawKey, availableMap.keys) }
-            .distinct()
-            .toList()
+    }
 
-        val savedKeySet = savedValid.toSet()
-        val missing = defaultOrderKeys.filterNot { it in savedKeySet }
-        val effectiveOrder = savedValid + missing
-
-        return effectiveOrder.mapIndexedNotNull { index, key ->
-            val entry = availableMap[key] ?: return@mapIndexedNotNull null
+    private fun buildVisibleCatalogItems(
+        homeCatalogRails: List<HomeCatalogRail>,
+        allEntries: List<CatalogOrderEntry>
+    ): List<CatalogOrderItem> {
+        val entriesByKey = allEntries.associateBy { it.key }
+        val sanitizedRails = sanitizeHomeCatalogRails(homeCatalogRails)
+        return sanitizedRails.mapIndexed { index, rail ->
+            val entry = entriesByKey[rail.key]
             CatalogOrderItem(
-                key = entry.key,
-                disableKey = entry.disableKey,
-                catalogName = entry.catalogName,
-                addonName = entry.addonName,
-                typeLabel = entry.typeLabel,
-                isToggleable = entry.isToggleable,
-                isDisabled = entry.isDisabled || entry.disableKey in disabledKeys || entry.key in disabledKeys,
+                key = rail.key,
+                disableKey = entry?.disableKey ?: rail.key,
+                catalogName = entry?.catalogName ?: rail.title.ifBlank { rail.key },
+                addonName = entry?.addonName ?: rail.family.ifBlank { "Unavailable" },
+                typeLabel = entry?.typeLabel ?: "catalog",
+                isToggleable = true,
+                isDisabled = false,
                 canMoveUp = index > 0,
-                canMoveDown = index < effectiveOrder.lastIndex
+                canMoveDown = index < sanitizedRails.lastIndex,
+                isUnavailable = entry == null || entry.isDisabled
             )
         }
+    }
+
+    private fun buildAvailableCatalogItems(
+        homeCatalogRails: List<HomeCatalogRail>,
+        allEntries: List<CatalogOrderEntry>
+    ): List<CatalogOrderItem> {
+        val visibleKeys = sanitizeHomeCatalogRails(homeCatalogRails).mapTo(linkedSetOf<String>()) { it.key }
+        return allEntries
+            .filter { it.key !in visibleKeys }
+            .filterNot { it.isDisabled }
+            .map { entry ->
+                CatalogOrderItem(
+                    key = entry.key,
+                    disableKey = entry.disableKey,
+                    catalogName = entry.catalogName,
+                    addonName = entry.addonName,
+                    typeLabel = entry.typeLabel,
+                    isToggleable = entry.isToggleable,
+                    isDisabled = false,
+                    canMoveUp = false,
+                    canMoveDown = false
+                )
+            }
     }
 
     private fun buildDefaultCatalogEntries(
@@ -531,48 +553,6 @@ class CatalogOrderViewModel @Inject constructor(
         return "${addonId}_${type}_${catalogId}"
     }
 
-    private fun buildEffectiveVisibleOrder(
-        savedOrderKeys: List<String>,
-        availableKeys: List<String>
-    ): List<String> {
-        val availableSet = availableKeys.toSet()
-        val savedVisible = savedOrderKeys
-            .asSequence()
-            .mapNotNull { rawKey -> resolveOrderedKey(rawKey, availableSet) }
-            .distinct()
-            .toList()
-        return savedVisible + availableKeys.filterNot { it in savedVisible }
-    }
-
-    private fun resolveOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
-        if (rawKey in availableKeys) {
-            return rawKey
-        }
-
-        val canonical = canonicalSyntheticCatalogKey(rawKey)
-        if (canonical.isBlank()) {
-            return null
-        }
-
-        return availableKeys.firstOrNull { canonicalSyntheticCatalogKey(it) == canonical }
-    }
-
-    private fun canonicalSyntheticCatalogKey(value: String): String {
-        val trimmed = value.trim()
-        if (trimmed.isBlank()) return ""
-        return when {
-            trimmed.startsWith("personal:", ignoreCase = true) ||
-                trimmed.startsWith("top:", ignoreCase = true) -> {
-                val prefix = trimmed.substringBefore(':').lowercase()
-                val payload = trimmed.substringAfter(':', "")
-                val listId = payload.substringAfterLast('/').trim().lowercase()
-                if (listId.isBlank()) trimmed.lowercase() else "$prefix:$listId"
-            }
-
-            else -> trimmed
-        }
-    }
-
     private fun disableKey(
         addonBaseUrl: String,
         type: String,
@@ -590,6 +570,7 @@ class CatalogOrderViewModel @Inject constructor(
 data class CatalogOrderUiState(
     val isLoading: Boolean = true,
     val items: List<CatalogOrderItem> = emptyList(),
+    val availableItems: List<CatalogOrderItem> = emptyList(),
     val androidTvChannelsEnabled: Boolean = false,
     val androidTvSelectedFeedKeys: List<String> = emptyList(),
     val androidTvFeedOptions: List<AndroidTvFeedOption> = emptyList()
@@ -604,7 +585,8 @@ data class CatalogOrderItem(
     val isToggleable: Boolean,
     val isDisabled: Boolean,
     val canMoveUp: Boolean,
-    val canMoveDown: Boolean
+    val canMoveDown: Boolean,
+    val isUnavailable: Boolean = false
 )
 
 private data class CatalogOrderEntry(
@@ -617,13 +599,18 @@ private data class CatalogOrderEntry(
     val isDisabled: Boolean
 )
 
+private data class CatalogOrderLists(
+    val visibleItems: List<CatalogOrderItem>,
+    val availableItems: List<CatalogOrderItem>,
+    val allEntries: List<CatalogOrderEntry>
+)
+
 private data class BaseCatalogOrderInputs(
     val addons: List<Addon>,
-    val savedOrderKeys: List<String>,
+    val homeCatalogRails: List<HomeCatalogRail>,
     val disabledKeys: Set<String>,
     val traktSnapshot: TraktDiscoverySnapshot,
-    val traktPrefs: TraktCatalogPreferences,
-    val simklPrefs: SimklCatalogPreferences
+    val traktPrefs: TraktCatalogPreferences
 )
 
 private data class ExtendedCatalogOrderInputs(
@@ -631,5 +618,6 @@ private data class ExtendedCatalogOrderInputs(
     val simklPrefs: SimklCatalogPreferences,
     val mdbListSnapshot: MDBListDiscoverySnapshot,
     val mdbListPrefs: MDBListCatalogPreferences,
-    val kitsuPrefs: KitsuCatalogPreferences
+    val kitsuPrefs: KitsuCatalogPreferences,
+    val tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences()
 )
