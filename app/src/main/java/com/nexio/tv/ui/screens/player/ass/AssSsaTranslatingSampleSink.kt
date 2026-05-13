@@ -148,8 +148,8 @@ internal class AssSsaTranslatingSampleSink(
                 budgetPreferPreserveStyles = setOf("signs")
             )
         )
-        val surfacesByFlatIndex = flatRecords.mapIndexedNotNull { flatIndex, record ->
-            if (plan.actions[flatIndex] !is AssSsaTranslationAction.Translate) return@mapIndexedNotNull null
+        val recompositionSurfacesByFlatIndex = flatRecords.mapIndexedNotNull { flatIndex, record ->
+            if (plan.actions[flatIndex] is AssSsaTranslationAction.Preserve) return@mapIndexedNotNull null
             val indexed = allRecords[flatIndex]
             val id = if (batchedIds) {
                 "evt_${indexed.sampleIndex}_${indexed.recordIndex}"
@@ -161,16 +161,18 @@ internal class AssSsaTranslatingSampleSink(
                 is AssSsaSurfaceParseResult.PreserveOnly -> null
             }
         }.toMap()
+        val translationSurfacesByFlatIndex = recompositionSurfacesByFlatIndex
+            .filterKeys { flatIndex -> plan.actions[flatIndex] is AssSsaTranslationAction.Translate }
         val preserveCount = plan.actions.count { it is AssSsaTranslationAction.Preserve }
         val duplicateCount = plan.actions.count { it is AssSsaTranslationAction.DuplicateOf }
         samples.forEach { sample ->
             diagnosticsLogger.log(
                 "sample_ass_classified track=${sample.trackId} timeUs=${sample.timeUs} " +
-                    "records=${sample.records.size} translate=${surfacesByFlatIndex.size} " +
+                    "records=${sample.records.size} translate=${translationSurfacesByFlatIndex.size} " +
                     "preserve=$preserveCount duplicate=$duplicateCount"
             )
         }
-        val surfaces = surfacesByFlatIndex.values.toList()
+        val surfaces = translationSurfacesByFlatIndex.values.toList()
         val first = samples.first()
         diagnosticsLogger.log(
             "sample_translate_start mode=ass_segment track=${first.trackId} timeUs=${first.timeUs} " +
@@ -220,10 +222,11 @@ internal class AssSsaTranslatingSampleSink(
                     is AssSsaTranslationAction.DuplicateOf -> action.canonicalIndex
                     is AssSsaTranslationAction.Preserve -> null
                 }
-                val surface = canonicalIndex?.let { surfacesByFlatIndex[it] }
+                val surface = recompositionSurfacesByFlatIndex[flatIndex]
+                val canonicalSurface = canonicalIndex?.let { translationSurfacesByFlatIndex[it] }
                 val translatedText = surface
                     ?.let {
-                        translated[it.id]?.let { segments ->
+                        canonicalSurface?.id?.let(translated::get)?.let { segments ->
                             runCatching { it.recomposeOrThrow(segments) }.getOrNull()
                         }
                     }

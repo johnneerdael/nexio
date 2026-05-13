@@ -303,7 +303,7 @@ class CatalogOrderViewModel @Inject constructor(
         val visibleKeys = sanitizeHomeCatalogRails(homeCatalogRails).mapTo(linkedSetOf<String>()) { it.key }
         return allEntries
             .filter { it.key !in visibleKeys }
-            .filterNot { it.isDisabled }
+            .filterNot { it.isDisabled && it.key !in TmdbCatalogIds.BUILT_IN_ORDER && it.key !in KitsuCatalogIds.BUILT_IN_ORDER }
             .map { entry ->
                 CatalogOrderItem(
                     key = entry.key,
@@ -489,7 +489,7 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = "TMDB",
                 typeLabel = if (isMovieCatalog) "movie" else "series",
                 isToggleable = true,
-                isDisabled = false
+                isDisabled = catalogId !in sanitized.enabledCatalogs
             )
         }
     }
@@ -509,7 +509,7 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = "Kitsu",
                 typeLabel = "anime",
                 isToggleable = true,
-                isDisabled = false
+                isDisabled = catalogId !in sanitized.enabledCatalogs
             )
         }
     }

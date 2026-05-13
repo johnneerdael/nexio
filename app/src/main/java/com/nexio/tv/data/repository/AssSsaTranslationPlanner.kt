@@ -59,8 +59,8 @@ internal object AssSsaTranslationPlanner {
     }
 
     private fun classifyInitial(record: AssSsaEventRecord, visible: String): AssSsaPreserveReason? {
-        if (visible.isBlank()) return AssSsaPreserveReason.EmptyVisibleText
         if (record.text.hasAssSsaDrawingPayload()) return AssSsaPreserveReason.Drawing
+        if (visible.isBlank()) return AssSsaPreserveReason.EmptyVisibleText
 
         val effect = record.field("Effect").orEmpty().trim()
         if (effect.equals("fx", ignoreCase = true) && !record.isReadableEnglishEffectLine(visible)) {
@@ -95,14 +95,26 @@ internal object AssSsaTranslationPlanner {
         }
 
         windows.values.forEach { indices ->
-            if (indices.size <= config.maxTranslatePerWindow) return@forEach
+            val budgetedIndices = if (config.budgetPreferPreserveStyles.isEmpty()) {
+                indices
+            } else {
+                indices.filter { index ->
+                    records[index].field("Style").orEmpty().trim().lowercase(Locale.US) in config.budgetPreferPreserveStyles
+                }
+            }
+            if (budgetedIndices.size <= config.maxTranslatePerWindow) return@forEach
             val sorted = indices.sortedWith(
                 compareBy<Int> { index ->
                     val style = records[index].field("Style").orEmpty().trim().lowercase(Locale.US)
                     if (style in config.budgetPreferPreserveStyles) 1 else 0
                 }.thenBy { index -> index }
             )
-            sorted.drop(config.maxTranslatePerWindow).forEach { index ->
+            val preserveCandidates = if (config.budgetPreferPreserveStyles.isEmpty()) {
+                sorted.drop(config.maxTranslatePerWindow)
+            } else {
+                budgetedIndices.drop(config.maxTranslatePerWindow)
+            }
+            preserveCandidates.forEach { index ->
                 actions[index] = AssSsaTranslationAction.Preserve(AssSsaPreserveReason.WindowBudget)
             }
         }
