@@ -21,6 +21,7 @@ import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
+import com.nexio.tv.ui.screens.home.displayMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -51,18 +52,20 @@ class ContinueWatchingResolvedDisplayItemTest {
         assertSame(backdrop, item.backdropRef)
         assertSame(logo, item.logoRef)
         assertSame(rating, item.rating)
-        assertSame(source, item.source)
+        assertSame(source.progress, item.source.progress)
+        assertEquals("Fight Club", item.source.displayMetadata().title)
+        assertEquals("An office worker meets a strange soap salesman.", item.source.displayMetadata().description)
+        assertEquals("tt0137523", item.source.displayMetadata().imdbId)
     }
 
     @Test
-    fun `fromInProgress threads source through unchanged and exposes progress getter`() {
+    fun `fromInProgress preserves progress and exposes progress getter`() {
         val source = inProgressItem()
         val item = ContinueWatchingResolvedDisplayItem.fromInProgress(
             resolvedItem(artwork = ArtworkBundle(), rating = null),
             source
         )
 
-        assertSame(source, item.source)
         assertSame(source.progress, item.progress)
     }
 
@@ -100,19 +103,24 @@ class ContinueWatchingResolvedDisplayItemTest {
         assertSame(backdrop, item.backdropRef)
         assertSame(logo, item.logoRef)
         assertSame(rating, item.rating)
-        assertSame(source, item.source)
+        assertEquals(source.info.videoId, item.source.info.videoId)
+        assertEquals(source.info.season, item.source.info.season)
+        assertEquals(source.info.episode, item.source.info.episode)
+        assertEquals("Fight Club", item.source.displayMetadata().title)
+        assertEquals("tt0137523", item.source.displayMetadata().imdbId)
     }
 
     @Test
-    fun `fromNextUp threads source through unchanged and exposes info getter`() {
+    fun `fromNextUp preserves episode coordinates and exposes info getter`() {
         val source = nextUpItem()
         val item = ContinueWatchingResolvedDisplayItem.fromNextUp(
             resolvedItem(artwork = ArtworkBundle(), rating = null),
             source
         )
 
-        assertSame(source, item.source)
-        assertSame(source.info, item.info)
+        assertEquals(source.info.videoId, item.info.videoId)
+        assertEquals(source.info.season, item.info.season)
+        assertEquals(source.info.episode, item.info.episode)
     }
 
     @Test

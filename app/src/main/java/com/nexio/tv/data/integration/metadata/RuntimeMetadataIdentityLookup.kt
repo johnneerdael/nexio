@@ -2,6 +2,8 @@ package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.core.metadata.router.StableIdBundleResolver
+import com.nexio.tv.core.tvdb.TvdbRemoteIdSource
+import com.nexio.tv.core.tvdb.normalizeTvdbRemoteIdSource
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import javax.inject.Inject
@@ -36,7 +38,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     override suspend fun tvdbSeriesToImdb(tvdbId: String): String? =
         tvdbProvider.fetchSeriesExtended(MetadataProviderTargetIds.tvdbInt(tvdbId) ?: return null)
             ?.remoteIds
-            ?.firstOrNull { it.sourceName.equals("IMDB", ignoreCase = true) }
+            ?.firstOrNull { normalizeTvdbRemoteIdSource(it.sourceName) == TvdbRemoteIdSource.IMDB }
             ?.id
             ?.takeIf { it.isNotBlank() }
 

@@ -23,6 +23,7 @@ import com.nexio.tv.data.repository.ResumeIdentity
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.data.repository.toSafeResumeIdentity
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import kotlinx.coroutines.CancellationException
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -132,6 +134,18 @@ internal suspend fun resolveProjectedContinueWatchingIdentityKeys(
     }
     return result
 }
+
+internal fun continueWatchingIdentityMetadataRequest(item: ContinueWatchingItem): MetadataRequest =
+    MetadataRequest(
+        contentId = item.contentId(),
+        contentType = ContentType.fromString(item.contentType()),
+        sourceContext = MetadataSourceContext(
+            itemType = item.contentType(),
+            previewStableIds = providerIdsFromContinueWatchingContentId(item.contentId())
+        ),
+        seasonNumber = item.season(),
+        depth = MetadataDepth.IDENTITY
+    )
 
 internal fun shouldEnrichContinueWatchingProviderMetadata(
     items: List<ContinueWatchingItem>,
@@ -404,13 +418,16 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     } catch (_: Exception) {
         emptyMap<Int, String>()
     }
-    val items = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
+    val itemsWithoutOverlaySidecars = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
         val idx = rawItems.indexOfFirst { it === item }
         projectedKeys[idx] ?: item.canonicalOrContentKey()
     }
-    val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
+    val items = withContinueWatchingOverlaySidecars(itemsWithoutOverlaySidecars)
+    val traktUpNextItemsWithoutOverlaySidecars = snapshot.traktUpNextItems.map { entry ->
         entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
     }.filter { it.info.hasAired }
+    val traktUpNextItems = withContinueWatchingOverlaySidecars(traktUpNextItemsWithoutOverlaySidecars)
+        .filterIsInstance<ContinueWatchingItem.NextUp>()
 
     if (!isCurrentHomeSession(session)) {
         emitStaleContinueWatchingEmission("publish", session)
@@ -481,7 +498,9 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                val enrichedItems = enrichContinueWatchingItems(items, settings)
+                val enrichedItems = withContinueWatchingOverlaySidecars(
+                    enrichContinueWatchingItems(items, settings)
+                )
                 if (!isCurrentHomeSession(session)) {
                     emitStaleContinueWatchingEmission("enrichment_items", session)
                     return@launch
@@ -491,7 +510,9 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                val enrichedTraktItems = withContinueWatchingOverlaySidecars(
+                    enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                ).filterIsInstance<ContinueWatchingItem.NextUp>()
                 if (!isCurrentHomeSession(session)) {
                     emitStaleContinueWatchingEmission("enrichment", session)
                     Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment")
@@ -543,6 +564,60 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         }
     }
 }
+
+private suspend fun HomeViewModel.withContinueWatchingOverlaySidecars(
+    items: List<ContinueWatchingItem>
+): List<ContinueWatchingItem> {
+    if (items.isEmpty()) return items
+    val itemKeys = items.mapTo(linkedSetOf()) { item ->
+        homeDisplayItemKey(item.contentType(), item.contentId())
+    }
+    val overlays = runCatching {
+        withContext(Dispatchers.IO) {
+            hydratedHomeOverlayStore.readForItemKeys(
+                itemKeys = itemKeys,
+                languageTag = profileBoundary.currentLanguageTag(),
+                policyVersion = CONTINUE_WATCHING_OVERLAY_POLICY_VERSION
+            )
+        }
+    }.onFailure { error ->
+        Log.d(HomeViewModel.TAG, "Unable to read hydrated overlay sidecars for Continue Watching", error)
+    }.getOrDefault(emptyMap())
+    if (overlays.isEmpty()) return items
+    return mergeContinueWatchingOverlaySidecars(items, overlays)
+}
+
+internal fun mergeContinueWatchingOverlaySidecars(
+    items: List<ContinueWatchingItem>,
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): List<ContinueWatchingItem> {
+    if (items.isEmpty() || overlaysByItemKey.isEmpty()) return items
+    return items.map { item ->
+        val overlay = overlaysByItemKey[homeDisplayItemKey(item.contentType(), item.contentId())]
+            ?: return@map item
+        item.withOverlaySidecar(overlay)
+    }
+}
+
+private fun ContinueWatchingItem.withOverlaySidecar(
+    overlay: HydratedHomeOverlay
+): ContinueWatchingItem {
+    val current = displayMetadata()
+    val merged = current.copy(
+        imdbId = current.imdbId ?: overlay.imdbId ?: overlay.fields.imdbId,
+        originalLanguage = current.originalLanguage ?: overlay.fields.originalLanguage,
+        runtime = current.runtime ?: overlay.fields.runtime,
+        releaseInfo = current.releaseInfo ?: overlay.fields.releaseInfo,
+        imdbRating = current.imdbRating ?: overlay.fields.imdbRating,
+        ratingSource = current.ratingSource ?: overlay.fields.ratingSource
+    )
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> copy(displayMetadata = merged)
+        is ContinueWatchingItem.NextUp -> copy(info = info.copy(displayMetadata = merged))
+    }
+}
+
+private const val CONTINUE_WATCHING_OVERLAY_POLICY_VERSION = 1
 
 internal suspend fun HomeViewModel.enrichContinueWatchingItems(
     items: List<ContinueWatchingItem>,

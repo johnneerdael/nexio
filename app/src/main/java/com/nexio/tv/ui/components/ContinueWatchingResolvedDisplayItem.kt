@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.WatchProgress
@@ -98,7 +100,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = resolved.artwork.backdrop,
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
-            source = source
+            source = source.withResolvedDisplayMetadata(resolved)
         )
 
         fun fromNextUp(
@@ -112,7 +114,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = resolved.artwork.backdrop,
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
-            source = source
+            source = source.withResolvedDisplayMetadata(resolved)
         )
 
         /**
@@ -160,6 +162,53 @@ sealed class ContinueWatchingResolvedDisplayItem {
             source = source
         )
     }
+}
+
+private fun ContinueWatchingItem.InProgress.withResolvedDisplayMetadata(
+    resolved: ResolvedDisplayItem
+): ContinueWatchingItem.InProgress {
+    val merged = displayMetadata.mergeResolvedDisplay(resolved)
+    return copy(displayMetadata = merged)
+}
+
+private fun ContinueWatchingItem.NextUp.withResolvedDisplayMetadata(
+    resolved: ResolvedDisplayItem
+): ContinueWatchingItem.NextUp {
+    val merged = info.displayMetadata.mergeResolvedDisplay(resolved)
+    return copy(info = info.copy(
+        displayMetadata = merged,
+        name = merged.title ?: info.name,
+        poster = merged.displayPoster ?: info.poster,
+        backdrop = merged.displayBackdrop ?: info.backdrop,
+        logo = merged.displayLogo ?: info.logo,
+        episodeDescription = info.episodeDescription ?: merged.description,
+        genres = info.genres.ifEmpty { merged.genres },
+        releaseInfo = info.releaseInfo ?: merged.releaseInfo
+    ))
+}
+
+private fun HomeDisplayMetadata?.mergeResolvedDisplay(
+    resolved: ResolvedDisplayItem
+): HomeDisplayMetadata {
+    val current = this
+    return HomeDisplayMetadata(
+        title = resolved.display.title ?: current?.title,
+        logo = resolved.artwork.logo.toLegacyArtworkString() ?: current?.logo,
+        description = resolved.display.overview ?: current?.description,
+        genres = resolved.display.genres.ifEmpty { current?.genres.orEmpty() },
+        releaseInfo = resolved.display.releaseDate ?: resolved.display.year?.toString() ?: current?.releaseInfo,
+        runtime = resolved.display.runtimeText ?: current?.runtime,
+        imdbRating = resolved.rating?.value?.toFloat() ?: current?.imdbRating,
+        ratingSource = resolved.rating?.source ?: current?.ratingSource,
+        tomatoesRating = resolved.display.tomatoesRating ?: current?.tomatoesRating,
+        originalLanguage = current?.originalLanguage,
+        imdbId = resolved.imdbId ?: resolved.stableIds.imdb ?: current?.imdbId,
+        poster = resolved.artwork.poster.toLegacyArtworkString() ?: current?.poster,
+        posterProviderTag = current?.posterProviderTag,
+        backdrop = resolved.artwork.backdrop.toLegacyArtworkString() ?: current?.backdrop,
+        thumbnail = resolved.artwork.thumbnail.toLegacyArtworkString() ?: current?.thumbnail,
+        artwork = resolved.artwork
+    )
 }
 
 private fun String?.toLegacyArtworkRefOrNull(type: ArtworkType): ArtworkDisplayRef? {

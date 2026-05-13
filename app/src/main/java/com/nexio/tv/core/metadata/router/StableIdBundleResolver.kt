@@ -184,7 +184,7 @@ class StableIdBundleResolver @Inject constructor(
     ): String? {
         resolveFromStore(sourceId, provider, operation, target, evidence)?.let { return it }
         if (idMappingStore.readRaw(provider, sourceId)?.source == IdMappingSource.NEGATIVE) {
-            return null
+            if (!shouldRefreshNegativeMapping(operation)) return null
         }
 
         val resolved = providerLookup().presentStableId()
@@ -192,6 +192,9 @@ class StableIdBundleResolver @Inject constructor(
         persistLookup(sourceId, provider, operation, resolved)
         return resolved
     }
+
+    private fun shouldRefreshNegativeMapping(operation: String): Boolean =
+        operation == "tvdbSeriesToImdb"
 
     private suspend fun persistLookup(
         sourceId: ParsedMetadataId,

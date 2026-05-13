@@ -3,13 +3,18 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -183,6 +188,77 @@ class ContinueWatchingSnapshotServiceMutationTest {
             languageTag = input.languageTag
         )
     }
+
+    @Test
+    fun `resolved display surface hydrates imdb keyed movie snapshot with canonical record`() {
+        val service = buildService()
+        val progress = resume(
+            contentId = "tt40898187",
+            videoId = "tt40898187",
+            lastWatched = 1778611202000L,
+            progressPercent = 72.0997f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(
+            duration = 0L,
+            traktMovieId = 1361127
+        )
+        val snapshot = ContinueWatchingSnapshot(
+            resumeItems = listOf(progress),
+            updatedAtMs = 1778611202000L
+        )
+
+        val hydrated = service.mergeResolvedDisplaySnapshot(
+            snapshot = snapshot,
+            profileId = 1,
+            resolvedItems = listOf(roastResolvedDisplayItem())
+        )
+
+        val metadata = hydrated.displayMetadataByItemKey.getValue("movie:tt40898187")
+        assertEquals("The Roast of Kevin Hart", metadata.title)
+        assertEquals("tt40898187", metadata.imdbId)
+        assertEquals("172", metadata.runtime)
+
+        val record = hydrated.records.single()
+        assertEquals("profile:1:movie:tmdb:1658982", record.identityKey())
+        assertEquals("1658982", record.idBundle.tmdb)
+        assertEquals("1361127", record.idBundle.trakt)
+        assertEquals("tt40898187", record.idBundle.imdb)
+        assertEquals("tt40898187", record.streamFetchIdentity?.contentId)
+        assertEquals("tt40898187", record.streamFetchIdentity?.videoId)
+        assertEquals(StreamIdScheme.IMDB_MOVIE, record.streamFetchIdentity?.idScheme)
+    }
+
+    private fun roastResolvedDisplayItem(): ResolvedDisplayItem = ResolvedDisplayItem(
+        itemKey = "movie:tmdb:1658982",
+        contentId = "tmdb:1658982",
+        parentId = "tmdb:1658982",
+        itemType = ContentType.MOVIE,
+        mediaKind = MetadataMediaKind.MOVIE,
+        canonicalProvider = "TMDB",
+        canonicalId = "1658982",
+        imdbId = "tt40898187",
+        stableIds = ProviderIds(
+            imdb = "tt40898187",
+            tmdb = "1658982",
+            trakt = "1361127",
+            slug = "the-roast-of-kevin-hart-2026"
+        ),
+        display = ResolvedDisplayFields(
+            title = "The Roast of Kevin Hart",
+            originalTitle = null,
+            year = 2026,
+            releaseDate = "2026-05-10",
+            overview = "Kevin Hart is in the hot seat.",
+            genres = listOf("Comedy"),
+            runtimeText = "172"
+        ),
+        artwork = ArtworkBundle(),
+        rating = null,
+        trailer = TrailerDisplayState(),
+        hydrationState = com.nexio.tv.domain.model.HydrationState.STALE_READY,
+        sourceTrace = emptyList(),
+        updatedAtMs = 1778611202000L
+    )
 
     private fun String.canonicalProvider(): ProviderId? =
         when (substringBefore(':').lowercase()) {

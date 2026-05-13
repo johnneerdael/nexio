@@ -3,12 +3,17 @@ package com.nexio.tv.ui.navigation
 import com.nexio.tv.core.metadata.parseRuntimeMinutes
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
+import com.nexio.tv.ui.screens.home.continueWatchingIdentityMetadataRequest
+import com.nexio.tv.ui.screens.home.displayMetadata
+import com.nexio.tv.ui.screens.home.mergeContinueWatchingOverlaySidecars
 import kotlinx.coroutines.test.runTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -193,6 +198,232 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `manual continue watching route derives episode stream fetch id from imdb metadata when persisted id is missing`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    contentType = "series",
+                    season = 2,
+                    episode = 1,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt9794044")
+            )
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching route derives episode stream fetch id from imdb metadata when persisted id is tvdb shaped`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    contentType = "series",
+                    season = 2,
+                    episode = 1,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tvdb:393268:2:1",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt9794044")
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching route derives episode stream fetch id from resolved imdb override`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:463433",
+                    videoId = "tvdb:463433:1:9",
+                    contentType = "series",
+                    season = 1,
+                    episode = 9,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tvdb:463433:1:9"
+            ),
+            deterministicAutoplayEnabled = true,
+            resolvedImdbHint = "tt12345678"
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
+        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
+        assertEquals("tt12345678", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching overlay sidecar supplies imdb metadata for tvdb item`() {
+        val item = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tvdb:393268",
+                contentType = "series",
+                name = "Citadel",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(runtime = "43"),
+                videoId = "tvdb:393268:2:2",
+                season = 2,
+                episode = 2,
+                episodeTitle = "Cold Plunge",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+        val enriched = mergeContinueWatchingOverlaySidecars(
+            items = listOf(item),
+            overlaysByItemKey = mapOf(
+                "series:tvdb:393268" to hydratedOverlay(
+                    itemKey = "series:tvdb:393268",
+                    imdbId = "tt9794044",
+                    title = "Citadel"
+                )
+            )
+        ).single()
+
+        val route = buildContinueWatchingStreamRoute(
+            item = enriched,
+            deterministicAutoplayEnabled = true
+        )
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tt9794044", enriched.displayMetadata().imdbId)
+        assertEquals("tt9794044:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt9794044", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching tv identity request seeds tvdb provider id from content id`() {
+        val request = continueWatchingIdentityMetadataRequest(
+            ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:463433",
+                    videoId = "tvdb:463433:1:9",
+                    contentType = "series",
+                    season = 1,
+                    episode = 9,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                )
+            )
+        )
+
+        assertEquals("tvdb:463433", request.contentId)
+        assertEquals("463433", request.sourceContext.previewStableIds.tvdb)
+        assertEquals("series", request.sourceContext.itemType)
+    }
+
+    @Test
+    fun `continue watching movie identity request seeds tmdb provider id from content id`() {
+        val request = continueWatchingIdentityMetadataRequest(
+            ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    contentType = "movie"
+                ).copy(
+                    contentId = "tmdb:1405769",
+                    videoId = "tmdb:1405769",
+                    contentType = "movie"
+                )
+            )
+        )
+
+        assertEquals("tmdb:1405769", request.contentId)
+        assertEquals("1405769", request.sourceContext.previewStableIds.tmdb)
+        assertEquals("movie", request.sourceContext.itemType)
+    }
+
+    @Test
+    fun `manual continue watching route derives episode stream fetch id from imdb metadata when persisted id is tvdb shaped`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    contentType = "series",
+                    season = 2,
+                    episode = 1,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tvdb:393268:2:1",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt9794044")
+            )
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `manual continue watching route derives episode stream fetch id from resolved imdb override`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:463433",
+                    videoId = "tvdb:463433:1:9",
+                    contentType = "series",
+                    season = 1,
+                    episode = 9,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tvdb:463433:1:9"
+            ),
+            resolvedImdbHint = "tt12345678"
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
+        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
+        assertEquals("tt12345678", args.getValue("imdbId"))
+    }
+
+    @Test
     fun `continue watching in progress route preserves stable ids addon context and resume args`() {
         val route = buildContinueWatchingStreamRoute(
             item = ContinueWatchingItem.InProgress(
@@ -232,6 +463,46 @@ class StreamRuntimeRoutingTest {
         assertEquals("50.0", args.getValue("resumeProgressPercent"))
         assertEquals("98765", args.getValue("resumeLastWatchedMs"))
         assertEquals(WatchProgress.SOURCE_TRAKT_PLAYBACK, args.getValue("resumeSource"))
+    }
+
+    @Test
+    fun `continue watching route uses resolved display title when source name is stale`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = WatchProgress(
+                    contentId = "tt40898187",
+                    contentType = "movie",
+                    name = "The Roast of Kevin Hart",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "tt40898187",
+                    season = null,
+                    episode = null,
+                    episodeTitle = null,
+                    position = 0L,
+                    duration = 0L,
+                    lastWatched = 98_765L,
+                    progressPercent = 72.0f,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                displayMetadata = HomeDisplayMetadata(
+                    title = "De roast van Kevin Hart",
+                    description = "Nederlandse metadata",
+                    imdbId = "tt40898187",
+                    runtime = "172"
+                )
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("De roast van Kevin Hart", args.getValue("title"))
+        assertEquals("De roast van Kevin Hart", args.getValue("contentName"))
+        assertEquals("tt40898187", args.getValue("streamVideoId"))
+        assertEquals("tt40898187", args.getValue("imdbId"))
+        assertEquals("172", args.getValue("runtime"))
     }
 
     @Test
@@ -449,6 +720,32 @@ class StreamRuntimeRoutingTest {
             episodeTitle = "Episode",
             thumbnail = null,
             lastWatched = 42L
+        )
+    }
+
+    private fun hydratedOverlay(
+        itemKey: String,
+        imdbId: String,
+        title: String
+    ): HydratedHomeOverlay {
+        return HydratedHomeOverlay(
+            overlayKey = "canonical:TVDB:393268:type:SERIES:lang:nl:policy:1",
+            itemKey = itemKey,
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "393268",
+            imdbId = imdbId,
+            contentType = ContentType.SERIES,
+            languageTag = "nl",
+            fields = HomeDisplayMetadata(
+                title = title,
+                imdbId = imdbId,
+                runtime = "43"
+            ),
+            fieldTrace = emptyList(),
+            updatedAtMs = 1L,
+            staleAtMs = Long.MAX_VALUE,
+            expiresAtMs = Long.MAX_VALUE,
+            stableIdsSnapshot = ProviderIds(tvdb = "393268", imdb = imdbId)
         )
     }
 

@@ -67,8 +67,10 @@ import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.Rail
 import com.nexio.tv.domain.model.RailItemKey
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.domain.model.RailHydrationState
@@ -545,12 +547,30 @@ class HomeViewModel @Inject constructor(
                     val key = continueWatchingItemKey(item)
                     wantedKeys += key
                 }
-                val resolvedByWantedKey = HashMap<String, com.nexio.tv.domain.model.ResolvedDisplayItem>(cwItems.size)
+                val wantedAliases = HashSet<String>(cwItems.size * 4)
+                for (i in cwItems.indices) {
+                    wantedAliases += continueWatchingResolvedDisplayAliases(cwItems[i])
+                }
+                val resolvedByWantedKey = HashMap<String, ResolvedDisplayItem>(cwItems.size)
+                val resolvedByWantedAlias = HashMap<String, ResolvedDisplayItem>(cwItems.size)
                 for (i in resolvedItems.indices) {
                     val ri = resolvedItems[i]
                     if (ri.itemKey in wantedKeys) {
                         resolvedByWantedKey[ri.itemKey] = ri
                         if (resolvedByWantedKey.size == wantedKeys.size) break
+                    }
+                    val aliases = resolvedDisplayAliases(ri)
+                    var matched = false
+                    for (alias in aliases) {
+                        if (alias in wantedAliases) {
+                            resolvedByWantedAlias.putIfAbsent(alias, ri)
+                            matched = true
+                        }
+                    }
+                    if (matched && resolvedByWantedKey.size + resolvedByWantedAlias.size >= wantedKeys.size) {
+                        // Keep scanning exact keys until all are found, but avoid doing
+                        // more alias work than the CW row can consume.
+                        continue
                     }
                 }
                 val activeKeys = HashSet<String>(cwItems.size)
@@ -558,8 +578,10 @@ class HomeViewModel @Inject constructor(
                 for (i in cwItems.indices) {
                     val item = cwItems[i]
                     val key = continueWatchingItemKey(item)
-                    activeKeys += key
                     val resolved = resolvedByWantedKey[key]
+                        ?: continueWatchingResolvedDisplayAliases(item)
+                            .firstNotNullOfOrNull { alias -> resolvedByWantedAlias[alias] }
+                    activeKeys += resolved?.itemKey ?: key
                     val projected = if (resolved != null) {
                         when (item) {
                             is ContinueWatchingItem.InProgress -> projectionCache.projectCwInProgress(resolved, item)
@@ -594,6 +616,48 @@ class HomeViewModel @Inject constructor(
     private fun continueWatchingItemKey(item: ContinueWatchingItem): String = when (item) {
         is ContinueWatchingItem.InProgress -> homeDisplayItemKey(item.progress.contentType, item.progress.contentId)
         is ContinueWatchingItem.NextUp -> homeDisplayItemKey(item.info.contentType, item.info.contentId)
+    }
+
+    private fun continueWatchingResolvedDisplayAliases(item: ContinueWatchingItem): Set<String> {
+        val type = item.contentType().lowercase()
+        val aliases = linkedSetOf(homeDisplayItemKey(type, item.contentId()))
+        fun addProvider(provider: String, value: String?) {
+            val clean = value?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            aliases += "$type:$provider:$clean"
+        }
+        when (item) {
+            is ContinueWatchingItem.InProgress -> {
+                providerIdsFromContinueWatchingContentId(item.progress.contentId).addAliases(type, aliases)
+                addProvider("imdb", item.displayMetadata?.imdbId)
+                addProvider("trakt", item.progress.traktMovieId?.toString())
+                addProvider("trakt", item.progress.traktShowId?.toString())
+            }
+            is ContinueWatchingItem.NextUp -> {
+                providerIdsFromContinueWatchingContentId(item.info.contentId).addAliases(type, aliases)
+                addProvider("imdb", item.info.displayMetadata?.imdbId)
+            }
+        }
+        return aliases
+    }
+
+    private fun resolvedDisplayAliases(item: ResolvedDisplayItem): Set<String> {
+        val type = item.itemType.toApiString()
+        val aliases = linkedSetOf(
+            item.itemKey,
+            homeDisplayItemKey(type, item.contentId)
+        )
+        item.stableIds.addAliases(type, aliases)
+        item.imdbId?.let { aliases += "$type:imdb:$it" }
+        return aliases
+    }
+
+    private fun ProviderIds.addAliases(type: String, aliases: MutableSet<String>) {
+        imdb?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:imdb:$it" }
+        tmdb?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:tmdb:$it" }
+        tvdb?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:tvdb:$it" }
+        trakt?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:trakt:$it" }
+        simkl?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:simkl:$it" }
+        kitsu?.trim()?.takeIf { it.isNotEmpty() }?.let { aliases += "$type:kitsu:$it" }
     }
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
@@ -843,6 +907,7 @@ class HomeViewModel @Inject constructor(
         observeResolvedRailRows()
         observeResolvedHeroItems()
         observeResolvedContinueWatchingItems()
+        observeContinueWatchingSnapshotHydrationFromResolvedSurface()
         startCrossIdResolutionObserverPipeline()
     }
 
@@ -1034,6 +1099,28 @@ class HomeViewModel @Inject constructor(
             .onEach { items ->
                 if (_resolvedContinueWatchingItems.value !== items) {
                     _resolvedContinueWatchingItems.value = items
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeContinueWatchingSnapshotHydrationFromResolvedSurface() {
+        profileManager.activeProfileSession
+            .map { it.profileId }
+            .distinctUntilChanged()
+            .flatMapLatest { profileId ->
+                resolvedDisplaySurfaceRepository.observeHomeSurface(profileId)
+                    .map { items -> profileId to items }
+            }
+            .onEach { (profileId, items) ->
+                if (items.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        continueWatchingSnapshotService.hydrateFromResolvedDisplaySurface(
+                            profileId = profileId,
+                            resolvedItems = items
+                        )
+                    }
                 }
             }
             .launchIn(viewModelScope)

@@ -1174,7 +1174,6 @@ class TraktProgressService @Inject constructor(
         }
         if (activityChanged) {
             remoteProgress.value = progressSnapshot
-            hasLoadedRemoteProgress.value = true
             reconcileOptimistic(progressSnapshot)
         }
 
@@ -1191,6 +1190,9 @@ class TraktProgressService @Inject constructor(
         )
         myShowsNextUp.value = allNextUpSnapshot
         myShowsNextUpAll.value = allNextUpSnapshot
+        if (activityChanged) {
+            hasLoadedRemoteProgress.value = true
+        }
     }
 
     private suspend fun hasActivityChanged(): Boolean {

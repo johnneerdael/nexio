@@ -296,6 +296,41 @@ class StableIdBundleResolverTest {
     }
 
     @Test
+    fun `tvdb to imdb lookup refreshes stale negative cache`() = runTest {
+        val store = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = MetadataIdParser.parse("tvdb:463433"),
+                    provider = MetadataPrimaryProvider.IMDB,
+                    providerId = "",
+                    source = IdMappingSource.NEGATIVE,
+                    evidence = "tvdbSeriesToImdb"
+                )
+            ),
+            nowEpochMs = { 10L }
+        )
+        val lookup = RecordingLookup(tvdbSeriesToImdbResult = "tt12345678")
+        val resolver = resolver(store = store, lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TVDB,
+                knownIds = ProviderIds(tvdb = "463433")
+            )
+        )
+
+        assertEquals("tt12345678", bundle.sidecars.imdbId)
+        assertEquals(listOf("tvdbSeriesToImdb:463433"), lookup.calls)
+        val refreshed = store.readRaw(
+            provider = MetadataPrimaryProvider.IMDB,
+            sourceId = MetadataIdParser.parse("tvdb:463433")
+        )
+        assertEquals(IdMappingSource.PROVIDER_LOOKUP, refreshed?.source)
+        assertEquals("tt12345678", refreshed?.providerId)
+    }
+
+    @Test
     fun `tracking route providers return no canonical ids and do not call provider network`() = runTest {
         val lookup = RecordingLookup(
             tmdbMovieToImdbResult = "tt0137523",

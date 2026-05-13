@@ -20,7 +20,7 @@ fun normalizeTvdbRemoteIdSource(sourceName: String?): TvdbRemoteIdSource {
     return when {
         normalized.isBlank() -> TvdbRemoteIdSource.OTHER
         normalized in setOf("tvdb", "thetvdb", "thetvdbcom") -> TvdbRemoteIdSource.TVDB
-        normalized in setOf("imdb", "internetmoviedatabase") -> TvdbRemoteIdSource.IMDB
+        normalized in setOf("imdb", "imdbcom", "internetmoviedatabase") -> TvdbRemoteIdSource.IMDB
         normalized in setOf("tmdb", "themoviedb", "themoviedbcom") -> TvdbRemoteIdSource.TMDB
         normalized in setOf("tvmaze", "tvmazedatabase") -> TvdbRemoteIdSource.TV_MAZE
         normalized == "wikidata" -> TvdbRemoteIdSource.WIKIDATA

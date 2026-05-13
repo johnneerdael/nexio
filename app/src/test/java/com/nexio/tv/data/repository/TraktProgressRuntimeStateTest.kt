@@ -68,6 +68,19 @@ class TraktProgressRuntimeStateTest {
     }
 
     @Test
+    fun `remote snapshot loaded is published after next up refresh`() {
+        val refresh = source().section(
+            start = "private suspend fun refreshRemoteSnapshot()",
+            end = "private suspend fun hasActivityChanged()"
+        )
+
+        assertTrue(
+            refresh.indexOf("myShowsNextUpAll.value = allNextUpSnapshot") <
+                refresh.indexOf("hasLoadedRemoteProgress.value = true")
+        )
+    }
+
+    @Test
     fun `episode history prefers highest episode when season mark timestamps match`() {
         val earlyEpisode = historyProgress(season = 12, episode = 2, lastWatched = 1_000L)
         val seasonFinale = historyProgress(season = 12, episode = 24, lastWatched = 1_000L)

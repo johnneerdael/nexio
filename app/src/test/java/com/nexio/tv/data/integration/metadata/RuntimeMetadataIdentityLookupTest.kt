@@ -143,6 +143,28 @@ class RuntimeMetadataIdentityLookupTest {
     }
 
     @Test
+    fun `tvdbSeriesToImdb normalizes TVDB IMDB source aliases`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
+        val tvdbProvider = mockk<TvdbIntegrationProvider>()
+        coEvery {
+            tvdbProvider.fetchSeriesExtended(tvdbId = 463433, meta = null, short = false)
+        } returns TvdbSeriesExtendedRecord(
+            id = 463433,
+            remoteIds = listOf(
+                TvdbRemoteId(id = "tt12345678", sourceName = "IMDb.com")
+            )
+        )
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.tvdbSeriesToImdb("463433")
+
+        assertEquals("tt12345678", result)
+    }
+
+    @Test
     fun `tvdbToTmdb does not call TMDB when TVDB IMDB remote id is blank`() = runTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
         val tvdbProvider = mockk<TvdbIntegrationProvider>()
