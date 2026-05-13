@@ -432,15 +432,15 @@ object StreamPresentationEngine {
         } else {
             0
         }
-        val groupedItems = groupedPreSortItems.sortedWith(
+        val sizeSortedGroupedItems = groupedPreSortItems.sortedWith(
             compareBy<StreamCardModel> { it.addonPriorityRank }
                 .thenBy { cacheStateRank(it.parsed.isCached) }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
-                .thenBy { toriiPriorityRank(it.stream.addonParserPreset) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
         )
+        val groupedItems = prioritizeToriiOverNagarePeers(sizeSortedGroupedItems)
         val diagnostics = StreamFilteringDiagnostics(
             inputCount = parsed.size,
             droppedEpisodeMismatchCount = droppedEpisodeMismatchCount,
@@ -924,12 +924,47 @@ object StreamPresentationEngine {
         }
     }
 
-    private fun toriiPriorityRank(preset: AddonParserPreset): Int {
-        return when (preset) {
-            AddonParserPreset.NEXIO_TORII -> 0
-            else -> 1
+    private fun prioritizeToriiOverNagarePeers(items: List<StreamCardModel>): List<StreamCardModel> {
+        if (items.size < 2) return items
+        val out = items.toMutableList()
+        var groupStart = 0
+        while (groupStart < out.size) {
+            val key = providerPriorityGroupKey(out[groupStart])
+            var groupEnd = groupStart + 1
+            while (groupEnd < out.size && providerPriorityGroupKey(out[groupEnd]) == key) {
+                groupEnd += 1
+            }
+
+            val providerSlots = (groupStart until groupEnd).filter { index ->
+                val preset = out[index].stream.addonParserPreset
+                preset == AddonParserPreset.NEXIO_TORII || preset == AddonParserPreset.NEXIO_NAGARE
+            }
+            if (providerSlots.size > 1) {
+                val slotItems = providerSlots.map { out[it] }
+                val reordered = slotItems.filter { it.stream.addonParserPreset == AddonParserPreset.NEXIO_TORII } +
+                    slotItems.filter { it.stream.addonParserPreset == AddonParserPreset.NEXIO_NAGARE }
+                providerSlots.forEachIndexed { offset, index ->
+                    out[index] = reordered[offset]
+                }
+            }
+
+            groupStart = groupEnd
         }
+        return out
     }
+
+    private fun providerPriorityGroupKey(item: StreamCardModel): ProviderPriorityGroupKey =
+        ProviderPriorityGroupKey(
+            addonPriorityRank = item.addonPriorityRank,
+            cacheStateRank = cacheStateRank(item.parsed.isCached),
+            resolutionRank = resolutionRank(item.parsed.resolution)
+        )
+
+    private data class ProviderPriorityGroupKey(
+        val addonPriorityRank: Int,
+        val cacheStateRank: Int,
+        val resolutionRank: Int
+    )
 
     private fun shouldFilterEpisodeMismatch(
         parsed: ParsedStreamInfo,
