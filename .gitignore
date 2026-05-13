@@ -96,3 +96,6 @@ supabase/
 shadow-collector/
 plans/
 gradle/
+benchmarks/
+*.jks
+*.keystore
