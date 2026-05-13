@@ -1,7 +1,9 @@
-- [ ] Add spec delta for anime-only addon query selection and Nexio provider ranking.
-- [ ] Add failing repository tests proving anime content queries only anime-tagged compatible addons and non-anime content still queries all compatible addons.
-- [ ] Implement selected-addon fan-out in `StreamRepositoryImpl` using the existing anime classification result.
-- [ ] Update existing anime bucket tests whose old expectation allowed generic fallback during anime-only mode.
-- [ ] Add failing presentation test proving Torii ranks ahead of Nagare when cache and resolution tie.
-- [ ] Implement Torii-before-Nagare provider ranking in grouped stream presentation.
+- [x] Add spec delta for anime-only addon query selection and Nexio provider ranking.
+- [x] Add failing repository tests proving anime content queries only anime-tagged compatible addons and non-anime content still queries all compatible addons.
+- [x] Implement selected-addon fan-out in `StreamRepositoryImpl` using the existing anime classification result.
+- [x] Update existing anime bucket tests whose old expectation allowed generic fallback.
+- [x] Add failing presentation test proving Torii ranks ahead of Nagare when cache and resolution tie.
+- [x] Implement Torii-before-Nagare provider ranking in grouped stream presentation.
 - [ ] Run targeted unit tests and `openspec validate restrict-anime-stream-addons --strict`.
+  - `openspec validate restrict-anime-stream-addons --strict` passes.
+  - Targeted Gradle tests are blocked before execution by unrelated `:app:compileUniversalDebugKotlin` errors in modified player files.
