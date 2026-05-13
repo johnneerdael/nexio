@@ -207,13 +207,17 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
             val restoredSnapshot = filterRestoredHomeSnapshotKitsuRows(
                 snapshot = filterRestoredHomeSnapshotTmdbRows(
                     snapshot = snapshot,
-                    tmdbPrefs = tmdbCatalogPreferences,
+                    tmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails),
                     tmdbSnapshot = tmdbDiscoverySnapshot,
-                    currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+                    currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(
+                        tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+                    )
                 ),
-                kitsuPrefs = kitsuCatalogPreferences,
+                kitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails),
                 kitsuSnapshot = kitsuDiscoverySnapshot,
-                currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
+                currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(
+                    kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+                )
             )
             if (restoredSnapshot.rails.isEmpty() && restoredSnapshot.heroItemKeys.isEmpty()) {
                 return@withContext
@@ -1127,11 +1131,12 @@ internal fun HomeViewModel.observeKitsuCatalogPreferencesPipeline() {
             kitsuCatalogPreferencesObserved = true
             kitsuCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_prefs")
-            if (shouldRefreshKitsuDiscoveryForState(prefs, kitsuDiscoverySnapshot) &&
+            val effectiveKitsuPrefs = prefs.includingHomeCatalogRails(homeCatalogRails)
+            if (shouldRefreshKitsuDiscoveryForState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("kitsu_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                runCatching { kitsuDiscoveryService.refreshCatalogs(prefs, force = false) }
+                runCatching { kitsuDiscoveryService.refreshCatalogs(effectiveKitsuPrefs, force = false) }
                     .onFailure { error ->
                         Log.w(HomeViewModel.TAG, "Failed to refresh Kitsu discovery after settings change", error)
                     }
@@ -1178,11 +1183,12 @@ internal fun HomeViewModel.observeTmdbCatalogPreferencesPipeline() {
             tmdbCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_tmdb_prefs")
             refreshTmdbDiscoveryForPendingCredentialChangePipeline("tmdb_credential_change")
-            if (shouldRefreshTmdbDiscoveryForState(prefs, tmdbDiscoverySnapshot) &&
+            val effectiveTmdbPrefs = prefs.includingHomeCatalogRails(homeCatalogRails)
+            if (shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("tmdb_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                runCatching { tmdbDiscoveryService.refreshCatalogs(prefs, force = false) }
+                runCatching { tmdbDiscoveryService.refreshCatalogs(effectiveTmdbPrefs, force = false) }
                     .onFailure { error ->
                         Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after settings change", error)
                     }
@@ -1223,6 +1229,26 @@ internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
             invalidateHomeCatalogConfigurationPipeline("home_catalog_rails")
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_home_catalog_rails")
+            val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(rails)
+            if (shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("home_catalog_rails") &&
+                isNonPlaybackHomeWorkAllowed()
+            ) {
+                runCatching { tmdbDiscoveryService.refreshCatalogs(effectiveTmdbPrefs, force = false) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after home catalog rail change", error)
+                    }
+            }
+            val effectiveKitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(rails)
+            if (shouldRefreshKitsuDiscoveryForState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("home_catalog_rails") &&
+                isNonPlaybackHomeWorkAllowed()
+            ) {
+                runCatching { kitsuDiscoveryService.refreshCatalogs(effectiveKitsuPrefs, force = false) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to refresh Kitsu discovery after home catalog rail change", error)
+                    }
+            }
             scheduleUpdateCatalogRows()
         }
     }
@@ -1260,7 +1286,7 @@ internal fun HomeViewModel.observeTmdbSettingsPipeline() {
                 if (shouldForceTmdbDiscoveryRefreshForCredentialChange(
                         previous = previousSettings,
                         current = settings,
-                        prefs = tmdbCatalogPreferences
+                        prefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
                     )
                 ) {
                     tmdbCredentialRefreshPending = true
@@ -1276,13 +1302,14 @@ internal fun HomeViewModel.observeTmdbSettingsPipeline() {
 
 internal suspend fun HomeViewModel.refreshTmdbDiscoveryForPendingCredentialChangePipeline(reason: String) {
     if (!tmdbCredentialRefreshPending) return
-    if (tmdbCatalogPreferences.enabledCatalogIds().isEmpty()) return
+    val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+    if (effectiveTmdbPrefs.enabledCatalogIds().isEmpty()) return
     if (shouldSuppressProfileSwitchRefresh(reason)) return
     if (!isNonPlaybackHomeWorkAllowed()) return
 
     tmdbCredentialRefreshPending = false
     startupRefreshPending = true
-    runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbCatalogPreferences, force = true) }
+    runCatching { tmdbDiscoveryService.refreshCatalogs(effectiveTmdbPrefs, force = true) }
         .onFailure { error ->
             Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after credential change", error)
         }
@@ -1370,8 +1397,9 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
         .let { snap -> shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, snap) }
     val refreshMdbDiscovery = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
         .let { snap -> shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, snap) }
+    val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     val refreshTmdbDiscovery = tmdbDiscoveryService.observeSnapshot().first()
-        .let { snap -> shouldRefreshTmdbDiscoveryForState(tmdbCatalogPreferences, snap) }
+        .let { snap -> shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, snap) }
     supervisorScope {
         val refreshJobs = mutableListOf<Job>()
         refreshJobs.add(
@@ -1444,7 +1472,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=tmdb_discovery")
                     if (refreshTmdbDiscovery) {
                         try {
-                            tmdbDiscoveryService.refreshCatalogs(tmdbCatalogPreferences, force = false)
+                            tmdbDiscoveryService.refreshCatalogs(effectiveTmdbPrefs, force = false)
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
                         } catch (t: Throwable) {
@@ -2108,7 +2136,7 @@ internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
 ) {
     if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
     val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
-    val kitsuPrefsSnapshot = kitsuCatalogPreferences
+    val kitsuPrefsSnapshot = kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     var appliedKitsuGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -2167,7 +2195,7 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
 ) {
     if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) return
     val profileId = expectedProfileSession?.profileId ?: profileManager.activeProfileId.value
-    val tmdbPrefsSnapshot = tmdbCatalogPreferences
+    val tmdbPrefsSnapshot = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     var appliedTmdbSnapshot: SyntheticHomeCatalogStore.Snapshot? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -2603,7 +2631,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
     val mdbListSnapshot = mdbListDiscoverySnapshot
     val mdbListPrefs = mdbListCatalogPreferences
     val tmdbSnapshot = tmdbDiscoverySnapshot
-    val tmdbPrefs = tmdbCatalogPreferences
+    val tmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+    val kitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     // Inventory read used to live here as a function-head local capturing
     // the full inventory (27.98 MiB on the failing-state heap dump) into the
     // outer-fun continuation across the catalogRowsComputationMutex.withLock
@@ -2674,7 +2703,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         mdbSnapshot = effectiveMDBListSnapshot,
         tmdbPrefs = tmdbPrefs,
         tmdbSnapshot = effectiveTmdbSnapshot,
-        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuPrefs = kitsuPrefs,
         kitsuSnapshot = effectiveKitsuSnapshot
     )
     val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
@@ -2692,7 +2721,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
         applyPersistedHomeSnapshotIfEligiblePipeline(snapshot, requireSourceCachesReady = false)
     }
     val currentPreferencePersistedTmdbSyntheticGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbPrefs)
-    val currentPreferencePersistedKitsuSyntheticGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
+    val currentPreferencePersistedKitsuSyntheticGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuPrefs)
     val computationSignature = withContext(Dispatchers.Default) {
         // Read continue-watching snapshot inside withContext so the value is not pinned
         // as an outer-fun local across the catalogRowsComputationMutex.withLock + suspend
@@ -2718,7 +2747,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             tmdbPrefs = tmdbPrefs,
             persistedTmdbSyntheticGroups = currentPreferencePersistedTmdbSyntheticGroups,
             kitsuSnapshot = effectiveKitsuSnapshot,
-            kitsuPrefs = kitsuCatalogPreferences,
+            kitsuPrefs = kitsuPrefs,
             persistedKitsuSyntheticGroups = currentPreferencePersistedKitsuSyntheticGroups,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
             hydratedHomeOverlaysByItemKey = currentHydratedHomeOverlays,
@@ -2782,7 +2811,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             mdbSnapshot = effectiveMDBListSnapshot,
             tmdbPrefs = tmdbPrefs,
             tmdbSnapshot = effectiveTmdbSnapshot,
-            kitsuPrefs = kitsuCatalogPreferences,
+            kitsuPrefs = kitsuPrefs,
             kitsuSnapshot = effectiveKitsuSnapshot,
             existingRowsByOrderKey = existingRowsByOrderKey
         ).descriptors
@@ -2882,7 +2911,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             currentSyntheticTmdbGroups = currentPreferencePersistedTmdbSyntheticGroups
         )
         val currentCachedKitsuCatalogIds = currentKitsuCatalogIds(
-            kitsuPrefs = kitsuCatalogPreferences,
+            kitsuPrefs = kitsuPrefs,
             kitsuSnapshot = effectiveKitsuSnapshot,
             currentSyntheticKitsuGroups = currentPreferencePersistedKitsuSyntheticGroups
         )
@@ -3374,16 +3403,18 @@ private fun HomeViewModel.applyHomeResolvedRowsToUiPipeline(
 internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
+    val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+    val effectiveKitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     val builtInSafeSnapshot = filterRestoredHomeSnapshotKitsuRows(
         snapshot = filterRestoredHomeSnapshotTmdbRows(
             snapshot = snapshot,
-            tmdbPrefs = tmdbCatalogPreferences,
+            tmdbPrefs = effectiveTmdbPrefs,
             tmdbSnapshot = tmdbDiscoverySnapshot,
-            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(effectiveTmdbPrefs)
         ),
-        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuPrefs = effectiveKitsuPrefs,
         kitsuSnapshot = kitsuDiscoverySnapshot,
-        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
+        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(effectiveKitsuPrefs)
     )
     val filteredSnapshot = builtInSafeSnapshot.filterDisabledHomeCatalogRows(
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
@@ -3702,18 +3733,20 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbListCatalogPreferences,
         mdbListDiscoverySnapshot
     )
-    val tmdbExpectedOrderKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbCatalogPreferences)
-    val kitsuExpectedOrderKeys = buildExpectedConfiguredKitsuOrderKeys(kitsuCatalogPreferences)
+    val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+    val effectiveKitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
+    val tmdbExpectedOrderKeys = buildExpectedConfiguredTmdbOrderKeys(effectiveTmdbPrefs)
+    val kitsuExpectedOrderKeys = buildExpectedConfiguredKitsuOrderKeys(effectiveKitsuPrefs)
     val restoredSnapshot = filterRestoredHomeSnapshotKitsuRows(
         snapshot = filterRestoredHomeSnapshotTmdbRows(
             snapshot = snapshot,
-            tmdbPrefs = tmdbCatalogPreferences,
+            tmdbPrefs = effectiveTmdbPrefs,
             tmdbSnapshot = tmdbDiscoverySnapshot,
-            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(effectiveTmdbPrefs)
         ),
-        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuPrefs = effectiveKitsuPrefs,
         kitsuSnapshot = kitsuDiscoverySnapshot,
-        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
+        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(effectiveKitsuPrefs)
     )
     val catalogPlan = buildConfiguredCatalogPlan(
         addons = addonsCache,
@@ -3726,9 +3759,9 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         simklSnapshot = simklDiscoverySnapshot,
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot,
-        tmdbPrefs = tmdbCatalogPreferences,
+        tmdbPrefs = effectiveTmdbPrefs,
         tmdbSnapshot = tmdbDiscoverySnapshot,
-        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuPrefs = effectiveKitsuPrefs,
         kitsuSnapshot = kitsuDiscoverySnapshot
     )
     val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
@@ -3746,10 +3779,10 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot,
         kitsuExpectedOrderKeys = kitsuExpectedOrderKeys,
-        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuPrefs = effectiveKitsuPrefs,
         kitsuSnapshot = kitsuDiscoverySnapshot,
         tmdbExpectedOrderKeys = tmdbExpectedOrderKeys,
-        tmdbPrefs = tmdbCatalogPreferences,
+        tmdbPrefs = effectiveTmdbPrefs,
         tmdbSnapshot = tmdbDiscoverySnapshot
     )
     if (requireSourceCachesReady && !sourceCachesReady) {
