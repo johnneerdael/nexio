@@ -1,6 +1,0 @@
-- [x] Add spec deltas for dual-transport debrid benchmark sessions, richer metrics, and side-by-side results presentation.
-- [x] Extend the benchmark result model and local storage to persist direct and optimized transport profiles plus shared candidate metadata.
-- [x] Add shared metrics collection for startup, sustained transfer, and seek phases, including percentile and stability summaries.
-- [x] Implement an optimized benchmark transport that measures the current Nexio parallel path without reusing playback cache or warm-ahead state.
-- [x] Update the benchmark completion UX to show direct and optimized results side-by-side immediately and keep a latest-result re-open affordance.
-- [x] Validate the OpenSpec change and write the follow-up implementation plan after spec approval.

@@ -1,4 +1,0 @@
-- [ ] Add a `portal-auth` spec delta for verified signup, resend confirmation, password reset, and signed-in password management.
-- [ ] Update the web auth endpoints and shared auth utility layer for verified email signup and password management.
-- [ ] Update the account and approval auth UI plus add confirmation/reset routes and signed-in security controls.
-- [ ] Enable email confirmations in Supabase local config and verify the web build and auth tests.

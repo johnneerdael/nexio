@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.nexio.tv.core.trace.RuntimeTraceValidatorRealEmissionTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-04-27T22:34:16.149Z" hostname="KQ2DRW310F" time="0.333">
-  <properties/>
-  <testcase name="real emissions across runtime metadata profile and first-paint validate as PASS" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorRealEmissionTest" time="0.333"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

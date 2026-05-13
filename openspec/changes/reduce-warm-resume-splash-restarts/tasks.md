@@ -1,7 +1,0 @@
-- [ ] Add startup resume policy helpers and tests for cold vs warm splash decisions.
-- [ ] Change Android 12+ launcher theme behavior so warm process-alive launches are not forced through system splash branding.
-- [ ] Cache critical bootstrap readiness across the process lifetime so warm activity recreation can skip splash safely.
-- [ ] Stop replaying deferred startup-only work on warm resumes.
-- [ ] Reuse the existing MainActivity task for launcher-style relaunches when possible.
-- [ ] Add logs that explain whether a launch was cold, warm-and-skipped, or warm-but-unready.
-- [ ] Validate the OpenSpec change with `openspec validate reduce-warm-resume-splash-restarts --strict`.

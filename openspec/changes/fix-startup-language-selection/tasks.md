@@ -1,8 +1,0 @@
-- [ ] Add an Original language option for preferred audio language in settings and stored player settings.
-- [ ] Thread original-language metadata through the player route so startup audio selection can use it.
-- [ ] Add a startup audio correction pass that prefers the configured language over default MULTI-track ordering.
-- [ ] Add startup subtitle policy that prefers downloaded primary-language subtitles over embedded secondary-language subtitles.
-- [ ] Add startup-only Gemini auto-translation fallback when only secondary-language subtitles are available.
-- [ ] Keep fallback subtitle selection active when Gemini startup translation fails.
-- [ ] Add targeted startup-selection policy tests.
-- [ ] Validate with `openspec validate fix-startup-language-selection --strict`.

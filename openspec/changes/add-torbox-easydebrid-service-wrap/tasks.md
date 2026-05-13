@@ -1,8 +1,0 @@
-- [ ] Add spec deltas for account-config v4 and service-wrap provider expansion.
-- [ ] Document the deferred-provider discovery memo for AllDebrid, Debrid-Link, Offcloud, Debrider, and PikPak, and explicitly exclude put.io and Seedr from this change.
-- [ ] Add failing Android tests for account-config v4 and TorBox/EasyDebrid wrap provider support.
-- [ ] Add failing portal tests for v4 types, integration secret bindings, and TorBox/EasyDebrid validation helpers.
-- [ ] Implement Android TorBox and EasyDebrid settings, sync, provider backends, API clients, and optional TorBox library support.
-- [ ] Implement portal secret types, validation endpoints, provider-card registry changes, and sync contract updates for TorBox and EasyDebrid.
-- [ ] Update Supabase sync SQL allowlists for the new secret types.
-- [ ] Validate the OpenSpec change and run focused Android and portal verification targets.

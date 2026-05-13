@@ -1,7 +1,0 @@
-- [ ] Add spec deltas for the local Real-Debrid transport probe capability.
-- [ ] Scaffold a standalone probe package under `tools/rd_probe/` with `.env`-driven configuration.
-- [ ] Implement Real-Debrid candidate resolution with both automatic selection and explicit override support.
-- [ ] Implement parallel range scheduling plus an in-order consumer/assembler model.
-- [ ] Emit structured worker and consumer telemetry plus summary analysis artifacts.
-- [ ] Add optional integrated packet capture support.
-- [ ] Validate the OpenSpec change and keep the probe plan aligned with the approved design.

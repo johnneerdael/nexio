@@ -1,6 +1,0 @@
-- [x] Add spec deltas for collector-backed debrid benchmark ingestion/export and explicit benchmark upload opt-in behavior.
-- [x] Add failing collector tests for completed benchmark ingestion and benchmark export payloads.
-- [x] Add failing Android tests for the dedicated benchmark collection toggle and completed-outcome upload trigger.
-- [x] Implement collector benchmark storage, write/read endpoints, and README/schema updates.
-- [x] Implement app benchmark collection setting, uploader, and completed-benchmark upload wiring.
-- [x] Validate the OpenSpec change and run focused collector/app verification targets.

@@ -1,6 +1,0 @@
-- [ ] Add spec delta for the no-addon official-app handoff behavior.
-- [ ] Add failing tests for no-addon mode gating and installed official app resolution.
-- [ ] Implement official app resolution using only in-app-search-capable providers plus chooser / no-match flows for detail-page play actions.
-- [ ] Disable the mode automatically when the first addon is enabled.
-- [ ] Document Android TV searchable integration for NEXIO itself as a future phase.
-- [ ] Run targeted detail-screen tests and validate the OpenSpec change.

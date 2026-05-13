@@ -1,8 +1,0 @@
-- [ ] Add spec deltas for a second Debrid configuration benchmark mode, profile statuses, and grouped results presentation.
-- [ ] Add a dedicated latest-result model/store for configuration benchmark sessions.
-- [ ] Add a deterministic memory-safety gate that marks unsafe profiles unsupported before execution.
-- [ ] Reuse the optimized benchmark transport for sustained-only matrix profile runs.
-- [ ] Implement sequential same-candidate orchestration across the nine benchmark profiles, including no-success session handling and clear URL-expiry failure semantics.
-- [ ] Update Debrid settings UI to expose the second benchmark action and grouped completion modal, including the no-success summary state.
-- [ ] Enforce cancellation and mutual exclusion across the new matrix benchmark and the existing transport-comparison benchmark.
-- [ ] Validate the OpenSpec change and keep the implementation plan aligned with the approved design.

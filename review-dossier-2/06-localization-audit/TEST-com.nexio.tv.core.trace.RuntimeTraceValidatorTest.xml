@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.nexio.tv.core.trace.RuntimeTraceValidatorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-29T13:38:25.438Z" hostname="KQ2DRW310F" time="0.001">
-  <properties/>
-  <testcase name="synthetic preview violation fails" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorTest" time="0.0"/>
-  <testcase name="clean session passes" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorTest" time="0.001"/>
-  <testcase name="counters reflect event mix" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

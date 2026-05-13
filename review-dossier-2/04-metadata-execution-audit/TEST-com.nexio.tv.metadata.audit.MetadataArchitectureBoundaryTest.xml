@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.nexio.tv.metadata.audit.MetadataArchitectureBoundaryTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-04-29T13:38:24.717Z" hostname="KQ2DRW310F" time="0.002">
-  <properties/>
-  <testcase name="ui metadata paths do not import legacy provider metadata execution" classname="com.nexio.tv.metadata.audit.MetadataArchitectureBoundaryTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

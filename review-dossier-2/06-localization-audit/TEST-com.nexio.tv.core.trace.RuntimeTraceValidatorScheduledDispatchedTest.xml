@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.nexio.tv.core.trace.RuntimeTraceValidatorScheduledDispatchedTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-29T13:38:25.435Z" hostname="KQ2DRW310F" time="0.002">
-  <properties/>
-  <testcase name="validator passes when each scheduled networkResolver has a corresponding field_selected" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorScheduledDispatchedTest" time="0.001"/>
-  <testcase name="validator also reads the production scheduled key with mixed local and network resolvers" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorScheduledDispatchedTest" time="0.0"/>
-  <testcase name="validator fails when networkResolvers schedule has no matching field_selected events" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorScheduledDispatchedTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
