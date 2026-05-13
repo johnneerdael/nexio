@@ -1849,11 +1849,11 @@ class TraktProgressService @Inject constructor(
             val episodeInfo = findEpisodeInfo(candidate.contentId, season, episode)
             // Air-date gate: the next episode must already have aired in real time.
             //
-            // Trakt's first_aired is ISO 8601 with TZ (e.g. "2026-05-16T02:00:00.000Z"); Instant.parse
-            // gives us the exact epoch ms. Comparing against System.currentTimeMillis() is
-            // timezone-independent — the user in any local TZ sees it once the broadcast moment has
-            // passed for them. ISO date-only strings ("2026-05-16") get parsed as well; they're
-            // treated as midnight UTC of that day.
+            // Trakt's first_aired is ISO 8601 with TZ (e.g. "2026-05-16T02:00:00.000Z"); the
+            // centralized AirDateGate preserves exact timestamps. Date-only strings
+            // ("2026-05-16") are intentionally treated as end-of-day UTC so TVDB date-only
+            // metadata cannot publish US network episodes before the series-level localized
+            // airtime is known.
             //
             // Conservative policy: when findEpisodeInfo returned no released string (typical for
             // genuinely unaired/unannounced episodes — TVDB doesn't have a date yet), suppress the
@@ -1862,14 +1862,11 @@ class TraktProgressService @Inject constructor(
             val firstAiredMs = episodeInfo.released
                 ?.takeIf { it.isNotBlank() }
                 ?.let { raw ->
-                    runCatching { java.time.Instant.parse(raw).toEpochMilli() }.getOrNull()
-                        ?: runCatching {
-                            // Fallback for date-only strings ("YYYY-MM-DD"): midnight UTC of that day.
-                            java.time.LocalDate.parse(raw.substringBefore('T'))
-                                .atStartOfDay(java.time.ZoneOffset.UTC)
-                                .toInstant()
-                                .toEpochMilli()
-                        }.getOrNull()
+                    AirDateGate.pendingTriggerMs(
+                        firstAiredMs = 0L,
+                        availabilityInstantMs = null,
+                        tmdbAirDate = raw
+                    )
                 }
                 ?: 0L
             val nowMs = System.currentTimeMillis()

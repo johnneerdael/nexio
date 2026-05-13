@@ -62,6 +62,16 @@ internal fun TvMetadataEnrichment?.toMetadataCandidate(provider: MetadataPrimary
                 put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
                 put(ResolvedField.ORIGINAL_LANGUAGE, FieldValue(it, FieldOwner.PRIMARY))
             }
+            airsTime?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.AIRS_TIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalCountry?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalNetwork?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            latestNetwork?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.LATEST_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            platformName?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.PLATFORM_NAME, FieldValue(it, FieldOwner.PRIMARY)) }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
             }
@@ -85,6 +95,15 @@ internal fun TvdbSeriesExtendedRecord?.toMetadataCandidate(provider: MetadataPri
             }
             originalCountry?.takeIf { it.isNotBlank() }
                 ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
+            airsTime?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.AIRS_TIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalNetwork?.name?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            latestNetwork?.name?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.LATEST_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            (originalNetwork?.name ?: latestNetwork?.name)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.PLATFORM_NAME, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = remoteIds.toRemoteIdsMap(id)
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
@@ -215,6 +234,15 @@ internal fun buildTvdbCoreLocalizedCandidate(
             }
             extended?.originalCountry?.takeIf { it.isNotBlank() }
                 ?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
+            extended?.airsTime?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.AIRS_TIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            extended?.originalNetwork?.name?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.ORIGINAL_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            extended?.latestNetwork?.name?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.LATEST_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            (extended?.originalNetwork?.name ?: extended?.latestNetwork?.name)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { put(ResolvedField.PLATFORM_NAME, FieldValue(it, FieldOwner.PRIMARY)) }
             val remoteIds = extended?.remoteIds.toRemoteIdsMap(extended?.id)
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))

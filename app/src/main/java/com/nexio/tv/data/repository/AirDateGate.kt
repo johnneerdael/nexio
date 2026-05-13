@@ -7,7 +7,8 @@ internal object AirDateGate {
      * Priority order:
      * 1. If [availabilityInstantMs] > 0, compare it against [nowMs].
      * 2. Else if [firstAiredMs] > 0, compare it against [nowMs].
-     * 3. Else if [tmdbAirDate] is a non-blank ISO date (YYYY-MM-DD), parse and compare.
+     * 3. Else if [tmdbAirDate] is non-blank, parse an exact ISO timestamp or a conservative
+     *    date-only fallback and compare.
      * 4. If all are unknown, return true (treat as aired — preserves behaviour for
      *    entries with no air-date data).
      */
@@ -81,10 +82,12 @@ internal object AirDateGate {
             .minOrNull()
     }
 
-    /** Parses an ISO date string (YYYY-MM-DD) or ISO 8601 timestamp to epoch milliseconds at midnight UTC. */
+    /** Parses an ISO 8601 timestamp exactly, or a date-only value as a conservative end-of-day UTC trigger. */
     private fun parseDateToEpochMs(dateStr: String): Long? {
         return try {
-            // Strip time component from ISO 8601 timestamps (e.g. "2026-04-21T04:00:00.000Z" → "2026-04-21")
+            if ('T' in dateStr) {
+                return java.time.Instant.parse(dateStr).toEpochMilli()
+            }
             val datePart = dateStr.substringBefore('T')
             val parts = datePart.split('-')
             if (parts.size != 3) return null
@@ -104,7 +107,8 @@ internal object AirDateGate {
                 cal.get(java.util.Calendar.MONTH) == month &&
                 cal.get(java.util.Calendar.DAY_OF_MONTH) == day
             ) {
-                cal.timeInMillis
+                cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                cal.timeInMillis - 1L
             } else {
                 null
             }

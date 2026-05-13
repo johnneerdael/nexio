@@ -53,6 +53,32 @@ class AirDateGateTest {
     }
 
     @Test
+    fun `date-only fallback does not publish same-day TVDB episodes before the day has fully elapsed`() {
+        val amsterdamMorningMay13 = 1_778_639_340_000L // 2026-05-13T02:29:00Z / 04:29 Amsterdam
+
+        assertFalse(
+            AirDateGate.isAired(
+                firstAiredMs = 0L,
+                tmdbAirDate = "2026-05-13",
+                nowMs = amsterdamMorningMay13
+            )
+        )
+    }
+
+    @Test
+    fun `timestamp fallback preserves exact instant instead of truncating to date`() {
+        val oneMinuteBeforeAirtime = 1_778_716_740_000L // 2026-05-13T23:59:00Z
+
+        assertFalse(
+            AirDateGate.isAired(
+                firstAiredMs = 0L,
+                tmdbAirDate = "2026-05-14T00:00:00Z",
+                nowMs = oneMinuteBeforeAirtime
+            )
+        )
+    }
+
+    @Test
     fun `airDateFallbackOrder - returns true when both firstAiredMs and tmdbAirDate are unknown`() {
         assertTrue(
             AirDateGate.isAired(

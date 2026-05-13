@@ -4,6 +4,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.data.remote.api.TvdbCompanyRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -81,6 +82,32 @@ class MetadataAdapterCandidatesLanguageTest {
 
         assertEquals("eng", candidate.fields[ResolvedField.LANGUAGE]?.value)
         assertEquals("usa", candidate.fields[ResolvedField.ORIGINAL_COUNTRY]?.value)
+    }
+
+    @Test
+    fun `TvdbSeriesExtendedRecord toMetadataCandidate forwards airtime fields`() {
+        val record = com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord(
+            id = 76733,
+            name = "Survivor",
+            overview = null,
+            image = null,
+            score = null,
+            averageRuntime = null,
+            airsTime = "20:00",
+            originalLanguage = "eng",
+            originalCountry = "usa",
+            originalNetwork = TvdbCompanyRecord(name = "CBS"),
+            latestNetwork = TvdbCompanyRecord(name = "CBS"),
+            remoteIds = emptyList()
+        )
+
+        val candidate = record.toMetadataCandidate(MetadataPrimaryProvider.TVDB)
+
+        assertEquals("20:00", candidate.fields[ResolvedField.AIRS_TIME]?.value)
+        assertEquals("usa", candidate.fields[ResolvedField.ORIGINAL_COUNTRY]?.value)
+        assertEquals("CBS", candidate.fields[ResolvedField.ORIGINAL_NETWORK]?.value)
+        assertEquals("CBS", candidate.fields[ResolvedField.LATEST_NETWORK]?.value)
+        assertEquals("CBS", candidate.fields[ResolvedField.PLATFORM_NAME]?.value)
     }
 
     // C5: ORIGINAL_LANGUAGE emission tests
