@@ -52,7 +52,12 @@ internal object SrvCaptionParser {
         var depth = 1
         while (depth > 0) {
             when (parser.next()) {
-                XmlPullParser.START_TAG -> depth++
+                XmlPullParser.START_TAG -> {
+                    if (parser.name.equals("br", ignoreCase = true)) {
+                        builder.append('\n')
+                    }
+                    depth++
+                }
                 XmlPullParser.END_TAG -> depth--
                 XmlPullParser.TEXT -> builder.append(parser.text)
                 XmlPullParser.END_DOCUMENT -> return builder.toString()

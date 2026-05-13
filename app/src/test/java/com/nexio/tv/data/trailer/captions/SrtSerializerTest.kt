@@ -48,6 +48,28 @@ class SrtSerializerTest {
     }
 
     @Test
+    fun `clamps overlapping caption end to next caption start`() {
+        val lines = listOf(
+            CaptionLine(offsetMs = 1_000L, durationMs = 4_000L, text = "First"),
+            CaptionLine(offsetMs = 2_500L, durationMs = 2_000L, text = "Second")
+        )
+
+        val srt = SrtSerializer.serialize(lines)
+
+        assertEquals(
+            "1\n" +
+                "00:00:01,000 --> 00:00:02,500\n" +
+                "First\n" +
+                "\n" +
+                "2\n" +
+                "00:00:02,500 --> 00:00:04,500\n" +
+                "Second\n" +
+                "\n",
+            srt
+        )
+    }
+
+    @Test
     fun `replaces arrow sequence in caption text with en-dashes`() {
         val lines = listOf(
             CaptionLine(offsetMs = 0, durationMs = 1000, text = "Use --> for arrows")

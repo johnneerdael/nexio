@@ -80,6 +80,19 @@ class SrvCaptionParserTest {
     }
 
     @Test
+    fun `preserves explicit line breaks inside paragraph text`() {
+        val xml = """
+            <timedtext format="3"><body>
+              <p t="1000" d="2000">First line<br />Second line</p>
+            </body></timedtext>
+        """.trimIndent()
+
+        val lines = SrvCaptionParser.parse(xml)
+        assertEquals(1, lines.size)
+        assertEquals("First line\nSecond line", lines[0].text)
+    }
+
+    @Test
     fun `unescapes XML entities in text`() {
         val xml = """
             <timedtext format="3"><body>

@@ -18,10 +18,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TrailerSubtitleCache"
+private const val CACHE_DIR_NAME = "trailer-subtitles-v2"
 
 /**
  * Fetches a YouTube SRV3 caption track, parses + converts to SRT, and
- * caches the result under `cacheDir/trailer-subtitles/`. Returns a
+ * caches the result under `cacheDir/trailer-subtitles-v2/`. Returns a
  * `file://` URI suitable for `MediaItem.SubtitleConfiguration` with
  * `application/x-subrip` MIME (ExoPlayer's SubripParser).
  *
@@ -36,7 +37,7 @@ class TrailerSubtitleCache @Inject constructor(
 
     private val mutex = Mutex()
     private val baseDir: File by lazy {
-        File(applicationContext.cacheDir, "trailer-subtitles").apply { mkdirs() }
+        File(applicationContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
     }
 
     /**
