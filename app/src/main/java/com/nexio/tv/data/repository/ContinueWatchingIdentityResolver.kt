@@ -3,10 +3,13 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdBundleRequest
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
@@ -21,11 +24,16 @@ import kotlinx.coroutines.CancellationException
 @Singleton
 class ContinueWatchingIdentityResolver @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade?,
-    private val streamFetchIdentityResolver: StreamFetchIdentityResolver
+    private val streamFetchIdentityResolver: StreamFetchIdentityResolver,
+    // Optional so the internal test constructor stays parameter-free. When null,
+    // crossBridgeIdentity() is a no-op; the resolver just returns whatever the
+    // facade gave it (legacy behavior).
+    private val stableIdBundleResolver: StableIdBundleResolver? = null
 ) {
     internal constructor() : this(
         metadataRouterFacade = null,
-        streamFetchIdentityResolver = StreamFetchIdentityResolver()
+        streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+        stableIdBundleResolver = null
     )
 
     suspend fun resolveOrFallback(input: RawContinueWatchingInput): ContinueWatchingRecord {
@@ -50,8 +58,21 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 StableIdResolutionTrigger.CONTINUE_WATCHING,
                 ContinueWatchingItemKeys.legacyParentKey(progress.contentType, progress.contentId)
             )
-            val identity = bundle.toContentIdentity()
-            val mediaKind = progress.toMediaKind(identity.providerIds)
+            val initialIdentity = bundle.toContentIdentity()
+            val mediaKind = progress.toMediaKind(initialIdentity.providerIds)
+            // Cross-bridge step. The facade's route is determined by the call's contentType
+            // + provider; a Trakt CW record arrives as IMDB and a local CW record arrives as
+            // TMDB, and the facade's single-direction resolve doesn't always bridge to the
+            // OTHER namespace. For dedup to work in ContinueWatchingMerger, both records
+            // need to share a provider key. Without bridging here, the same movie appears
+            // as two entries (e.g. Roast of Kevin Hart: trakt knows imdb+trakt, local knows
+            // tmdb-only — disjoint sets → no bucket overlap → no dedup).
+            val identity = crossBridgeIdentity(
+                identity = initialIdentity,
+                mediaKind = mediaKind,
+                contentType = progress.contentType,
+                contentId = progress.contentId,
+            )
             val episodeContext = progress.toEpisodeContextOrNull()
             val streamFetchIdentity = resolveStreamFetchIdentity(
                 mediaKind = mediaKind,
@@ -204,6 +225,96 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         season = episodeContext?.season,
         episode = episodeContext?.number,
     )
+
+    /**
+     * Fill any missing cross-provider IDs on [identity] by consulting
+     * [stableIdBundleResolver] with an explicit routeProvider for the OTHER
+     * namespace. Movies bridge TMDB ↔ IMDB; series bridge TVDB ↔ IMDB.
+     * Cache-backed (IdMappingStore checked first); a cache miss falls through
+     * to the Lookup interface which may make a network call — bounded by the
+     * number of records being resolved (≤ snapshot size). Returns the original
+     * identity reference on no-op so downstream reference-equality holds.
+     */
+    private suspend fun crossBridgeIdentity(
+        identity: ContentIdentity,
+        mediaKind: MetadataMediaKind,
+        contentType: String,
+        contentId: String,
+    ): ContentIdentity {
+        val resolver = stableIdBundleResolver ?: return identity
+        val current = identity.providerIds
+        // Compute which directions are worth attempting. Only bridge between the
+        // primary canonical providers for each media kind to keep the call count
+        // bounded; anime is left to the existing kitsu/mal/anidb pipeline.
+        val passes = mutableListOf<MetadataPrimaryProvider>()
+        when (mediaKind) {
+            MetadataMediaKind.MOVIE -> {
+                if (current.imdb.isNullOrBlank() && !current.tmdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TMDB // tmdb → imdb bridge
+                }
+                if (current.tmdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TMDB // imdb → tmdb bridge (same routeProvider; resolver fills both)
+                }
+            }
+            MetadataMediaKind.SERIES -> {
+                if (current.imdb.isNullOrBlank() && !current.tvdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TVDB
+                }
+                if (current.tvdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TVDB
+                }
+            }
+            else -> Unit
+        }
+        if (passes.isEmpty()) return identity
+
+        var providerIds = current
+        passes.distinct().forEach { route ->
+            val sourceProvider = when (route) {
+                MetadataPrimaryProvider.TMDB -> ProviderId.TMDB
+                MetadataPrimaryProvider.TVDB -> ProviderId.TVDB
+                else -> null
+            }
+            val bundle = runCatching {
+                resolver.resolve(
+                    StableIdBundleRequest(
+                        itemKey = "$contentType:$contentId",
+                        itemType = ContentType.fromString(contentType),
+                        routeProvider = route,
+                        knownIds = providerIds,
+                        sourceProvider = sourceProvider,
+                        sourceItemId = contentId,
+                        railId = null,
+                        trigger = StableIdResolutionTrigger.CONTINUE_WATCHING
+                    )
+                )
+            }.getOrNull() ?: return@forEach
+            providerIds = providerIds.copy(
+                imdb = providerIds.imdb ?: bundle.sidecars.imdbId,
+                tmdb = providerIds.tmdb ?: bundle.canonical.tmdbMovieId,
+                tvdb = providerIds.tvdb ?: bundle.canonical.tvdbSeriesId,
+                kitsu = providerIds.kitsu ?: bundle.canonical.kitsuAnimeId,
+            )
+        }
+        if (providerIds == current) return identity
+        // Strengthen canonicalProvider/canonicalId once we have a richer set.
+        val strongerCanonicalProvider = when {
+            !providerIds.tvdb.isNullOrBlank() && identity.canonicalProvider != ProviderId.TVDB -> ProviderId.TVDB
+            !providerIds.tmdb.isNullOrBlank() && identity.canonicalProvider == null -> ProviderId.TMDB
+            else -> identity.canonicalProvider
+        }
+        val strongerCanonicalId = when (strongerCanonicalProvider) {
+            ProviderId.TVDB -> providerIds.tvdb
+            ProviderId.TMDB -> providerIds.tmdb
+            ProviderId.KITSU -> providerIds.kitsu
+            else -> identity.canonicalId
+        } ?: identity.canonicalId
+        return identity.copy(
+            canonicalProvider = strongerCanonicalProvider,
+            canonicalId = strongerCanonicalId,
+            providerIds = providerIds,
+        )
+    }
 
     private fun StableIdBundle.toContentIdentity(): ContentIdentity {
         val observed = source.observedIds

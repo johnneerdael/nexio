@@ -16,6 +16,7 @@ import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.data.repository.ContinueWatchingCanonicalKey
+import com.nexio.tv.data.repository.ContinueWatchingIdBundle
 import com.nexio.tv.data.repository.ContinueWatchingRecord
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
@@ -493,7 +494,8 @@ class ContinueWatchingSnapshotStore private constructor(
                 identityConfidence = obj.enumOrNull<IdentityConfidence>("identityConfidence", "r")
                     ?: IdentityConfidence.LOW,
                 identityWarnings = obj.stringList("identityWarnings", "s"),
-                languageTag = obj.stringOrNull("languageTag", "t")?.takeIf { it.isNotBlank() }
+                languageTag = obj.stringOrNull("languageTag", "t")?.takeIf { it.isNotBlank() },
+                idBundle = decodeIdBundle(obj.objectOrNull("idBundle"))
             )
         }.getOrNull()
     }
@@ -704,7 +706,48 @@ class ContinueWatchingSnapshotStore private constructor(
                 record.identityWarnings.forEach { add(it) }
             })
             record.languageTag?.let { addProperty("languageTag", it) }
+            // idBundle carries the cross-provider ID snapshot ContinueWatchingMerger
+            // uses for dedup. Without persistence here, restored records arrive with
+            // ContinueWatchingIdBundle() (all-null) and the merger collapses into the
+            // legacy identityKey() fallback, which keys only on canonicalKey's primary
+            // provider. Two records for the same item that came in under different
+            // canonicalParents (e.g. trakt knows imdb, local knows tmdb) never bucket
+            // together. Persisting the bundle preserves the in-memory dedup work.
+            add("idBundle", encodeIdBundle(record.idBundle))
         }
+    }
+
+    private fun encodeIdBundle(bundle: ContinueWatchingIdBundle): JsonObject {
+        return JsonObject().apply {
+            bundle.imdb?.let { addProperty("imdb", it) }
+            bundle.tmdb?.let { addProperty("tmdb", it) }
+            bundle.tvdb?.let { addProperty("tvdb", it) }
+            bundle.kitsu?.let { addProperty("kitsu", it) }
+            bundle.mal?.let { addProperty("mal", it) }
+            bundle.anilist?.let { addProperty("anilist", it) }
+            bundle.anidb?.let { addProperty("anidb", it) }
+            bundle.trakt?.let { addProperty("trakt", it) }
+            bundle.simkl?.let { addProperty("simkl", it) }
+            bundle.season?.let { addProperty("season", it) }
+            bundle.episode?.let { addProperty("episode", it) }
+        }
+    }
+
+    private fun decodeIdBundle(obj: JsonObject?): ContinueWatchingIdBundle {
+        obj ?: return ContinueWatchingIdBundle()
+        return ContinueWatchingIdBundle(
+            imdb = obj.stringOrNull("imdb")?.takeIf { it.isNotBlank() },
+            tmdb = obj.stringOrNull("tmdb")?.takeIf { it.isNotBlank() },
+            tvdb = obj.stringOrNull("tvdb")?.takeIf { it.isNotBlank() },
+            kitsu = obj.stringOrNull("kitsu")?.takeIf { it.isNotBlank() },
+            mal = obj.stringOrNull("mal")?.takeIf { it.isNotBlank() },
+            anilist = obj.stringOrNull("anilist")?.takeIf { it.isNotBlank() },
+            anidb = obj.stringOrNull("anidb")?.takeIf { it.isNotBlank() },
+            trakt = obj.stringOrNull("trakt")?.takeIf { it.isNotBlank() },
+            simkl = obj.stringOrNull("simkl")?.takeIf { it.isNotBlank() },
+            season = obj.intOrNull("season"),
+            episode = obj.intOrNull("episode"),
+        )
     }
 
     private fun encodeEpisodeContext(context: ContinueWatchingRecord.EpisodeContext): JsonObject {
