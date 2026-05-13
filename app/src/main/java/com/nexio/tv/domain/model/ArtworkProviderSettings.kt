@@ -23,10 +23,12 @@ value class ArtworkProviderChoiceKey(val value: String) {
         val DEFAULT = ArtworkProviderChoiceKey("default")
         val RPDB = ArtworkProviderChoiceKey("rpdb")
         val TOP_POSTERS = ArtworkProviderChoiceKey("top_posters")
+        val FANART_TV = ArtworkProviderChoiceKey("fanart_tv")
 
         fun fromStored(value: String?): ArtworkProviderChoiceKey = when (value) {
             RPDB.value -> RPDB
             TOP_POSTERS.value -> TOP_POSTERS
+            FANART_TV.value -> FANART_TV
             DEFAULT.value -> DEFAULT
             else -> DEFAULT
         }
@@ -102,6 +104,8 @@ fun ArtworkProviderChoiceKey.toRuntimeProviderId(): ArtworkProviderId =
             ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
         ArtworkProviderChoiceKey.TOP_POSTERS ->
             ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
+        ArtworkProviderChoiceKey.FANART_TV ->
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV)
         ArtworkProviderChoiceKey.DEFAULT ->
             throw IllegalArgumentException(
                 "DEFAULT must be coerced upstream by ArtworkProviderResolver — never passed to toRuntimeProviderId"
