@@ -449,7 +449,7 @@ class AuthManager @Inject constructor(
         cachedEffectiveUserId?.let { return it }
 
         suspend fun resolveAndCache(): String {
-            val result = postgrest.rpc("get_sync_owner")
+            val result = postgrest.rpc("sync_owner_id")
             val effectiveId = result.decodeAs<String>()
             cachedEffectiveUserId = effectiveId
             cachedEffectiveUserSourceUserId = userId
