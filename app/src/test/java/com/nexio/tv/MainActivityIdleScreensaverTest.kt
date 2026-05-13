@@ -340,6 +340,60 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `remote notice startup window restarts when activity recreates with gate open`() {
+        assertTrue(
+            shouldStartOrRestartRemoteNoticeStartupWindow(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup window is startup only after gate closes`() {
+        assertFalse(
+            shouldStartOrRestartRemoteNoticeStartupWindow(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.CLOSED
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup suppression only runs before startup gate opens`() {
+        assertTrue(
+            shouldSuppressRemoteNoticeBeforeStartupGate(
+                startupSplashVisible = true,
+                gatePhase = RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH
+            )
+        )
+
+        assertFalse(
+            shouldSuppressRemoteNoticeBeforeStartupGate(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup gate stays open for visible dialog after window elapses`() {
+        assertFalse(
+            shouldCloseRemoteNoticeStartupGateAfterWindow(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED,
+                remoteNoticeDialogVisible = true
+            )
+        )
+
+        assertTrue(
+            shouldCloseRemoteNoticeStartupGateAfterWindow(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED,
+                remoteNoticeDialogVisible = false
+            )
+        )
+    }
+
+    @Test
     fun `idle diagnostics logging is debug only`() {
         assertTrue(shouldLogIdleScreensaverDiagnostics(isDebugBuild = true))
         assertFalse(shouldLogIdleScreensaverDiagnostics(isDebugBuild = false))

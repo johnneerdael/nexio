@@ -701,10 +701,9 @@ class MainActivity : ComponentActivity() {
                     }
                     var startupSplashReadyToPlay by remember { mutableStateOf(false) }
                     val showStartupSplash = !startupSplashDismissed
-                    var remoteNoticeStartupGateOpen by rememberSaveable { mutableStateOf(false) }
-                    var remoteNoticeStartupCheckRequested by rememberSaveable { mutableStateOf(false) }
-                    var remoteNoticeStartupWindowElapsed by rememberSaveable { mutableStateOf(false) }
-                    var remoteNoticeSuppressedForStartup by rememberSaveable { mutableStateOf(false) }
+                    var remoteNoticeStartupGatePhase by rememberSaveable {
+                        mutableStateOf(RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH)
+                    }
                     val idleScreensaverSlides by idleScreensaverRepository.slides.collectAsState()
                     val idleTrailerRepositoryCandidates by idleScreensaverRepository.trailerCandidates.collectAsState()
                     val idleScreensaverVisible by idleScreensaverController.isVisible.collectAsState()
@@ -735,54 +734,61 @@ class MainActivity : ComponentActivity() {
                         playbackActive = playbackIdleSnapshot.hasActiveSession,
                         fullscreenTrailerActive = homeTrailerFullscreenActive,
                         idleScreensaverVisible = idleScreensaverVisible,
-                        startupNoticeGateOpen = remoteNoticeStartupGateOpen
+                        startupNoticeGateOpen = isRemoteNoticeStartupGateOpen(remoteNoticeStartupGatePhase)
                     )
 
-                    LaunchedEffect(remoteNoticeViewModel) {
-                        remoteNoticeViewModel.suppressForStartup()
-                    }
-
-                    LaunchedEffect(showStartupSplash) {
-                        if (!showStartupSplash && !remoteNoticeStartupCheckRequested) {
-                            remoteNoticeStartupGateOpen = true
-                            remoteNoticeStartupCheckRequested = true
-                            remoteNoticeStartupWindowElapsed = false
-                            remoteNoticeSuppressedForStartup = false
-                            remoteNoticeViewModel.checkForStartupNotice()
+                    LaunchedEffect(showStartupSplash, remoteNoticeViewModel) {
+                        if (
+                            shouldSuppressRemoteNoticeBeforeStartupGate(
+                                startupSplashVisible = showStartupSplash,
+                                gatePhase = remoteNoticeStartupGatePhase
+                            )
+                        ) {
+                            remoteNoticeViewModel.suppressForStartup()
+                            return@LaunchedEffect
+                        }
+                        if (
+                            shouldStartOrRestartRemoteNoticeStartupWindow(
+                                startupSplashVisible = showStartupSplash,
+                                gatePhase = remoteNoticeStartupGatePhase
+                            )
+                        ) {
+                            remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
+                            remoteNoticeViewModel.checkForNotice()
                             delay(REMOTE_NOTICE_STARTUP_WINDOW_MS)
-                            remoteNoticeStartupWindowElapsed = true
+                            if (remoteNoticeStartupGatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN) {
+                                remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED
+                            }
                         }
                     }
 
                     LaunchedEffect(
                         updateState.showDialog,
-                        remoteNoticeStartupCheckRequested,
-                        remoteNoticeSuppressedForStartup
+                        remoteNoticeStartupGatePhase
                     ) {
                         if (
-                            updateState.showDialog &&
-                            remoteNoticeStartupCheckRequested &&
-                            !remoteNoticeSuppressedForStartup
+                            shouldCloseRemoteNoticeStartupGateForUpdateDialog(
+                                updateDialogVisible = updateState.showDialog,
+                                gatePhase = remoteNoticeStartupGatePhase
+                            )
                         ) {
                             remoteNoticeViewModel.suppressForStartup()
-                            remoteNoticeStartupGateOpen = false
-                            remoteNoticeSuppressedForStartup = true
+                            remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.CLOSED
                         }
                     }
 
                     LaunchedEffect(
-                        remoteNoticeStartupWindowElapsed,
+                        remoteNoticeStartupGatePhase,
                         showRemoteNoticeDialog,
-                        remoteNoticeSuppressedForStartup
                     ) {
                         if (
-                            remoteNoticeStartupWindowElapsed &&
-                            !showRemoteNoticeDialog &&
-                            !remoteNoticeSuppressedForStartup
+                            shouldCloseRemoteNoticeStartupGateAfterWindow(
+                                gatePhase = remoteNoticeStartupGatePhase,
+                                remoteNoticeDialogVisible = showRemoteNoticeDialog
+                            )
                         ) {
                             remoteNoticeViewModel.suppressForStartup()
-                            remoteNoticeStartupGateOpen = false
-                            remoteNoticeSuppressedForStartup = true
+                            remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.CLOSED
                         }
                     }
 
@@ -1712,8 +1718,49 @@ private data class RecommendationFeedNavigation(
     val feedKey: String
 )
 
-private fun RemoteNoticeViewModel.checkForStartupNotice() {
-    checkForNotice()
+internal enum class RemoteNoticeStartupGatePhase {
+    WAITING_FOR_SPLASH,
+    STARTUP_WINDOW_OPEN,
+    STARTUP_WINDOW_ELAPSED,
+    CLOSED
+}
+
+internal fun isRemoteNoticeStartupGateOpen(
+    gatePhase: RemoteNoticeStartupGatePhase
+): Boolean {
+    return gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN ||
+        gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED
+}
+
+internal fun shouldSuppressRemoteNoticeBeforeStartupGate(
+    startupSplashVisible: Boolean,
+    gatePhase: RemoteNoticeStartupGatePhase
+): Boolean {
+    return startupSplashVisible && gatePhase == RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH
+}
+
+internal fun shouldStartOrRestartRemoteNoticeStartupWindow(
+    startupSplashVisible: Boolean,
+    gatePhase: RemoteNoticeStartupGatePhase
+): Boolean {
+    return !startupSplashVisible &&
+        (gatePhase == RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH ||
+            gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN)
+}
+
+internal fun shouldCloseRemoteNoticeStartupGateForUpdateDialog(
+    updateDialogVisible: Boolean,
+    gatePhase: RemoteNoticeStartupGatePhase
+): Boolean {
+    return updateDialogVisible && isRemoteNoticeStartupGateOpen(gatePhase)
+}
+
+internal fun shouldCloseRemoteNoticeStartupGateAfterWindow(
+    gatePhase: RemoteNoticeStartupGatePhase,
+    remoteNoticeDialogVisible: Boolean
+): Boolean {
+    return gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED &&
+        !remoteNoticeDialogVisible
 }
 
 internal fun shouldLogIdleScreensaverDiagnostics(isDebugBuild: Boolean): Boolean = isDebugBuild
