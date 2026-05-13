@@ -49,7 +49,7 @@ import org.junit.Test
 class StreamRepositoryImplAnimeBucketTest {
 
     @Test
-    fun `bucket is true only when both addon isAnime and contentIsAnime`() = runTest {
+    fun `anime content queries anime addon bucket only when anime addons are configured`() = runTest {
         val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
         val genericAddon = streamAddon("https://generic.example", "Generic Addon")
         val index = RecordingAnimeIdentityIndex(contentIsAnime = true)
@@ -60,8 +60,8 @@ class StreamRepositoryImplAnimeBucketTest {
 
         val buckets = repository.successBuckets(videoId = "mal:21")
 
+        assertEquals(listOf("Anime Addon"), buckets.map { it.addonName })
         assertTrue(buckets.single { it.addonName == "Anime Addon" }.isAnimeBucket)
-        assertFalse(buckets.single { it.addonName == "Generic Addon" }.isAnimeBucket)
         assertEquals(listOf("21"), index.lookups.map { it.value })
     }
 
