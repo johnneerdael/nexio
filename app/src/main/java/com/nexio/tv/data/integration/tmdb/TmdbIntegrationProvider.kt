@@ -616,6 +616,18 @@ class TmdbIntegrationProvider private constructor(
             "tv" -> TmdbApiShapes.TV_CORE
             else -> TmdbApiShapes.MOVIE_CORE
         }
+        // 2026-05-13 — TMDB's standalone `/{movie,tv}/{id}/external_ids` endpoint
+        // returns `imdb_id: null` for some titles (observed on movie 1658982 "Roast
+        // of Kevin Hart") even when the same id is populated under
+        // `/{movie,tv}/{id}?append_to_response=external_ids,...`. The two endpoints
+        // share an upstream data table but apparently disagree on the freshness
+        // cut-off. Caching the standalone-endpoint null as NEGATIVE poisoned the
+        // cross-id resolver for 24h on titles where the details endpoint had the
+        // data the whole time. Route through `getMovieDetails`/`getTvDetails` with
+        // `append_to_response=external_ids` so a single network call returns the
+        // authoritative external_ids block. Falls back to the standalone endpoint
+        // only if the unified call returned a response without an external_ids
+        // block (defensive — should never happen with the append param set).
         val operationKey = "tmdb.external_ids.$normalizedType"
         return when (
             val result = runtime.call(
@@ -627,8 +639,16 @@ class TmdbIntegrationProvider private constructor(
                     call = {
                         val response = runCatching {
                             when (normalizedType) {
-                                "tv" -> tmdbApi.getTvExternalIds(tmdbId, credential.apiKey)
-                                else -> tmdbApi.getMovieExternalIds(tmdbId, credential.apiKey)
+                                "tv" -> tmdbApi.getTvDetails(
+                                    tvId = tmdbId,
+                                    apiKey = credential.apiKey,
+                                    appendToResponse = "external_ids"
+                                )
+                                else -> tmdbApi.getMovieDetails(
+                                    movieId = tmdbId,
+                                    apiKey = credential.apiKey,
+                                    appendToResponse = "external_ids"
+                                )
                             }
                         }.getOrElse { exception ->
                             if (exception is CancellationException) throw exception
@@ -637,7 +657,11 @@ class TmdbIntegrationProvider private constructor(
                         if (!response.isSuccessful) {
                             IntegrationCallResult.HttpError(response.code())
                         } else {
-                            response.body()?.let { IntegrationCallResult.Success(it) }
+                            // TmdbDetailsResponse carries the appended external_ids block;
+                            // pull it out so the rest of the lookup pipeline keeps its
+                            // existing TmdbExternalIdsResponse contract.
+                            val externalIds = response.body()?.externalIds
+                            externalIds?.let { IntegrationCallResult.Success(it) }
                                 ?: IntegrationCallResult.Missing
                         }
                     }
