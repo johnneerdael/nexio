@@ -7,12 +7,14 @@ import com.nexio.tv.data.repository.AssSsaEventRecord
 import com.nexio.tv.data.repository.AssSsaSegmentSurfaceParser
 import com.nexio.tv.data.repository.AssSsaSurfaceParseResult
 import com.nexio.tv.data.repository.AssSsaTranslationAction
+import com.nexio.tv.data.repository.AssSsaTranslationPlanConfig
 import com.nexio.tv.data.repository.AssSsaTranslationPlanner
 import com.nexio.tv.data.repository.AssSsaTranslationSurface
 import com.nexio.tv.data.repository.AutoTranslateDiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -26,10 +28,13 @@ internal class AssSsaTranslatingSampleSink(
     private val translate: suspend (List<AssSsaTranslationSurface>) -> Map<String, List<String>>,
     private val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
         AutoTranslateDiagnosticsLogger.disabled(),
-    private val translationTimeoutMs: Long = SAMPLE_TRANSLATION_TIMEOUT_MS
+    private val translationTimeoutMs: Long = SAMPLE_TRANSLATION_TIMEOUT_MS,
+    private val liveBatchWindowMs: Long = 250L,
+    private val maxLiveBatchTranslations: Int = 3
 ) : AssSsaSampleSink {
     private val trackFormats = linkedMapOf<Int, TrackEventFormats>()
     private val inFlightTranslations = mutableMapOf<String, Deferred<Map<String, List<String>>>>()
+    private val pendingBatches = mutableMapOf<Long, MutableList<PendingLiveSample>>()
 
     override fun onTrackHeader(trackId: Int, headerData: ByteArray, format: Format) {
         val dialogueFormat = headerData.decodeToString()
@@ -77,79 +82,32 @@ internal class AssSsaTranslatingSampleSink(
             return
         }
 
-        val plan = AssSsaTranslationPlanner.plan(records)
-        val surfacesByIndex = records.mapIndexedNotNull { index, record ->
-            if (plan.actions[index] !is AssSsaTranslationAction.Translate) return@mapIndexedNotNull null
-            val id = "evt_$index"
-            when (val result = AssSsaSegmentSurfaceParser.parse(id, record.text)) {
-                is AssSsaSurfaceParseResult.Translatable -> index to result.surface
-                is AssSsaSurfaceParseResult.PreserveOnly -> null
-            }
-        }
-        val preserveCount = plan.actions.count { it is AssSsaTranslationAction.Preserve }
-        val duplicateCount = plan.actions.count { it is AssSsaTranslationAction.DuplicateOf }
-        diagnosticsLogger.log(
-            "sample_ass_classified track=$trackId timeUs=$timeUs records=${records.size} " +
-                "translate=${surfacesByIndex.size} preserve=$preserveCount duplicate=$duplicateCount"
+        val pending = PendingLiveSample(
+            trackId = trackId,
+            timeUs = timeUs,
+            data = data,
+            text = text,
+            records = records
         )
-        scope.launch {
-            val surfaces = surfacesByIndex.map { it.second }
-            diagnosticsLogger.log(
-                "sample_translate_start mode=ass_segment track=$trackId timeUs=$timeUs records=${records.size} " +
-                    "surfaces=${surfaces.size} bytes=${data.size} hash=${AutoTranslateDiagnosticsLogger.sha256Short(text)}"
-            )
-            if (surfaces.isEmpty()) {
-                diagnosticsLogger.log(
-                    "sample_emit_original reason=no_translatable_surfaces mode=ass_segment track=$trackId timeUs=$timeUs"
-                )
-                downstream.onSubtitleSample(trackId, timeUs, data)
-                return@launch
-            }
-            val translationKey = AutoTranslateDiagnosticsLogger.sha256Short(text)
-            val translationDeferred = translationDeferredFor(translationKey, surfaces)
-            val translated = runCatching {
-                withTimeoutOrNull(translationTimeoutMs) {
-                    translationDeferred.await()
+        if (liveBatchWindowMs <= 0L) {
+            scope.launch { processLiveBatch(listOf(pending), batchedIds = false) }
+            return
+        }
+
+        val batchKey = timeUs / (liveBatchWindowMs * 1000L)
+        val shouldSchedule = synchronized(pendingBatches) {
+            val bucket = pendingBatches.getOrPut(batchKey) { mutableListOf() }
+            bucket += pending
+            bucket.size == 1
+        }
+        if (shouldSchedule) {
+            scope.launch {
+                delay(liveBatchWindowMs)
+                val samples = synchronized(pendingBatches) {
+                    pendingBatches.remove(batchKey).orEmpty()
                 }
-            }.onFailure { error ->
-                diagnosticsLogger.log(
-                    "sample_translate_failed mode=ass_segment track=$trackId timeUs=$timeUs " +
-                        "error=${error::class.simpleName}:${error.message}"
-                )
-            }.getOrNull()
-            if (translated == null) {
-                diagnosticsLogger.log(
-                    "sample_emit_original reason=translation_timeout mode=ass_segment track=$trackId " +
-                        "timeUs=$timeUs timeoutMs=$translationTimeoutMs bytes=${data.size}"
-                )
-                downstream.onSubtitleSample(trackId, timeUs, data)
-                return@launch
+                processLiveBatch(samples, batchedIds = true)
             }
-            val surfaceByIndex = surfacesByIndex.toMap()
-            val translatedLines = records.mapIndexed { index, record ->
-                val canonicalIndex = when (val action = plan.actions[index]) {
-                    is AssSsaTranslationAction.Translate -> action.canonicalIndex
-                    is AssSsaTranslationAction.DuplicateOf -> action.canonicalIndex
-                    is AssSsaTranslationAction.Preserve -> null
-                }
-                val surface = canonicalIndex?.let { surfaceByIndex[it] }
-                val translatedText = surface
-                    ?.let {
-                        translated[it.id]?.let { segments ->
-                            runCatching { it.recomposeOrThrow(segments) }.getOrNull()
-                        }
-                    }
-                    ?: record.text
-                record.withText(translatedText).render()
-            }
-            val output = translatedLines.joinToString("\n")
-            downstream.onSubtitleSample(trackId = trackId, timeUs = timeUs, data = output.toByteArray())
-            diagnosticsLogger.log(
-                "sample_emit_translated mode=ass_segment track=$trackId timeUs=$timeUs " +
-                    "translatedItems=${translated.size} outputBytes=${output.toByteArray().size} " +
-                    "outputHash=${AutoTranslateDiagnosticsLogger.sha256Short(output)}"
-            )
-            diagnosticsLogger.logUnsafe("sample_ass_segment_output track=$trackId timeUs=$timeUs", output)
         }
     }
 
@@ -175,6 +133,128 @@ internal class AssSsaTranslatingSampleSink(
             return created
         }
     }
+
+    private suspend fun processLiveBatch(samples: List<PendingLiveSample>, batchedIds: Boolean) {
+        if (samples.isEmpty()) return
+        val allRecords = samples.flatMapIndexed { sampleIndex, sample ->
+            sample.records.mapIndexed { recordIndex, record -> IndexedLiveRecord(sampleIndex, recordIndex, record) }
+        }
+        val flatRecords = allRecords.map { it.record }
+        val plan = AssSsaTranslationPlanner.plan(
+            records = flatRecords,
+            config = AssSsaTranslationPlanConfig(
+                liveWindowMs = liveBatchWindowMs.takeIf { it > 0L },
+                maxTranslatePerWindow = if (liveBatchWindowMs > 0L) maxLiveBatchTranslations else Int.MAX_VALUE,
+                budgetPreferPreserveStyles = setOf("signs")
+            )
+        )
+        val surfacesByFlatIndex = flatRecords.mapIndexedNotNull { flatIndex, record ->
+            if (plan.actions[flatIndex] !is AssSsaTranslationAction.Translate) return@mapIndexedNotNull null
+            val indexed = allRecords[flatIndex]
+            val id = if (batchedIds) {
+                "evt_${indexed.sampleIndex}_${indexed.recordIndex}"
+            } else {
+                "evt_${indexed.recordIndex}"
+            }
+            when (val result = AssSsaSegmentSurfaceParser.parse(id, record.text)) {
+                is AssSsaSurfaceParseResult.Translatable -> flatIndex to result.surface
+                is AssSsaSurfaceParseResult.PreserveOnly -> null
+            }
+        }.toMap()
+        val preserveCount = plan.actions.count { it is AssSsaTranslationAction.Preserve }
+        val duplicateCount = plan.actions.count { it is AssSsaTranslationAction.DuplicateOf }
+        samples.forEach { sample ->
+            diagnosticsLogger.log(
+                "sample_ass_classified track=${sample.trackId} timeUs=${sample.timeUs} " +
+                    "records=${sample.records.size} translate=${surfacesByFlatIndex.size} " +
+                    "preserve=$preserveCount duplicate=$duplicateCount"
+            )
+        }
+        val surfaces = surfacesByFlatIndex.values.toList()
+        val first = samples.first()
+        diagnosticsLogger.log(
+            "sample_translate_start mode=ass_segment track=${first.trackId} timeUs=${first.timeUs} " +
+                "records=${flatRecords.size} surfaces=${surfaces.size} " +
+                "bytes=${samples.sumOf { it.data.size }} " +
+                "hash=${AutoTranslateDiagnosticsLogger.sha256Short(samples.joinToString("\n") { it.text })}"
+        )
+        if (surfaces.isEmpty()) {
+            samples.forEach { sample ->
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=no_translatable_surfaces mode=ass_segment " +
+                        "track=${sample.trackId} timeUs=${sample.timeUs}"
+                )
+                downstream.onSubtitleSample(sample.trackId, sample.timeUs, sample.data)
+            }
+            return
+        }
+
+        val translationKey = AutoTranslateDiagnosticsLogger.sha256Short(samples.joinToString("\n") { it.text })
+        val translated = runCatching {
+            withTimeoutOrNull(translationTimeoutMs) {
+                translationDeferredFor(translationKey, surfaces).await()
+            }
+        }.onFailure { error ->
+            diagnosticsLogger.log(
+                "sample_translate_failed mode=ass_segment track=${first.trackId} timeUs=${first.timeUs} " +
+                    "error=${error::class.simpleName}:${error.message}"
+            )
+        }.getOrNull()
+        if (translated == null) {
+            samples.forEach { sample ->
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=translation_timeout mode=ass_segment track=${sample.trackId} " +
+                        "timeUs=${sample.timeUs} timeoutMs=$translationTimeoutMs bytes=${sample.data.size}"
+                )
+                downstream.onSubtitleSample(sample.trackId, sample.timeUs, sample.data)
+            }
+            return
+        }
+
+        var flatCursor = 0
+        samples.forEach { sample ->
+            val translatedLines = sample.records.mapIndexed { recordIndex, record ->
+                val flatIndex = flatCursor + recordIndex
+                val canonicalIndex = when (val action = plan.actions[flatIndex]) {
+                    is AssSsaTranslationAction.Translate -> action.canonicalIndex
+                    is AssSsaTranslationAction.DuplicateOf -> action.canonicalIndex
+                    is AssSsaTranslationAction.Preserve -> null
+                }
+                val surface = canonicalIndex?.let { surfacesByFlatIndex[it] }
+                val translatedText = surface
+                    ?.let {
+                        translated[it.id]?.let { segments ->
+                            runCatching { it.recomposeOrThrow(segments) }.getOrNull()
+                        }
+                    }
+                    ?: record.text
+                record.withText(translatedText).render()
+            }
+            val output = translatedLines.joinToString("\n")
+            downstream.onSubtitleSample(trackId = sample.trackId, timeUs = sample.timeUs, data = output.toByteArray())
+            diagnosticsLogger.log(
+                "sample_emit_translated mode=ass_segment track=${sample.trackId} timeUs=${sample.timeUs} " +
+                    "translatedItems=${translated.size} outputBytes=${output.toByteArray().size} " +
+                    "outputHash=${AutoTranslateDiagnosticsLogger.sha256Short(output)}"
+            )
+            diagnosticsLogger.logUnsafe("sample_ass_segment_output track=${sample.trackId} timeUs=${sample.timeUs}", output)
+            flatCursor += sample.records.size
+        }
+    }
+
+    private data class PendingLiveSample(
+        val trackId: Int,
+        val timeUs: Long,
+        val data: ByteArray,
+        val text: String,
+        val records: List<AssSsaEventRecord>
+    )
+
+    private data class IndexedLiveRecord(
+        val sampleIndex: Int,
+        val recordIndex: Int,
+        val record: AssSsaEventRecord
+    )
 
     private data class TrackEventFormats(
         val dialogueFormat: AssSsaEventFormat,

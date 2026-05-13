@@ -5,6 +5,7 @@ import androidx.media3.common.MimeTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -21,7 +22,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = { surfaces ->
                 assertEquals(listOf(listOf("I am", "not", "angry")), surfaces.map { it.segments })
                 mapOf("evt_0" to listOf("Ik ben", "niet", "boos"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
 
         sink.onTrackHeader(
@@ -54,7 +56,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = { surfaces ->
                 assertEquals(listOf(listOf("I am", "not", "angry")), surfaces.map { it.segments })
                 mapOf("evt_0" to listOf("Ik ben", "niet", "boos"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
 
         sink.onTrackHeader(
@@ -87,7 +90,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = { surfaces ->
                 assertEquals(listOf(listOf("I cannot argue with him.")), surfaces.map { it.segments })
                 mapOf("evt_0" to listOf("Ik kan niet met hem discussieren."))
-            }
+            },
+            liveBatchWindowMs = 0
         )
 
         sink.onTrackHeader(
@@ -120,7 +124,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = { surfaces ->
                 assertEquals(listOf(listOf("Hello, world.")), surfaces.map { it.segments })
                 mapOf("evt_0" to listOf("Hallo, wereld."))
-            }
+            },
+            liveBatchWindowMs = 0
         )
 
         sink.onTrackHeader(
@@ -153,7 +158,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = { surfaces ->
                 assertEquals(listOf("evt_0"), surfaces.map { it.id })
                 mapOf("evt_0" to listOf("Bordtekst"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
         val sample = "Comment: 0,0:00:01.00,0:00:03.00,Default,SIGN,0,0,0,,Sign text"
 
@@ -191,7 +197,8 @@ class AssSsaTranslatingSampleSinkTest {
             downstream = downstream,
             scope = CoroutineScope(Dispatchers.Unconfined),
             isEnabled = { true },
-            translate = { throw IllegalStateException("provider down") }
+            translate = { throw IllegalStateException("provider down") },
+            liveBatchWindowMs = 0
         )
         val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello".toByteArray()
 
@@ -239,7 +246,8 @@ class AssSsaTranslatingSampleSinkTest {
                 providerCalls += 1
                 delay(50)
                 mapOf("evt_0" to listOf("Hallo"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
         val sample = "Dialogue: 0:00:00:00,0:00:01:00,1,10,Default,,0,0,0,,Hello".toByteArray()
 
@@ -287,7 +295,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = {
                 providerCalls += 1
                 emptyMap()
-            }
+            },
+            liveBatchWindowMs = 0
         )
         val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\p1}m 0 0 l 100 0{\\p0}".toByteArray()
 
@@ -310,7 +319,8 @@ class AssSsaTranslatingSampleSinkTest {
                 providerCalls += 1
                 assertEquals(listOf(listOf("My best friend?!")), it.map { surface -> surface.segments })
                 mapOf("evt_0" to listOf("Mijn beste vriend?!"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
 
         sink.onSubtitleSample(trackId = 4, timeUs = 43_770_000L, data = sample.toByteArray())
@@ -334,7 +344,8 @@ class AssSsaTranslatingSampleSinkTest {
                 providerCalls += 1
                 assertEquals(listOf("evt_1"), surfaces.map { it.id })
                 mapOf("evt_1" to listOf("Jij bent de prooi, en wij zijn de jagers."))
-            }
+            },
+            liveBatchWindowMs = 0
         )
         val sample = """
             Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP Romaji,,0,0,0,fx,{\fad(200,0)}Sie sind das Essen und wir sind die Jäger
@@ -365,7 +376,8 @@ class AssSsaTranslatingSampleSinkTest {
                 providerCalls += 1
                 assertEquals(listOf("evt_0"), surfaces.map { it.id })
                 mapOf("evt_0" to listOf("Vooruitblik"))
-            }
+            },
+            liveBatchWindowMs = 0
         )
         val sample = """
             Dialogue: 0,0:23:54.60,0:23:54.90,Signs,,0,0,0,,{\pos(653,55)}Preview
@@ -382,6 +394,55 @@ class AssSsaTranslatingSampleSinkTest {
             """.trimIndent(),
             downstream.samples.single().decodeToString()
         )
+    }
+
+    @Test
+    fun liveSinkBatchesCloseSamplesAndCapsWindowToThreeTranslations() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        var providerCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = this,
+            isEnabled = { true },
+            translate = { surfaces ->
+                providerCalls += 1
+                assertEquals(listOf("evt_0_0", "evt_1_0", "evt_2_0"), surfaces.map { it.id })
+                mapOf(
+                    "evt_0_0" to listOf("Een"),
+                    "evt_1_0" to listOf("Twee"),
+                    "evt_2_0" to listOf("Drie")
+                )
+            },
+            liveBatchWindowMs = 250,
+            maxLiveBatchTranslations = 3
+        )
+        val one = "Dialogue: 0,0:10:52.90,0:10:53.30,Signs,,0,0,0,,{\\pos(1,1)}One"
+        val two = "Dialogue: 0,0:10:52.91,0:10:53.31,Signs,,0,0,0,,{\\pos(2,1)}Two"
+        val three = "Dialogue: 0,0:10:52.92,0:10:53.32,Signs,,0,0,0,,{\\pos(3,1)}Three"
+        val four = "Dialogue: 0,0:10:52.93,0:10:53.33,Signs,,0,0,0,,{\\pos(4,1)}Four"
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 652_900_000L, data = one.toByteArray())
+        sink.onSubtitleSample(trackId = 4, timeUs = 652_910_000L, data = two.toByteArray())
+        sink.onSubtitleSample(trackId = 4, timeUs = 652_920_000L, data = three.toByteArray())
+        sink.onSubtitleSample(trackId = 4, timeUs = 652_930_000L, data = four.toByteArray())
+        advanceTimeBy(250)
+        advanceUntilIdle()
+
+        assertEquals(1, providerCalls)
+        assertEquals(4, downstream.samples.size)
+        assertEquals(
+            "Dialogue: 0,0:10:52.90,0:10:53.30,Signs,,0,0,0,,{\\pos(1,1)}Een",
+            downstream.samples[0].decodeToString()
+        )
+        assertEquals(
+            "Dialogue: 0,0:10:52.91,0:10:53.31,Signs,,0,0,0,,{\\pos(2,1)}Twee",
+            downstream.samples[1].decodeToString()
+        )
+        assertEquals(
+            "Dialogue: 0,0:10:52.92,0:10:53.32,Signs,,0,0,0,,{\\pos(3,1)}Drie",
+            downstream.samples[2].decodeToString()
+        )
+        assertEquals(four, downstream.samples[3].decodeToString())
     }
 
     private class RecordingAssSsaSampleSink : AssSsaSampleSink {
