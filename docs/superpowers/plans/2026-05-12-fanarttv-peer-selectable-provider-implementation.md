@@ -102,7 +102,7 @@ enum class IntegrationProvider {
 
 - [ ] **Step 2: Build to verify nothing breaks**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 3: Commit**
@@ -141,7 +141,7 @@ fanarttv.api.key=07882f4309da827df559bb85b63793f9
 
 - [ ] **Step 3: Build to verify the field is generated**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Then: `grep -r "FANARTTV_API_KEY" app/build/generated/source/buildConfig/`
 Expected: at least one match showing `public static final String FANARTTV_API_KEY = "...";`
 
@@ -232,7 +232,7 @@ The Json instance must be configured with `ignoreUnknownKeys = true` so unmodele
 
 - [ ] **Step 3: Build**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 4: Commit**
@@ -278,7 +278,7 @@ Base URL `https://webservice.fanart.tv/` is wired in the Hilt module in Task 4.2
 
 - [ ] **Step 2: Build**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 3: Commit**
@@ -329,7 +329,7 @@ class FanartTvAvailabilityTest {
 
 - [ ] **Step 2: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvAvailabilityTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvAvailabilityTest"`
 Expected: COMPILATION FAILURE.
 
 - [ ] **Step 3: Implementation**
@@ -351,7 +351,7 @@ sealed interface FanartTvAvailability {
 
 - [ ] **Step 4: Run — passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvAvailabilityTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvAvailabilityTest"`
 Expected: PASS (3/3)
 
 - [ ] **Step 5: Commit**
@@ -405,7 +405,7 @@ class FanartTvIdSelectorTest {
 
 - [ ] **Step 2: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvIdSelectorTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvIdSelectorTest"`
 Expected: COMPILATION FAILURE.
 
 - [ ] **Step 3: Implementation**
@@ -436,7 +436,7 @@ class FanartTvIdSelector {
 
 - [ ] **Step 4: Run — passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvIdSelectorTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvIdSelectorTest"`
 Expected: PASS (6/6)
 
 - [ ] **Step 5: Commit**
@@ -583,7 +583,7 @@ class FanartTvImagePickerTest {
 
 - [ ] **Step 2: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
 Expected: COMPILATION FAILURE.
 
 - [ ] **Step 3: Implementation**
@@ -640,7 +640,7 @@ class FanartTvImagePicker {
 
 - [ ] **Step 4: Run — passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -707,7 +707,7 @@ git commit -m "feat(fanarttv): add image picker with highest-likes + lang gating
 
 - [ ] **Step 2: Run**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvImagePickerTest"`
 Expected: PASS (all + 2 new)
 
 - [ ] **Step 3: Commit**
@@ -758,7 +758,7 @@ sealed interface FanartTvLookupResult {
 
 - [ ] **Step 3: Build**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 4: Commit**
@@ -835,7 +835,7 @@ If the project uses a per-provider `OkHttpClient`, inject the same one TMDB or T
 
 - [ ] **Step 3: Build to verify Hilt graph compiles (RuntimeFanartTvLookup added in Task 4.4 — temporarily comment out the `@Binds` if needed)**
 
-Run: `./gradlew :app:kspDebugKotlin :app:compileDebugKotlin`
+Run: `./gradlew :app:kspUniversalDebugKotlin :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL (re-enable the `@Binds` after Task 4.4).
 
 - [ ] **Step 4: Commit**
@@ -900,7 +900,7 @@ class FanartTvLookupShapeTest {
 
 - [ ] **Step 3: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvLookupShapeTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvLookupShapeTest"`
 Expected: COMPILATION FAILURE.
 
 - [ ] **Step 4: Implement FanartTvLookupShape**
@@ -923,7 +923,7 @@ If `IntegrationCallSpec` does not directly expose `redactedUrlForTrace` / `cache
 
 - [ ] **Step 5: Run — passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvLookupShapeTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvLookupShapeTest"`
 Expected: PASS (2/2)
 
 - [ ] **Step 6: Commit**
@@ -977,7 +977,7 @@ class RuntimeFanartTvLookup @Inject constructor(
 
 - [ ] **Step 3: Build**
 
-Run: `./gradlew :app:kspDebugKotlin :app:compileDebugKotlin`
+Run: `./gradlew :app:kspUniversalDebugKotlin :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 4: Commit**
@@ -1075,7 +1075,7 @@ fun ArtworkProviderChoiceKey.toRuntimeProviderId(): ArtworkProviderId =
 
 - [ ] **Step 3: Build**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 4: Commit**
@@ -1153,7 +1153,7 @@ Modify `app/src/test/java/com/nexio/tv/core/artwork/ArtworkProviderRegistryTest.
 
 - [ ] **Step 3: Build + run tests**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderRegistryTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderRegistryTest"`
 Expected: PASS (existing + new)
 
 - [ ] **Step 4: Commit**
@@ -1283,7 +1283,7 @@ Append to `ArtworkProviderCapabilityResolverTest`:
 
 - [ ] **Step 2: Run — fail**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolverTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolverTest"`
 Expected: 6 new tests fail.
 
 - [ ] **Step 3: Implement extensions**
@@ -1357,7 +1357,7 @@ If passing `mediaKind` into `settingsAwareRejectionReason` requires too much sur
 
 - [ ] **Step 4: Run — pass**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolverTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolverTest"`
 Expected: PASS (all)
 
 - [ ] **Step 5: Commit**
@@ -1432,7 +1432,7 @@ git commit -m "feat(artwork-capability): reject FANART_TV for anime + missing-id
 
 - [ ] **Step 2: Run — pass**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderResolverTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.ArtworkProviderResolverTest"`
 Expected: PASS (existing + 3 new)
 
 - [ ] **Step 3: Commit**
@@ -1655,7 +1655,7 @@ class FanartTvCandidateGeneratorTest {
 
 - [ ] **Step 2: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGeneratorTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGeneratorTest"`
 Expected: COMPILATION FAILURE.
 
 - [ ] **Step 3: Implementation**
@@ -1765,7 +1765,7 @@ class FanartTvCandidateGenerator @Inject constructor(
 
 - [ ] **Step 4: Run — pass**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGeneratorTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGeneratorTest"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1809,7 +1809,7 @@ Inside the `companion object` block:
 
 - [ ] **Step 2: Build to verify Hilt graph compiles**
 
-Run: `./gradlew :app:kspDebugKotlin :app:compileDebugKotlin`
+Run: `./gradlew :app:kspUniversalDebugKotlin :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL
 
 - [ ] **Step 3: Commit**
@@ -1909,7 +1909,7 @@ class MetadataArtworkDecisionResolverFanartTvTest {
 
 - [ ] **Step 2: Run — fails compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.metadata.MetadataArtworkDecisionResolverFanartTvTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.integration.metadata.MetadataArtworkDecisionResolverFanartTvTest"`
 Expected: COMPILATION FAILURE (resolver constructor doesn't yet take a generator).
 
 - [ ] **Step 3: Modify the resolver**
@@ -1989,12 +1989,12 @@ Note: `settingsSource.settings.first()` was already called inside `resolveFields
 
 - [ ] **Step 4: Run — pass**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.metadata.MetadataArtworkDecisionResolverFanartTvTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.integration.metadata.MetadataArtworkDecisionResolverFanartTvTest"`
 Expected: PASS
 
 - [ ] **Step 5: Build to confirm production graph**
 
-Run: `./gradlew :app:assembleDebug`
+Run: `./gradlew :app:assembleUniversalDebug`
 Expected: BUILD SUCCESSFUL (Hilt binding from Task 6.2 satisfies the new constructor parameter).
 
 - [ ] **Step 6: Commit**
@@ -2044,7 +2044,7 @@ class FanartTvTraceRedactionTest {
 
 - [ ] **Step 2: Run — pass**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvTraceRedactionTest"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.integration.fanarttv.FanartTvTraceRedactionTest"`
 Expected: PASS. If FAIL, the redaction policy on `FanartTvLookupShape` is incomplete — copy the redaction declaration from the analogous shape used in Task 4.3 Step 1.
 
 - [ ] **Step 3: Commit**
@@ -2069,7 +2069,7 @@ Expected: a non-empty value.
 
 - [ ] **Step 2: Build and install**
 
-Run: `./gradlew :app:installDebug`
+Run: `./gradlew :app:installUniversalDebug`
 Expected: BUILD SUCCESSFUL and install succeeds.
 
 - [ ] **Step 3: Launch the app and select a profile**
