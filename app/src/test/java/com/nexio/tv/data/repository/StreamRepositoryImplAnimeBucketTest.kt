@@ -270,7 +270,109 @@ class StreamRepositoryImplAnimeBucketTest {
     }
 
     @Test
-    fun `anime_tagged_addon_empty_generic_addons_still_selected`() = runTest {
+    fun `anime content queries only anime tagged compatible addons when configured`() = runTest {
+        mockAndroidLog()
+
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(listOf(animeAddon, genericAddon))
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(animeAddon.id, match { it.contains("anime.example") }, any())
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Anime Stream"))))
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(genericAddon.id, any(), any())
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Generic Stream"))))
+
+        val repository = StreamRepositoryImpl(
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = true),
+            traceMetadataEvents = mockk(relaxed = true)
+        )
+
+        val emissions = repository.getStreamsFromAllAddons(
+            type = "movie",
+            videoId = "mal:21",
+            requestOrigin = "test_anime_only_addons",
+            requestId = "request-anime-only-addons"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList()
+
+        assertEquals(listOf("Anime Addon"), emissions.last().data.map { it.addonName })
+        assertTrue(emissions.last().data.single().isAnimeBucket)
+        coVerify(exactly = 1) {
+            addonStreamIntegrationProvider.getStreams(animeAddon.id, match { it.contains("anime.example") }, any())
+        }
+        coVerify(exactly = 0) {
+            addonStreamIntegrationProvider.getStreams(genericAddon.id, any(), any())
+        }
+    }
+
+    @Test
+    fun `non anime content still queries anime tagged and generic compatible addons`() = runTest {
+        mockAndroidLog()
+
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+        val genericAddon = streamAddon("https://generic.example", "Generic Addon")
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(listOf(animeAddon, genericAddon))
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(animeAddon.id, match { it.contains("anime.example") }, any())
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Anime Tagged Stream"))))
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(genericAddon.id, match { it.contains("generic.example") }, any())
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Generic Stream"))))
+
+        val repository = StreamRepositoryImpl(
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = RecordingAnimeIdentityIndex(contentIsAnime = false),
+            traceMetadataEvents = mockk(relaxed = true)
+        )
+
+        val emissions = repository.getStreamsFromAllAddons(
+            type = "movie",
+            videoId = "tt1234567",
+            requestOrigin = "test_non_anime_all_addons",
+            requestId = "request-non-anime-all-addons"
+        ).filterIsInstance<NetworkResult.Success<List<AddonStreams>>>().toList()
+
+        assertEquals(setOf("Anime Addon", "Generic Addon"), emissions.last().data.map { it.addonName }.toSet())
+        assertTrue(emissions.last().data.none { it.isAnimeBucket })
+        coVerify(exactly = 1) {
+            addonStreamIntegrationProvider.getStreams(animeAddon.id, match { it.contains("anime.example") }, any())
+        }
+        coVerify(exactly = 1) {
+            addonStreamIntegrationProvider.getStreams(genericAddon.id, match { it.contains("generic.example") }, any())
+        }
+    }
+
+    @Test
+    fun `anime tagged addon empty result does not fall back to generic addons`() = runTest {
         val animeAddon = streamAddon(
             baseUrl = "https://anime.example",
             displayName = "Anime Addon",
@@ -285,10 +387,9 @@ class StreamRepositoryImplAnimeBucketTest {
 
         val buckets = repository.successBuckets(videoId = "mal:21")
 
-        assertTrue(buckets.single { it.addonName == "Anime Addon" }.isAnimeBucket)
-        assertTrue(buckets.single { it.addonName == "Anime Addon" }.streams.isEmpty())
-        assertFalse(buckets.single { it.addonName == "Generic Addon" }.isAnimeBucket)
-        assertEquals(1, buckets.single { it.addonName == "Generic Addon" }.streams.size)
+        assertEquals(listOf("Anime Addon"), buckets.map { it.addonName })
+        assertTrue(buckets.single().isAnimeBucket)
+        assertTrue(buckets.single().streams.isEmpty())
     }
 
     @Test
