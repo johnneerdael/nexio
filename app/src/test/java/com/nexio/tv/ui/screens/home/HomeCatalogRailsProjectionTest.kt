@@ -8,6 +8,7 @@ import com.nexio.tv.ui.screens.home.order.HomeRailKey
 import com.nexio.tv.ui.screens.home.order.RailFamily
 import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import com.nexio.tv.ui.screens.home.order.RailSource
+import com.nexio.tv.ui.screens.home.order.fromOrderKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
