@@ -220,6 +220,67 @@ class AssSsaRenderControllerTest {
     }
 
     @Test
+    fun disableRenderingClearsSelectionAndIgnoresFutureSamples() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+        controller.onTrackHeader(trackId = 9, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.onSubtitleSample(
+            trackId = 9,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Before".toByteArray()
+        )
+
+        assertEquals(1, controller.eventChunksForTesting().size)
+        assertTrue(native.chunks.isNotEmpty())
+
+        controller.disableRendering()
+        native.clearRecordedCalls()
+
+        assertFalse(controller.isRenderLoopScheduledForTesting())
+        assertTrue(controller.eventChunksForTesting().isEmpty())
+
+        controller.onSubtitleSample(
+            trackId = 9,
+            timeUs = 2_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,2,0,Default,,0,0,0,,After".toByteArray()
+        )
+        controller.renderCurrentFrameForTesting()
+
+        assertTrue(controller.eventChunksForTesting().isEmpty())
+        assertTrue(native.chunks.isEmpty())
+        assertTrue(native.renders.isEmpty())
+    }
+
+    @Test
+    fun selectingTrackReEnablesRenderingAfterDisable() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+        controller.onTrackHeader(trackId = 9, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.disableRendering()
+        native.clearRecordedCalls()
+
+        controller.selectTrackByFormat(format)
+        controller.onSubtitleSample(
+            trackId = 9,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Again".toByteArray()
+        )
+
+        assertEquals(1, controller.eventChunksForTesting().size)
+        assertEquals(1, native.chunks.size)
+    }
+
+    @Test
     fun releaseDestroysNativeHandleAndClearsOverlay() {
         val native = FakeAssSsaNativeApi()
         val overlay = newOverlay()

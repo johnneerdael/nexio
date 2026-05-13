@@ -90,6 +90,7 @@ internal class AssSsaRenderController(
     private var selectedTrackId: Int? = null
     private var loadedTrackId: Int? = null
     private var handle = 0L
+    private var renderingEnabled = true
     private var renderBitmap: Bitmap? = null
     private var renderWidth = 0
     private var renderHeight = 0
@@ -170,6 +171,7 @@ internal class AssSsaRenderController(
 
     fun selectTrackByFormat(format: Format) {
         synchronized(stateLock) {
+            renderingEnabled = true
             val trackId = findTrackIdByFormat(format) ?: return
             if (selectedTrackId == trackId) {
                 startRenderLoopIfNeeded()
@@ -193,6 +195,23 @@ internal class AssSsaRenderController(
         startRenderLoopIfNeeded()
     }
 
+    fun disableRendering() {
+        stopRenderLoop()
+        synchronized(stateLock) {
+            if (released) return
+            renderingEnabled = false
+            val activeHandle = handle
+            if (activeHandle != 0L) {
+                native.flush(activeHandle)
+            }
+            selectedTrackId = null
+            loadedTrackId = null
+            eventChunks.clear()
+            rawSamples.clear()
+        }
+        clearOverlayView()
+    }
+
     fun clearOverlay() {
         stopRenderLoop()
         clearOverlayView()
@@ -209,6 +228,7 @@ internal class AssSsaRenderController(
             fontAttachments.clear()
             selectedTrackId = null
             loadedTrackId = null
+            renderingEnabled = true
             currentTimeUs = 0L
         }
         clearOverlay()
@@ -229,6 +249,7 @@ internal class AssSsaRenderController(
             fontAttachments.clear()
             selectedTrackId = null
             loadedTrackId = null
+            renderingEnabled = false
         }
         clearOverlay()
     }
@@ -252,6 +273,7 @@ internal class AssSsaRenderController(
 
         synchronized(stateLock) {
             if (released) return
+            if (!renderingEnabled) return
 
             if (chunk != null) {
                 eventChunks += chunk
@@ -352,6 +374,7 @@ internal class AssSsaRenderController(
     private fun canRunRenderLoop(): Boolean = synchronized(stateLock) {
         val trackId = selectedTrackId
         !released &&
+            renderingEnabled &&
             overlayView != null &&
             player != null &&
             trackId != null &&

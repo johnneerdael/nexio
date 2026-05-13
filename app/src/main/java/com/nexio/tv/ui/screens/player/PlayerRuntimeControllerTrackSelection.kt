@@ -9,6 +9,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.ui.screens.player.ass.isEmbeddedAssSsaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -178,6 +179,11 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
                             .setOverrideForType(override)
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                             .build()
+                        if (format.isEmbeddedAssSsaFormat()) {
+                            assSsaRenderController?.selectTrackByFormat(format)
+                        } else {
+                            assSsaRenderController?.disableRendering()
+                        }
                         return
                     }
                     currentSubIndex++
@@ -188,6 +194,7 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 }
 
 internal fun PlayerRuntimeController.disableSubtitles() {
+    assSsaRenderController?.disableRendering()
     _exoPlayer?.let { player ->
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
@@ -238,7 +245,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
             "ADDON_SUB: select id=${subtitle.id} lang=${subtitle.lang} url=${subtitle.url.take(120)}"
         )
         deactivateAddonSubtitleOverlay()
-        assSsaRenderController?.clearOverlay()
+        assSsaRenderController?.disableRendering()
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
         val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)

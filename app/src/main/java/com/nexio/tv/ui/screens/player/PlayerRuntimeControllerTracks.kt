@@ -655,6 +655,9 @@ internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: 
         activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
         fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream
     )
+    if (!desiredUseAssSsaPipeline) {
+        assSsaRenderController?.disableRendering()
+    }
     adjustment.overrideForCurrentStream?.let { assSsaPipelineOverrideForCurrentStream = it }
     _uiState.update {
         it.copy(useAssSsaRenderOverlay = desiredUseAssSsaPipeline && activePlayerUsesAssSsaRenderer)
