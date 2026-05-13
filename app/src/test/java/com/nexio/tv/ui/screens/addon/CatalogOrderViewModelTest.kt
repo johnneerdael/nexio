@@ -21,13 +21,12 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.repository.AddonRepository
-import com.nexio.tv.ui.screens.home.order.HomeRailKey
-import com.nexio.tv.ui.screens.home.order.HomeRailOrderState
-import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
-import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
+import io.mockk.any
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.match
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -64,6 +63,7 @@ class CatalogOrderViewModelTest {
         val notifier = CatalogPriorityHydrationNotifier()
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(emptyList())
         every {
             layoutPreferenceDataStore.disabledHomeCatalogKeys
         } returns MutableStateFlow(listOf(TraktCatalogIds.TRENDING_MOVIES))
@@ -91,6 +91,7 @@ class CatalogOrderViewModelTest {
         val notifier = CatalogPriorityHydrationNotifier()
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(emptyList())
         every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
 
         val viewModel = buildViewModel(
@@ -112,13 +113,28 @@ class CatalogOrderViewModelTest {
     }
 
     @Test
-    fun `reorder routes through HomeRailOrderStore updateOrder`() = runTest(dispatcher) {
+    fun `reorder writes home catalog rails`() = runTest(dispatcher) {
         val notifier = CatalogPriorityHydrationNotifier()
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
-        val homeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true)
-        every { homeRailOrderStore.state } returns MutableStateFlow(HomeRailOrderState.Empty)
+        val railsFlow = MutableStateFlow(
+            listOf(
+                HomeCatalogRail(
+                    key = TraktCatalogIds.TRENDING_MOVIES,
+                    family = "trakt",
+                    source = "provider_catalog",
+                    title = "Trakt Trending Movies"
+                ),
+                HomeCatalogRail(
+                    key = TraktCatalogIds.TRENDING_SHOWS,
+                    family = "trakt",
+                    source = "provider_catalog",
+                    title = "Trakt Trending Shows"
+                )
+            )
+        )
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns railsFlow
         every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
         every { traktSettingsDataStore.catalogPreferences } returns MutableStateFlow(
             TraktCatalogPreferences(
@@ -133,8 +149,7 @@ class CatalogOrderViewModelTest {
         val viewModel = buildViewModel(
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             notifier = notifier,
-            traktSettingsDataStore = traktSettingsDataStore,
-            homeRailOrderStore = homeRailOrderStore
+            traktSettingsDataStore = traktSettingsDataStore
         )
         advanceUntilIdle()
 
@@ -142,11 +157,9 @@ class CatalogOrderViewModelTest {
         advanceUntilIdle()
 
         coVerify {
-            homeRailOrderStore.updateOrder(
-                orderedKeys = any(),
-                source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
-                knownLiveKeys = any(),
-            )
+            layoutPreferenceDataStore.setHomeCatalogRails(match { rails ->
+                rails.map { it.key } == listOf(TraktCatalogIds.TRENDING_SHOWS, TraktCatalogIds.TRENDING_MOVIES)
+            })
         }
     }
 
@@ -156,6 +169,7 @@ class CatalogOrderViewModelTest {
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val kitsuCatalogSettingsDataStore = mockk<KitsuCatalogSettingsDataStore>(relaxed = true)
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(emptyList())
         every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
         every { kitsuCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(KitsuCatalogPreferences())
 
@@ -178,21 +192,28 @@ class CatalogOrderViewModelTest {
     }
 
     @Test
-    fun `observeCatalogs reflects HomeRailOrderStore state changes after reorder`() = runTest(dispatcher) {
+    fun `observeCatalogs reflects home catalog rail state changes after reorder`() = runTest(dispatcher) {
         val notifier = CatalogPriorityHydrationNotifier()
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
-        val homeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true)
-        val storeState = MutableStateFlow(
-            HomeRailOrderState.Empty.copy(
-                orderedKeys = listOf(
-                    HomeRailKey(TraktCatalogIds.TRENDING_MOVIES),
-                    HomeRailKey(TraktCatalogIds.TRENDING_SHOWS),
+        val railsFlow = MutableStateFlow(
+            listOf(
+                HomeCatalogRail(
+                    key = TraktCatalogIds.TRENDING_MOVIES,
+                    family = "trakt",
+                    source = "provider_catalog",
+                    title = "Trakt Trending Movies"
+                ),
+                HomeCatalogRail(
+                    key = TraktCatalogIds.TRENDING_SHOWS,
+                    family = "trakt",
+                    source = "provider_catalog",
+                    title = "Trakt Trending Shows"
                 )
             )
         )
-        every { homeRailOrderStore.state } returns storeState
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns railsFlow
         every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
         every { traktSettingsDataStore.catalogPreferences } returns MutableStateFlow(
             TraktCatalogPreferences(
@@ -207,8 +228,7 @@ class CatalogOrderViewModelTest {
         val viewModel = buildViewModel(
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             notifier = notifier,
-            traktSettingsDataStore = traktSettingsDataStore,
-            homeRailOrderStore = homeRailOrderStore
+            traktSettingsDataStore = traktSettingsDataStore
         )
         advanceUntilIdle()
 
@@ -218,13 +238,19 @@ class CatalogOrderViewModelTest {
             initialKeys.filter { it in setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS) }
         )
 
-        // Simulate the store emitting a swapped order (as if updateOrder ran).
-        storeState.value = storeState.value.copy(
-            orderedKeys = listOf(
-                HomeRailKey(TraktCatalogIds.TRENDING_SHOWS),
-                HomeRailKey(TraktCatalogIds.TRENDING_MOVIES),
+        railsFlow.value = listOf(
+            HomeCatalogRail(
+                key = TraktCatalogIds.TRENDING_SHOWS,
+                family = "trakt",
+                source = "provider_catalog",
+                title = "Trakt Trending Shows"
             ),
-            version = 1L,
+            HomeCatalogRail(
+                key = TraktCatalogIds.TRENDING_MOVIES,
+                family = "trakt",
+                source = "provider_catalog",
+                title = "Trakt Trending Movies"
+            )
         )
         advanceUntilIdle()
 
@@ -235,14 +261,79 @@ class CatalogOrderViewModelTest {
         )
     }
 
+    @Test
+    fun `catalog management shows home rails as visible and stock rails as add candidates`() = runTest(dispatcher) {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(
+            listOf(
+                HomeCatalogRail(
+                    key = "tmdb_trending_movies",
+                    family = "tmdb",
+                    source = "provider_catalog",
+                    title = "Trending Movies"
+                )
+            )
+        )
+        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
+        every { tmdbCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(
+            TmdbCatalogPreferences(
+                enabledCatalogs = setOf("tmdb_trending_movies", "tmdb_popular_movies"),
+                catalogOrder = listOf("tmdb_trending_movies", "tmdb_popular_movies")
+            )
+        )
+
+        val viewModel = buildViewModel(
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            notifier = CatalogPriorityHydrationNotifier(),
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("tmdb_trending_movies"), viewModel.uiState.value.items.map { it.key })
+        assertTrue(viewModel.uiState.value.availableItems.map { it.key }.contains("tmdb_popular_movies"))
+    }
+
+    @Test
+    fun `removing rail updates home catalog rails without disabling provider`() = runTest(dispatcher) {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(
+            listOf(
+                HomeCatalogRail(
+                    key = "tmdb_trending_movies",
+                    family = "tmdb",
+                    source = "provider_catalog",
+                    title = "Trending Movies"
+                )
+            )
+        )
+
+        val viewModel = buildViewModel(
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            notifier = CatalogPriorityHydrationNotifier()
+        )
+        advanceUntilIdle()
+
+        viewModel.removeFromHome("tmdb_trending_movies")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            layoutPreferenceDataStore.setHomeCatalogRails(emptyList())
+        }
+        coVerify(exactly = 0) {
+            layoutPreferenceDataStore.setDisabledHomeCatalogKeys(any())
+        }
+    }
+
     private fun buildViewModel(
         layoutPreferenceDataStore: LayoutPreferenceDataStore,
         notifier: CatalogPriorityHydrationNotifier,
         kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore = mockk(relaxed = true),
-        traktSettingsDataStore: TraktSettingsDataStore? = null,
-        homeRailOrderStore: HomeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true).also {
-            every { it.state } returns MutableStateFlow(HomeRailOrderState.Empty)
-        }
+        tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore = mockk(relaxed = true),
+        traktSettingsDataStore: TraktSettingsDataStore? = null
     ): CatalogOrderViewModel {
         val addonRepository = mockk<AddonRepository>(relaxed = true)
         val traktDiscoveryService = mockk<TraktDiscoveryService>(relaxed = true)
@@ -257,7 +348,6 @@ class CatalogOrderViewModelTest {
         val simklSettingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
         val mdbListDiscoveryService = mockk<MDBListDiscoveryService>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
-        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
         val androidTvRecommendationsDataStore = mockk<AndroidTvRecommendationsDataStore>(relaxed = true)
         val androidTvFeedCatalogService = mockk<AndroidTvFeedCatalogService>(relaxed = true)
 
@@ -285,8 +375,7 @@ class CatalogOrderViewModelTest {
             tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
             androidTvRecommendationsDataStore = androidTvRecommendationsDataStore,
             androidTvFeedCatalogService = androidTvFeedCatalogService,
-            catalogPriorityHydrationNotifier = notifier,
-            homeRailOrderStore = homeRailOrderStore
+            catalogPriorityHydrationNotifier = notifier
         )
     }
 }

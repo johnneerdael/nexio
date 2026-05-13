@@ -63,6 +63,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
@@ -611,6 +612,7 @@ class HomeViewModel @Inject constructor(
     internal val catalogOrder = mutableListOf<String>()
     internal var addonsCache: List<Addon> = emptyList()
     internal var homeCatalogOrderKeys: List<String> = emptyList()
+    internal var homeCatalogRails: List<HomeCatalogRail> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null

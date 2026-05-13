@@ -18,6 +18,7 @@ import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
+import com.nexio.tv.domain.model.HOME_CATALOG_RAILS_VERSION
 import com.nexio.tv.domain.model.UserProfile
 
 fun stockDefaultProfile(): UserProfile =
@@ -53,6 +54,8 @@ fun stockAccountConfigSyncPayload(): AccountConfigSyncPayload =
         // than leaving it untouched, which is the meaning of `null`).
         catalogs = CatalogSyncSettings(
             home = HomeCatalogSyncSettings(
+                railsVersion = HOME_CATALOG_RAILS_VERSION,
+                rails = emptyList(),
                 heroCatalogKeys = emptyList(),
                 homeCatalogOrderKeys = emptyList(),
                 disabledHomeCatalogKeys = emptyList()

@@ -1,0 +1,11 @@
+{
+  "rails": [
+    { "key": "tmdb_trending_movies", "family": "tmdb", "source": "provider_catalog", "title": "Trending Movies", "enabled": true },
+    { "key": "unknown_rail", "family": "addon", "source": "addon_catalog", "title": "Unknown", "enabled": true },
+    { "key": "tmdb_trending_movies", "family": "tmdb", "source": "provider_catalog", "title": "Duplicate", "enabled": true }
+  ],
+  "inventory": [
+    { "key": "tmdb_trending_movies", "title": "Trending Movies" }
+  ],
+  "expectedVisibleKeys": ["tmdb_trending_movies"]
+}

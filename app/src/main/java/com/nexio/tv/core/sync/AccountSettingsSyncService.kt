@@ -95,6 +95,7 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
@@ -503,6 +504,32 @@ private fun AccountSecretPushSnapshot.withSectionsFrom(
     return merged
 }
 
+internal class AccountHomeCatalogRailsSyncCache {
+    private var lastRemoteHomeCatalogRails: List<HomeCatalogRail>? = null
+
+    fun selectForAccountPayload(
+        isPrimaryProfile: Boolean,
+        localHomeCatalogRails: List<HomeCatalogRail>
+    ): List<HomeCatalogRail>? {
+        // Secondary profile pushes still full-replace account settings on legacy RPCs.
+        // Carry the last remote default-profile rails when known so unrelated pushes
+        // do not erase catalogs.home.rails.
+        return if (isPrimaryProfile) localHomeCatalogRails else lastRemoteHomeCatalogRails
+    }
+
+    fun rememberFullRemotePull(rails: List<HomeCatalogRail>?) {
+        lastRemoteHomeCatalogRails = rails
+    }
+
+    fun rememberSuccessfulSettingsPush(rails: List<HomeCatalogRail>?) {
+        lastRemoteHomeCatalogRails = rails
+    }
+
+    fun clearForUserChange() {
+        lastRemoteHomeCatalogRails = null
+    }
+}
+
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -560,6 +587,7 @@ class AccountSettingsSyncService @Inject constructor(
     private var lastAppliedRemoteRevision: Long = 0L
     @Volatile
     private var lastSyncedAccountSecretSnapshot: AccountSecretPushSnapshot? = null
+    private val homeCatalogRailsSyncCache = AccountHomeCatalogRailsSyncCache()
     private var lastRemoteTraktPinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
     private var lastRemoteMDBListPinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList()
 
@@ -593,6 +621,7 @@ class AccountSettingsSyncService @Inject constructor(
                 heroCatalogSelections = layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
                 homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
                 disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
+                homeCatalogRails = layoutPreferenceDataStore.homeCatalogRails.drop(1).map { Unit },
                 tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
@@ -661,6 +690,9 @@ class AccountSettingsSyncService @Inject constructor(
 
     fun onStartupSyncUserChanged(userId: String?) {
         if (startupPushGate.onSessionUserChanged(userId)) {
+            homeCatalogRailsSyncCache.clearForUserChange()
+            lastRemoteTraktPinnedListOptions = emptyList()
+            lastRemoteMDBListPinnedTopListOptions = emptyList()
             pushJob?.cancel()
             pushJob = null
         }
@@ -872,21 +904,29 @@ class AccountSettingsSyncService @Inject constructor(
                             .filterKeys { sectionKey -> sectionKey in appliedSectionKeys }
                     )
 
-                    if (appliedChangedPaths.isNotEmpty()) {
+                    if (
+                        appliedChangedPaths.isNotEmpty() ||
+                        AccountSettingsSectionKey.CATALOGS_HOME in appliedSectionKeys
+                    ) {
                         applyingRemoteMutex.withLock {
                             if (isApplyingRemote || !hasLiveFullAccountSession()) return@withLock
                             maxAppliedRevision?.let { revision ->
                                 lastAppliedRemoteRevision = maxOf(lastAppliedRemoteRevision, revision)
                             }
-                            synchronized(pendingChangedPaths) {
-                                if (!clearAppliedChangedPathsForGeneration(
-                                        pendingChangedPaths = pendingChangedPaths,
-                                        pendingChangedPathsGeneration = pendingChangedPathsGeneration,
-                                        snapshotChangedPathsGeneration = snapshot.changedPathsGeneration,
-                                        appliedChangedPaths = appliedChangedPaths
-                                    )
-                                ) {
-                                    scheduleFollowUpPush = true
+                            if (AccountSettingsSectionKey.CATALOGS_HOME in appliedSectionKeys) {
+                                homeCatalogRailsSyncCache.rememberSuccessfulSettingsPush(snapshot.payload.catalogs.home?.rails)
+                            }
+                            if (appliedChangedPaths.isNotEmpty()) {
+                                synchronized(pendingChangedPaths) {
+                                    if (!clearAppliedChangedPathsForGeneration(
+                                            pendingChangedPaths = pendingChangedPaths,
+                                            pendingChangedPathsGeneration = pendingChangedPathsGeneration,
+                                            snapshotChangedPathsGeneration = snapshot.changedPathsGeneration,
+                                            appliedChangedPaths = appliedChangedPaths
+                                        )
+                                    ) {
+                                        scheduleFollowUpPush = true
+                                    }
                                 }
                             }
                         }
@@ -1148,6 +1188,10 @@ class AccountSettingsSyncService @Inject constructor(
         val heroCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.heroCatalogSelections.first() else emptyList()
         val homeCatalogOrderKeys = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogOrderKeys.first() else emptyList()
         val disabledHomeCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.disabledHomeCatalogKeys.first() else emptyList()
+        val homeCatalogRails = homeCatalogRailsSyncCache.selectForAccountPayload(
+            isPrimaryProfile = isPrimaryProfile,
+            localHomeCatalogRails = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogRails.first() else emptyList()
+        )
         val traktCatalogPrefs = if (isPrimaryProfile) traktSettingsDataStore.catalogPreferences.first() else null
         val simklCatalogPrefs = if (isPrimaryProfile) simklSettingsDataStore.catalogPreferences.first() else null
         val playerSettings = if (isPrimaryProfile) playerSettingsDataStore.playerSettings.first() else null
@@ -1263,6 +1307,7 @@ class AccountSettingsSyncService @Inject constructor(
             heroCatalogKeys = heroCatalogKeys,
             homeCatalogOrderKeys = homeCatalogOrderKeys,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+            homeCatalogRails = homeCatalogRails,
             traktCatalogEnabledSet = traktCatalogPrefs?.enabledCatalogs?.toList() ?: emptyList(),
             traktCatalogOrder = traktCatalogPrefs?.catalogOrder ?: emptyList(),
             traktSelectedPopularListKeys = traktCatalogPrefs?.selectedPopularListKeys?.toList() ?: emptyList(),
@@ -1308,6 +1353,9 @@ class AccountSettingsSyncService @Inject constructor(
         // pinnedListOptions / pinnedTopListOptions remain non-null typed-object
         // lists; when their sub-section is null we fall back to the
         // last-known value.
+        if (sectionKeys.includesSection(AccountSettingsSectionKey.CATALOGS_HOME)) {
+            homeCatalogRailsSyncCache.rememberFullRemotePull(settings.catalogs.home?.rails)
+        }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.CATALOGS_TRAKT)) settings.catalogs.trakt?.let {
             lastRemoteTraktPinnedListOptions = it.pinnedListOptions
         }

@@ -50,4 +50,32 @@ class TmdbKitsuCatalogSyncModelsTest {
         assertEquals(listOf("tmdb_popular_movies"), decoded.tmdb?.catalogOrder)
         assertEquals(listOf("kitsu_trending_anime"), decoded.kitsu?.catalogOrder)
     }
+
+    @Test
+    fun `HomeCatalogSyncSettings carries displayed rails`() {
+        val original = HomeCatalogSyncSettings(
+            railsVersion = 1,
+            rails = listOf(
+                com.nexio.tv.domain.model.HomeCatalogRail(
+                    key = "tmdb_trending_movies",
+                    family = "tmdb",
+                    source = "provider_catalog",
+                    title = "Trending Movies",
+                    addedAtMs = 1778544000000L
+                )
+            ),
+            heroCatalogKeys = listOf("hero-key"),
+            homeCatalogOrderKeys = listOf("legacy-key"),
+            disabledHomeCatalogKeys = listOf("disabled-key")
+        )
+
+        val text = json.encodeToString(HomeCatalogSyncSettings.serializer(), original)
+        val decoded = json.decodeFromString(HomeCatalogSyncSettings.serializer(), text)
+
+        assertEquals(1, decoded.railsVersion)
+        assertEquals("tmdb_trending_movies", decoded.rails?.single()?.key)
+        assertEquals(listOf("hero-key"), decoded.heroCatalogKeys)
+        assertEquals(listOf("legacy-key"), decoded.homeCatalogOrderKeys)
+        assertEquals(listOf("disabled-key"), decoded.disabledHomeCatalogKeys)
+    }
 }
