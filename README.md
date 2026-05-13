@@ -2,8 +2,6 @@
   <img src="assets/brand/app_logo_wordmark.png" alt="NEXIO" width="720">
 </p>
 
-# NEXIO
-
 NEXIO is a streaming app for Android TV and Fire TV built around a simple idea:
 the living-room experience should feel premium before, during, and after playback.
 
