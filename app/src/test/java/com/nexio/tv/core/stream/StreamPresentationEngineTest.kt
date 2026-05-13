@@ -885,7 +885,7 @@ class StreamPresentationEngineTest {
     }
 
     @Test
-    fun `grouped sorting uses transitive torii priority before nagare and generic size sort`() {
+    fun `grouped sorting reorders torii and nagare without moving generic size slot`() {
         val torii = stream(
             filename = "Show.S01E01.1080p.WEB-DL.x265.Torii.mkv",
             name = "⚡ RD",
@@ -917,7 +917,7 @@ class StreamPresentationEngineTest {
         )
 
         assertEquals(
-            listOf("Nexio Torii", "Nexio Nagare", "Torrentio"),
+            listOf("Nexio Torii", "Torrentio", "Nexio Nagare"),
             result.items.map { it.stream.addonName }
         )
     }
