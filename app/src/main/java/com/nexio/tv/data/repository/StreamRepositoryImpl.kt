@@ -99,6 +99,11 @@ class StreamRepositoryImpl @Inject constructor(
             val accumulatedResults = LinkedHashMap<String, AddonStreams>()
             val addonDiagnostics = mutableListOf<AddonFetchDiagnostic>()
             val animePriorityGateEnabled = contentIsAnime && streamAddons.any { it.isAnime }
+            val queryAddons = if (animePriorityGateEnabled) {
+                streamAddons.filter { it.isAnime }
+            } else {
+                streamAddons
+            }
             var emittedSuccess = false
 
             coroutineScope {
@@ -120,7 +125,7 @@ class StreamRepositoryImpl @Inject constructor(
                 }
 
                 // Launch addon jobs
-                val jobs = streamAddons.map { addon ->
+                val jobs = queryAddons.map { addon ->
                     launch(Dispatchers.IO) {
                         val addonStartedAtNs = System.nanoTime()
                         var outcome = "exception"
@@ -193,7 +198,7 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
                 var remainingAddonEvents = jobs.size
-                var remainingAnimeAddonEvents = if (animePriorityGateEnabled) streamAddons.count { it.isAnime } else 0
+                var remainingAnimeAddonEvents = if (animePriorityGateEnabled) queryAddons.count { it.isAnime } else 0
                 var pendingWrapEvents = 0
                 while (remainingAddonEvents > 0 || pendingWrapEvents > 0) {
                     when (val event = eventChannel.receive()) {
@@ -270,7 +275,7 @@ class StreamRepositoryImpl @Inject constructor(
                     type = type,
                     season = season,
                     episode = episode,
-                    totalAddonCandidates = streamAddons.size,
+                    totalAddonCandidates = queryAddons.size,
                     diagnostics = addonDiagnostics,
                     totalDurationMs = (System.nanoTime() - requestStartedAtNs) / 1_000_000L
                 )
