@@ -1,6 +1,6 @@
 package com.nexio.tv.updater
 
-object VersionUtils {
+internal object VersionUtils {
 
     fun normalize(raw: String?): String {
         if (raw.isNullOrBlank()) return ""

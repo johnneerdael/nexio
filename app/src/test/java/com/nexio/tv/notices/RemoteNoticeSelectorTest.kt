@@ -54,13 +54,43 @@ class RemoteNoticeSelectorTest {
     }
 
     @Test
-    fun `version and expiry filters are applied`() {
+    fun `newer min version too high notice is skipped in favor of older valid notice`() {
         val selected = RemoteNoticeSelector.selectNewestEligible(
             manifest = manifest(
-                notice("too-low", "2026-05-12T10:01:00Z", minVersion = "2.0.0"),
-                notice("too-high", "2026-05-12T10:02:00Z", maxVersion = "1.4.9"),
-                notice("expired", "2026-05-12T10:03:00Z", expiresAt = "2026-05-12T11:00:00Z"),
-                notice("valid", "2026-05-12T10:04:00Z", minVersion = "1.4.0", maxVersion = "1.9.0")
+                notice("valid", "2026-05-12T10:04:00Z"),
+                notice("too-high-min", "2026-05-12T10:05:00Z", minVersion = "2.0.0")
+            ),
+            now = now,
+            baselineAt = baseline,
+            seenIds = emptySet(),
+            appVersion = "1.5.0"
+        )
+
+        assertEquals("valid", selected?.id)
+    }
+
+    @Test
+    fun `newer max version too low notice is skipped in favor of older valid notice`() {
+        val selected = RemoteNoticeSelector.selectNewestEligible(
+            manifest = manifest(
+                notice("valid", "2026-05-12T10:04:00Z"),
+                notice("too-low-max", "2026-05-12T10:05:00Z", maxVersion = "1.4.9")
+            ),
+            now = now,
+            baselineAt = baseline,
+            seenIds = emptySet(),
+            appVersion = "1.5.0"
+        )
+
+        assertEquals("valid", selected?.id)
+    }
+
+    @Test
+    fun `newer expired notice is skipped in favor of older valid notice`() {
+        val selected = RemoteNoticeSelector.selectNewestEligible(
+            manifest = manifest(
+                notice("valid", "2026-05-12T10:04:00Z"),
+                notice("expired", "2026-05-12T10:05:00Z", expiresAt = "2026-05-12T11:00:00Z")
             ),
             now = now,
             baselineAt = baseline,
