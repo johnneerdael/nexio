@@ -118,4 +118,47 @@ class FanartTvImagePickerTest {
         assertNull(picker.pickFor(doc, FanartTvCallId.Type.MOVIE, ArtworkType.THUMBNAIL))
         assertNull(picker.pickFor(doc, FanartTvCallId.Type.TV, ArtworkType.THUMBNAIL))
     }
+
+    @Test
+    fun `fight club fixture picks expected urls`() {
+        val doc = loadFixture("fight-club-550.json")
+        assertEquals(
+            "https://assets.fanart.tv/fanart/fight-club-504c0530d5f93.png",
+            picker.pickFor(doc, FanartTvCallId.Type.MOVIE, ArtworkType.LOGO)
+        )
+        assertEquals(
+            "https://assets.fanart.tv/fanart/fight-club-55e2393686745.jpg",
+            picker.pickFor(doc, FanartTvCallId.Type.MOVIE, ArtworkType.BACKDROP)
+        )
+        assertEquals(
+            "https://assets.fanart.tv/fanart/fight-club-522a5477c7bd3.jpg",
+            picker.pickFor(doc, FanartTvCallId.Type.MOVIE, ArtworkType.POSTER)
+        )
+    }
+
+    @Test
+    fun `breaking bad fixture picks expected urls`() {
+        val doc = loadFixture("breaking-bad-81189.json")
+        assertEquals(
+            "https://assets.fanart.tv/fanart/breaking-bad-503d6f03d4bfe.png",
+            picker.pickFor(doc, FanartTvCallId.Type.TV, ArtworkType.LOGO)
+        )
+        assertEquals(
+            "https://assets.fanart.tv/fanart/breaking-bad-4fcb7b24428ba.jpg",
+            picker.pickFor(doc, FanartTvCallId.Type.TV, ArtworkType.BACKDROP)
+        )
+        assertEquals(
+            "https://assets.fanart.tv/fanart/breaking-bad-5427fc5ebded7.jpg",
+            picker.pickFor(doc, FanartTvCallId.Type.TV, ArtworkType.POSTER)
+        )
+    }
+
+    private fun loadFixture(name: String): FanartTvDocument {
+        val text = checkNotNull(this::class.java.getResource("/fixtures/fanarttv/$name")) {
+            "Fixture $name not found on test classpath"
+        }.readText()
+        return kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+        }.decodeFromString(FanartTvDocument.serializer(), text)
+    }
 }
