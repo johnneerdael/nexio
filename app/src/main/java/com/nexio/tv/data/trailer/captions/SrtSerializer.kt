@@ -10,7 +10,7 @@ internal object SrtSerializer {
             sb.append(i + 1).append('\n')
             sb.append(formatTimestamp(line.offsetMs))
                 .append(" --> ")
-                .append(formatTimestamp(line.offsetMs + line.durationMs))
+                .append(formatTimestamp(clampedEndMs(lines, i)))
                 .append('\n')
             // Replace literal arrow sequences in the text with en-dashes
             // to avoid confusing SRT parsers; YoutubeExplode does the same
@@ -19,6 +19,14 @@ internal object SrtSerializer {
             sb.append('\n')
         }
         return sb.toString()
+    }
+
+    private fun clampedEndMs(lines: List<CaptionLine>, index: Int): Long {
+        val line = lines[index]
+        val naturalEndMs = line.offsetMs + line.durationMs
+        val nextStartMs = lines.getOrNull(index + 1)?.offsetMs ?: return naturalEndMs
+        if (nextStartMs <= line.offsetMs) return naturalEndMs
+        return naturalEndMs.coerceAtMost(nextStartMs)
     }
 
     private fun formatTimestamp(totalMs: Long): String {
