@@ -436,9 +436,7 @@ object StreamPresentationEngine {
             compareBy<StreamCardModel> { it.addonPriorityRank }
                 .thenBy { cacheStateRank(it.parsed.isCached) }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
-                .thenComparator { left, right ->
-                    compareNexioProviderPeers(left.stream.addonParserPreset, right.stream.addonParserPreset)
-                }
+                .thenBy { toriiPriorityRank(it.stream.addonParserPreset) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
@@ -926,11 +924,10 @@ object StreamPresentationEngine {
         }
     }
 
-    private fun compareNexioProviderPeers(left: AddonParserPreset, right: AddonParserPreset): Int {
-        return when {
-            left == AddonParserPreset.NEXIO_TORII && right == AddonParserPreset.NEXIO_NAGARE -> -1
-            left == AddonParserPreset.NEXIO_NAGARE && right == AddonParserPreset.NEXIO_TORII -> 1
-            else -> 0
+    private fun toriiPriorityRank(preset: AddonParserPreset): Int {
+        return when (preset) {
+            AddonParserPreset.NEXIO_TORII -> 0
+            else -> 1
         }
     }
 
