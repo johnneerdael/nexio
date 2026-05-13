@@ -92,7 +92,28 @@ internal val topPostersDescriptor = ArtworkProviderDescriptor(
     }
 )
 
+internal val fanartTvDescriptor = ArtworkProviderDescriptor(
+    choice = ArtworkProviderChoiceKey.FANART_TV,
+    provider = IntegrationProvider.FANART_TV,
+    supportedArtworkTypes = setOf(
+        ArtworkType.POSTER,
+        ArtworkType.LOGO,
+        ArtworkType.BACKDROP
+    ),
+    supportedIdTypes = setOf(
+        ArtworkProviderStableIdType.TMDB,
+        ArtworkProviderStableIdType.TVDB
+    ),
+    embedsRatings = false,
+    isConfigured = { _ ->
+        (com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability
+            .from(com.nexio.tv.BuildConfig.FANARTTV_API_KEY)
+                is com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability.Available)
+    }
+)
+
 internal val artworkProviderDescriptors = listOf(
     topPostersDescriptor,
-    rpdbDescriptor
+    rpdbDescriptor,
+    fanartTvDescriptor
 )
