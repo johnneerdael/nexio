@@ -56,6 +56,8 @@ object GitHubApiShapes {
     const val LATEST_RELEASE = "github.latest_release"
     const val LIST_RELEASES = "github.list_releases"
     const val ASSET_DOWNLOAD = "github.asset_download"
+    const val NOTICE_MANIFEST = "github.notice_manifest"
+    const val NOTICE_MARKDOWN = "github.notice_markdown"
 }
 
 object KitsuApiShapes {

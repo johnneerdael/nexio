@@ -410,6 +410,11 @@ android {
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"johnneerdael\"")
         buildConfigField("String", "GITHUB_REPO", "\"nexio\"")
+        buildConfigField(
+            "String",
+            "NOTICES_MANIFEST_URL",
+            "\"https://raw.githubusercontent.com/johnneerdael/nexio/main/notices/manifest.json\""
+        )
         buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
     }
 
