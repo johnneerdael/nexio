@@ -38,9 +38,16 @@ object ContinueWatchingMerger {
 
         val byBucket = HashMap<String, MutableList<Int>>()
         sorted.forEachIndexed { idx, record ->
-            val keys = record.idBundle.toBucketKeys()
+            // Harvest bucket keys from EVERY identity surface the record carries, not just
+            // idBundle. After disk restore older snapshots may have an empty idBundle, and
+            // even fresh in-memory records can have provider-disjoint identity sets (e.g.
+            // Trakt record has imdb+trakt, local record has tmdb-only) — pulling keys
+            // also from displayIdentity / trackingIdentity / canonicalKey.canonicalParent
+            // means as soon as ONE record carries the cross-provider link, the union-find
+            // catches both. Legacy identityKey() is appended as a final safety net for
+            // records with no provider IDs at all.
+            val keys = record.allBucketKeys()
             if (keys.isEmpty()) {
-                // Back-compat: records without idBundle fall back to legacy identityKey().
                 byBucket.getOrPut("legacy:${record.identityKey()}") { mutableListOf() }.add(idx)
             } else {
                 keys.forEach { key ->
@@ -65,6 +72,40 @@ object ContinueWatchingMerger {
             }
         }
         return groups.values.filterNotNull().sortedByDescending { it.updatedAt }
+    }
+
+    /**
+     * Union of all provider-id-derived bucket keys across every identity surface
+     * the record carries: idBundle, displayIdentity, trackingIdentity, and the
+     * canonicalKey's canonicalParent. Each emits one key per non-null provider
+     * id ("imdb:tt..." / "tmdb:..." / etc.), suffixed with `:s<season>e<episode>`
+     * when the record is an episode so episode bundles bucket separately from
+     * one another. Returns an empty list when no record-level identity carries
+     * any provider id (the legacy fallback path in [merge] handles that case).
+     */
+    private fun ContinueWatchingRecord.allBucketKeys(): List<String> {
+        val episodeSuffix = episodeContext?.let { ":s${it.season}e${it.number}" } ?: ""
+        val keys = LinkedHashSet<String>()
+        keys.addAll(idBundle.toBucketKeys())
+        displayIdentity?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix) }
+        trackingIdentity?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix) }
+        canonicalKey?.canonicalParent?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix) }
+        return keys.toList()
+    }
+
+    private fun MutableSet<String>.addAllProviderKeys(
+        ids: com.nexio.tv.domain.model.ProviderIds,
+        episodeSuffix: String
+    ) {
+        ids.imdb?.takeIf { it.isNotBlank() }?.let { add("imdb:$it$episodeSuffix") }
+        ids.tmdb?.takeIf { it.isNotBlank() }?.let { add("tmdb:$it$episodeSuffix") }
+        ids.tvdb?.takeIf { it.isNotBlank() }?.let { add("tvdb:$it$episodeSuffix") }
+        ids.kitsu?.takeIf { it.isNotBlank() }?.let { add("kitsu:$it$episodeSuffix") }
+        ids.mal?.takeIf { it.isNotBlank() }?.let { add("mal:$it$episodeSuffix") }
+        ids.anilist?.takeIf { it.isNotBlank() }?.let { add("anilist:$it$episodeSuffix") }
+        ids.anidb?.takeIf { it.isNotBlank() }?.let { add("anidb:$it$episodeSuffix") }
+        ids.trakt?.takeIf { it.isNotBlank() }?.let { add("trakt:$it$episodeSuffix") }
+        ids.simkl?.takeIf { it.isNotBlank() }?.let { add("simkl:$it$episodeSuffix") }
     }
 
     private fun ContinueWatchingRecord.isEligibleForContinueWatching(): Boolean {
