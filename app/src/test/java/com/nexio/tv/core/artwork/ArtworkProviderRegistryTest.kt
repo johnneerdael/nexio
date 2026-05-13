@@ -6,6 +6,8 @@ import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ArtworkProviderRegistryTest {
@@ -13,10 +15,10 @@ class ArtworkProviderRegistryTest {
 
     @Test
     fun `no keys exposes only default`() {
-        assertEquals(
-            listOf(ArtworkProviderChoiceKey.DEFAULT),
-            registry.availableChoices(ArtworkType.POSTER, ArtworkProviderSettings())
-        )
+        val choices = registry.availableChoices(ArtworkType.POSTER, ArtworkProviderSettings())
+        assertEquals(ArtworkProviderChoiceKey.DEFAULT, choices.first())
+        assertFalse(ArtworkProviderChoiceKey.TOP_POSTERS in choices)
+        assertFalse(ArtworkProviderChoiceKey.RPDB in choices)
     }
 
     @Test
@@ -24,18 +26,15 @@ class ArtworkProviderRegistryTest {
         val freeSettings = topPostersSettings(tier = 3)
         val proSettings = topPostersSettings(tier = 2)
 
-        assertEquals(
-            listOf(ArtworkProviderChoiceKey.DEFAULT, ArtworkProviderChoiceKey.TOP_POSTERS),
-            registry.availableChoices(ArtworkType.POSTER, freeSettings)
-        )
-        assertEquals(
-            listOf(ArtworkProviderChoiceKey.DEFAULT),
-            registry.availableChoices(ArtworkType.THUMBNAIL, freeSettings)
-        )
-        assertEquals(
-            listOf(ArtworkProviderChoiceKey.DEFAULT),
-            registry.availableChoices(ArtworkType.THUMBNAIL, proSettings)
-        )
+        val posterChoices = registry.availableChoices(ArtworkType.POSTER, freeSettings)
+        assertTrue(ArtworkProviderChoiceKey.DEFAULT in posterChoices)
+        assertTrue(ArtworkProviderChoiceKey.TOP_POSTERS in posterChoices)
+
+        val thumbnailFreeChoices = registry.availableChoices(ArtworkType.THUMBNAIL, freeSettings)
+        assertEquals(listOf(ArtworkProviderChoiceKey.DEFAULT), thumbnailFreeChoices)
+
+        val thumbnailProChoices = registry.availableChoices(ArtworkType.THUMBNAIL, proSettings)
+        assertEquals(listOf(ArtworkProviderChoiceKey.DEFAULT), thumbnailProChoices)
     }
 
     @Test
@@ -70,14 +69,11 @@ class ArtworkProviderRegistryTest {
             topPostersApiKey = "top-key"
         )
 
-        assertEquals(
-            listOf(
-                ArtworkProviderChoiceKey.DEFAULT,
-                ArtworkProviderChoiceKey.TOP_POSTERS,
-                ArtworkProviderChoiceKey.RPDB
-            ),
-            registry.availableChoices(ArtworkType.POSTER, settings)
-        )
+        val choices = registry.availableChoices(ArtworkType.POSTER, settings)
+        assertEquals(ArtworkProviderChoiceKey.DEFAULT, choices[0])
+        assertTrue(ArtworkProviderChoiceKey.TOP_POSTERS in choices)
+        assertTrue(ArtworkProviderChoiceKey.RPDB in choices)
+        // Fanart.tv may be available depending on BuildConfig.FANARTTV_API_KEY
     }
 
     @Test
@@ -107,6 +103,20 @@ class ArtworkProviderRegistryTest {
     fun `unknown provider choice maps to null safely`() {
         assertNull(registry.providerIdFor(ArtworkProviderChoiceKey.DEFAULT))
         assertNull(registry.providerIdFor(ArtworkProviderChoiceKey("future_provider")))
+    }
+
+    @Test
+    fun `FANART_TV is offered for poster, logo, backdrop when build key non-blank`() {
+        val settings = ArtworkProviderSettings()
+        val registry = ArtworkProviderRegistry()
+        if (com.nexio.tv.BuildConfig.FANARTTV_API_KEY.isNotBlank()) {
+            assertTrue(ArtworkProviderChoiceKey.FANART_TV in registry.availableChoices(ArtworkType.POSTER, settings))
+            assertTrue(ArtworkProviderChoiceKey.FANART_TV in registry.availableChoices(ArtworkType.LOGO, settings))
+            assertTrue(ArtworkProviderChoiceKey.FANART_TV in registry.availableChoices(ArtworkType.BACKDROP, settings))
+            assertFalse(ArtworkProviderChoiceKey.FANART_TV in registry.availableChoices(ArtworkType.THUMBNAIL, settings))
+        } else {
+            assertFalse(ArtworkProviderChoiceKey.FANART_TV in registry.availableChoices(ArtworkType.POSTER, settings))
+        }
     }
 
     private fun topPostersSettings(
