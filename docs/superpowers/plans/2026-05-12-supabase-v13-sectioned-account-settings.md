@@ -1280,7 +1280,7 @@ Keep existing addon/secrets handling from the v10 envelope.
 In the loop above, unknown sections must use:
 
 ```kotlin
-val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: return@forEach
+val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: continue
 ```
 
 Do not log as error. At most log `Log.d(TAG, "Ignoring unknown account settings section ${section.sectionKey}")`.
@@ -1503,7 +1503,7 @@ val result = withJwtRefreshRetry {
 For each result section:
 
 ```kotlin
-val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: return@forEach
+val key = AccountSettingsSectionKey.fromKey(section.sectionKey) ?: continue
 if (section.applied) {
     syncWatermarkStore.setAccountSettingsSection(key, section.currentUpdatedAtMs)
     appliedSections += key
