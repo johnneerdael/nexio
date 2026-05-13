@@ -20,6 +20,7 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
     suspend fun fetchNoticeManifest(url: String): IntegrationCallResult<String> =
         fetchText(
             url = url,
+            scope = IntegrationScope.ProviderConfig("github:notices:manifest"),
             apiShapeId = GitHubApiShapes.NOTICE_MANIFEST,
             operationKey = "github.notice.fetchManifest",
             reason = "github_notice_manifest_failed"
@@ -28,6 +29,7 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
     suspend fun fetchNoticeMarkdown(url: String): IntegrationCallResult<String> =
         fetchText(
             url = url,
+            scope = IntegrationScope.ProviderConfig("github:notices:markdown:${stableUrlKey(url)}"),
             apiShapeId = GitHubApiShapes.NOTICE_MARKDOWN,
             operationKey = "github.notice.fetchMarkdown",
             reason = "github_notice_markdown_failed"
@@ -35,6 +37,7 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
 
     private suspend fun fetchText(
         url: String,
+        scope: IntegrationScope.ProviderConfig,
         apiShapeId: String,
         operationKey: String,
         reason: String
@@ -43,7 +46,7 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.GITHUB,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.ProviderConfig("github:notices"),
+                scope = scope,
                 apiShapeId = apiShapeId,
                 operationKey = operationKey,
                 call = {
@@ -51,10 +54,13 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
                         val response = gitHubRawContentApi.getText(url)
                         val body = response.body()
                         when {
-                            !response.isSuccessful -> IntegrationCallResult.HttpError(
-                                statusCode = response.code(),
-                                reason = reason
-                            )
+                            !response.isSuccessful -> {
+                                response.errorBody()?.close()
+                                IntegrationCallResult.HttpError(
+                                    statusCode = response.code(),
+                                    reason = reason
+                                )
+                            }
                             body == null -> IntegrationCallResult.Missing
                             else -> IntegrationCallResult.Success(body.string())
                         }
@@ -66,4 +72,6 @@ class GitHubRawContentIntegrationProvider @Inject constructor(
             )
         )
     }
+
+    private fun stableUrlKey(url: String): String = url.hashCode().toString()
 }

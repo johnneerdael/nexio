@@ -12,9 +12,11 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -48,7 +50,7 @@ class GitHubRawContentIntegrationProviderTest {
         assertEquals(GitHubApiShapes.NOTICE_MANIFEST, specSlot.captured.apiShapeId)
         assertEquals("github.notice.fetchManifest", specSlot.captured.operationKey)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.ProviderConfig("github:notices"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("github:notices:manifest"), specSlot.captured.scope)
         coVerify(exactly = 1) { api.getText("https://raw.githubusercontent.com/johnneerdael/nexio/main/notices/manifest.json") }
     }
 
@@ -56,17 +58,24 @@ class GitHubRawContentIntegrationProviderTest {
     fun `fetchText maps http error`() = runTest {
         val runtime = mockk<IntegrationRuntime>(relaxed = true)
         val api = mockk<GitHubRawContentApi>()
-        coEvery { runtime.call(any<IntegrationCallSpec<String>>()) } coAnswers {
+        val specSlot = slot<IntegrationCallSpec<String>>()
+        val errorBody = mockk<ResponseBody>(relaxed = true)
+        val url = "https://raw.githubusercontent.com/johnneerdael/nexio/main/notices/a.md"
+        coEvery { runtime.call(capture(specSlot)) } coAnswers {
             firstArg<IntegrationCallSpec<String>>().call()
         }
-        coEvery { api.getText("https://raw.githubusercontent.com/johnneerdael/nexio/main/notices/a.md") } returns
-            Response.error(404, ByteArray(0).toResponseBody("text/plain".toMediaType()))
+        coEvery { api.getText(url) } returns Response.error(404, errorBody)
 
         val result = GitHubRawContentIntegrationProvider(runtime, api)
-            .fetchNoticeMarkdown("https://raw.githubusercontent.com/johnneerdael/nexio/main/notices/a.md")
+            .fetchNoticeMarkdown(url)
 
         assertTrue(result is IntegrationCallResult.HttpError)
         assertEquals(404, (result as IntegrationCallResult.HttpError).statusCode)
+        assertEquals(
+            IntegrationScope.ProviderConfig("github:notices:markdown:${url.hashCode()}"),
+            specSlot.captured.scope
+        )
+        verify(exactly = 1) { errorBody.close() }
     }
 
     @Test
