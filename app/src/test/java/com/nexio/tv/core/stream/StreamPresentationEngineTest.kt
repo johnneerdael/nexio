@@ -854,6 +854,37 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `grouped sorting does not prefer nagare over generic stream before size`() {
+        val generic = stream(
+            filename = "Show.S01E01.1080p.WEB-DL.x265.Generic.mkv",
+            name = "⚡ RD",
+            parserPreset = AddonParserPreset.GENERIC,
+            addonName = "Torrentio",
+            videoSizeBytes = 20L * 1024L * 1024L * 1024L
+        )
+        val nagare = stream(
+            filename = "Show.S01E01.1080p.WEB-DL.x265.Nagare.mkv",
+            name = "⚡ RD",
+            parserPreset = AddonParserPreset.NEXIO_NAGARE,
+            addonName = "Nexio Nagare",
+            videoSizeBytes = 2L * 1024L * 1024L * 1024L
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(nagare, generic),
+            availableAddons = listOf("Nexio Nagare", "Torrentio"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "series")
+        )
+
+        assertEquals(
+            listOf("Torrentio", "Nexio Nagare"),
+            result.items.map { it.stream.addonName }
+        )
+    }
+
+    @Test
     fun `grouped sorting uses addon priority rank before cache resolution and size when supplied`() {
         val anime = stream(
             filename = "Show.S01E01.720p.WEB-DL.x265.AnimePriority.mkv",
