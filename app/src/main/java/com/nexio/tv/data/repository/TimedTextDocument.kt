@@ -56,24 +56,35 @@ internal data class TimedTextDocument(
 
     fun assSsaSegmentSurfaces(): List<AssSsaTranslationSurface> {
         if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) return emptyList()
-        var dialogueIndex = 0
-        return blocks
-            .filterIsInstance<AssSsaDialogueBlock>()
-            .mapNotNull { block ->
-                block.segmentSurface("ass_${dialogueIndex++}")
+        val dialogueBlocks = blocks.filterIsInstance<AssSsaDialogueBlock>()
+        val plan = AssSsaTranslationPlanner.plan(dialogueBlocks.map { it.record })
+        return dialogueBlocks.mapIndexedNotNull { index, block ->
+            when (plan.actions[index]) {
+                is AssSsaTranslationAction.Translate -> block.segmentSurface("ass_$index")
+                is AssSsaTranslationAction.DuplicateOf -> null
+                is AssSsaTranslationAction.Preserve -> null
             }
+        }
     }
 
     fun renderAssSsaSegmentSurfaces(translations: Map<String, List<String>>): String {
         if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) {
             return render(emptyMap())
         }
+        val dialogueBlocks = blocks.filterIsInstance<AssSsaDialogueBlock>()
+        val plan = AssSsaTranslationPlanner.plan(dialogueBlocks.map { it.record })
         var dialogueIndex = 0
         return blocks.joinToString("\n") { block ->
             if (block is AssSsaDialogueBlock) {
-                val id = "ass_${dialogueIndex++}"
-                val surface = block.segmentSurface(id)
-                block.renderSegmentSurface(surface, translations[id])
+                val index = dialogueIndex++
+                val canonicalIndex = when (val action = plan.actions[index]) {
+                    is AssSsaTranslationAction.Translate -> action.canonicalIndex
+                    is AssSsaTranslationAction.DuplicateOf -> action.canonicalIndex
+                    is AssSsaTranslationAction.Preserve -> null
+                }
+                val id = canonicalIndex?.let { "ass_$it" }
+                val surface = id?.let { block.segmentSurface(it) }
+                block.renderSegmentSurface(surface, id?.let { translations[it] })
             } else {
                 block.render(emptyMap())
             }

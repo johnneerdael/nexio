@@ -35,6 +35,7 @@ internal fun parseAssSsaTimedTextDocument(
         ) {
             val parsedDialogue = parseAssSsaDialogueLine(
                 line = line,
+                eventFormat = eventFormat,
                 eventFieldCount = eventFormat.size,
                 textFieldIndex = textFieldIndex,
                 nextBlockId = nextBlockId
@@ -64,6 +65,7 @@ private data class AssSsaPassthroughLineBlock(
 }
 
 internal data class AssSsaDialogueBlock(
+    val record: AssSsaEventRecord,
     private val prefix: String,
     private val fieldsBeforeText: List<String>,
     private val textSegments: List<AssSsaTextSegment>
@@ -135,6 +137,7 @@ internal data class TranslatableAssSsaTextSegment(
 
 private fun parseAssSsaDialogueLine(
     line: String,
+    eventFormat: List<String>,
     eventFieldCount: Int,
     textFieldIndex: Int,
     nextBlockId: Int
@@ -152,9 +155,23 @@ private fun parseAssSsaDialogueLine(
 
     val beforeText = fields.take(textFieldIndex)
     val text = fields[textFieldIndex]
+    val kind = line.take(prefixEnd).trim()
+    val recordFormat = AssSsaEventFormat(
+        fields = eventFormat,
+        textIndex = textFieldIndex,
+        startIndex = eventFormat.indexOfFirst { it.equals("Start", ignoreCase = true) },
+        endIndex = eventFormat.indexOfFirst { it.equals("End", ignoreCase = true) }
+    )
+    val record = AssSsaEventRecord(
+        kind = kind,
+        prefix = prefix,
+        format = recordFormat,
+        values = fields
+    )
     val tokenized = tokenizeAssSsaDialogueText(text, nextBlockId)
     return AssSsaParseResult(
         block = AssSsaDialogueBlock(
+            record = record,
             prefix = prefix,
             fieldsBeforeText = beforeText,
             textSegments = tokenized.segments

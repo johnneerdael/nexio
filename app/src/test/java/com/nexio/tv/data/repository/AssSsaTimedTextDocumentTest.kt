@@ -233,4 +233,59 @@ class AssSsaTimedTextDocumentTest {
             document.renderAssSsaSegmentSurfaces(mapOf("ass_0" to listOf("Hallo")))
         )
     }
+
+    @Test
+    fun segmentSurfaceRenderPreservesRomajiFxButTranslatesEnglishFxLayer() {
+        val document = TimedTextDocument.parse(
+            raw = """
+                [Events]
+                Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+                Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP Romaji,,0,0,0,fx,{\fad(200,0)}Sie sind das Essen und wir sind die Jäger
+                Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP English,,0,0,0,fx,{\fad(200,0)}You're the prey, and we're the hunters.
+            """.trimIndent(),
+            url = "file:///tmp/subtitle.ass"
+        )!!
+
+        val surfaces = document.assSsaSegmentSurfaces()
+
+        assertEquals(listOf("ass_1"), surfaces.map { it.id })
+        assertEquals(listOf("You're the prey, and we're the hunters."), surfaces.single().segments)
+        assertEquals(
+            """
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP Romaji,,0,0,0,fx,{\fad(200,0)}Sie sind das Essen und wir sind die Jäger
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP English,,0,0,0,fx,{\fad(200,0)}Jij bent de prooi, en wij zijn de jagers.
+            """.trimIndent() + "\n",
+            document.renderAssSsaSegmentSurfaces(
+                mapOf("ass_1" to listOf("Jij bent de prooi, en wij zijn de jagers."))
+            )
+        )
+    }
+
+    @Test
+    fun segmentSurfaceRenderReusesGlobalVisibleTextTranslationAcrossAnimatedSignCopies() {
+        val document = TimedTextDocument.parse(
+            raw = """
+                [Events]
+                Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+                Dialogue: 0,0:23:54.60,0:23:54.90,Signs,,0,0,0,,{\pos(653,55)}Preview
+                Dialogue: 1,0:23:55.20,0:23:55.60,Signs,,0,0,0,,{\pos(652,55)}Preview
+            """.trimIndent(),
+            url = "file:///tmp/subtitle.ass"
+        )!!
+
+        val surfaces = document.assSsaSegmentSurfaces()
+
+        assertEquals(listOf("ass_0"), surfaces.map { it.id })
+        assertEquals(
+            """
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:23:54.60,0:23:54.90,Signs,,0,0,0,,{\pos(653,55)}Vooruitblik
+            Dialogue: 1,0:23:55.20,0:23:55.60,Signs,,0,0,0,,{\pos(652,55)}Vooruitblik
+            """.trimIndent() + "\n",
+            document.renderAssSsaSegmentSurfaces(mapOf("ass_0" to listOf("Vooruitblik")))
+        )
+    }
 }
