@@ -379,6 +379,7 @@ android {
         buildConfigField("String", "IMDB_API_KEY", "\"${resolveProperty(devProperties, localProperties, "IMDB_API_KEY")}\"")
         buildConfigField("String", "WYZIE_API_KEY", "\"${resolveProperty(devProperties, localProperties, "WYZIE_API_KEY")}\"")
         buildConfigField("String", "WYZIE_API_URL", "\"${resolveProperty(devProperties, localProperties, "WYZIE_API_URL", "https://sub.wyzie.io/")}\"")
+        buildConfigField("String", "FANARTTV_API_KEY", "\"${localProperties.getProperty("FANARTTV_API_KEY", "")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
         buildConfigField("boolean", "DOVI_EXTRACTOR_HOOK_READY", doviExtractorHookReady.toString())
         if (enableDoviNative) {
