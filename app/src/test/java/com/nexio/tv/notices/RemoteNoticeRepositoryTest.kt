@@ -126,6 +126,26 @@ class RemoteNoticeRepositoryTest {
     }
 
     @Test
+    fun `unsupported manifest schema fails closed without setting baseline`() = runTest {
+        val provider = mockProvider(
+            manifest = manifestJson(
+                schemaVersion = 2,
+                id = "new",
+                publishedAt = "2026-05-12T12:01:00Z",
+                markdownUrl = markdownUrl
+            ),
+            markdown = "# Important"
+        )
+        val prefs = RemoteNoticePreferences(createDataStore())
+
+        val notice = repository(provider, prefs).fetchStartupNotice(now = now)
+
+        assertNull(notice)
+        assertNull(prefs.noticeBaselineAt.first())
+        coVerify(exactly = 0) { provider.fetchNoticeMarkdown(any()) }
+    }
+
+    @Test
     fun `cancellation is rethrown`() = runTest {
         val manifestProvider = mockk<GitHubRawContentIntegrationProvider>()
         coEvery { manifestProvider.fetchNoticeManifest(manifestUrl) } throws CancellationException("manifest cancelled")
@@ -180,13 +200,14 @@ class RemoteNoticeRepositoryTest {
     }
 
     private fun manifestJson(
+        schemaVersion: Int = 1,
         id: String,
         title: String = "Notice",
         publishedAt: String,
         markdownUrl: String
     ): String = """
         {
-          "schemaVersion": 1,
+          "schemaVersion": $schemaVersion,
           "notices": [
             {
               "id": "$id",

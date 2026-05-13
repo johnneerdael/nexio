@@ -48,6 +48,8 @@ class RemoteNoticeRepository internal constructor(
                 moshi.adapter(RemoteNoticeManifest::class.java).fromJson(manifestText)
             }.getOrNull() ?: return null
 
+            if (manifest.schemaVersion != 1) return null
+
             val existingBaseline = remoteNoticePreferences.noticeBaselineAt.first()
             val baselineAt = existingBaseline ?: now.also { baseline ->
                 remoteNoticePreferences.setNoticeBaselineAtIfAbsent(baseline)
