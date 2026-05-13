@@ -1,20 +1,20 @@
 package com.nexio.tv.core.artwork.fanarttv.dto
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class FanartTvDocument(
-    @SerialName("name") val name: String? = null,
-    @SerialName("tmdb_id") val tmdbId: String? = null,
-    @SerialName("thetvdb_id") val tvdbId: String? = null,
-    @SerialName("imdb_id") val imdbId: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "tmdb_id") val tmdbId: String? = null,
+    @Json(name = "thetvdb_id") val tvdbId: String? = null,
+    @Json(name = "imdb_id") val imdbId: String? = null,
 
-    @SerialName("hdmovielogo") val hdMovieLogo: List<FanartTvImage>? = null,
-    @SerialName("moviebackground") val movieBackground: List<FanartTvImage>? = null,
-    @SerialName("movieposter") val moviePoster: List<FanartTvImage>? = null,
+    @Json(name = "hdmovielogo") val hdMovieLogo: List<FanartTvImage>? = null,
+    @Json(name = "moviebackground") val movieBackground: List<FanartTvImage>? = null,
+    @Json(name = "movieposter") val moviePoster: List<FanartTvImage>? = null,
 
-    @SerialName("hdtvlogo") val hdTvLogo: List<FanartTvImage>? = null,
-    @SerialName("showbackground") val showBackground: List<FanartTvImage>? = null,
-    @SerialName("tvposter") val tvPoster: List<FanartTvImage>? = null
+    @Json(name = "hdtvlogo") val hdTvLogo: List<FanartTvImage>? = null,
+    @Json(name = "showbackground") val showBackground: List<FanartTvImage>? = null,
+    @Json(name = "tvposter") val tvPoster: List<FanartTvImage>? = null
 )
