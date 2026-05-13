@@ -24,36 +24,50 @@ class RemoteNoticeViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(RemoteNoticeUiState())
     val uiState: StateFlow<RemoteNoticeUiState> = _uiState.asStateFlow()
+    private var noticeRequestGeneration = 0L
 
     init {
         checkForNotice()
     }
 
     fun checkForNotice() {
+        val generation = ++noticeRequestGeneration
         viewModelScope.launch {
-            _uiState.update { it.copy(isChecking = true) }
+            _uiState.update { state ->
+                if (generation == noticeRequestGeneration) {
+                    state.copy(isChecking = true)
+                } else {
+                    state
+                }
+            }
             val notice = remoteNoticeRepository.fetchStartupNotice()
-            _uiState.update {
-                it.copy(
-                    isChecking = false,
-                    notice = notice,
-                    showDialog = notice != null
-                )
+            _uiState.update { state ->
+                if (generation == noticeRequestGeneration) {
+                    state.copy(
+                        isChecking = false,
+                        notice = notice,
+                        showDialog = notice != null
+                    )
+                } else {
+                    state
+                }
             }
         }
     }
 
     fun dismissNotice() {
+        noticeRequestGeneration += 1
         val noticeId = _uiState.value.notice?.id
+        _uiState.update { it.copy(isChecking = false, showDialog = false, notice = null) }
         viewModelScope.launch {
             if (noticeId != null) {
                 remoteNoticePreferences.markSeen(noticeId)
             }
-            _uiState.update { it.copy(showDialog = false, notice = null) }
         }
     }
 
     fun suppressForStartup() {
-        _uiState.update { it.copy(showDialog = false, notice = null) }
+        noticeRequestGeneration += 1
+        _uiState.update { it.copy(isChecking = false, showDialog = false) }
     }
 }
