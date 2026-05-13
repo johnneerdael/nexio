@@ -157,8 +157,9 @@ class FanartTvImagePickerTest {
         val text = checkNotNull(this::class.java.getResource("/fixtures/fanarttv/$name")) {
             "Fixture $name not found on test classpath"
         }.readText()
-        return kotlinx.serialization.json.Json {
-            ignoreUnknownKeys = true
-        }.decodeFromString(FanartTvDocument.serializer(), text)
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        return checkNotNull(moshi.adapter(FanartTvDocument::class.java).fromJson(text)) {
+            "Failed to decode fixture $name"
+        }
     }
 }
