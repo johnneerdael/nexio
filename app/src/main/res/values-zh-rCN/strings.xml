@@ -812,6 +812,7 @@
   <string name="nav_addons">插件</string>
   <string name="nav_settings">设置</string>
   <string name="update_close">关闭</string>
+  <string name="notice_close">关闭</string>
   <string name="update_open_settings">打开设置</string>
   <string name="update_install">安装</string>
   <string name="update_ignore">忽略</string>

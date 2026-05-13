@@ -1341,6 +1341,7 @@
     <string name="settings_rounded_ui">Rounded UI</string>
 
     <string name="update_close">Close</string>
+    <string name="notice_close">Close</string>
     <string name="update_open_settings">Open Settings</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>

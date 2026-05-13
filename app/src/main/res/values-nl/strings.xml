@@ -818,6 +818,7 @@
   <string name="nav_addons">Add-ons</string>
   <string name="nav_settings">Instellingen</string>
   <string name="update_close">Sluiten</string>
+  <string name="notice_close">Sluiten</string>
   <string name="update_open_settings">Instellingen openen</string>
   <string name="update_install">Installeren</string>
   <string name="update_ignore">Negeren</string>
