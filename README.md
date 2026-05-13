@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/nexio-logo.png" alt="NEXIO" width="720">
+  <img src="assets/brand/app_logo_wordmark.png" alt="NEXIO" width="720">
 </p>
 
 # NEXIO
@@ -19,10 +19,10 @@ The easiest way to install Nexio on Android TV or Fire TV is with
 
 <p>
   <a href="https://play.google.com/store/apps/details?id=com.esaba.downloader">
-    <img src="nexio-web/googleplay.webp" alt="Get Downloader on Google Play" width="280">
+    <img src="assets/googleplay.webp" alt="Get Downloader on Google Play" width="280">
   </a>
   <a href="https://www.amazon.com/dp/B01N0BP507/?tag=aftvn-20">
-    <img src="nexio-web/amazonappstore.webp" alt="Get Downloader on Amazon Appstore" width="280">
+    <img src="assets/amazonappstore.webp" alt="Get Downloader on Amazon Appstore" width="280">
   </a>
 </p>
 
