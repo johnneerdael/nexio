@@ -47,7 +47,8 @@ object IntegrationHeaderPolicies {
             IntegrationProvider.ARM -> PUBLIC_JSON_V1
             IntegrationProvider.ANIMESKIP -> GRAPHQL_JSON_V1
             IntegrationProvider.RPDB,
-            IntegrationProvider.TOP_POSTERS -> IMAGE_FETCH_DEFAULT_V1
+            IntegrationProvider.TOP_POSTERS,
+            IntegrationProvider.FANART_TV -> IMAGE_FETCH_DEFAULT_V1
             IntegrationProvider.THEINTRODB -> INTRODB_JSON_OPTIONAL_BEARER_V1
             IntegrationProvider.MDBLIST -> MDBLIST_API_KEY_V1
             IntegrationProvider.OMDB -> OMDB_QUERY_API_KEY_V1
