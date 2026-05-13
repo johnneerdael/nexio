@@ -220,6 +220,126 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `remote notice dialog renders only while startup gate is open and app is idle`() {
+        assertTrue(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by update dialog`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = true,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by startup splash`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = true,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by active playback`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = true,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by fullscreen trailer`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = true,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by idle screensaver`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = true,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked after startup window closes`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = false
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked when notice is not requested`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = false,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
     fun `idle diagnostics logging is debug only`() {
         assertTrue(shouldLogIdleScreensaverDiagnostics(isDebugBuild = true))
         assertFalse(shouldLogIdleScreensaverDiagnostics(isDebugBuild = false))

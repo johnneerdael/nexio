@@ -162,6 +162,8 @@ import com.nexio.tv.ui.screensaver.trailerResolverContentId
 import com.nexio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
+import com.nexio.tv.notices.RemoteNoticeViewModel
+import com.nexio.tv.notices.ui.RemoteNoticeDialog
 import com.nexio.tv.updater.UpdateViewModel
 import com.nexio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
@@ -192,6 +194,7 @@ val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 private const val STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS = 4_000L
 private const val STARTUP_SPLASH_LAST_FRAME_HOLD_MS = 150L
 private const val STARTUP_SPLASH_HARD_TIMEOUT_MS = 12_000L
+private const val REMOTE_NOTICE_STARTUP_WINDOW_MS = 2_000L
 private const val IDLE_SCREENSAVER_DEBUG_LOG_TAG = "IdleScreensaverDebug"
 
 private data class MainUiPrefs(
@@ -666,6 +669,8 @@ class MainActivity : ComponentActivity() {
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                     val updateState by updateViewModel.uiState.collectAsState()
+                    val remoteNoticeViewModel: RemoteNoticeViewModel = hiltViewModel(this@MainActivity)
+                    val remoteNoticeState by remoteNoticeViewModel.uiState.collectAsState()
 
                     val startDestination = if (layoutChosen) Screen.Home.route else Screen.LayoutSelection.route
                     val navController = rememberNavController()
@@ -696,6 +701,10 @@ class MainActivity : ComponentActivity() {
                     }
                     var startupSplashReadyToPlay by remember { mutableStateOf(false) }
                     val showStartupSplash = !startupSplashDismissed
+                    var remoteNoticeStartupGateOpen by rememberSaveable { mutableStateOf(false) }
+                    var remoteNoticeStartupCheckRequested by rememberSaveable { mutableStateOf(false) }
+                    var remoteNoticeStartupWindowElapsed by rememberSaveable { mutableStateOf(false) }
+                    var remoteNoticeSuppressedForStartup by rememberSaveable { mutableStateOf(false) }
                     val idleScreensaverSlides by idleScreensaverRepository.slides.collectAsState()
                     val idleTrailerRepositoryCandidates by idleScreensaverRepository.trailerCandidates.collectAsState()
                     val idleScreensaverVisible by idleScreensaverController.isVisible.collectAsState()
@@ -719,6 +728,63 @@ class MainActivity : ComponentActivity() {
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
                     val idleTrailerPlaybackActive = idleScreensaverVisible && idleTrailerSessionStart != null
+                    val showRemoteNoticeDialog = shouldRenderRemoteNoticeDialog(
+                        noticeDialogRequested = remoteNoticeState.showDialog,
+                        updateDialogVisible = updateState.showDialog,
+                        startupSplashVisible = showStartupSplash,
+                        playbackActive = playbackIdleSnapshot.hasActiveSession,
+                        fullscreenTrailerActive = homeTrailerFullscreenActive,
+                        idleScreensaverVisible = idleScreensaverVisible,
+                        startupNoticeGateOpen = remoteNoticeStartupGateOpen
+                    )
+
+                    LaunchedEffect(remoteNoticeViewModel) {
+                        remoteNoticeViewModel.suppressForStartup()
+                    }
+
+                    LaunchedEffect(showStartupSplash) {
+                        if (!showStartupSplash && !remoteNoticeStartupCheckRequested) {
+                            remoteNoticeStartupGateOpen = true
+                            remoteNoticeStartupCheckRequested = true
+                            remoteNoticeStartupWindowElapsed = false
+                            remoteNoticeSuppressedForStartup = false
+                            remoteNoticeViewModel.checkForStartupNotice()
+                            delay(REMOTE_NOTICE_STARTUP_WINDOW_MS)
+                            remoteNoticeStartupWindowElapsed = true
+                        }
+                    }
+
+                    LaunchedEffect(
+                        updateState.showDialog,
+                        remoteNoticeStartupCheckRequested,
+                        remoteNoticeSuppressedForStartup
+                    ) {
+                        if (
+                            updateState.showDialog &&
+                            remoteNoticeStartupCheckRequested &&
+                            !remoteNoticeSuppressedForStartup
+                        ) {
+                            remoteNoticeViewModel.suppressForStartup()
+                            remoteNoticeStartupGateOpen = false
+                            remoteNoticeSuppressedForStartup = true
+                        }
+                    }
+
+                    LaunchedEffect(
+                        remoteNoticeStartupWindowElapsed,
+                        showRemoteNoticeDialog,
+                        remoteNoticeSuppressedForStartup
+                    ) {
+                        if (
+                            remoteNoticeStartupWindowElapsed &&
+                            !showRemoteNoticeDialog &&
+                            !remoteNoticeSuppressedForStartup
+                        ) {
+                            remoteNoticeViewModel.suppressForStartup()
+                            remoteNoticeStartupGateOpen = false
+                            remoteNoticeSuppressedForStartup = true
+                        }
+                    }
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -1262,6 +1328,15 @@ class MainActivity : ComponentActivity() {
                             onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
                         )
 
+                        if (showRemoteNoticeDialog) {
+                            remoteNoticeState.notice?.let { notice ->
+                                RemoteNoticeDialog(
+                                    notice = notice,
+                                    onDismiss = { remoteNoticeViewModel.dismissNotice() }
+                                )
+                            }
+                        }
+
                         if (idleScreensaverVisible && (idleScreensaverSlides.isNotEmpty() || idleTrailerSessionStart != null)) {
                             when (
                                 chooseIdleScreensaverPresentationMode(
@@ -1637,6 +1712,10 @@ private data class RecommendationFeedNavigation(
     val feedKey: String
 )
 
+private fun RemoteNoticeViewModel.checkForStartupNotice() {
+    checkForNotice()
+}
+
 internal fun shouldLogIdleScreensaverDiagnostics(isDebugBuild: Boolean): Boolean = isDebugBuild
 
 internal fun buildIdleScreensaverDiagnosticsMessage(
@@ -1716,6 +1795,24 @@ internal fun shouldScheduleIdleScreensaverStart(
         idleScreensaverEligible &&
         !idleScreensaverVisible &&
         (slideCount > 0 || trailerCandidateCount > 0)
+}
+
+internal fun shouldRenderRemoteNoticeDialog(
+    noticeDialogRequested: Boolean,
+    updateDialogVisible: Boolean,
+    startupSplashVisible: Boolean,
+    playbackActive: Boolean,
+    fullscreenTrailerActive: Boolean,
+    idleScreensaverVisible: Boolean,
+    startupNoticeGateOpen: Boolean
+): Boolean {
+    return noticeDialogRequested &&
+        startupNoticeGateOpen &&
+        !updateDialogVisible &&
+        !startupSplashVisible &&
+        !playbackActive &&
+        !fullscreenTrailerActive &&
+        !idleScreensaverVisible
 }
 
 internal fun idleScreensaverScheduleBlockReason(
