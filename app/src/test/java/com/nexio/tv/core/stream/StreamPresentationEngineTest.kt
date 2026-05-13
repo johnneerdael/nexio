@@ -823,6 +823,37 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `grouped sorting prefers torii over nagare before size when cache and resolution tie`() {
+        val torii = stream(
+            filename = "Show.S01E01.1080p.WEB-DL.x265.Torii.mkv",
+            name = "⚡ RD",
+            parserPreset = AddonParserPreset.NEXIO_TORII,
+            addonName = "Nexio Torii",
+            videoSizeBytes = 2L * 1024L * 1024L * 1024L
+        )
+        val nagare = stream(
+            filename = "Show.S01E01.1080p.WEB-DL.x265.Nagare.mkv",
+            name = "⚡ RD",
+            parserPreset = AddonParserPreset.NEXIO_NAGARE,
+            addonName = "Nexio Nagare",
+            videoSizeBytes = 20L * 1024L * 1024L * 1024L
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(nagare, torii),
+            availableAddons = listOf("Nexio Nagare", "Nexio Torii"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "series")
+        )
+
+        assertEquals(
+            listOf("Nexio Torii", "Nexio Nagare"),
+            result.items.map { it.stream.addonName }
+        )
+    }
+
+    @Test
     fun `grouped sorting uses addon priority rank before cache resolution and size when supplied`() {
         val anime = stream(
             filename = "Show.S01E01.720p.WEB-DL.x265.AnimePriority.mkv",
