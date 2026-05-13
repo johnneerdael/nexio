@@ -41,12 +41,18 @@ class RemoteNoticePreferences internal constructor(
         prefs[lastCheckAtMsKey] ?: 0L
     }
 
-    suspend fun setNoticeBaselineAtIfAbsent(value: Instant) {
+    suspend fun setNoticeBaselineAtIfAbsent(value: Instant): Instant {
+        var resultingValue = value
         dataStore.edit { prefs ->
-            if (prefs[baselineAtMsKey] == null) {
+            val existingValue = prefs[baselineAtMsKey]?.let(Instant::ofEpochMilli)
+            if (existingValue == null) {
                 prefs[baselineAtMsKey] = value.toEpochMilli()
+                resultingValue = value
+            } else {
+                resultingValue = existingValue
             }
         }
+        return resultingValue
     }
 
     suspend fun markSeen(id: String) {

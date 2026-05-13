@@ -22,9 +22,11 @@ class RemoteNoticePreferencesTest {
         assertNull(prefs.noticeBaselineAt.first())
 
         val baseline = Instant.parse("2026-05-12T10:00:00Z")
-        prefs.setNoticeBaselineAtIfAbsent(baseline)
-        prefs.setNoticeBaselineAtIfAbsent(Instant.parse("2026-05-13T10:00:00Z"))
+        val inserted = prefs.setNoticeBaselineAtIfAbsent(baseline)
+        val existing = prefs.setNoticeBaselineAtIfAbsent(Instant.parse("2026-05-13T10:00:00Z"))
 
+        assertEquals(baseline, inserted)
+        assertEquals(baseline, existing)
         assertEquals(baseline, prefs.noticeBaselineAt.first())
     }
 

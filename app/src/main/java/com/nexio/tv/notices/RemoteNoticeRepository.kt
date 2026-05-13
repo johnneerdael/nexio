@@ -44,16 +44,17 @@ class RemoteNoticeRepository internal constructor(
                 is IntegrationCallResult.NetworkError -> return null
             }
 
-            val manifest = runCatching {
+            val manifest = try {
                 moshi.adapter(RemoteNoticeManifest::class.java).fromJson(manifestText)
-            }.getOrNull() ?: return null
+            } catch (exception: Exception) {
+                if (exception is CancellationException) throw exception
+                null
+            } ?: return null
 
             if (manifest.schemaVersion != 1) return null
 
             val existingBaseline = remoteNoticePreferences.noticeBaselineAt.first()
-            val baselineAt = existingBaseline ?: now.also { baseline ->
-                remoteNoticePreferences.setNoticeBaselineAtIfAbsent(baseline)
-            }
+            val baselineAt = existingBaseline ?: remoteNoticePreferences.setNoticeBaselineAtIfAbsent(now)
 
             val selected = RemoteNoticeSelector.selectNewestEligible(
                 manifest = manifest,
