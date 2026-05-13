@@ -183,7 +183,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun assSsaTrackSelectionAfterPlayerInitDoesNotReinitializePlayback() {
+    fun assSsaTrackSelectionAfterPlayerInitReinitializesPlaybackWithAssRenderer() {
         val adjustment = resolveAssSsaPipelineTrackAdjustment(
             desiredUseAssSsaPipeline = true,
             activePlayerUsesAssSsaRenderer = false,
@@ -191,7 +191,15 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
         )
 
         assertEquals(true, adjustment.overrideForCurrentStream)
-        assertFalse(adjustment.shouldReinitializePlayer)
+        assertTrue(adjustment.shouldReinitializePlayer)
+    }
+
+    @Test
+    fun kitsuContentIdsAreTreatedAsAnime() {
+        assertTrue(isKitsuContentId("kitsu:7442"))
+        assertTrue(isKitsuContentId(" KITSU:7442:1:1 "))
+        assertFalse(isKitsuContentId("tmdb:123"))
+        assertFalse(isKitsuContentId(null))
     }
 
     private fun tracksFor(format: Format, selected: Boolean): Tracks {

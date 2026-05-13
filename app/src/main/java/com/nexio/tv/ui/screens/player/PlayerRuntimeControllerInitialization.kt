@@ -197,7 +197,7 @@ internal fun resolveAssSsaPipelineTrackAdjustment(
     }
     return AssSsaPipelineTrackAdjustment(
         overrideForCurrentStream = desiredUseAssSsaPipeline,
-        shouldReinitializePlayer = false
+        shouldReinitializePlayer = desiredUseAssSsaPipeline
     )
 }
 
@@ -343,6 +343,17 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             "host=${url.safeHost()}"
                     )
                 }
+            }
+            if (AssSsaNativeBridge.nativeAvailable &&
+                assSsaPipelineOverrideForCurrentStream != true &&
+                isKitsuBackedAnimeContent()
+            ) {
+                assSsaPipelineOverrideForCurrentStream = true
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "ASS_SSA_RENDER: enabling ASS renderer for Kitsu anime content " +
+                        "contentId=$contentId videoId=$currentVideoId host=${url.safeHost()}"
+                )
             }
             val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
                 assSsaPipelineOverrideForCurrentStream == true
