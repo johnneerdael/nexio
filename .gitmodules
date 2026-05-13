@@ -13,3 +13,6 @@
 [submodule "tools/frontiersimulator"]
 	path = tools/frontiersimulator
 	url = https://github.com/johnneerdael/frontiersimulator.git
+[submodule "github-redirector"]
+	path = github-redirector
+	url = https://github.com/johnneerdael/nexio-redirect
