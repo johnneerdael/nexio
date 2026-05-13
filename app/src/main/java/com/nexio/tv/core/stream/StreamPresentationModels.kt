@@ -436,6 +436,7 @@ object StreamPresentationEngine {
             compareBy<StreamCardModel> { it.addonPriorityRank }
                 .thenBy { cacheStateRank(it.parsed.isCached) }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
+                .thenBy { nexioProviderRank(it.stream.addonParserPreset) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
@@ -920,6 +921,14 @@ object StreamPresentationEngine {
             true -> 0
             null -> 1
             false -> 2
+        }
+    }
+
+    private fun nexioProviderRank(preset: AddonParserPreset): Int {
+        return when (preset) {
+            AddonParserPreset.NEXIO_TORII -> 0
+            AddonParserPreset.NEXIO_NAGARE -> 1
+            else -> 2
         }
     }
 
