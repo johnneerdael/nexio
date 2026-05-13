@@ -16,6 +16,7 @@ enum class IntegrationProvider {
     ARM,
     RPDB,
     TOP_POSTERS,
+    FANART_TV,
     REAL_DEBRID,
     PREMIUMIZE,
     TORBOX,
