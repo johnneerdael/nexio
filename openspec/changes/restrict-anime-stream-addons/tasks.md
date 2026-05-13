@@ -6,4 +6,4 @@
 - [x] Implement Torii-before-Nagare provider ranking in grouped stream presentation.
 - [ ] Run targeted unit tests and `openspec validate restrict-anime-stream-addons --strict`.
   - `openspec validate restrict-anime-stream-addons --strict` passes.
-  - Targeted Gradle tests are blocked before execution by unrelated `:app:compileUniversalDebugKotlin` unresolved-reference errors in player runtime files.
+  - Targeted Gradle tests are blocked before execution by unrelated `:app:compileUniversalDebugKotlin` unresolved-reference errors outside the touched stream routing and presentation files.
