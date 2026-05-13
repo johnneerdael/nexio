@@ -4,6 +4,8 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -76,6 +78,72 @@ class AssSsaTranslatingSampleSinkTest {
     }
 
     @Test
+    fun translatesPrefixedEmbeddedMatroskaSampleWithoutTreatingTextAsLeadingComma() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { surfaces ->
+                assertEquals(listOf(listOf("I cannot argue with him.")), surfaces.map { it.segments })
+                mapOf("evt_0" to listOf("Ik kan niet met hem discussieren."))
+            }
+        )
+
+        sink.onTrackHeader(
+            trackId = 4,
+            headerData = "[Script Info]\nScriptType: v4.00+\n".toByteArray(),
+            format = Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+                .build()
+        )
+        sink.onSubtitleSample(
+            trackId = 4,
+            timeUs = 402_340_000L,
+            data = "Dialogue: 0:00:00:00,0:00:02:54,58,10,Default,,0,0,0,,I cannot argue with him.".toByteArray()
+        )
+
+        assertEquals(
+            "Dialogue: 0:00:00:00,0:00:02:54,58,10,Default,,0,0,0,,Ik kan niet met hem discussieren.",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun embeddedStandardDialogueWithCommaInTextUsesDialogueFormat() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { surfaces ->
+                assertEquals(listOf(listOf("Hello, world.")), surfaces.map { it.segments })
+                mapOf("evt_0" to listOf("Hallo, wereld."))
+            }
+        )
+
+        sink.onTrackHeader(
+            trackId = 4,
+            headerData = "[Script Info]\nScriptType: v4.00+\n".toByteArray(),
+            format = Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+                .build()
+        )
+        sink.onSubtitleSample(
+            trackId = 4,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello, world.".toByteArray()
+        )
+
+        assertEquals(
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hallo, wereld.",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
     fun translatesCommentSampleWhenItMatchesEventFormat() = runTest {
         val downstream = RecordingAssSsaSampleSink()
         val sink = AssSsaTranslatingSampleSink(
@@ -128,6 +196,29 @@ class AssSsaTranslatingSampleSinkTest {
         val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello".toByteArray()
 
         sink.onSubtitleSample(trackId = 4, timeUs = 1_000_000L, data = sample)
+
+        assertEquals(
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun emitsOriginalSampleWhenLiveTranslationTimesOut() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = this,
+            isEnabled = { true },
+            translate = {
+                delay(3_000)
+                mapOf("evt_0" to listOf("Hallo"))
+            }
+        )
+        val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello".toByteArray()
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 1_000_000L, data = sample)
+        advanceUntilIdle()
 
         assertEquals(
             "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello",

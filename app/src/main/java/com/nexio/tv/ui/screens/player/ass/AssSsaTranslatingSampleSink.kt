@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player.ass
 
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import com.nexio.tv.data.repository.AssSsaEventFormat
 import com.nexio.tv.data.repository.AssSsaEventRecord
 import com.nexio.tv.data.repository.AssSsaSegmentSurfaceParser
@@ -9,6 +10,10 @@ import com.nexio.tv.data.repository.AssSsaTranslationSurface
 import com.nexio.tv.data.repository.AutoTranslateDiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+private val ASS_SAMPLE_TIME_PATTERN = Regex("""\d+:\d{2}:\d{2}[:.]\d{2}""")
+private const val SAMPLE_TRANSLATION_TIMEOUT_MS = 2_500L
 
 internal class AssSsaTranslatingSampleSink(
     private val downstream: AssSsaSampleSink,
@@ -28,7 +33,12 @@ internal class AssSsaTranslatingSampleSink(
             ?: AssSsaEventFormat.standardDialogue()
         trackFormats[trackId] = TrackEventFormats(
             dialogueFormat = dialogueFormat,
-            rawSampleFormat = if (format.isEmbeddedAssSsaFormat()) {
+            prefixedRawSampleFormat = if (format.isEmbeddedAssSsaSampleTrack()) {
+                AssSsaEventFormat.prefixedMatroskaAss()
+            } else {
+                null
+            },
+            rawSampleFormat = if (format.isEmbeddedAssSsaSampleTrack()) {
                 AssSsaEventFormat.matroskaAss()
             } else {
                 dialogueFormat
@@ -82,13 +92,23 @@ internal class AssSsaTranslatingSampleSink(
                 return@launch
             }
             val translated = runCatching {
-                translate(surfaces)
+                withTimeoutOrNull(SAMPLE_TRANSLATION_TIMEOUT_MS) {
+                    translate(surfaces)
+                }
             }.onFailure { error ->
                 diagnosticsLogger.log(
                     "sample_translate_failed mode=ass_segment track=$trackId timeUs=$timeUs " +
                         "error=${error::class.simpleName}:${error.message}"
                 )
-            }.getOrDefault(emptyMap())
+            }.getOrNull()
+            if (translated == null) {
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=translation_timeout mode=ass_segment track=$trackId " +
+                        "timeUs=$timeUs timeoutMs=$SAMPLE_TRANSLATION_TIMEOUT_MS bytes=${data.size}"
+                )
+                downstream.onSubtitleSample(trackId, timeUs, data)
+                return@launch
+            }
             val surfaceByIndex = surfacesByIndex.toMap()
             val translatedLines = records.mapIndexed { index, record ->
                 val surface = surfaceByIndex[index]
@@ -118,6 +138,7 @@ internal class AssSsaTranslatingSampleSink(
 
     private data class TrackEventFormats(
         val dialogueFormat: AssSsaEventFormat,
+        val prefixedRawSampleFormat: AssSsaEventFormat?,
         val rawSampleFormat: AssSsaEventFormat
     ) {
         companion object {
@@ -125,6 +146,7 @@ internal class AssSsaTranslatingSampleSink(
                 val dialogueFormat = AssSsaEventFormat.standardDialogue()
                 return TrackEventFormats(
                     dialogueFormat = dialogueFormat,
+                    prefixedRawSampleFormat = null,
                     rawSampleFormat = dialogueFormat
                 )
             }
@@ -136,9 +158,28 @@ internal class AssSsaTranslatingSampleSink(
         return if (trimmed.startsWith("Dialogue:", ignoreCase = true) ||
             trimmed.startsWith("Comment:", ignoreCase = true)
         ) {
-            AssSsaEventRecord.parseDialogueLine(this, formats.dialogueFormat)
+            formats.prefixedRawSampleFormat
+                ?.let { parsePrefixedRawAssSsaSampleRecord(it) }
+                ?: AssSsaEventRecord.parseDialogueLine(this, formats.dialogueFormat)
         } else {
             parseRawAssSsaSampleRecord(formats.rawSampleFormat)
+        }
+    }
+
+    private fun String.parsePrefixedRawAssSsaSampleRecord(format: AssSsaEventFormat): AssSsaEventRecord? {
+        val record = AssSsaEventRecord.parseDialogueLine(this, format) ?: return null
+        val start = record.field("Start").orEmpty()
+        val end = record.field("End").orEmpty()
+        val readOrder = record.field("ReadOrder").orEmpty()
+        val layer = record.field("Layer").orEmpty()
+        return if (start.looksLikeAssSampleTime() &&
+            end.looksLikeAssSampleTime() &&
+            readOrder.trim().toIntOrNull() != null &&
+            layer.trim().toIntOrNull() != null
+        ) {
+            record
+        } else {
+            null
         }
     }
 
@@ -152,5 +193,14 @@ internal class AssSsaTranslatingSampleSink(
             format = format,
             values = values
         )
+    }
+
+    private fun String.looksLikeAssSampleTime(): Boolean {
+        return ASS_SAMPLE_TIME_PATTERN.matches(trim())
+    }
+
+    private fun Format.isEmbeddedAssSsaSampleTrack(): Boolean {
+        return (sampleMimeType == MimeTypes.TEXT_SSA || sampleMimeType == "text/x-ass") &&
+            (containerMimeType == MimeTypes.VIDEO_MATROSKA || containerMimeType == MimeTypes.VIDEO_WEBM)
     }
 }

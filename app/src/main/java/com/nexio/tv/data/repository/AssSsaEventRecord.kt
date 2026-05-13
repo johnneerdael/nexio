@@ -41,6 +41,28 @@ internal data class AssSsaEventFormat(
             )
         }
 
+        fun prefixedMatroskaAss(): AssSsaEventFormat {
+            val fields = listOf(
+                "Start",
+                "End",
+                "ReadOrder",
+                "Layer",
+                "Style",
+                "Name",
+                "MarginL",
+                "MarginR",
+                "MarginV",
+                "Effect",
+                "Text"
+            )
+            return AssSsaEventFormat(
+                fields = fields,
+                textIndex = fields.indexOfField("Text"),
+                startIndex = fields.indexOfField("Start"),
+                endIndex = fields.indexOfField("End")
+            )
+        }
+
         fun standardDialogue(): AssSsaEventFormat {
             return checkNotNull(
                 parse("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text")
