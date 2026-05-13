@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -363,11 +364,13 @@ fun SkeletonPill(
 
 @Composable
 fun rememberShimmerBrush(): Brush {
-    val shimmerColors = listOf(
-        NexioColors.SurfaceVariant.copy(alpha = 0.30f),
-        NexioColors.SurfaceVariant.copy(alpha = 0.60f),
-        NexioColors.SurfaceVariant.copy(alpha = 0.30f)
-    )
+    val shimmerColors = remember {
+        listOf(
+            NexioColors.SurfaceVariant.copy(alpha = 0.30f),
+            NexioColors.SurfaceVariant.copy(alpha = 0.60f),
+            NexioColors.SurfaceVariant.copy(alpha = 0.30f)
+        )
+    }
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translate by transition.animateFloat(
         initialValue = 0f,
@@ -378,9 +381,11 @@ fun rememberShimmerBrush(): Brush {
         label = "shimmer_translate"
     )
 
-    return Brush.linearGradient(
-        colors = shimmerColors,
-        start = Offset(translate - 1000f, 0f),
-        end = Offset(translate, 0f)
-    )
+    return remember(translate) {
+        Brush.linearGradient(
+            colors = shimmerColors,
+            start = Offset(translate - 1000f, 0f),
+            end = Offset(translate, 0f)
+        )
+    }
 }
