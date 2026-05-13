@@ -753,8 +753,17 @@ class MainActivity : ComponentActivity() {
                                 gatePhase = remoteNoticeStartupGatePhase
                             )
                         ) {
+                            val startingGatePhase = remoteNoticeStartupGatePhase
                             remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
-                            remoteNoticeViewModel.checkForNotice()
+                            if (
+                                shouldRequestRemoteNoticeStartupCheck(
+                                    gatePhase = startingGatePhase,
+                                    noticeCheckInProgress = remoteNoticeState.isChecking,
+                                    noticeLoaded = remoteNoticeState.notice != null
+                                )
+                            ) {
+                                remoteNoticeViewModel.checkForNotice()
+                            }
                             delay(REMOTE_NOTICE_STARTUP_WINDOW_MS)
                             if (remoteNoticeStartupGatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN) {
                                 remoteNoticeStartupGatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED
@@ -1746,6 +1755,19 @@ internal fun shouldStartOrRestartRemoteNoticeStartupWindow(
     return !startupSplashVisible &&
         (gatePhase == RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH ||
             gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN)
+}
+
+internal fun shouldRequestRemoteNoticeStartupCheck(
+    gatePhase: RemoteNoticeStartupGatePhase,
+    noticeCheckInProgress: Boolean,
+    noticeLoaded: Boolean
+): Boolean {
+    return gatePhase == RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH ||
+        (
+            gatePhase == RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN &&
+                !noticeCheckInProgress &&
+                !noticeLoaded
+            )
 }
 
 internal fun shouldCloseRemoteNoticeStartupGateForUpdateDialog(

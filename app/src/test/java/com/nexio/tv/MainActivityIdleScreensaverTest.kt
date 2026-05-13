@@ -350,6 +350,47 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `remote notice startup check is not restarted when recreation keeps in flight check`() {
+        assertFalse(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = true,
+                noticeLoaded = false
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup check is not restarted when recreation keeps loaded notice`() {
+        assertFalse(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = false,
+                noticeLoaded = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup check starts when window first opens or recovered window has no state`() {
+        assertTrue(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH,
+                noticeCheckInProgress = false,
+                noticeLoaded = false
+            )
+        )
+
+        assertTrue(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = false,
+                noticeLoaded = false
+            )
+        )
+    }
+
+    @Test
     fun `remote notice startup window is startup only after gate closes`() {
         assertFalse(
             shouldStartOrRestartRemoteNoticeStartupWindow(
