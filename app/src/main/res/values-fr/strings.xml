@@ -511,6 +511,7 @@
   <string name="update_install">Installer</string>
   <string name="update_ignore">Ignorer</string>
   <string name="update_close">Fermer</string>
+  <string name="notice_close">Fermer</string>
   <string name="update_open_settings">Ouvrir les paramètres</string>
   <string name="account_title">Compte</string>
   <string name="account_sign_in_description">Connecte-toi pour synchroniser les paramètres de ton compte et tes addons entre tes appareils.</string>

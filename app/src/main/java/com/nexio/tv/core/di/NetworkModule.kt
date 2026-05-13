@@ -23,6 +23,7 @@ import com.nexio.tv.data.integration.youtube.transport.OkHttpYouTubeTrailerTrans
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransport
 import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.data.remote.api.EasyDebridApi
+import com.nexio.tv.data.remote.api.GitHubRawContentApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.OkHttpImdbSearchService
@@ -748,6 +749,11 @@ object NetworkModule {
     @Singleton
     fun provideGitHubReleaseApi(@Named("github") retrofit: Retrofit): GitHubReleaseApi =
         retrofit.create(GitHubReleaseApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGitHubRawContentApi(@Named("github") retrofit: Retrofit): GitHubRawContentApi =
+        retrofit.create(GitHubRawContentApi::class.java)
 
     // --- MDBList API ---
 

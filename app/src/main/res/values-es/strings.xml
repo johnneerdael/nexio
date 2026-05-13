@@ -520,6 +520,7 @@
   <string name="nav_addons">Complementos</string>
   <string name="nav_settings">Configuración</string>
   <string name="update_close">Cerrar</string>
+  <string name="notice_close">Cerrar</string>
   <string name="update_open_settings">Abrir configuración</string>
   <string name="update_install">Instalar</string>
   <string name="update_ignore">Ignorar</string>

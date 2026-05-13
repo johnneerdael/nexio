@@ -46,7 +46,8 @@ class IntegrationHostClassifier(
                 "api.top-posters.com",
                 "api.aniskip.com",
                 "api.animeskip.com",
-                "api.github.com"
+                "api.github.com",
+                "raw.githubusercontent.com"
             )
         )
     }

@@ -220,6 +220,221 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `remote notice dialog renders only while startup gate is open and app is idle`() {
+        assertTrue(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by update dialog`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = true,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by startup splash`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = true,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by active playback`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = true,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by fullscreen trailer`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = true,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked by idle screensaver`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = true,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked after startup window closes`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = true,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = false
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice dialog is blocked when notice is not requested`() {
+        assertFalse(
+            shouldRenderRemoteNoticeDialog(
+                noticeDialogRequested = false,
+                updateDialogVisible = false,
+                startupSplashVisible = false,
+                playbackActive = false,
+                fullscreenTrailerActive = false,
+                idleScreensaverVisible = false,
+                startupNoticeGateOpen = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup window restarts when activity recreates with gate open`() {
+        assertTrue(
+            shouldStartOrRestartRemoteNoticeStartupWindow(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup check is not restarted when recreation keeps in flight check`() {
+        assertFalse(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = true,
+                noticeLoaded = false
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup check is not restarted when recreation keeps loaded notice`() {
+        assertFalse(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = false,
+                noticeLoaded = true
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup check starts when window first opens or recovered window has no state`() {
+        assertTrue(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH,
+                noticeCheckInProgress = false,
+                noticeLoaded = false
+            )
+        )
+
+        assertTrue(
+            shouldRequestRemoteNoticeStartupCheck(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN,
+                noticeCheckInProgress = false,
+                noticeLoaded = false
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup window is startup only after gate closes`() {
+        assertFalse(
+            shouldStartOrRestartRemoteNoticeStartupWindow(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.CLOSED
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup suppression only runs before startup gate opens`() {
+        assertTrue(
+            shouldSuppressRemoteNoticeBeforeStartupGate(
+                startupSplashVisible = true,
+                gatePhase = RemoteNoticeStartupGatePhase.WAITING_FOR_SPLASH
+            )
+        )
+
+        assertFalse(
+            shouldSuppressRemoteNoticeBeforeStartupGate(
+                startupSplashVisible = false,
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_OPEN
+            )
+        )
+    }
+
+    @Test
+    fun `remote notice startup gate stays open for visible dialog after window elapses`() {
+        assertFalse(
+            shouldCloseRemoteNoticeStartupGateAfterWindow(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED,
+                remoteNoticeDialogVisible = true
+            )
+        )
+
+        assertTrue(
+            shouldCloseRemoteNoticeStartupGateAfterWindow(
+                gatePhase = RemoteNoticeStartupGatePhase.STARTUP_WINDOW_ELAPSED,
+                remoteNoticeDialogVisible = false
+            )
+        )
+    }
+
+    @Test
     fun `idle diagnostics logging is debug only`() {
         assertTrue(shouldLogIdleScreensaverDiagnostics(isDebugBuild = true))
         assertFalse(shouldLogIdleScreensaverDiagnostics(isDebugBuild = false))
