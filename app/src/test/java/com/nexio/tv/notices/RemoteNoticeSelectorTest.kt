@@ -124,6 +124,42 @@ class RemoteNoticeSelectorTest {
         )
     }
 
+    @Test
+    fun `blank and invalid required fields return no selection`() {
+        assertNull(
+            RemoteNoticeSelector.selectNewestEligible(
+                manifest = manifest(
+                    notice(" ", "2026-05-12T10:01:00Z"),
+                    notice("blank-title", "2026-05-12T10:02:00Z", title = " "),
+                    notice("blank-url", "2026-05-12T10:03:00Z", markdownUrl = " "),
+                    notice("bad-date", "not-an-instant"),
+                    notice("bad-expiry", "2026-05-12T10:04:00Z", expiresAt = "not-an-instant")
+                ),
+                now = now,
+                baselineAt = baseline,
+                seenIds = emptySet(),
+                appVersion = "1.5.0"
+            )
+        )
+    }
+
+    @Test
+    fun `invalid entries are ignored without failing manifest selection`() {
+        val selected = RemoteNoticeSelector.selectNewestEligible(
+            manifest = manifest(
+                notice("bad-url", "2026-05-12T10:10:00Z", markdownUrl = "ftp://example.com/a.md"),
+                notice("bad-date", "not-an-instant"),
+                notice("valid", "2026-05-12T10:05:00Z")
+            ),
+            now = now,
+            baselineAt = baseline,
+            seenIds = emptySet(),
+            appVersion = "1.5.0"
+        )
+
+        assertEquals("valid", selected?.id)
+    }
+
     private fun manifest(vararg notices: RemoteNoticeManifestItem) =
         RemoteNoticeManifest(schemaVersion = 1, notices = notices.toList())
 
