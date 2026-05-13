@@ -296,6 +296,34 @@ class CatalogOrderViewModelTest {
     }
 
     @Test
+    fun `catalog management exposes stock add candidates independent of provider enabled sets`() = runTest(dispatcher) {
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.homeCatalogRails } returns MutableStateFlow(emptyList())
+        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
+        every { tmdbCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(
+            TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        )
+        val kitsuCatalogSettingsDataStore = mockk<KitsuCatalogSettingsDataStore>(relaxed = true)
+        every { kitsuCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(
+            KitsuCatalogPreferences(enabledCatalogs = emptySet())
+        )
+
+        val viewModel = buildViewModel(
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            notifier = CatalogPriorityHydrationNotifier(),
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+            kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore
+        )
+        advanceUntilIdle()
+
+        val availableKeys = viewModel.uiState.value.availableItems.map { it.key }
+        assertTrue(availableKeys.contains("tmdb_popular_movies"))
+        assertTrue(availableKeys.contains(KitsuCatalogIds.TRENDING_ANIME))
+    }
+
+    @Test
     fun `removing rail updates home catalog rails without disabling provider`() = runTest(dispatcher) {
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())

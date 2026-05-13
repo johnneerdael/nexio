@@ -489,7 +489,7 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = "TMDB",
                 typeLabel = if (isMovieCatalog) "movie" else "series",
                 isToggleable = true,
-                isDisabled = catalogId !in sanitized.enabledCatalogs
+                isDisabled = false
             )
         }
     }
@@ -509,7 +509,7 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = "Kitsu",
                 typeLabel = "anime",
                 isToggleable = true,
-                isDisabled = catalogId !in sanitized.enabledCatalogs
+                isDisabled = false
             )
         }
     }
