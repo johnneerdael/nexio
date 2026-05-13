@@ -322,6 +322,68 @@ class AssSsaTranslatingSampleSinkTest {
         )
     }
 
+    @Test
+    fun liveSinkPreservesRomajiFxAndTranslatesEnglishFx() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        var providerCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { surfaces ->
+                providerCalls += 1
+                assertEquals(listOf("evt_1"), surfaces.map { it.id })
+                mapOf("evt_1" to listOf("Jij bent de prooi, en wij zijn de jagers."))
+            }
+        )
+        val sample = """
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP Romaji,,0,0,0,fx,{\fad(200,0)}Sie sind das Essen und wir sind die Jäger
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP English,,0,0,0,fx,{\fad(200,0)}You're the prey, and we're the hunters.
+        """.trimIndent()
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 43_200_000L, data = sample.toByteArray())
+
+        assertEquals(1, providerCalls)
+        assertEquals(
+            """
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP Romaji,,0,0,0,fx,{\fad(200,0)}Sie sind das Essen und wir sind die Jäger
+            Dialogue: 0,0:00:43.20,0:00:45.00,Shingeki OP English,,0,0,0,fx,{\fad(200,0)}Jij bent de prooi, en wij zijn de jagers.
+            """.trimIndent(),
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun liveSinkReusesDuplicateVisibleTextTranslationInsideSample() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        var providerCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { surfaces ->
+                providerCalls += 1
+                assertEquals(listOf("evt_0"), surfaces.map { it.id })
+                mapOf("evt_0" to listOf("Vooruitblik"))
+            }
+        )
+        val sample = """
+            Dialogue: 0,0:23:54.60,0:23:54.90,Signs,,0,0,0,,{\pos(653,55)}Preview
+            Dialogue: 1,0:23:55.20,0:23:55.60,Signs,,0,0,0,,{\pos(652,55)}Preview
+        """.trimIndent()
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 1_434_600_000L, data = sample.toByteArray())
+
+        assertEquals(1, providerCalls)
+        assertEquals(
+            """
+            Dialogue: 0,0:23:54.60,0:23:54.90,Signs,,0,0,0,,{\pos(653,55)}Vooruitblik
+            Dialogue: 1,0:23:55.20,0:23:55.60,Signs,,0,0,0,,{\pos(652,55)}Vooruitblik
+            """.trimIndent(),
+            downstream.samples.single().decodeToString()
+        )
+    }
+
     private class RecordingAssSsaSampleSink : AssSsaSampleSink {
         val samples = mutableListOf<ByteArray>()
 

@@ -6,6 +6,8 @@ import com.nexio.tv.data.repository.AssSsaEventFormat
 import com.nexio.tv.data.repository.AssSsaEventRecord
 import com.nexio.tv.data.repository.AssSsaSegmentSurfaceParser
 import com.nexio.tv.data.repository.AssSsaSurfaceParseResult
+import com.nexio.tv.data.repository.AssSsaTranslationAction
+import com.nexio.tv.data.repository.AssSsaTranslationPlanner
 import com.nexio.tv.data.repository.AssSsaTranslationSurface
 import com.nexio.tv.data.repository.AutoTranslateDiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
@@ -75,13 +77,21 @@ internal class AssSsaTranslatingSampleSink(
             return
         }
 
+        val plan = AssSsaTranslationPlanner.plan(records)
         val surfacesByIndex = records.mapIndexedNotNull { index, record ->
+            if (plan.actions[index] !is AssSsaTranslationAction.Translate) return@mapIndexedNotNull null
             val id = "evt_$index"
             when (val result = AssSsaSegmentSurfaceParser.parse(id, record.text)) {
                 is AssSsaSurfaceParseResult.Translatable -> index to result.surface
                 is AssSsaSurfaceParseResult.PreserveOnly -> null
             }
         }
+        val preserveCount = plan.actions.count { it is AssSsaTranslationAction.Preserve }
+        val duplicateCount = plan.actions.count { it is AssSsaTranslationAction.DuplicateOf }
+        diagnosticsLogger.log(
+            "sample_ass_classified track=$trackId timeUs=$timeUs records=${records.size} " +
+                "translate=${surfacesByIndex.size} preserve=$preserveCount duplicate=$duplicateCount"
+        )
         scope.launch {
             val surfaces = surfacesByIndex.map { it.second }
             diagnosticsLogger.log(
@@ -117,7 +127,12 @@ internal class AssSsaTranslatingSampleSink(
             }
             val surfaceByIndex = surfacesByIndex.toMap()
             val translatedLines = records.mapIndexed { index, record ->
-                val surface = surfaceByIndex[index]
+                val canonicalIndex = when (val action = plan.actions[index]) {
+                    is AssSsaTranslationAction.Translate -> action.canonicalIndex
+                    is AssSsaTranslationAction.DuplicateOf -> action.canonicalIndex
+                    is AssSsaTranslationAction.Preserve -> null
+                }
+                val surface = canonicalIndex?.let { surfaceByIndex[it] }
                 val translatedText = surface
                     ?.let {
                         translated[it.id]?.let { segments ->
