@@ -1,12 +1,12 @@
 package com.nexio.tv.core.artwork.fanarttv.dto
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class FanartTvImage(
-    @SerialName("id") val id: String? = null,
-    @SerialName("url") val url: String? = null,
-    @SerialName("lang") val lang: String? = null,
-    @SerialName("likes") val likes: String? = null
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "lang") val lang: String? = null,
+    @Json(name = "likes") val likes: String? = null
 )
