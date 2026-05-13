@@ -9,11 +9,13 @@ import com.nexio.tv.data.repository.AssSsaSurfaceParseResult
 import com.nexio.tv.data.repository.AssSsaTranslationSurface
 import com.nexio.tv.data.repository.AutoTranslateDiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 private val ASS_SAMPLE_TIME_PATTERN = Regex("""\d+:\d{2}:\d{2}[:.]\d{2}""")
-private const val SAMPLE_TRANSLATION_TIMEOUT_MS = 2_500L
+private const val SAMPLE_TRANSLATION_TIMEOUT_MS = 5_000L
 
 internal class AssSsaTranslatingSampleSink(
     private val downstream: AssSsaSampleSink,
@@ -21,9 +23,11 @@ internal class AssSsaTranslatingSampleSink(
     private val isEnabled: () -> Boolean,
     private val translate: suspend (List<AssSsaTranslationSurface>) -> Map<String, List<String>>,
     private val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
-        AutoTranslateDiagnosticsLogger.disabled()
+        AutoTranslateDiagnosticsLogger.disabled(),
+    private val translationTimeoutMs: Long = SAMPLE_TRANSLATION_TIMEOUT_MS
 ) : AssSsaSampleSink {
     private val trackFormats = linkedMapOf<Int, TrackEventFormats>()
+    private val inFlightTranslations = mutableMapOf<String, Deferred<Map<String, List<String>>>>()
 
     override fun onTrackHeader(trackId: Int, headerData: ByteArray, format: Format) {
         val dialogueFormat = headerData.decodeToString()
@@ -91,9 +95,11 @@ internal class AssSsaTranslatingSampleSink(
                 downstream.onSubtitleSample(trackId, timeUs, data)
                 return@launch
             }
+            val translationKey = AutoTranslateDiagnosticsLogger.sha256Short(text)
+            val translationDeferred = translationDeferredFor(translationKey, surfaces)
             val translated = runCatching {
-                withTimeoutOrNull(SAMPLE_TRANSLATION_TIMEOUT_MS) {
-                    translate(surfaces)
+                withTimeoutOrNull(translationTimeoutMs) {
+                    translationDeferred.await()
                 }
             }.onFailure { error ->
                 diagnosticsLogger.log(
@@ -104,7 +110,7 @@ internal class AssSsaTranslatingSampleSink(
             if (translated == null) {
                 diagnosticsLogger.log(
                     "sample_emit_original reason=translation_timeout mode=ass_segment track=$trackId " +
-                        "timeUs=$timeUs timeoutMs=$SAMPLE_TRANSLATION_TIMEOUT_MS bytes=${data.size}"
+                        "timeUs=$timeUs timeoutMs=$translationTimeoutMs bytes=${data.size}"
                 )
                 downstream.onSubtitleSample(trackId, timeUs, data)
                 return@launch
@@ -134,6 +140,25 @@ internal class AssSsaTranslatingSampleSink(
 
     override fun onFontAttachment(name: String, data: ByteArray) {
         downstream.onFontAttachment(name, data)
+    }
+
+    private fun translationDeferredFor(
+        key: String,
+        surfaces: List<AssSsaTranslationSurface>
+    ): Deferred<Map<String, List<String>>> {
+        synchronized(inFlightTranslations) {
+            inFlightTranslations[key]?.takeIf { !it.isCancelled }?.let { return it }
+            val created = scope.async { translate(surfaces) }
+            inFlightTranslations[key] = created
+            created.invokeOnCompletion {
+                synchronized(inFlightTranslations) {
+                    if (inFlightTranslations[key] === created) {
+                        inFlightTranslations.remove(key)
+                    }
+                }
+            }
+            return created
+        }
     }
 
     private data class TrackEventFormats(

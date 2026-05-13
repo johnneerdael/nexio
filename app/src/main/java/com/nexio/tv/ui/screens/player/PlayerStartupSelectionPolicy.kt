@@ -276,10 +276,6 @@ internal fun decideStartupSubtitleAutoSelection(
         )
     }
 
-    if (addonSubtitleDiscoveryPending) {
-        return StartupSubtitleAutoSelectionDecision.DeferAddonFallback
-    }
-
     // findAddon() returns null both when no addon match exists AND when the
     // readiness gate (!hasScannedTextTracksOnce || !playerReady) blocks it.
     // Without this defer, the AI translation tier below would intercept any
@@ -303,17 +299,28 @@ internal fun decideStartupSubtitleAutoSelection(
     // with the same enableAiTranslation flag.
     val aiTranslationAllowed =
         startupPhase && aiTranslationConfigured && normalizedPreferred != null
-    if (aiTranslationAllowed) {
+    fun aiTranslationInternalDecision(): StartupSubtitleAutoSelectionDecision.Internal? {
+        if (!aiTranslationAllowed) return null
         val translatableInternalIndex = pickTranslatableInternalSubtitle(
             subtitleTracks = subtitleTracks,
             secondaryLanguage = normalizedSecondary
         )
-        if (translatableInternalIndex >= 0) {
-            return StartupSubtitleAutoSelectionDecision.Internal(
-                index = translatableInternalIndex,
-                enableAiTranslation = true
-            )
+        if (translatableInternalIndex < 0) return null
+        return StartupSubtitleAutoSelectionDecision.Internal(
+            index = translatableInternalIndex,
+            enableAiTranslation = true
+        )
+    }
+
+    if (addonSubtitleDiscoveryPending) {
+        if (subtitleTracks.any { isAssSsaSubtitleMimeType(it.mimeType) }) {
+            aiTranslationInternalDecision()?.let { return it }
         }
+        return StartupSubtitleAutoSelectionDecision.DeferAddonFallback
+    }
+
+    if (aiTranslationAllowed) {
+        aiTranslationInternalDecision()?.let { return it }
     }
 
     val internalSecondary = findInternal(normalizedSecondary)
@@ -652,6 +659,17 @@ internal fun isBitmapSubtitleMimeType(mimeType: String?): Boolean {
         normalized == "application/vobsub" ||
         normalized == "application/dvbsubs" ||
         normalized == "application/x-subpic"
+}
+
+internal fun isAssSsaSubtitleMimeType(mimeType: String?): Boolean {
+    if (mimeType.isNullOrBlank()) return false
+    val normalized = mimeType.lowercase(Locale.ROOT)
+    return normalized == "text/x-ssa" ||
+        normalized == "text/x-ass" ||
+        normalized == "text/ssa" ||
+        normalized == "text/ass" ||
+        normalized == "application/x-ssa" ||
+        normalized == "application/x-ass"
 }
 
 internal fun findBestInternalSubtitleTrackIndexForStartup(

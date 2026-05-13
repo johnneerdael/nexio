@@ -351,6 +351,30 @@ class PlayerStartupSelectionPolicyTest {
     }
 
     @Test
+    fun `startup subtitle selection starts ASS AI translation while addon discovery is pending`() {
+        val internalTracks = listOf(
+            TrackInfo(index = 0, name = "English ASS", language = "en", mimeType = "text/x-ssa")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = internalTracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = true,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 0, enableAiTranslation = true),
+            decision
+        )
+    }
+
+    @Test
     fun `tv episode addon auto pick falls through to ai translation when preferred addon group mismatches`() {
         val internalTracks = listOf(
             TrackInfo(index = 0, name = "English", language = "en", mimeType = "text/vtt")

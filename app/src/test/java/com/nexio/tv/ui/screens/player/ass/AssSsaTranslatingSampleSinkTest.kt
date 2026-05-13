@@ -213,7 +213,8 @@ class AssSsaTranslatingSampleSinkTest {
             translate = {
                 delay(3_000)
                 mapOf("evt_0" to listOf("Hallo"))
-            }
+            },
+            translationTimeoutMs = 100
         )
         val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello".toByteArray()
 
@@ -223,6 +224,55 @@ class AssSsaTranslatingSampleSinkTest {
         assertEquals(
             "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello",
             downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun reusesInFlightTranslationForDuplicateEmbeddedSamples() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        var providerCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = this,
+            isEnabled = { true },
+            translate = {
+                providerCalls += 1
+                delay(50)
+                mapOf("evt_0" to listOf("Hallo"))
+            }
+        )
+        val sample = "Dialogue: 0:00:00:00,0:00:01:00,1,10,Default,,0,0,0,,Hello".toByteArray()
+
+        sink.onTrackHeader(
+            trackId = 3,
+            headerData = "[Script Info]\nScriptType: v4.00+\n".toByteArray(),
+            format = Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+                .build()
+        )
+        sink.onTrackHeader(
+            trackId = 4,
+            headerData = "[Script Info]\nScriptType: v4.00+\n".toByteArray(),
+            format = Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+                .build()
+        )
+
+        sink.onSubtitleSample(trackId = 3, timeUs = 1_000_000L, data = sample)
+        sink.onSubtitleSample(trackId = 4, timeUs = 1_000_000L, data = sample)
+        advanceUntilIdle()
+
+        assertEquals(1, providerCalls)
+        assertEquals(2, downstream.samples.size)
+        assertEquals(
+            "Dialogue: 0:00:00:00,0:00:01:00,1,10,Default,,0,0,0,,Hallo",
+            downstream.samples[0].decodeToString()
+        )
+        assertEquals(
+            "Dialogue: 0:00:00:00,0:00:01:00,1,10,Default,,0,0,0,,Hallo",
+            downstream.samples[1].decodeToString()
         )
     }
 
