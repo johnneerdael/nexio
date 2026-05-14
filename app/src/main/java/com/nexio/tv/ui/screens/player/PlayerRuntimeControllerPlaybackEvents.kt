@@ -418,7 +418,21 @@ internal fun PlayerRuntimeController.emitScrobbleStop(
 
 internal fun PlayerRuntimeController.emitPauseScrobble(progressPercent: Float) {
     if (progressPercent < 1f) return
-    emitScrobbleStop(progressPercent = progressPercent)
+    val item = currentScrobbleItem ?: return
+    if (!hasRequestedScrobbleStartForCurrentItem) return
+
+    scope.launch {
+        val hydrated = prehydrateScrobbleIds()
+        trackingScrobbleService.scrobblePause(
+            item = item.withHydratedIds(hydrated),
+            progressPercent = progressPercent,
+            owner = playbackOwnerContext
+        )
+    }
+    stopScrobbleHeartbeat()
+    scrobbleStartRequestGeneration++
+    hasRequestedScrobbleStartForCurrentItem = false
+    hasSentScrobbleStartForCurrentItem = false
 }
 
 internal fun PlayerRuntimeController.emitCompletionScrobbleStop(progressPercent: Float) {
