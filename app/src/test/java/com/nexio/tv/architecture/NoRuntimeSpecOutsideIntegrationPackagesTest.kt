@@ -11,6 +11,7 @@ class NoRuntimeSpecOutsideIntegrationPackagesTest {
                 "com.nexio.tv.core.anime",
                 "com.nexio.tv.data.integration",
                 "com.nexio.tv.core.integration",
+                "com.nexio.tv.core.artwork",
                 "com.nexio.tv.core.tmdb",
                 "com.nexio.tv.core.tvdb",
                 "com.nexio.tv.data.local.integration"

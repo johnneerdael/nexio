@@ -1,6 +1,8 @@
-package com.nexio.tv.data.repository
+package com.nexio.tv.data.integration.mdblist
 
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.repository.MDBListSettingsReader
+import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.mdblist.MDBListIdMapper
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject

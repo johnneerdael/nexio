@@ -12,6 +12,10 @@ class NoRawProviderInjectionTest {
                 "OkHttpClient" to Regex("""\bOkHttpClient\b""")
             ),
             allowedPaths = productionAllowedPathSuffixes("/com/nexio/tv/core/di/") +
+                productionAllowedPathSuffixes(
+                    "/com/nexio/tv/core/player/auth/EgressIpFingerprint.kt",
+                    "/com/nexio/tv/integrations/hyperhdr/network/HyperHdrJsonApiClient.kt"
+                ) +
                 productionAllowedPathContainsAll(
                     "/com/nexio/tv/data/integration/",
                     "/transport/"

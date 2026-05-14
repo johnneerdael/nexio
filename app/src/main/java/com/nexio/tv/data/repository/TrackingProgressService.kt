@@ -7,6 +7,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
+import com.nexio.tv.data.integration.mdblist.MDBListProgressService
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.data.repository.trakt.TraktEpisodeRef
 import com.nexio.tv.domain.model.TrackingProvider

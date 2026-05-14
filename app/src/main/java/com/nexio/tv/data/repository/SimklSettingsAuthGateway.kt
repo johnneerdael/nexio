@@ -14,4 +14,7 @@ class SimklSettingsAuthGateway @Inject constructor(
     suspend fun revokeAndLogout() = authService.revokeAndLogout()
 
     suspend fun fetchUserSettings() = authService.fetchUserSettings()
+
+    suspend fun mutationAccountScopedSession(session: TrackingAuthSession): TrackingAuthSession =
+        authService.mutationAccountScopedSession(session)
 }

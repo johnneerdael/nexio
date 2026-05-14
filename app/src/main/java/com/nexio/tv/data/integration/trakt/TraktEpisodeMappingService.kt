@@ -1,7 +1,11 @@
-package com.nexio.tv.data.repository
+package com.nexio.tv.data.integration.trakt
 
 import android.util.Log
-import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.core.integration.valueOrNull
+import com.nexio.tv.data.repository.EpisodeMappingEntry
+import com.nexio.tv.data.repository.hasAnyId
+import com.nexio.tv.data.repository.parseContentIds
+import com.nexio.tv.data.repository.toTraktIds
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -10,8 +14,8 @@ import javax.inject.Singleton
 /**
  * Core-only port of NuvioTV's TraktEpisodeMappingService.
  *
- * Fetches Trakt's bulk season tree (see `TraktApi.getShowSeasons`) and caches
- * it per show, so the player can confirm a (season, episode) pair against
+ * Fetches Trakt's season tree through IntegrationRuntime and caches it per
+ * show/season, so the player can confirm a (season, episode) pair against
  * Trakt's canonical episode list before scrobbling.
  *
  * Unlike the upstream implementation, this port intentionally drops the
@@ -23,8 +27,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class TraktEpisodeMappingService @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService
+    private val traktIntegrationProvider: TraktIntegrationProvider
 ) {
     companion object {
         private const val TAG = "TraktEpMapSvc"
@@ -67,7 +70,7 @@ class TraktEpisodeMappingService @Inject constructor(
 
         val showLookupId = resolveShowLookupId(contentId = resolvedContentId, videoId = videoId)
             ?: return null
-        val traktEpisodes = getTraktEpisodes(showLookupId)
+        val traktEpisodes = getTraktEpisodes(showLookupId, requestedSeason)
         if (traktEpisodes.isEmpty()) return null
 
         val mapped = traktEpisodes.firstOrNull {
@@ -95,19 +98,20 @@ class TraktEpisodeMappingService @Inject constructor(
         return cacheMutex.withLock { mappingCache[key] }
     }
 
-    private suspend fun getTraktEpisodes(showLookupId: String): List<EpisodeMappingEntry> {
+    private suspend fun getTraktEpisodes(showLookupId: String, season: Int): List<EpisodeMappingEntry> {
+        val cacheKey = "$showLookupId|$season"
         val ownDeferred: kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>?
         val joinDeferred: kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>?
         cacheMutex.withLock {
-            traktEpisodesCache[showLookupId]?.let { return it }
-            val existing = traktEpisodesInFlight[showLookupId]
+            traktEpisodesCache[cacheKey]?.let { return it }
+            val existing = traktEpisodesInFlight[cacheKey]
             if (existing != null) {
                 ownDeferred = null
                 joinDeferred = existing
             } else {
                 val newDeferred =
                     kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>()
-                traktEpisodesInFlight[showLookupId] = newDeferred
+                traktEpisodesInFlight[cacheKey] = newDeferred
                 ownDeferred = newDeferred
                 joinDeferred = null
             }
@@ -123,57 +127,45 @@ class TraktEpisodeMappingService @Inject constructor(
         }
         val deferred = ownDeferred!!
         return try {
-            val episodes = fetchTraktEpisodes(showLookupId)
+            val episodes = fetchTraktEpisodes(showLookupId, season)
             cacheMutex.withLock {
-                traktEpisodesCache[showLookupId] = episodes
-                traktEpisodesInFlight.remove(showLookupId)
+                traktEpisodesCache[cacheKey] = episodes
+                traktEpisodesInFlight.remove(cacheKey)
             }
             deferred.complete(episodes)
             episodes
         } catch (e: kotlinx.coroutines.CancellationException) {
-            cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
+            cacheMutex.withLock { traktEpisodesInFlight.remove(cacheKey) }
             deferred.completeExceptionally(e)
             throw e
         } catch (e: Exception) {
-            cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
+            cacheMutex.withLock { traktEpisodesInFlight.remove(cacheKey) }
             deferred.completeExceptionally(e)
             emptyList()
         }
     }
 
-    private suspend fun fetchTraktEpisodes(showLookupId: String): List<EpisodeMappingEntry> {
-        val session = traktAuthService.accountScopedSession()
-        val seasonsResponse = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authHeader ->
-            traktApi.getShowSeasons(
-                authorization = authHeader,
-                id = showLookupId,
-                extended = "episodes"
-            )
-        } ?: return emptyList()
-        if (!seasonsResponse.isSuccessful) {
-            Log.w(
-                TAG,
-                "fetchTraktEpisodes: seasons request failed code=${seasonsResponse.code()} id=$showLookupId"
-            )
+    private suspend fun fetchTraktEpisodes(showLookupId: String, season: Int): List<EpisodeMappingEntry> {
+        val episodes = traktIntegrationProvider.getSeasonEpisodes(
+            id = showLookupId,
+            season = season,
+            extended = "full"
+        ).valueOrNull()
+        if (episodes == null) {
+            Log.w(TAG, "fetchTraktEpisodes: season request failed id=$showLookupId season=$season")
             return emptyList()
         }
 
-        return seasonsResponse.body()
-            .orEmpty()
+        return episodes
             .asSequence()
-            .filter { (it.number ?: 0) > 0 }
-            .sortedBy { it.number }
-            .flatMap { seasonDto ->
-                seasonDto.episodes.orEmpty().asSequence()
-                    .mapNotNull { episodeDto ->
-                        val seasonNumber = episodeDto.season ?: seasonDto.number ?: return@mapNotNull null
-                        val episodeNumber = episodeDto.number ?: return@mapNotNull null
-                        EpisodeMappingEntry(
-                            season = seasonNumber,
-                            episode = episodeNumber,
-                            title = episodeDto.title
-                        )
-                    }
+            .mapNotNull { episodeDto ->
+                val seasonNumber = episodeDto.season ?: season
+                val episodeNumber = episodeDto.number ?: return@mapNotNull null
+                EpisodeMappingEntry(
+                    season = seasonNumber,
+                    episode = episodeNumber,
+                    title = episodeDto.title
+                )
             }
             .toList()
     }

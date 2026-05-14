@@ -5,8 +5,8 @@ import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.integration.mdblist.MDBListProgressMutationAdapter
 import com.nexio.tv.data.local.WatchProgressPreferences
-import com.nexio.tv.data.repository.mdblist.MDBListProgressMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher

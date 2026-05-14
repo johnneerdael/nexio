@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.mdblist.MDBListProgressService
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto

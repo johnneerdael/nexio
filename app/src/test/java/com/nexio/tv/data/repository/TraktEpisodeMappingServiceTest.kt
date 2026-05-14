@@ -1,9 +1,9 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.trakt.TraktEpisodeMappingService
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeSummaryDto
-import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonWithEpisodesDto
-import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -15,25 +15,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
-import retrofit2.Response
 
 class TraktEpisodeMappingServiceTest {
 
     @Test
     fun prefetch_returns_mapping_for_show_with_episodes_in_trakt() = runBlocking {
-        val seasons = listOf(
-            seasonWith(
-                number = 1,
-                episodes = listOf(
-                    episode(season = 1, number = 1, title = "Pilot"),
-                    episode(season = 1, number = 2, title = "Two")
-                )
-            )
+        val episodes = listOf(
+            episode(season = 1, number = 1, title = "Pilot"),
+            episode(season = 1, number = 2, title = "Two")
         )
         val service = buildService(
-            traktApi = mockk {
-                coEvery { getShowSeasons(any(), any(), any()) } returns Response.success(seasons)
-            }
+            episodes = episodes
         )
 
         val mapping = service.prefetchEpisodeMapping(
@@ -53,9 +45,7 @@ class TraktEpisodeMappingServiceTest {
     @Test
     fun prefetch_returns_null_when_trakt_returns_empty() = runBlocking {
         val service = buildService(
-            traktApi = mockk {
-                coEvery { getShowSeasons(any(), any(), any()) } returns Response.success(emptyList())
-            }
+            episodes = emptyList()
         )
 
         val mapping = service.prefetchEpisodeMapping(
@@ -71,16 +61,9 @@ class TraktEpisodeMappingServiceTest {
 
     @Test
     fun prefetch_returns_null_when_episode_missing_from_trakt_tree() = runBlocking {
-        val seasons = listOf(
-            seasonWith(
-                number = 1,
-                episodes = listOf(episode(season = 1, number = 1, title = "Pilot"))
-            )
-        )
+        val episodes = listOf(episode(season = 1, number = 1, title = "Pilot"))
         val service = buildService(
-            traktApi = mockk {
-                coEvery { getShowSeasons(any(), any(), any()) } returns Response.success(seasons)
-            }
+            episodes = episodes
         )
 
         // Trakt only knows S1E1 — asking for S1E5 should yield null (no addon fallback).
@@ -97,22 +80,17 @@ class TraktEpisodeMappingServiceTest {
 
     @Test
     fun prefetch_caches_results_per_show_id() = runBlocking {
-        val seasons = listOf(
-            seasonWith(
-                number = 1,
-                episodes = listOf(
-                    episode(season = 1, number = 1, title = "Pilot"),
-                    episode(season = 1, number = 2, title = "Two")
-                )
-            )
+        val episodes = listOf(
+            episode(season = 1, number = 1, title = "Pilot"),
+            episode(season = 1, number = 2, title = "Two")
         )
-        val traktApi = mockk<TraktApi> {
-            coEvery { getShowSeasons(any(), any(), any()) } returns Response.success(seasons)
+        val traktProvider = mockk<TraktIntegrationProvider> {
+            coEvery { getSeasonEpisodes(any(), any(), any()) } returns IntegrationCallResult.Success(episodes)
         }
-        val service = buildService(traktApi = traktApi)
+        val service = buildService(traktProvider = traktProvider)
 
         // Two distinct cache keys (different episode), but same showLookupId →
-        // getShowSeasons should only fire once thanks to the per-show cache.
+        // getSeasonEpisodes should only fire once thanks to the per-show/season cache.
         val first = service.prefetchEpisodeMapping(
             contentId = "tt1234567",
             contentType = "series",
@@ -130,21 +108,13 @@ class TraktEpisodeMappingServiceTest {
 
         assertNotNull(first)
         assertNotNull(second)
-        coVerify(exactly = 1) { traktApi.getShowSeasons(any(), any(), any()) }
+        coVerify(exactly = 1) { traktProvider.getSeasonEpisodes(any(), any(), any()) }
     }
 
     @Test
     fun cached_lookup_does_not_hit_network() = runBlocking {
-        val seasons = listOf(
-            seasonWith(
-                number = 1,
-                episodes = listOf(episode(season = 1, number = 1, title = "Pilot"))
-            )
-        )
-        val traktApi = mockk<TraktApi> {
-            coEvery { getShowSeasons(any(), any(), any()) } returns Response.success(seasons)
-        }
-        val service = buildService(traktApi = traktApi)
+        val episodes = listOf(episode(season = 1, number = 1, title = "Pilot"))
+        val service = buildService(episodes = episodes)
 
         service.prefetchEpisodeMapping(
             contentId = "tt1234567",
@@ -167,22 +137,17 @@ class TraktEpisodeMappingServiceTest {
 
     @Test
     fun concurrent_prefetch_for_same_show_dedups_to_single_api_call() = runBlocking {
-        val seasons = listOf(
-            seasonWith(
-                number = 1,
-                episodes = listOf(
-                    episode(season = 1, number = 1, title = "Pilot"),
-                    episode(season = 1, number = 2, title = "Two")
-                )
-            )
+        val episodes = listOf(
+            episode(season = 1, number = 1, title = "Pilot"),
+            episode(season = 1, number = 2, title = "Two")
         )
-        val traktApi = mockk<TraktApi> {
-            coEvery { getShowSeasons(any(), any(), any()) } coAnswers {
+        val traktProvider = mockk<TraktIntegrationProvider> {
+            coEvery { getSeasonEpisodes(any(), any(), any()) } coAnswers {
                 delay(50)
-                Response.success(seasons)
+                IntegrationCallResult.Success(episodes)
             }
         }
-        val service = buildService(traktApi = traktApi)
+        val service = buildService(traktProvider = traktProvider)
 
         val results = listOf(
             async {
@@ -205,7 +170,7 @@ class TraktEpisodeMappingServiceTest {
             }
         ).awaitAll()
 
-        coVerify(exactly = 1) { traktApi.getShowSeasons(any(), any(), any()) }
+        coVerify(exactly = 1) { traktProvider.getSeasonEpisodes(any(), any(), any()) }
         assertNotNull(results[0])
         assertNotNull(results[1])
     }
@@ -214,40 +179,21 @@ class TraktEpisodeMappingServiceTest {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private fun buildService(traktApi: TraktApi): TraktEpisodeMappingService {
-        val session = TrackingAuthSession(
-            provider = TrackingProvider.TRAKT,
-            profileId = 1,
-            credentialHash = "hash-p1"
-        )
-        val traktAuthService = mockk<TraktAuthService> {
-            coEvery { accountScopedSession() } returns session
-            coEvery { accountScopedSession(any()) } returns session
-            coEvery {
-                executeAuthorizedRequestWithinRuntimeCall(
-                    any<TrackingAuthSession>(),
-                    any<suspend (String) -> Response<List<TraktShowSeasonWithEpisodesDto>>>()
-                )
-            } coAnswers {
-                val block = secondArg<suspend (String) -> Response<List<TraktShowSeasonWithEpisodesDto>>>()
-                block("Bearer hash-p1")
+    private fun buildService(
+        episodes: List<TraktEpisodeSummaryDto>
+    ): TraktEpisodeMappingService {
+        return buildService(
+            traktProvider = mockk {
+                coEvery { getSeasonEpisodes(any(), any(), any()) } returns IntegrationCallResult.Success(episodes)
             }
-        }
-        return TraktEpisodeMappingService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService
         )
     }
 
-    private fun seasonWith(
-        number: Int,
-        episodes: List<TraktEpisodeSummaryDto>
-    ): TraktShowSeasonWithEpisodesDto = TraktShowSeasonWithEpisodesDto(
-        number = number,
-        title = "Season $number",
-        ids = null,
-        episodes = episodes
-    )
+    private fun buildService(traktProvider: TraktIntegrationProvider): TraktEpisodeMappingService {
+        return TraktEpisodeMappingService(
+            traktIntegrationProvider = traktProvider
+        )
+    }
 
     private fun episode(
         season: Int,

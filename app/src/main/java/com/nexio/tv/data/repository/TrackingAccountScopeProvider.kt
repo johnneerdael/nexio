@@ -16,8 +16,8 @@ interface TrackingAccountScopeProvider {
 
 @Singleton
 class DefaultTrackingAccountScopeProvider @Inject constructor(
-    private val traktAuthService: TraktAuthService,
-    private val simklAuthService: SimklAuthService,
+    private val traktAuthGateway: TraktRepositoryAuthGateway,
+    private val simklAuthGateway: SimklSettingsAuthGateway,
     private val mdbListSettingsReader: MDBListSettingsReader
 ) : TrackingAccountScopeProvider {
     override suspend fun accountScopedSession(
@@ -26,8 +26,8 @@ class DefaultTrackingAccountScopeProvider @Inject constructor(
     ): TrackingAuthSession {
         val base = TrackingAuthSession(provider = provider, profileId = profileId)
         return when (provider) {
-            TrackingProvider.TRAKT -> traktAuthService.mutationAccountScopedSession(base)
-            TrackingProvider.SIMKL -> simklAuthService.mutationAccountScopedSession(base)
+            TrackingProvider.TRAKT -> traktAuthGateway.mutationAccountScopedSession(base)
+            TrackingProvider.SIMKL -> simklAuthGateway.mutationAccountScopedSession(base)
             TrackingProvider.MDBLIST -> {
                 val apiKey = mdbListSettingsReader.settings.first().apiKey.trim()
                 require(apiKey.isNotBlank()) {

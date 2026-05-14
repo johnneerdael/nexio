@@ -20,6 +20,7 @@ import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvid
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
 import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
+import com.nexio.tv.data.integration.trakt.TraktEpisodeMappingService
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -32,7 +33,6 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.EpisodeMappingEntry
-import com.nexio.tv.data.repository.TraktEpisodeMappingService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings

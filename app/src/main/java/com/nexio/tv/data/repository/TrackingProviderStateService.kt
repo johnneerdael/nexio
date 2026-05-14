@@ -25,6 +25,7 @@ data class EffectiveTrackingProviderState(
             "or sync writes. Use activeProviders for fan-out. effectiveProvider is retained " +
             "only for surfaces that must pick one provider for display (e.g. ContinueWatching " +
             "provider tag, library write routing during Phase 0; migrated in Phase 3).",
+        replaceWith = ReplaceWith("activeProviders"),
         level = DeprecationLevel.WARNING,
     )
     val effectiveProvider: TrackingProvider = TrackingProvider.TRAKT,

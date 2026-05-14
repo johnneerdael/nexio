@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver
 import com.nexio.tv.core.playback.PlaybackOwnerContext
+import com.nexio.tv.data.integration.mdblist.MDBListScrobbleService
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery

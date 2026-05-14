@@ -1,4 +1,4 @@
-package com.nexio.tv.data.repository
+package com.nexio.tv.data.integration.mdblist
 
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListCreateListRequestDto
@@ -7,6 +7,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistItemDto
+import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab

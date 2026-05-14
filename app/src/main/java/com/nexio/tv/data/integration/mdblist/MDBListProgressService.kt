@@ -1,10 +1,11 @@
-package com.nexio.tv.data.repository
+package com.nexio.tv.data.integration.mdblist
 
 import android.util.Log
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedResponseDto
+import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -15,8 +15,8 @@ class DefaultTrackingAccountScopeProviderTest {
     fun `MDBList account scope uses configured API key hash without exposing raw key`() = runTest {
         val apiKey = "mdb_secret_key"
         val provider = DefaultTrackingAccountScopeProvider(
-            traktAuthService = mockk(relaxed = true),
-            simklAuthService = mockk(relaxed = true),
+            traktAuthGateway = mockk(relaxed = true),
+            simklAuthGateway = mockk(relaxed = true),
             mdbListSettingsReader = object : MDBListSettingsReader {
                 override val settings = flowOf(MDBListSettings(enabled = true, apiKey = apiKey))
             }

@@ -1,8 +1,7 @@
 package com.nexio.tv.data.repository.trakt
 
-import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
-import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.TraktRepositoryAuthGateway
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import io.mockk.coEvery
@@ -27,7 +26,7 @@ class SeasonMarkBatcherTest {
         val batcher = SeasonMarkBatcher(
             traktMutationOutboxCoordinator = coordinator,
             ioDispatcher = StandardTestDispatcher(testScheduler),
-            traktAuthService = traktAuthService()
+            traktAuthGateway = traktAuthGateway()
         )
         val episodes = (1..24).map { episodeNumber ->
             TraktEpisodeRef(
@@ -52,7 +51,7 @@ class SeasonMarkBatcherTest {
         val batcher = SeasonMarkBatcher(
             traktMutationOutboxCoordinator = coordinator,
             ioDispatcher = StandardTestDispatcher(testScheduler),
-            traktAuthService = traktAuthService()
+            traktAuthGateway = traktAuthGateway()
         )
         val episodes = listOf(
             TraktEpisodeRef(
@@ -74,7 +73,7 @@ class SeasonMarkBatcherTest {
         }
     }
 
-    private fun traktAuthService(): TraktAuthService {
+    private fun traktAuthGateway(): TraktRepositoryAuthGateway {
         return mockk {
             coEvery { mutationAccountScopedSession(any()) } answers {
                 firstArg<com.nexio.tv.data.repository.TrackingAuthSession>().copy(

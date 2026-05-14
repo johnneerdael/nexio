@@ -16,13 +16,13 @@ import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvid
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
 import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
+import com.nexio.tv.data.integration.trakt.TraktEpisodeMappingService
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.repository.SubtitleTranslationService
-import com.nexio.tv.data.repository.TraktEpisodeMappingService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository

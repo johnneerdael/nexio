@@ -9,6 +9,7 @@ import com.nexio.tv.core.anime.projection.AnimeSourceIdentity
 import com.nexio.tv.core.anime.projection.EpisodeProjectionTarget
 import com.nexio.tv.core.anime.projection.SourceEpisodeCoordinate
 import com.nexio.tv.core.playback.PlaybackOwnerContext
+import com.nexio.tv.data.integration.mdblist.MDBListScrobbleService
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds

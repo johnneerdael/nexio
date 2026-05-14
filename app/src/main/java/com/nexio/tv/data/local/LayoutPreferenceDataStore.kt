@@ -287,6 +287,7 @@ class LayoutPreferenceDataStore @Inject constructor(
             "the 45 KiB JSON-encoded state was pinned in MutablePreferences.preferencesMap, retained by " +
             "every Flow collector continuation). HomeRailOrderStore now writes via file-backed streaming " +
             "JSON; this entry point is retained for the one-time read-then-clear legacy migration only.",
+        replaceWith = ReplaceWith("clearLegacyHomeRailOrderStateJson()"),
         level = DeprecationLevel.WARNING
     )
     suspend fun setHomeRailOrderStateJson(json: String) {

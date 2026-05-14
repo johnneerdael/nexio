@@ -6,6 +6,7 @@
 
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.mdblist.MDBListLibraryService
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryEmptyReason

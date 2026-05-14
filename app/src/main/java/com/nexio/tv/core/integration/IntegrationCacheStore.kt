@@ -17,6 +17,7 @@ interface IntegrationCacheStore {
         @Deprecated(
             message = "For legacy test compatibility only. Production uses LocalIntegrationCacheStore via Hilt; " +
                 "new tests should use ByteArrayIntegrationCacheStore.",
+            replaceWith = ReplaceWith("ByteArrayIntegrationCacheStore"),
             level = DeprecationLevel.WARNING
         )
         val Noop: IntegrationCacheStore = object : IntegrationCacheStore {

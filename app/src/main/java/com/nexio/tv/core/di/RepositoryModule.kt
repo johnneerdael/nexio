@@ -21,7 +21,7 @@ import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TrackingAccountScopeProvider
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.repository.TrackingScrobbleService
-import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.TraktRepositoryAuthGateway
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
@@ -126,11 +126,11 @@ abstract class RepositoryModule {
         @Singleton
         fun provideSeasonMarkBatcher(
             providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
-            traktAuthService: TraktAuthService
+            traktAuthGateway: TraktRepositoryAuthGateway
         ): SeasonMarkBatcher {
             return SeasonMarkBatcher(
                 traktMutationOutboxCoordinator = providerMutationOutboxCoordinator,
-                traktAuthService = traktAuthService,
+                traktAuthGateway = traktAuthGateway,
                 ioDispatcher = Dispatchers.IO
             )
         }

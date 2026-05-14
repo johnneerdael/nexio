@@ -428,7 +428,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
 
-    @Deprecated("redundant after reducer; remove once Plan B (UI consumption migration) lands")
+    @Deprecated(
+        message = "redundant after reducer; remove once Plan B (UI consumption migration) lands",
+        replaceWith = ReplaceWith("this")
+    )
     private fun MetaPreview.withCompatiblePersistedInternalPoster(
         persistedFallback: MetaPreview?,
         artworkProviderSettings: ArtworkProviderSettings

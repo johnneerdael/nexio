@@ -1,4 +1,4 @@
-package com.nexio.tv.data.repository.mdblist
+package com.nexio.tv.data.integration.mdblist
 
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -12,7 +12,6 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleSeasonDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleShowDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedSyncRequestDto
-import com.nexio.tv.data.repository.MDBListProgressService
 import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
