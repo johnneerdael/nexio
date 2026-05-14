@@ -2,7 +2,9 @@ package com.nexio.tv.ui.screens.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
 import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
@@ -11,6 +13,7 @@ import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistRowItem
 import com.nexio.tv.domain.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -54,6 +57,13 @@ enum class LibrarySortOption(
     }
 }
 
+enum class LibraryPrimaryTab(
+    val label: String
+) {
+    UNIFIED_WATCHLIST("Unified Watchlist"),
+    PROVIDER_LIBRARY("Provider Library")
+}
+
 data class LibraryListEditorState(
     val mode: Mode,
     val listId: String? = null,
@@ -68,6 +78,7 @@ data class LibraryListEditorState(
 }
 
 data class LibraryUiState(
+    val selectedPrimaryTab: LibraryPrimaryTab = LibraryPrimaryTab.UNIFIED_WATCHLIST,
     val sourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val allItems: List<LibraryEntry> = emptyList(),
     val visibleItems: List<LibraryEntry> = emptyList(),
@@ -108,6 +119,8 @@ class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val torBoxDirectPlayHandler: TorBoxDirectPlayHandler,
+    private val unifiedWatchlistResolvedDisplayProjector: UnifiedWatchlistResolvedDisplayProjector,
+    private val profileManager: ProfileManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
@@ -118,6 +131,9 @@ class LibraryViewModel @Inject constructor(
 
     private val _torBoxRefreshing = MutableStateFlow(false)
     internal val torBoxRefreshing: StateFlow<Boolean> = _torBoxRefreshing.asStateFlow()
+
+    private val _unifiedWatchlistRows = MutableStateFlow<List<UnifiedWatchlistRowItem>>(emptyList())
+    val unifiedWatchlistRows: StateFlow<List<UnifiedWatchlistRowItem>> = _unifiedWatchlistRows.asStateFlow()
 
     private var messageClearJob: Job? = null
     private var initialTraktSyncRequested = false
@@ -160,8 +176,15 @@ class LibraryViewModel @Inject constructor(
     init {
         observeLayoutPreferences()
         observeLibraryData()
+        observeUnifiedWatchlistRows()
         observeDebridBootstrap()
         observeTraktBootstrap()
+    }
+
+    fun onSelectPrimaryTab(tab: LibraryPrimaryTab) {
+        _uiState.update { current ->
+            if (current.selectedPrimaryTab == tab) current else current.copy(selectedPrimaryTab = tab)
+        }
     }
 
     fun onSelectTypeTab(tab: LibraryTypeTab) {
@@ -202,6 +225,12 @@ class LibraryViewModel @Inject constructor(
             val successMessage: String
             val refreshBlock: suspend () -> Unit
             when {
+                state.selectedPrimaryTab == LibraryPrimaryTab.UNIFIED_WATCHLIST -> {
+                    startMessage = "Syncing unified watchlist..."
+                    successMessage = "Unified watchlist synced"
+                    refreshBlock = { libraryRepository.refreshProviderNow() }
+                }
+
                 selectedList?.type == LibraryListTab.Type.PERSONAL -> {
                     startMessage = "Syncing Trakt library..."
                     successMessage = "Trakt library synced"
@@ -501,6 +530,18 @@ class LibraryViewModel @Inject constructor(
                     )
                     updated.withVisibleItems()
                 }
+            }
+        }
+    }
+
+    private fun observeUnifiedWatchlistRows() {
+        viewModelScope.launch {
+            profileManager.activeProfileId.collectLatest { profileId ->
+                unifiedWatchlistResolvedDisplayProjector
+                    .observeRows(profileId, libraryRepository.unifiedWatchlistMemberships)
+                    .collectLatest { rows ->
+                        _unifiedWatchlistRows.value = rows
+                    }
             }
         }
     }

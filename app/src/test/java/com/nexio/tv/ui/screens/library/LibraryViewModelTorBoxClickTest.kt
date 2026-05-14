@@ -1,9 +1,11 @@
 package com.nexio.tv.ui.screens.library
 
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
+import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -79,6 +81,8 @@ class LibraryViewModelTorBoxClickTest {
             libraryRepository = fakeRepository(),
             layoutPreferenceDataStore = layoutPrefs(),
             torBoxDirectPlayHandler = handler,
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
         val emitted = mutableListOf<DirectPlayCommand>()
         val collector: Job = launch { viewModel.directPlayCommands.collect { emitted += it } }
@@ -107,6 +111,8 @@ class LibraryViewModelTorBoxClickTest {
             libraryRepository = fakeRepository(),
             layoutPreferenceDataStore = layoutPrefs(),
             torBoxDirectPlayHandler = handler,
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
         val emitted = mutableListOf<DirectPlayCommand>()
         val collector: Job = launch { viewModel.directPlayCommands.collect { emitted += it } }
@@ -124,6 +130,20 @@ class LibraryViewModelTorBoxClickTest {
     }
 
     /** Library repository that returns empty flows; the click handler does not consult the repo. */
+    private fun unifiedWatchlistProjector(): UnifiedWatchlistResolvedDisplayProjector {
+        val projector = mockk<UnifiedWatchlistResolvedDisplayProjector>()
+        every {
+            projector.observeRows(any(), any<Flow<List<UnifiedWatchlistMembership>>>())
+        } returns flowOf(emptyList())
+        return projector
+    }
+
+    private fun profileManager(): ProfileManager {
+        val manager = mockk<ProfileManager>()
+        every { manager.activeProfileId } returns MutableStateFlow(1)
+        return manager
+    }
+
     private class EmptyLibraryRepository : LibraryRepository {
         override val sourceMode: Flow<LibrarySourceMode> = MutableStateFlow(LibrarySourceMode.LOCAL)
         override val isSyncing: Flow<Boolean> = MutableStateFlow(false)

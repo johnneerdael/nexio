@@ -115,10 +115,13 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val torBoxRefreshing by viewModel.torBoxRefreshing.collectAsState()
+    val unifiedWatchlistRows by viewModel.unifiedWatchlistRows.collectAsState()
     val context = LocalContext.current
 
-    val isTorBoxTab = uiState.selectedListKey == com.nexio.tv.data.repository.DebridLibraryService.TORBOX_LIST_KEY
-    LaunchedEffect(uiState.selectedListKey) {
+    val isUnifiedWatchlistTab = uiState.selectedPrimaryTab == LibraryPrimaryTab.UNIFIED_WATCHLIST
+    val isTorBoxTab = !isUnifiedWatchlistTab &&
+        uiState.selectedListKey == com.nexio.tv.data.repository.DebridLibraryService.TORBOX_LIST_KEY
+    LaunchedEffect(uiState.selectedPrimaryTab, uiState.selectedListKey) {
         if (isTorBoxTab) viewModel.refreshTorBoxLibraryNow()
     }
     LaunchedEffect(viewModel) {
@@ -144,22 +147,27 @@ fun LibraryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val primaryFocusRequester = remember { FocusRequester() }
+    val selectorFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
     var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val visibleItemKeys = remember(uiState.visibleItems) {
-        uiState.visibleItems.map { "${it.type}:${it.id}" }
+    val gridItemKeys = remember(isUnifiedWatchlistTab, unifiedWatchlistRows, uiState.visibleItems) {
+        if (isUnifiedWatchlistTab) {
+            unifiedWatchlistRows.map { "unified:${it.membership.authorityKey}" }
+        } else {
+            uiState.visibleItems.map { "${it.type}:${it.id}" }
+        }
     }
-    val visibleItemIndexByKey = remember(visibleItemKeys) {
-        visibleItemKeys.withIndex().associate { (index, key) -> key to index }
+    val visibleItemIndexByKey = remember(gridItemKeys) {
+        gridItemKeys.withIndex().associate { (index, key) -> key to index }
     }
-    val posterFocusRequesters = remember(visibleItemKeys) {
-        visibleItemKeys.associateWith { FocusRequester() }
+    val posterFocusRequesters = remember(gridItemKeys) {
+        gridItemKeys.associateWith { FocusRequester() }
     }
-    val firstVisiblePosterKey = visibleItemKeys.firstOrNull()
+    val firstVisiblePosterKey = gridItemKeys.firstOrNull()
     val posterCardStyle = PosterCardDefaults.Style
-    val useReadableDebridListLayout = remember(uiState.selectedListKey) {
-        usesReadableDebridListLayout(uiState.selectedListKey)
+    val useReadableDebridListLayout = remember(isUnifiedWatchlistTab, uiState.selectedListKey) {
+        !isUnifiedWatchlistTab && usesReadableDebridListLayout(uiState.selectedListKey)
     }
 
     LaunchedEffect(uiState.isLoading) {
@@ -168,7 +176,7 @@ fun LibraryScreen(
         }
     }
 
-    LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size) {
+    LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size, uiState.selectedPrimaryTab) {
         if (!uiState.isLoading && pendingPrimaryFocus) {
             val restoreKey = lastFocusedPosterKey
             val restoreIndex = restoreKey?.let { visibleItemIndexByKey[it] }
@@ -279,11 +287,15 @@ fun LibraryScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = when (uiState.sourceMode) {
-                        LibrarySourceMode.TRAKT -> "TRAKT"
-                        LibrarySourceMode.SIMKL -> "SIMKL"
-                        LibrarySourceMode.DEBRID -> "DEBRID"
-                        LibrarySourceMode.LOCAL -> stringResource(R.string.library_source_local)
+                    text = if (isUnifiedWatchlistTab) {
+                        "WATCHLIST"
+                    } else {
+                        when (uiState.sourceMode) {
+                            LibrarySourceMode.TRAKT -> "TRAKT"
+                            LibrarySourceMode.SIMKL -> "SIMKL"
+                            LibrarySourceMode.DEBRID -> "DEBRID"
+                            LibrarySourceMode.LOCAL -> stringResource(R.string.library_source_local)
+                        }
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = if (showBuiltInHeader) NexioColors.TextTertiary else Color.Transparent,
@@ -294,47 +306,65 @@ fun LibraryScreen(
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {
-            LibrarySelectorsRow(
-                sourceMode = uiState.sourceMode,
-                listTabs = uiState.listTabs,
-                typeTabs = uiState.availableTypeTabs,
-                sortOptions = uiState.availableSortOptions,
-                selectedListKey = uiState.selectedListKey,
-                selectedTypeTab = uiState.selectedTypeTab,
-                selectedSortOption = uiState.selectedSortOption,
+            LibraryPrimaryTabsRow(
+                selectedTab = uiState.selectedPrimaryTab,
                 primaryFocusRequester = primaryFocusRequester,
-                expandedPicker = expandedPicker,
-                onExpandedChange = { picker, shouldExpand ->
-                    expandedPicker = if (shouldExpand) picker else null
-                },
-                onSelectList = { key ->
-                    viewModel.onSelectListTab(key)
-                    expandedPicker = null
-                },
-                onSelectType = { type ->
-                    viewModel.onSelectTypeTab(type)
-                    expandedPicker = null
-                },
-                onSelectSort = { sort ->
-                    viewModel.onSelectSortOption(sort)
-                    expandedPicker = null
-                }
+                onSelect = viewModel::onSelectPrimaryTab
             )
         }
 
-        if (uiState.listTabs.isNotEmpty() || uiState.sourceMode != LibrarySourceMode.LOCAL) {
+        if (!isUnifiedWatchlistTab) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LibrarySelectorsRow(
+                    sourceMode = uiState.sourceMode,
+                    listTabs = uiState.listTabs,
+                    typeTabs = uiState.availableTypeTabs,
+                    sortOptions = uiState.availableSortOptions,
+                    selectedListKey = uiState.selectedListKey,
+                    selectedTypeTab = uiState.selectedTypeTab,
+                    selectedSortOption = uiState.selectedSortOption,
+                    primaryFocusRequester = selectorFocusRequester,
+                    expandedPicker = expandedPicker,
+                    onExpandedChange = { picker, shouldExpand ->
+                        expandedPicker = if (shouldExpand) picker else null
+                    },
+                    onSelectList = { key ->
+                        viewModel.onSelectListTab(key)
+                        expandedPicker = null
+                    },
+                    onSelectType = { type ->
+                        viewModel.onSelectTypeTab(type)
+                        expandedPicker = null
+                    },
+                    onSelectSort = { sort ->
+                        viewModel.onSelectSortOption(sort)
+                        expandedPicker = null
+                    }
+                )
+            }
+        }
+
+        if (isUnifiedWatchlistTab || uiState.listTabs.isNotEmpty() || uiState.sourceMode != LibrarySourceMode.LOCAL) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryActionsRow(
                     pending = uiState.pendingOperation,
                     isSyncing = uiState.isSyncing,
-                    canManageLists = uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL },
+                    canManageLists = !isUnifiedWatchlistTab && uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL },
                     onManageLists = viewModel::onOpenManageLists,
                     onRefresh = viewModel::onRefresh
                 )
             }
         }
 
-        if (uiState.visibleItems.isEmpty()) {
+        if (isUnifiedWatchlistTab && unifiedWatchlistRows.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                EmptyScreenState(
+                    title = "No unified watchlist items",
+                    subtitle = "Items from connected watchlist sources will appear here.",
+                    icon = Icons.Default.BookmarkBorder
+                )
+            }
+        } else if (!isUnifiedWatchlistTab && uiState.visibleItems.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 val selectedTypeLabel = uiState.selectedTypeTab?.let { localizedTypeLabel(it.key) }?.lowercase() ?: stringResource(R.string.library_type_items)
                 val title = when (uiState.sourceMode) {
@@ -357,7 +387,25 @@ fun LibraryScreen(
             }
         }
 
-        if (useReadableDebridListLayout) {
+        if (isUnifiedWatchlistTab) {
+            items(unifiedWatchlistRows, key = { "unified:${it.membership.authorityKey}" }) { row ->
+                val focusKey = "unified:${row.membership.authorityKey}"
+                val cardData = remember(row) { UnifiedWatchlistLibraryRailItem.fromRow(row) }
+                GridContentCard(
+                    item = cardData,
+                    posterCardStyle = posterCardStyle,
+                    focusRequester = posterFocusRequesters[focusKey],
+                    showLabel = true,
+                    onFocused = {
+                        lastFocusedPosterKey = focusKey
+                    },
+                    onClick = {
+                        lastFocusedPosterKey = focusKey
+                        onOpenEntry(cardData.source)
+                    }
+                )
+            }
+        } else if (useReadableDebridListLayout) {
             items(
                 items = uiState.visibleItems,
                 key = { "${it.type}:${it.id}" },
@@ -464,6 +512,41 @@ fun LibraryScreen(
                     }
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun LibraryPrimaryTabsRow(
+    selectedTab: LibraryPrimaryTab,
+    primaryFocusRequester: FocusRequester,
+    onSelect: (LibraryPrimaryTab) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        LibraryPrimaryTab.entries.forEach { tab ->
+            val selected = selectedTab == tab
+            Button(
+                onClick = { onSelect(tab) },
+                modifier = if (tab == LibraryPrimaryTab.UNIFIED_WATCHLIST) {
+                    Modifier.focusRequester(primaryFocusRequester)
+                } else {
+                    Modifier
+                },
+                colors = ButtonDefaults.colors(
+                    containerColor = if (selected) NexioColors.Secondary else NexioColors.BackgroundCard,
+                    contentColor = if (selected) NexioColors.OnSecondary else NexioColors.TextPrimary
+                )
+            ) {
+                Text(
+                    text = tab.label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
