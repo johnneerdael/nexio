@@ -36,6 +36,7 @@ class SimklLibraryMutationAdapter @Inject constructor(
         val response = when (envelope.mutationKind) {
             MUTATION_KIND_ADD_TO_LIST -> remote.addToList(envelope.addBody(), envelope.session())
             MUTATION_KIND_REMOVE -> remote.removeFromHistoryAndLists(envelope.removeBody(), envelope.session())
+            MUTATION_KIND_REMOVE_WATCHLIST -> remote.removeFromWatchlist(envelope.removeBody(), envelope.session())
             else -> null
         } ?: return TraktMutationExecutionResult.Failure(httpStatusCode = 400, reason = "Unsupported SIMKL library mutation ${envelope.mutationKind}")
 
@@ -69,6 +70,7 @@ class SimklLibraryMutationAdapter @Inject constructor(
         const val ADAPTER_KEY = "simkl.library"
         const val MUTATION_KIND_ADD_TO_LIST = "simkl.library.addToList"
         const val MUTATION_KIND_REMOVE = "simkl.library.remove"
+        const val MUTATION_KIND_REMOVE_WATCHLIST = "simkl.library.removeWatchlist"
         private val gson = Gson()
 
         fun buildAddToListEnvelope(
@@ -103,6 +105,24 @@ class SimklLibraryMutationAdapter @Inject constructor(
                 mutationKind = MUTATION_KIND_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
                 collapseKey = "simkl.library:remove",
+                payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
+            )
+        }
+
+        fun buildWatchlistRemoveEnvelope(
+            body: SimklHistoryRemoveRequestDto,
+            rollbackState: SimklLibraryService.LibraryRollbackState,
+            session: TrackingAuthSession
+        ): TraktMutationEnvelope {
+            return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireSimklCredentialHash(session),
+                adapterKey = ADAPTER_KEY,
+                mutationKind = MUTATION_KIND_REMOVE_WATCHLIST,
+                priority = TraktMutationPriorityBucket.WATCHLIST,
+                collapseKey = "simkl.library:watchlist.remove",
                 payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) },
                 rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )

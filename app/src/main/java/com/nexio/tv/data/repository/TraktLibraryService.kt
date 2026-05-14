@@ -200,6 +200,18 @@ class TraktLibraryService @Inject constructor(
         }
     }
 
+    suspend fun removeWatchlistItem(item: LibraryEntryInput) {
+        ensureFresh()
+        performOptimisticMutation(
+            optimistic = { snapshot -> removeItemFromList(snapshot, item, WATCHLIST_KEY) }
+        ) { before, _, _ ->
+            removeFromWatchlist(
+                item = item,
+                rollbackState = rollbackStateForList(before, WATCHLIST_KEY)
+            )
+        }
+    }
+
     suspend fun applyMembershipChanges(
         item: LibraryEntryInput,
         changes: ListMembershipChanges

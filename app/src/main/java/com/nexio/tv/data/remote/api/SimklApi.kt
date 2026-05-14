@@ -99,6 +99,12 @@ interface SimklApi {
         @Body body: SimklHistoryRemoveRequestDto
     ): Response<Unit>
 
+    @POST("sync/watchlist/remove")
+    suspend fun removeFromWatchlist(
+        @Header("Authorization") authorization: String,
+        @Body body: SimklHistoryRemoveRequestDto
+    ): Response<Unit>
+
     @POST("scrobble/start")
     suspend fun scrobbleStart(
         @Header("Authorization") authorization: String,

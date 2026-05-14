@@ -180,6 +180,18 @@ class SimklIntegrationProvider @Inject constructor(
         }
     }
 
+    suspend fun removeFromWatchlist(
+        body: SimklHistoryRemoveRequestDto,
+        session: TrackingAuthSession? = null
+    ): retrofit2.Response<Unit>? {
+        return authorizedWrite(
+            session = session,
+            rawOperationKey = "simkl.watchlist.remove"
+        ) { authorization ->
+            simklApi.removeFromWatchlist(authorization = authorization, body = body)
+        }
+    }
+
     suspend fun scrobbleStart(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null

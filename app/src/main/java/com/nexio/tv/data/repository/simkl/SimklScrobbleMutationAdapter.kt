@@ -7,8 +7,10 @@ import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleRequestDto
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
 import com.nexio.tv.data.repository.SimklProgressService
+import com.nexio.tv.data.repository.SimklLibraryService
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingScrobbleItem
+import com.nexio.tv.data.repository.WatchlistAutoRemoveCoordinator
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.domain.model.ProviderIds
@@ -16,7 +18,12 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
+import com.nexio.tv.domain.model.UnifiedWatchlistMembershipConfidence
+import com.nexio.tv.domain.model.UnifiedWatchlistSource
+import com.nexio.tv.domain.model.UnifiedWatchlistSourceRef
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -29,7 +36,8 @@ import javax.inject.Singleton
 class SimklScrobbleMutationAdapter @Inject constructor(
     private val remote: SimklTrackingRemoteDataSource,
     private val simklProgressService: SimklProgressService,
-    private val watchingNowStateController: TraktWatchingNowStateController
+    private val watchingNowStateController: TraktWatchingNowStateController,
+    private val watchlistAutoRemoveCoordinator: WatchlistAutoRemoveCoordinator? = null
 ) : TraktMutationAdapter {
 
     override val adapterKey: String = ADAPTER_KEY
@@ -68,6 +76,11 @@ class SimklScrobbleMutationAdapter @Inject constructor(
         // watch history or playback state on SIMKL, so there is nothing to reconcile.
         if (envelope.mutationKind == MUTATION_KIND_CHECKIN || envelope.scrobbleAction() == "stop") {
             simklProgressService.refreshNow()
+        }
+        if (envelope.isCompletedStopScrobble()) {
+            envelope.toUnifiedWatchlistMembershipOrNull()?.let { membership ->
+                watchlistAutoRemoveCoordinator?.onCompletedScrobble(membership)
+            }
         }
     }
 
@@ -273,6 +286,62 @@ class SimklScrobbleMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.scrobbleAction(): String =
             payload.get(PAYLOAD_ACTION)?.asString ?: "stop"
+
+        private fun TraktMutationEnvelope.isCompletedStopScrobble(): Boolean {
+            val progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat ?: 0f
+            return mutationKind == MUTATION_KIND_SCROBBLE && scrobbleAction() == "stop" && progress >= 95f
+        }
+
+        private fun TraktMutationEnvelope.toUnifiedWatchlistMembershipOrNull(): UnifiedWatchlistMembership? {
+            val itemType = payload.get(PAYLOAD_ITEM_TYPE)?.asString
+            val isMovie = itemType == "movie"
+            val contentType = if (isMovie) ContentType.MOVIE else ContentType.SERIES
+            val imdb = if (isMovie) payload.get(PAYLOAD_IMDB)?.asString else payload.get(PAYLOAD_SHOW_IMDB)?.asString
+            val tmdb = if (isMovie) payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asString?.toIntOrNull() else payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asString?.toIntOrNull()
+            val tvdb = if (isMovie) payload.get(PAYLOAD_TVDB)?.takeIf { !it.isJsonNull }?.asString?.toIntOrNull() else payload.get(PAYLOAD_SHOW_TVDB)?.takeIf { !it.isJsonNull }?.asString?.toIntOrNull()
+            val simkl = if (isMovie) payload.get(PAYLOAD_SIMKL)?.takeIf { !it.isJsonNull }?.asLong?.toInt() else payload.get(PAYLOAD_SHOW_SIMKL)?.takeIf { !it.isJsonNull }?.asLong?.toInt()
+            val authorityKey = when {
+                tmdb != null -> "${contentType.toAuthorityTypeKey()}:tmdb:$tmdb"
+                imdb != null -> "${contentType.toAuthorityTypeKey()}:imdb:${imdb.lowercase()}"
+                simkl != null -> "${contentType.toAuthorityTypeKey()}:simkl:$simkl"
+                tvdb != null -> "${contentType.toAuthorityTypeKey()}:tvdb:$tvdb"
+                else -> return null
+            }
+            val rawKey = when {
+                simkl != null -> "simkl:$simkl"
+                tmdb != null -> "tmdb:$tmdb"
+                imdb != null -> imdb
+                tvdb != null -> "tvdb:$tvdb"
+                else -> authorityKey
+            }
+            return UnifiedWatchlistMembership(
+                authorityKey = authorityKey,
+                contentType = contentType,
+                presentIn = setOf(UnifiedWatchlistSource.SIMKL),
+                sourceRefs = listOf(
+                    UnifiedWatchlistSourceRef(
+                        source = UnifiedWatchlistSource.SIMKL,
+                        rawKey = rawKey,
+                        listKey = SimklLibraryService.WATCHLIST_KEY
+                    )
+                ),
+                confidence = UnifiedWatchlistMembershipConfidence.STRONG,
+                title = if (isMovie) payload.get(PAYLOAD_TITLE)?.asString else payload.get(PAYLOAD_SHOW_TITLE)?.asString,
+                year = if (isMovie) payload.get(PAYLOAD_YEAR)?.takeIf { !it.isJsonNull }?.asInt else payload.get(PAYLOAD_SHOW_YEAR)?.takeIf { !it.isJsonNull }?.asInt,
+                imdbId = imdb,
+                tmdbId = tmdb,
+                tvdbId = tvdb,
+                simklId = simkl
+            )
+        }
+
+        private fun ContentType.toAuthorityTypeKey(): String =
+            when (this) {
+                ContentType.SERIES,
+                ContentType.TV -> "series"
+                ContentType.MOVIE -> "movie"
+                else -> toApiString()
+            }
 
         private fun TraktMutationEnvelope.buildRequestBody(): SimklScrobbleRequestDto {
             val parentKind = payload.get(PAYLOAD_PARENT_KIND)?.asString ?: when (

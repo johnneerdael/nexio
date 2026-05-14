@@ -189,6 +189,21 @@ class SimklLibraryService @Inject constructor(
         }
     }
 
+    suspend fun removeWatchlistItem(item: LibraryEntryInput) {
+        ensureFresh()
+        performOptimisticMutation(
+            optimistic = { current -> removeItemFromList(current, item, WATCHLIST_KEY) }
+        ) { before, profileId ->
+            traktMutationOutboxCoordinator.enqueueAndDrain(
+                SimklLibraryMutationAdapter.buildWatchlistRemoveEnvelope(
+                    body = buildRemoveBody(item),
+                    rollbackState = rollbackStateFor(before),
+                    session = accountSession(profileId)
+                )
+            )
+        }
+    }
+
     suspend fun applyMembershipChanges(item: LibraryEntryInput, changes: ListMembershipChanges) {
         ensureFresh()
         val current = getMembershipSnapshot(item).listMembership
@@ -723,6 +738,13 @@ class SimklLibraryService @Inject constructor(
         val entriesByList = snapshot.entriesByList.mapValues { (_, entries) ->
             entries.filterNot { it.id == item.itemId && normalizeItemType(it.type) == normalizeItemType(item.itemType) }
         }
+        return rebuildSnapshotFromRollback(LibraryRollbackState(listTabs = snapshot.listTabs, entriesByList = entriesByList))
+    }
+
+    private fun removeItemFromList(snapshot: Snapshot, item: LibraryEntryInput, listKey: String): Snapshot {
+        val entriesByList = snapshot.entriesByList.toMutableMap()
+        entriesByList[listKey] = entriesByList[listKey].orEmpty()
+            .filterNot { it.id == item.itemId && normalizeItemType(it.type) == normalizeItemType(item.itemType) }
         return rebuildSnapshotFromRollback(LibraryRollbackState(listTabs = snapshot.listTabs, entriesByList = entriesByList))
     }
 

@@ -104,6 +104,14 @@ class SimklTrackingRemoteDataSource @Inject constructor(
             ?: throw IllegalStateException("SIMKL authentication required")
     }
 
+    suspend fun removeFromWatchlist(
+        body: SimklHistoryRemoveRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<Unit> {
+        return simklIntegrationProvider.removeFromWatchlist(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
+    }
+
     suspend fun scrobbleStart(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null

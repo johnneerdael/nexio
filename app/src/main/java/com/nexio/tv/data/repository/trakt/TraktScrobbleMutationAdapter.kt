@@ -14,12 +14,19 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TrackingAuthSession
+import com.nexio.tv.data.repository.TraktLibraryService
+import com.nexio.tv.data.repository.WatchlistAutoRemoveCoordinator
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
+import com.nexio.tv.domain.model.UnifiedWatchlistMembershipConfidence
+import com.nexio.tv.domain.model.UnifiedWatchlistSource
+import com.nexio.tv.domain.model.UnifiedWatchlistSourceRef
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -35,7 +42,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktProgressService: TraktProgressService,
     private val watchingNowStateController: TraktWatchingNowStateController,
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val watchlistAutoRemoveCoordinator: WatchlistAutoRemoveCoordinator? = null
 ) : TraktMutationAdapter {
 
     override val adapterKey: String = ADAPTER_KEY
@@ -57,6 +65,11 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         when {
             envelope.isCheckIn() -> traktProgressService.refreshNow()
             envelope.scrobbleAction() == "stop" -> traktProgressService.refreshNow()
+        }
+        if (envelope.isCompletedStopScrobble()) {
+            envelope.toUnifiedWatchlistMembershipOrNull()?.let { membership ->
+                watchlistAutoRemoveCoordinator?.onCompletedScrobble(membership)
+            }
         }
     }
 
@@ -332,6 +345,62 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         private fun TraktMutationEnvelope.shouldSuppressScrobbleSend(): Boolean {
             return payload.get(PAYLOAD_SUPPRESS_SEND)?.asBoolean == true
         }
+
+        private fun TraktMutationEnvelope.isCompletedStopScrobble(): Boolean {
+            val progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat ?: 0f
+            return mutationKind == MUTATION_KIND_SCROBBLE && scrobbleAction() == "stop" && progress >= 95f
+        }
+
+        private fun TraktMutationEnvelope.toUnifiedWatchlistMembershipOrNull(): UnifiedWatchlistMembership? {
+            val itemType = payload.get(PAYLOAD_ITEM_TYPE)?.asString
+            val isMovie = itemType == "movie"
+            val contentType = if (isMovie) ContentType.MOVIE else ContentType.SERIES
+            val imdb = if (isMovie) payload.get(PAYLOAD_IMDB)?.asString else payload.get(PAYLOAD_SHOW_IMDB)?.asString
+            val tmdb = if (isMovie) payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asInt else payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asInt
+            val tvdb = if (isMovie) payload.get(PAYLOAD_TVDB)?.takeIf { !it.isJsonNull }?.asInt else payload.get(PAYLOAD_SHOW_TVDB)?.takeIf { !it.isJsonNull }?.asInt
+            val trakt = if (isMovie) payload.get(PAYLOAD_TRAKT)?.takeIf { !it.isJsonNull }?.asInt else payload.get(PAYLOAD_SHOW_TRAKT)?.takeIf { !it.isJsonNull }?.asInt
+            val authorityKey = when {
+                tmdb != null -> "${contentType.toAuthorityTypeKey()}:tmdb:$tmdb"
+                imdb != null -> "${contentType.toAuthorityTypeKey()}:imdb:${imdb.lowercase()}"
+                trakt != null -> "${contentType.toAuthorityTypeKey()}:trakt:$trakt"
+                tvdb != null -> "${contentType.toAuthorityTypeKey()}:tvdb:$tvdb"
+                else -> return null
+            }
+            val rawKey = when {
+                trakt != null -> "trakt:$trakt"
+                tmdb != null -> "tmdb:$tmdb"
+                imdb != null -> imdb
+                tvdb != null -> "tvdb:$tvdb"
+                else -> authorityKey
+            }
+            return UnifiedWatchlistMembership(
+                authorityKey = authorityKey,
+                contentType = contentType,
+                presentIn = setOf(UnifiedWatchlistSource.TRAKT),
+                sourceRefs = listOf(
+                    UnifiedWatchlistSourceRef(
+                        source = UnifiedWatchlistSource.TRAKT,
+                        rawKey = rawKey,
+                        listKey = TraktLibraryService.WATCHLIST_KEY
+                    )
+                ),
+                confidence = UnifiedWatchlistMembershipConfidence.STRONG,
+                title = if (isMovie) payload.get(PAYLOAD_TITLE)?.asString else payload.get(PAYLOAD_SHOW_TITLE)?.asString,
+                year = if (isMovie) payload.get(PAYLOAD_YEAR)?.takeIf { !it.isJsonNull }?.asInt else payload.get(PAYLOAD_SHOW_YEAR)?.takeIf { !it.isJsonNull }?.asInt,
+                imdbId = imdb,
+                tmdbId = tmdb,
+                tvdbId = tvdb,
+                traktId = trakt
+            )
+        }
+
+        private fun ContentType.toAuthorityTypeKey(): String =
+            when (this) {
+                ContentType.SERIES,
+                ContentType.TV -> "series"
+                ContentType.MOVIE -> "movie"
+                else -> toApiString()
+            }
 
         private fun TraktMutationEnvelope.optimisticVersion(): Long {
             return metadata.get(METADATA_OPTIMISTIC_VERSION)?.asLong
