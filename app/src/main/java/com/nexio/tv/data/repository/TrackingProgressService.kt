@@ -1,6 +1,5 @@
-// effectiveProvider still routes progress sync (add/remove/setProgress) here.
-// Phase 3 of the scrobble + CW dual-provider plan migrates this file to read
-// from both providers and write to every authenticated provider via fan-out.
+// effectiveProvider remains for legacy single-provider next-up surfaces.
+// Progress source aggregation and optimistic mutation hooks use activeProviders.
 // Plan: docs/superpowers/plans/2026-05-12-scrobble-cw-dual-provider-overhaul.md
 @file:Suppress("DEPRECATION")
 
@@ -93,52 +92,58 @@ interface TrackingProgressService {
 class DefaultTrackingProgressService @Inject constructor(
     private val traktProgressService: TraktProgressService,
     private val simklProgressService: SimklProgressService,
+    private val mdbListProgressService: MDBListProgressService? = null,
     private val trackingProviderStateService: TrackingProviderStateService,
     private val tvdbContinueWatchingTimingEnricher: TvdbContinueWatchingTimingEnricher = TvdbContinueWatchingTimingEnricher()
 ) : TrackingProgressService {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    @Volatile private var currentProvider: TrackingProvider = TrackingProvider.TRAKT
-    @Volatile private var currentProviderAuthenticated: Boolean = false
+    @Volatile private var currentActiveProviders: Set<TrackingProvider> = emptySet()
 
     init {
         scope.launch {
             trackingProviderStateService.state.collect { state ->
-                currentProvider = state.effectiveProvider
-                currentProviderAuthenticated = state.canReadEffectiveProvider
+                currentActiveProviders = state.activeProviders
             }
         }
     }
 
     override fun observeAllProgress(): Flow<List<WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            val active = state.activeProviders - TrackingProvider.MDBLIST
+            val active = state.activeProviders
             when {
                 active.isEmpty() -> flowOf(emptyList())
                 active.size == 1 -> when (active.single()) {
                     TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
                     TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
-                    TrackingProvider.MDBLIST -> flowOf(emptyList())
+                    TrackingProvider.MDBLIST -> mdbListProgressService?.observeAllProgress() ?: flowOf(emptyList())
                 }
-                // Both authed: concatenate both providers. Downstream
+                // Multiple authed: concatenate provider rows. Downstream
                 // ContinueWatchingMerger collapses cross-provider duplicates by idBundle
                 // and routes conflicts through ContinueWatchingProgressDiffPlanner.
-                else -> combine(
-                    traktProgressService.observeAllProgress(),
-                    simklProgressService.observeAllProgress(),
-                ) { traktItems, simklItems -> traktItems + simklItems }
+                else -> combine(active.map(::allProgressFlowForProvider)) { providerRows ->
+                    providerRows.flatMap { it }
+                }
             }
         }
 
+    private fun allProgressFlowForProvider(provider: TrackingProvider): Flow<List<WatchProgress>> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
+            TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
+            TrackingProvider.MDBLIST -> mdbListProgressService?.observeAllProgress() ?: flowOf(emptyList())
+        }
+    }
+
     override fun observeRemoteSnapshotLoaded(): Flow<Boolean> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            if (!state.canReadEffectiveProvider) {
+            val active = state.activeProviders
+            if (active.isEmpty()) {
                 return@flatMapLatest flowOf(false)
             }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> simklProgressService.observeRemoteSnapshotLoaded()
-                TrackingProvider.TRAKT -> traktProgressService.observeRemoteSnapshotLoaded()
-                TrackingProvider.MDBLIST -> flowOf(false)
+            if (active.size == 1) {
+                return@flatMapLatest snapshotLoadedFlowForProvider(active.single())
             }
+            combine(active.map(::snapshotLoadedFlowForProvider)) { loaded -> loaded.any { it } }
         }
 
     @Suppress("OVERRIDE_DEPRECATION")
@@ -180,71 +185,89 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            if (!state.canReadEffectiveProvider) {
+            val active = state.activeProviders
+            if (active.isEmpty()) {
                 return@flatMapLatest flowOf(emptyMap())
             }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> simklProgressService.observeEpisodeProgress(contentId)
-                TrackingProvider.TRAKT -> traktProgressService.observeEpisodeProgress(contentId)
-                TrackingProvider.MDBLIST -> flowOf(emptyMap())
+            if (active.size == 1) {
+                return@flatMapLatest episodeProgressFlowForProvider(active.single(), contentId)
+            }
+            combine(active.map { provider -> episodeProgressFlowForProvider(provider, contentId) }) { maps ->
+                val merged = linkedMapOf<Pair<Int, Int>, WatchProgress>()
+                for (i in maps.indices) {
+                    merged.putAll(maps[i])
+                }
+                merged
             }
         }
 
     override fun observeMovieWatched(contentId: String): Flow<Boolean> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            if (!state.canReadEffectiveProvider) {
+            val active = state.activeProviders
+            if (active.isEmpty()) {
                 return@flatMapLatest flowOf(false)
             }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> simklProgressService.observeMovieWatched(contentId)
-                TrackingProvider.TRAKT -> traktProgressService.observeMovieWatched(contentId)
-                TrackingProvider.MDBLIST -> flowOf(false)
+            if (active.size == 1) {
+                return@flatMapLatest movieWatchedFlowForProvider(active.single(), contentId)
+            }
+            combine(active.map { provider -> movieWatchedFlowForProvider(provider, contentId) }) { values ->
+                values.any { it }
             }
         }
 
     override fun applyOptimisticProgress(progress: WatchProgress) {
-        if (!currentProviderAuthenticated) return
-        when (currentProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.applyOptimisticProgress(progress)
-            TrackingProvider.TRAKT -> traktProgressService.applyOptimisticProgress(progress)
-            TrackingProvider.MDBLIST -> Unit
+        val active = currentActiveProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.applyOptimisticProgress(progress)
+                TrackingProvider.TRAKT -> traktProgressService.applyOptimisticProgress(progress)
+                TrackingProvider.MDBLIST -> Unit
+            }
         }
     }
 
     override fun applyOptimisticRemoval(contentId: String, season: Int?, episode: Int?) {
-        if (!currentProviderAuthenticated) return
-        when (currentProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.applyOptimisticRemoval(contentId, season, episode)
-            TrackingProvider.TRAKT -> traktProgressService.applyOptimisticRemoval(contentId, season, episode)
-            TrackingProvider.MDBLIST -> Unit
+        val active = currentActiveProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.applyOptimisticRemoval(contentId, season, episode)
+                TrackingProvider.TRAKT -> traktProgressService.applyOptimisticRemoval(contentId, season, episode)
+                TrackingProvider.MDBLIST -> Unit
+            }
         }
     }
 
     override fun clearOptimistic() {
-        if (!currentProviderAuthenticated) return
-        when (currentProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.clearOptimistic()
-            TrackingProvider.TRAKT -> traktProgressService.clearOptimistic()
-            TrackingProvider.MDBLIST -> Unit
+        val active = currentActiveProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.clearOptimistic()
+                TrackingProvider.TRAKT -> traktProgressService.clearOptimistic()
+                TrackingProvider.MDBLIST -> Unit
+            }
         }
     }
 
     override fun invalidateLocalizedMetadata() {
-        if (!currentProviderAuthenticated) return
-        when (currentProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.invalidateLocalizedMetadata()
-            TrackingProvider.TRAKT -> traktProgressService.invalidateLocalizedMetadata()
-            TrackingProvider.MDBLIST -> Unit
+        val active = currentActiveProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.invalidateLocalizedMetadata()
+                TrackingProvider.TRAKT -> traktProgressService.invalidateLocalizedMetadata()
+                TrackingProvider.MDBLIST -> Unit
+            }
         }
     }
 
     override suspend fun refreshNow() {
         val state = trackingProviderStateService.currentState()
-        if (!state.canReadEffectiveProvider) return
-        when (state.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
-            TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
-            TrackingProvider.MDBLIST -> Unit
+        val active = state.activeProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
+                TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
+                TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
+            }
         }
     }
 
@@ -331,6 +354,33 @@ class DefaultTrackingProgressService @Inject constructor(
                 clearShow = clearShow
             )
             TrackingProvider.MDBLIST -> Unit
+        }
+    }
+
+    private fun snapshotLoadedFlowForProvider(provider: TrackingProvider): Flow<Boolean> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> simklProgressService.observeRemoteSnapshotLoaded()
+            TrackingProvider.TRAKT -> traktProgressService.observeRemoteSnapshotLoaded()
+            TrackingProvider.MDBLIST -> mdbListProgressService?.observeRemoteSnapshotLoaded() ?: flowOf(false)
+        }
+    }
+
+    private fun episodeProgressFlowForProvider(
+        provider: TrackingProvider,
+        contentId: String
+    ): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> simklProgressService.observeEpisodeProgress(contentId)
+            TrackingProvider.TRAKT -> traktProgressService.observeEpisodeProgress(contentId)
+            TrackingProvider.MDBLIST -> mdbListProgressService?.observeEpisodeProgress(contentId) ?: flowOf(emptyMap())
+        }
+    }
+
+    private fun movieWatchedFlowForProvider(provider: TrackingProvider, contentId: String): Flow<Boolean> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> simklProgressService.observeMovieWatched(contentId)
+            TrackingProvider.TRAKT -> traktProgressService.observeMovieWatched(contentId)
+            TrackingProvider.MDBLIST -> mdbListProgressService?.observeMovieWatched(contentId) ?: flowOf(false)
         }
     }
 }

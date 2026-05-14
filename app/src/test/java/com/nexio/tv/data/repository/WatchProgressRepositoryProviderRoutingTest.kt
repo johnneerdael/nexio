@@ -6,11 +6,17 @@ import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
+import com.nexio.tv.data.repository.mdblist.MDBListProgressMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
+import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.data.repository.trakt.TraktProgressHistoryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
@@ -172,6 +178,38 @@ class WatchProgressRepositoryProviderRoutingTest {
     }
 
     @Test
+    fun `markAsCompleted fans out history add to every authenticated tracker`() = runTest {
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true,
+            ),
+            outbox = outbox
+        )
+
+        repo.markAsCompleted(profileSession, sampleEpisodeProgress())
+
+        assertEquals(
+            setOf(
+                TraktProgressHistoryMutationAdapter.ADAPTER_KEY,
+                SimklProgressHistoryMutationAdapter.ADAPTER_KEY,
+                MDBListProgressMutationAdapter.ADAPTER_KEY,
+            ),
+            envelopes.map { it.adapterKey }.toSet()
+        )
+        assertEquals(
+            setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            envelopes.map { it.provider }.toSet()
+        )
+    }
+
+    @Test
     fun `removeFromHistory routes history remove through simkl adapter when simkl is selected`() = runTest {
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopeSlot = slot<TraktMutationEnvelope>()
@@ -189,6 +227,38 @@ class WatchProgressRepositoryProviderRoutingTest {
 
         assertEquals(SimklProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
         assertEquals(SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE, envelopeSlot.captured.mutationKind)
+    }
+
+    @Test
+    fun `removeFromHistory fans out history remove to every authenticated tracker`() = runTest {
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.SIMKL,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true,
+            ),
+            outbox = outbox
+        )
+
+        repo.removeFromHistory(profileSession, contentId = "tt1520211", season = 1, episode = 2)
+
+        assertEquals(
+            setOf(
+                TraktProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+                SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+                MDBListProgressMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+            ),
+            envelopes.map { it.mutationKind }.toSet()
+        )
+        assertEquals(
+            setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            envelopes.map { it.provider }.toSet()
+        )
     }
 
     @Test
@@ -222,10 +292,103 @@ class WatchProgressRepositoryProviderRoutingTest {
         coVerify(exactly = 1) { trackingProgressService.applyOptimisticRemoval("tt1520211", 1, 2) }
     }
 
+    @Test
+    fun `removeProgress fans out playback clear to every authenticated tracker`() = runTest {
+        val trackingProgressService = mockTrackingProgressService()
+        coEvery {
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox("tt1520211", 1, 2)
+        } returns listOf(44L)
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true,
+            ),
+            trackingProgressService = trackingProgressService,
+            outbox = outbox
+        )
+
+        repo.removeProgress(profileSession, contentId = "tt1520211", season = 1, episode = 2)
+
+        assertEquals(
+            setOf(
+                TraktProgressHistoryMutationAdapter.MUTATION_KIND_PLAYBACK_DELETE,
+                SimklProgressHistoryMutationAdapter.MUTATION_KIND_PLAYBACK_DELETE,
+                MDBListProgressMutationAdapter.MUTATION_KIND_PLAYBACK_CLEAR,
+            ),
+            envelopes.map { it.mutationKind }.toSet()
+        )
+        assertEquals(
+            setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            envelopes.map { it.provider }.toSet()
+        )
+    }
+
+    @Test
+    fun `markAsCompletedBatch fans out season history add to every authenticated tracker`() = runTest {
+        val trackingProgressService = mockTrackingProgressService()
+        coEvery {
+            trackingProgressService.resolveSeasonEpisodeTraktIds("tt1520211", 1, listOf(1, 2))
+        } returns mapOf(
+            1 to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(1, 101),
+            2 to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(2, 102),
+        )
+        val seasonMarkBatcher = mockk<SeasonMarkBatcher>(relaxed = true)
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true,
+            ),
+            trackingProgressService = trackingProgressService,
+            outbox = outbox,
+            seasonMarkBatcher = seasonMarkBatcher
+        )
+
+        repo.markAsCompletedBatch(
+            profileSession = profileSession,
+            meta = sampleMeta(),
+            seasonNumber = 1,
+            episodes = listOf(SeasonEpisodeMark(1, "2020-01-01"), SeasonEpisodeMark(2, "2020-01-02"))
+        )
+
+        coVerify(exactly = 1) {
+            seasonMarkBatcher.markSeasonWatched(
+                showContentId = "tt1520211",
+                seasonNumber = 1,
+                episodes = any(),
+                rollbackState = any(),
+                profileId = 1
+            )
+        }
+        assertEquals(
+            setOf(
+                SimklSeasonMarkMutationAdapter.ADAPTER_KEY,
+                MDBListProgressMutationAdapter.ADAPTER_KEY,
+            ),
+            envelopes.map { it.adapterKey }.toSet()
+        )
+        assertEquals(
+            setOf(TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            envelopes.map { it.provider }.toSet()
+        )
+    }
+
     private fun repository(
         providerState: EffectiveTrackingProviderState,
         trackingProgressService: TrackingProgressService = mockTrackingProgressService(),
         outbox: TraktMutationOutboxCoordinator = mockk(relaxed = true),
+        seasonMarkBatcher: SeasonMarkBatcher = mockk(relaxed = true),
         preferences: WatchProgressPreferences = mockk(relaxed = true),
         profileManager: ProfileManager = testProfileManager()
     ): WatchProgressRepositoryImpl {
@@ -240,7 +403,7 @@ class WatchProgressRepositoryProviderRoutingTest {
             trackingProviderStateService = trackingProviderStateService,
             trackingProgressService = trackingProgressService,
             traktMutationOutboxCoordinator = outbox,
-            seasonMarkBatcher = mockk<SeasonMarkBatcher>(relaxed = true),
+            seasonMarkBatcher = seasonMarkBatcher,
             traktAuthService = mockk(relaxed = true) {
                 every { currentTraktProfileId() } returns 1
             },
@@ -291,6 +454,30 @@ class WatchProgressRepositoryProviderRoutingTest {
             duration = 100L,
             lastWatched = 1234L,
             progressPercent = 100f
+        )
+    }
+
+    private fun sampleMeta(): Meta {
+        return Meta(
+            id = "tt1520211",
+            type = ContentType.SERIES,
+            name = "The Walking Dead",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2010",
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
         )
     }
 }
