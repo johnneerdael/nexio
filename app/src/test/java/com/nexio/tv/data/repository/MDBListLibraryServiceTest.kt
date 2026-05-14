@@ -44,7 +44,7 @@ class MDBListLibraryServiceTest {
     fun `refresh maps movies and shows to watchlist library entries`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = MutableStateFlow(MDBListSettings(enabled = true, apiKey = "api-key"))
-        coEvery { api.getMyLists(apiKey = "api-key", sort = "ranked", unified = true) } returns Response.success(emptyList())
+        coEvery { api.getMyLists(apiKey = "api-key", sort = "ranked", unified = false) } returns Response.success(emptyList())
         coEvery {
             api.getWatchlistItems(
                 apiKey = "api-key",
@@ -101,7 +101,7 @@ class MDBListLibraryServiceTest {
     fun `refresh loads watchlist and all personal list tabs`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = MutableStateFlow(MDBListSettings(enabled = true, apiKey = "mdb-key"))
-        coEvery { api.getMyLists(apiKey = "mdb-key", sort = "ranked", unified = true) } returns Response.success(
+        coEvery { api.getMyLists(apiKey = "mdb-key", sort = "ranked", unified = false) } returns Response.success(
             listOf(
                 MDBListUserListDto(id = 10, name = "Sci-Fi", slug = "sci-fi", type = "static", dynamic = false, private = true, items = 2),
                 MDBListUserListDto(id = 11, name = "Trending", slug = "trending", type = "dynamic", dynamic = true, private = false, items = 20)
@@ -129,7 +129,7 @@ class MDBListLibraryServiceTest {
     fun `selected personal list fetch uses list items endpoint and assigns list key`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = MutableStateFlow(MDBListSettings(enabled = true, apiKey = "mdb-key"))
-        coEvery { api.getMyLists(apiKey = "mdb-key", sort = "ranked", unified = true) } returns Response.success(
+        coEvery { api.getMyLists(apiKey = "mdb-key", sort = "ranked", unified = false) } returns Response.success(
             listOf(MDBListUserListDto(id = 10, name = "Sci-Fi", slug = "sci-fi", type = "static", dynamic = false, private = true, items = 1))
         )
         coEvery { api.getWatchlistItems(apiKey = "mdb-key", limit = any(), offset = 0, unified = true) } returns Response.success(

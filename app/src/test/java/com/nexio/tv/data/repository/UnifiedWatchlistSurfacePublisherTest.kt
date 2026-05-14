@@ -24,6 +24,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,40 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnifiedWatchlistSurfacePublisherTest {
+    @Test
+    fun `publish emits preview rows before waiting for hydration`() = runTest {
+        val session = testProfileSession()
+        val publishedBatches = mutableListOf<List<ResolvedDisplayItem>>()
+        val publisher = publisher(
+            session = session,
+            onHydrateStarted = {
+                assertEquals(1, publishedBatches.size)
+                assertEquals("Arrival", publishedBatches.single().single().display.title)
+                delay(10)
+            },
+            onPublishBatch = { publishedBatches += it }
+        )
+
+        publisher.publish(
+            profileSession = session,
+            memberships = listOf(
+                UnifiedWatchlistMembership(
+                    authorityKey = "movie:imdb:tt2543164",
+                    contentType = ContentType.MOVIE,
+                    presentIn = setOf(UnifiedWatchlistSource.TRAKT),
+                    sourceRefs = emptyList(),
+                    confidence = UnifiedWatchlistMembershipConfidence.STRONG,
+                    title = "Arrival",
+                    year = 2016,
+                    imdbId = "tt2543164",
+                    tmdbId = 329865
+                )
+            )
+        )
+
+        assertEquals(2, publishedBatches.size)
+    }
+
     @Test
     fun `publish hydrates watchlist memberships through home hydration path`() = runTest {
         val session = testProfileSession()
@@ -88,7 +123,9 @@ class UnifiedWatchlistSurfacePublisherTest {
     private fun publisher(
         session: ActiveProfileSession,
         onHydrate: CapturingSlot<MetaPreview>? = null,
-        onPublish: CapturingSlot<List<ResolvedDisplayItem>>
+        onHydrateStarted: suspend () -> Unit = {},
+        onPublish: CapturingSlot<List<ResolvedDisplayItem>>? = null,
+        onPublishBatch: (List<ResolvedDisplayItem>) -> Unit = {}
     ): UnifiedWatchlistSurfacePublisher {
         val profileManager = mockk<ProfileManager>()
         every { profileManager.activeProfileSession } returns MutableStateFlow(session)
@@ -115,17 +152,24 @@ class UnifiedWatchlistSurfacePublisherTest {
                 currentGeneration = any(),
                 onOverlayApplied = any()
             )
-        } returns null
+        } coAnswers {
+            onHydrateStarted()
+            null
+        }
 
         val surfaceRepository = mockk<ResolvedDisplaySurfaceRepository>()
         every {
             surfaceRepository.publishResolvedItems(
                 surfaceKey = ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY,
                 profileSession = session,
-                items = capture(onPublish),
+                items = if (onPublish != null) capture(onPublish) else any(),
                 replace = true
             )
-        } returns true
+        } answers {
+            @Suppress("UNCHECKED_CAST")
+            onPublishBatch(invocation.args[2] as List<ResolvedDisplayItem>)
+            true
+        }
 
         return UnifiedWatchlistSurfacePublisher(
             profileManager = profileManager,

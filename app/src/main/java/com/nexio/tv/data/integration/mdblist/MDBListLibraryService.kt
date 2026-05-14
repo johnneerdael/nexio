@@ -88,7 +88,7 @@ class MDBListLibraryService @Inject constructor(
                     return
                 }
 
-                val listsResponse = api.getMyLists(apiKey = apiKey, sort = "ranked", unified = true)
+                val listsResponse = api.getMyLists(apiKey = apiKey, sort = "ranked", unified = false)
                 val userLists = if (listsResponse.isSuccessful) listsResponse.body().orEmpty() else emptyList()
                 tabs.value = buildTabs(userLists)
 

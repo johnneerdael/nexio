@@ -58,6 +58,18 @@ class UnifiedWatchlistSurfacePublisher @Inject constructor(
 
         val languageTag = profileBoundary.currentLanguageTag()
         val expectedGeneration = profileSession.sessionOrdinal
+        val currentSettings = settingsSource.settings.first()
+        val previewResolvedItems = resolvedItemsFor(
+            previews = previews,
+            overlays = emptyMap(),
+            currentSettings = currentSettings
+        )
+        val previewPublished = resolvedDisplaySurfaceRepository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY,
+            profileSession = profileSession,
+            items = previewResolvedItems,
+            replace = true
+        )
         for (i in previews.indices) {
             hydrationCoordinator.hydrate(
                 item = previews[i],
@@ -88,7 +100,25 @@ class UnifiedWatchlistSurfacePublisher @Inject constructor(
             policyVersion = UNIFIED_WATCHLIST_OVERLAY_POLICY_VERSION,
             nowMs = System.currentTimeMillis()
         )
-        val currentSettings = settingsSource.settings.first()
+        val resolvedItems = resolvedItemsFor(
+            previews = previews,
+            overlays = overlays,
+            currentSettings = currentSettings
+        )
+        val hydratedPublished = resolvedDisplaySurfaceRepository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY,
+            profileSession = profileSession,
+            items = resolvedItems,
+            replace = true
+        )
+        return previewPublished || hydratedPublished
+    }
+
+    private fun resolvedItemsFor(
+        previews: List<MetaPreview>,
+        overlays: Map<String, com.nexio.tv.domain.model.HydratedHomeOverlay>,
+        currentSettings: com.nexio.tv.domain.model.ArtworkProviderSettings
+    ): List<com.nexio.tv.domain.model.ResolvedDisplayItem> {
         val row = CatalogRow(
             addonId = ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY,
             addonName = "Unified Watchlist",
@@ -100,18 +130,12 @@ class UnifiedWatchlistSurfacePublisher @Inject constructor(
             items = previews,
             hasMore = false
         )
-        val resolvedItems = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+        return HomeResolvedDisplayMapper.toResolvedDisplayItems(
             rows = listOf(row),
             overlaysByItemKey = overlays,
             resolver = artworkProviderResolver,
             currentSettings = currentSettings,
             traceEvents = traceEvents
-        )
-        return resolvedDisplaySurfaceRepository.publishResolvedItems(
-            surfaceKey = ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY,
-            profileSession = profileSession,
-            items = resolvedItems,
-            replace = true
         )
     }
 
