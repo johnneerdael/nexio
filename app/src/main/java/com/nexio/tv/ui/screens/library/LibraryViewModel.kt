@@ -257,13 +257,15 @@ class LibraryViewModel @Inject constructor(
 
     fun onOpenManageLists() {
         _uiState.update { current ->
-            if (current.listTabs.none { it.type == LibraryListTab.Type.PERSONAL }) {
+            val manageableTabs = current.manageableListTabs()
+            if (manageableTabs.isEmpty()) {
                 return@update current
             }
             current.copy(
                 showManageDialog = true,
                 manageSelectedListKey = current.manageSelectedListKey
-                    ?: current.listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
+                    ?.takeIf { selectedKey -> manageableTabs.any { it.key == selectedKey } }
+                    ?: manageableTabs.firstOrNull()?.key
             )
         }
     }
@@ -292,12 +294,12 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onStartEditList() {
-        val selected = selectedManagePersonalList() ?: return
+        val selected = selectedManageList() ?: return
         _uiState.update {
             it.copy(
                 listEditorState = LibraryListEditorState(
                     mode = LibraryListEditorState.Mode.EDIT,
-                    listId = selected.traktListId?.toString(),
+                    listId = selected.providerMutationListId(),
                     name = selected.title,
                     description = selected.description.orEmpty(),
                     privacy = selected.privacy ?: TraktListPrivacy.PRIVATE
@@ -342,11 +344,13 @@ class LibraryViewModel @Inject constructor(
         if (_uiState.value.pendingOperation) return
 
         viewModelScope.launch {
+            val provider = _uiState.value.selectedProvider
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
                 when (editor.mode) {
                     LibraryListEditorState.Mode.CREATE -> {
-                        libraryRepository.createPersonalList(
+                        libraryRepository.createProviderList(
+                            provider = provider,
                             name = name,
                             description = editor.description.trim().ifBlank { null },
                             privacy = editor.privacy
@@ -356,7 +360,8 @@ class LibraryViewModel @Inject constructor(
                     LibraryListEditorState.Mode.EDIT -> {
                         val listId = editor.listId
                             ?: throw IllegalStateException("Invalid list")
-                        libraryRepository.updatePersonalList(
+                        libraryRepository.updateProviderList(
+                            provider = provider,
                             listId = listId,
                             name = name,
                             description = editor.description.trim().ifBlank { null },
@@ -375,14 +380,15 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onDeleteSelectedList() {
-        val selected = selectedManagePersonalList() ?: return
-        val listId = selected.traktListId?.toString() ?: return
+        val selected = selectedManageList() ?: return
+        val listId = selected.providerMutationListId() ?: return
         if (_uiState.value.pendingOperation) return
 
         viewModelScope.launch {
+            val provider = _uiState.value.selectedProvider
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
-                libraryRepository.deletePersonalList(listId)
+                libraryRepository.deleteProviderList(provider, listId)
                 setTransientMessage("List deleted")
             }.onSuccess {
                 _uiState.update { it.copy(pendingOperation = false) }
@@ -467,13 +473,19 @@ class LibraryViewModel @Inject constructor(
                 selectedListKeyState.value = nextSelectedList
             }
 
+            val manageableTabs = listTabs.filter { tab ->
+                when (bundle.listManagementMode) {
+                    LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                    LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                    LibraryListManagementMode.SIMKL_STATUS,
+                    LibraryListManagementMode.NONE -> false
+                }
+            }
             val nextManageSelected = current.manageSelectedListKey
                 ?.takeIf { key ->
-                    listTabs.any { tab ->
-                        tab.key == key && tab.type == LibraryListTab.Type.PERSONAL
-                    }
+                    manageableTabs.any { tab -> tab.key == key }
                 }
-                ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
+                ?: manageableTabs.firstOrNull()?.key
 
             val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
             val itemsForTypeTabs = if (bundle.supportsLists && !nextSelectedList.isNullOrBlank()) {
@@ -646,6 +658,7 @@ class LibraryViewModel @Inject constructor(
     private fun reorderSelectedList(moveUp: Boolean) {
         val state = _uiState.value
         if (state.pendingOperation) return
+        if (state.listManagementMode != LibraryListManagementMode.TRAKT_PERSONAL) return
 
         val personalTabs = state.listTabs.filter { it.type == LibraryListTab.Type.PERSONAL }
         val selectedKey = state.manageSelectedListKey ?: return
@@ -676,10 +689,27 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun selectedManagePersonalList(): LibraryListTab? {
+    private fun selectedManageList(): LibraryListTab? {
         val state = _uiState.value
         val selectedKey = state.manageSelectedListKey ?: return null
-        return state.listTabs.firstOrNull { it.key == selectedKey && it.type == LibraryListTab.Type.PERSONAL }
+        return state.manageableListTabs().firstOrNull { it.key == selectedKey }
+    }
+
+    private fun LibraryUiState.manageableListTabs(): List<LibraryListTab> {
+        return listTabs.filter { tab ->
+            when (listManagementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    }
+
+    private fun LibraryListTab.providerMutationListId(): String? {
+        return traktListId?.toString()
+            ?: mdbListId?.toString()
+            ?: key.removePrefix(TraktLibraryService.PERSONAL_KEY_PREFIX).takeIf { it != key && it.isNotBlank() }
     }
 
     private fun setError(message: String) {

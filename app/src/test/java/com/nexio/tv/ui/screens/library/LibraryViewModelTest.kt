@@ -9,6 +9,7 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryListManagementMode
 import com.nexio.tv.domain.model.LibraryProviderOption
 import com.nexio.tv.domain.model.LibraryProviderSelection
 import com.nexio.tv.domain.model.LibraryProviderSnapshot
@@ -246,6 +247,93 @@ class LibraryViewModelTest {
         assertEquals(0, repository.refreshProviderNowCalls)
     }
 
+    @Test
+    fun `mdblist dynamic list cannot open mutable list editor`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.MDBLIST)
+                )
+            ),
+            providerSnapshot = MutableStateFlow(
+                LibraryProviderSnapshot(
+                    provider = LibraryProviderSelection.MDBLIST,
+                    sourceMode = LibrarySourceMode.TRAKT,
+                    listTabs = listOf(
+                        LibraryListTab(
+                            key = "mdblist:list:11",
+                            title = "Trending",
+                            type = LibraryListTab.Type.PERSONAL,
+                            mdbListId = 11,
+                            mdbListType = "dynamic",
+                            isMutableStaticList = false
+                        )
+                    ),
+                    selectedListKey = "mdblist:list:11",
+                    supportsLists = true,
+                    supportsListManagement = true,
+                    listManagementMode = LibraryListManagementMode.MDBLIST_STATIC,
+                    listSelectorLabel = "Trending"
+                )
+            )
+        )
+        val viewModel = viewModel(repository)
+
+        advanceUntilIdle()
+        viewModel.onOpenManageLists()
+
+        assertFalse(viewModel.uiState.value.showManageDialog)
+    }
+
+    @Test
+    fun `mdblist static list edit uses mdblist provider route`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(listOf(LibraryProviderOption(LibraryProviderSelection.MDBLIST))),
+            providerSnapshot = MutableStateFlow(
+                LibraryProviderSnapshot(
+                    provider = LibraryProviderSelection.MDBLIST,
+                    sourceMode = LibrarySourceMode.TRAKT,
+                    listTabs = listOf(
+                        LibraryListTab(
+                            key = "mdblist:list:10",
+                            title = "Sci-Fi",
+                            type = LibraryListTab.Type.PERSONAL,
+                            mdbListId = 10,
+                            mdbListType = "static",
+                            isMutableStaticList = true
+                        )
+                    ),
+                    selectedListKey = "mdblist:list:10",
+                    supportsLists = true,
+                    supportsListManagement = true,
+                    listManagementMode = LibraryListManagementMode.MDBLIST_STATIC,
+                    listSelectorLabel = "Sci-Fi"
+                )
+            )
+        )
+        val viewModel = viewModel(repository)
+
+        advanceUntilIdle()
+        viewModel.onOpenManageLists()
+        viewModel.onStartEditList()
+        viewModel.onUpdateEditorName("Sci-Fi Updated")
+        viewModel.onSubmitEditor()
+        advanceUntilIdle()
+
+        assertEquals(listOf(LibraryProviderSelection.MDBLIST to "10"), repository.updatedLists)
+    }
+
     private fun viewModel(repository: FakeLibraryRepository): LibraryViewModel {
         return LibraryViewModel(
             libraryRepository = repository,
@@ -306,6 +394,7 @@ class LibraryViewModelTest {
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0
         val refreshProviderCalls = mutableListOf<LibraryProviderSelection>()
+        val updatedLists = mutableListOf<Pair<LibraryProviderSelection, String>>()
 
         override fun observeProviderSnapshot(
             provider: LibraryProviderSelection,
@@ -388,7 +477,9 @@ class LibraryViewModelTest {
             name: String,
             description: String?,
             privacy: TraktListPrivacy
-        ) = Unit
+        ) {
+            updatedLists += provider to listId
+        }
 
         override suspend fun deleteProviderList(provider: LibraryProviderSelection, listId: String) = Unit
     }

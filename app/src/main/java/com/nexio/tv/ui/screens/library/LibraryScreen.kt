@@ -86,6 +86,7 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEmptyReason
+import com.nexio.tv.domain.model.LibraryListManagementMode
 import com.nexio.tv.domain.model.LibraryProviderOption
 import com.nexio.tv.domain.model.LibraryProviderSelection
 import java.util.Locale
@@ -531,9 +532,18 @@ fun LibraryScreen(
         item(span = { GridItemSpan(maxLineSpan) }) { Spacer(modifier = Modifier.height(8.dp)) }
     }
 
-    if (uiState.showManageDialog && uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL }) {
+    if (uiState.showManageDialog && uiState.listTabs.any { tab ->
+            when (uiState.listManagementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    ) {
         ManageListsDialog(
             tabs = uiState.listTabs,
+            managementMode = uiState.listManagementMode,
             selectedKey = uiState.manageSelectedListKey,
             errorMessage = uiState.errorMessage,
             pending = uiState.pendingOperation,
@@ -930,6 +940,7 @@ private fun LibraryActionsRow(
 @Composable
 private fun ManageListsDialog(
     tabs: List<LibraryListTab>,
+    managementMode: LibraryListManagementMode,
     selectedKey: String?,
     errorMessage: String?,
     pending: Boolean,
@@ -941,12 +952,22 @@ private fun ManageListsDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val personalTabs = remember(tabs) { tabs.filter { it.type == LibraryListTab.Type.PERSONAL } }
+    val manageableTabs = remember(tabs, managementMode) {
+        tabs.filter { tab ->
+            when (managementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    }
+    val canReorder = managementMode == LibraryListManagementMode.TRAKT_PERSONAL
     val firstFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(personalTabs.size) {
-        val target = if (personalTabs.isNotEmpty()) firstFocusRequester else closeFocusRequester
+    LaunchedEffect(manageableTabs.size) {
+        val target = if (manageableTabs.isNotEmpty()) firstFocusRequester else closeFocusRequester
         val focused = runCatching { target.requestFocus() }.isSuccess
         if (!focused) {
             delay(16)
@@ -972,7 +993,10 @@ private fun ManageListsDialog(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
-                    text = stringResource(R.string.library_manage_trakt_lists),
+                    text = when (managementMode) {
+                        LibraryListManagementMode.MDBLIST_STATIC -> "Manage MDBList Lists"
+                        else -> stringResource(R.string.library_manage_trakt_lists)
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     color = NexioColors.TextPrimary
                 )
@@ -985,7 +1009,7 @@ private fun ManageListsDialog(
                     )
                 }
 
-                if (personalTabs.isEmpty()) {
+                if (manageableTabs.isEmpty()) {
                     Text(
                         text = stringResource(R.string.library_no_lists),
                         style = MaterialTheme.typography.bodyMedium,
@@ -998,12 +1022,12 @@ private fun ManageListsDialog(
                             .height(220.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(personalTabs, key = { it.key }) { tab ->
+                        items(manageableTabs, key = { it.key }) { tab ->
                             val selected = tab.key == selectedKey
                             Button(
                                 onClick = { onSelect(tab.key) },
                                 enabled = !pending,
-                                modifier = if (tab.key == personalTabs.firstOrNull()?.key) {
+                                modifier = if (tab.key == manageableTabs.firstOrNull()?.key) {
                                     Modifier
                                         .fillMaxWidth()
                                         .focusRequester(firstFocusRequester)
@@ -1044,7 +1068,7 @@ private fun ManageListsDialog(
                     ) { Text(stringResource(R.string.library_list_edit)) }
                     Button(
                         onClick = onMoveUp,
-                        enabled = !pending && selectedKey != null,
+                        enabled = !pending && selectedKey != null && canReorder,
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
                             contentColor = NexioColors.TextPrimary
@@ -1052,7 +1076,7 @@ private fun ManageListsDialog(
                     ) { Text(stringResource(R.string.library_list_move_up)) }
                     Button(
                         onClick = onMoveDown,
-                        enabled = !pending && selectedKey != null,
+                        enabled = !pending && selectedKey != null && canReorder,
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
                             contentColor = NexioColors.TextPrimary
