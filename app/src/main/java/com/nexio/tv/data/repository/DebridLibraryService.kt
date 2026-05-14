@@ -68,7 +68,8 @@ class DebridLibraryService @Inject constructor(
         ALL,
         REAL_DEBRID,
         PREMIUMIZE,
-        TORBOX
+        TORBOX,
+        EASY_DEBRID
     }
 
     private data class Snapshot(
@@ -326,22 +327,25 @@ class DebridLibraryService @Inject constructor(
             val refreshRealDebrid = target == RefreshTarget.ALL || target == RefreshTarget.REAL_DEBRID
             val refreshPremiumize = target == RefreshTarget.ALL || target == RefreshTarget.PREMIUMIZE
             val refreshTorBox = target == RefreshTarget.ALL || target == RefreshTarget.TORBOX
+            val refreshEasyDebrid = target == RefreshTarget.ALL || target == RefreshTarget.EASY_DEBRID
 
-            val baseTabs = if (refreshRealDebrid || refreshPremiumize || refreshTorBox) {
+            val baseTabs = if (refreshRealDebrid || refreshPremiumize || refreshTorBox || refreshEasyDebrid) {
                 current.listTabs.filterNot { tab ->
                     (refreshRealDebrid && tab.key == REAL_DEBRID_LIST_KEY) ||
                         (refreshPremiumize && tab.key == PREMIUMIZE_LIST_KEY) ||
-                        (refreshTorBox && tab.key == TORBOX_LIST_KEY)
+                        (refreshTorBox && tab.key == TORBOX_LIST_KEY) ||
+                        (refreshEasyDebrid && tab.key == EASY_DEBRID_LIST_KEY)
                 }
             } else {
                 current.listTabs
             }
 
-            val baseItems = if (refreshRealDebrid || refreshPremiumize || refreshTorBox) {
+            val baseItems = if (refreshRealDebrid || refreshPremiumize || refreshTorBox || refreshEasyDebrid) {
                 current.items.filterNot { entry ->
                     (refreshRealDebrid && entry.listKeys.contains(REAL_DEBRID_LIST_KEY)) ||
                         (refreshPremiumize && entry.listKeys.contains(PREMIUMIZE_LIST_KEY)) ||
-                        (refreshTorBox && entry.listKeys.contains(TORBOX_LIST_KEY))
+                        (refreshTorBox && entry.listKeys.contains(TORBOX_LIST_KEY)) ||
+                        (refreshEasyDebrid && entry.listKeys.contains(EASY_DEBRID_LIST_KEY))
                 }
             } else {
                 current.items
@@ -392,6 +396,18 @@ class DebridLibraryService @Inject constructor(
                         )
                         items += torBoxItems
                     }
+                }
+            }
+
+            if (refreshEasyDebrid) {
+                val easyDebridApiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
+                if (easyDebridApiKey.isNotBlank() && hasEasyDebridAccount(easyDebridApiKey)) {
+                    tabs += LibraryListTab(
+                        key = EASY_DEBRID_LIST_KEY,
+                        title = "EasyDebrid",
+                        type = LibraryListTab.Type.SERVICE,
+                        description = "EasyDebrid library view."
+                    )
                 }
             }
 

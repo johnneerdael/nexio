@@ -6,12 +6,15 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
 import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
-import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.domain.model.LibraryEntry
+import com.nexio.tv.domain.model.LibraryEmptyReason
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryListManagementMode
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.model.UnifiedWatchlistRowItem
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -58,13 +62,6 @@ enum class LibrarySortOption(
     }
 }
 
-enum class LibraryPrimaryTab(
-    val label: String
-) {
-    UNIFIED_WATCHLIST("Unified Watchlist"),
-    PROVIDER_LIBRARY("Provider Library")
-}
-
 data class LibraryListEditorState(
     val mode: Mode,
     val listId: String? = null,
@@ -79,11 +76,17 @@ data class LibraryListEditorState(
 }
 
 data class LibraryUiState(
-    val selectedPrimaryTab: LibraryPrimaryTab = LibraryPrimaryTab.UNIFIED_WATCHLIST,
+    val selectedProvider: LibraryProviderSelection = LibraryProviderSelection.UNIFIED,
+    val availableProviders: List<LibraryProviderOption> = listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)),
     val sourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val allItems: List<LibraryEntry> = emptyList(),
     val visibleItems: List<LibraryEntry> = emptyList(),
     val listTabs: List<LibraryListTab> = emptyList(),
+    val listSelectorLabel: String = "N/A",
+    val supportsLists: Boolean = false,
+    val supportsListManagement: Boolean = false,
+    val listManagementMode: LibraryListManagementMode = LibraryListManagementMode.NONE,
+    val emptyReason: LibraryEmptyReason = LibraryEmptyReason.NONE,
     val availableTypeTabs: List<LibraryTypeTab> = emptyList(),
     val availableSortOptions: List<LibrarySortOption> = emptyList(),
     val selectedListKey: String? = null,
@@ -137,6 +140,9 @@ class LibraryViewModel @Inject constructor(
     private val _unifiedWatchlistRows = MutableStateFlow<List<UnifiedWatchlistRowItem>>(emptyList())
     val unifiedWatchlistRows: StateFlow<List<UnifiedWatchlistRowItem>> = _unifiedWatchlistRows.asStateFlow()
 
+    private val selectedProviderState = MutableStateFlow(LibraryProviderSelection.UNIFIED)
+    private val selectedListKeyState = MutableStateFlow<String?>(null)
+
     private var messageClearJob: Job? = null
     private var initialTraktSyncRequested = false
 
@@ -183,9 +189,21 @@ class LibraryViewModel @Inject constructor(
         observeTraktBootstrap()
     }
 
-    fun onSelectPrimaryTab(tab: LibraryPrimaryTab) {
+    fun onSelectProvider(provider: LibraryProviderSelection) {
+        selectedProviderState.value = provider
+        selectedListKeyState.value = null
         _uiState.update { current ->
-            if (current.selectedPrimaryTab == tab) current else current.copy(selectedPrimaryTab = tab)
+            if (current.selectedProvider == provider) {
+                current
+            } else {
+                current.copy(
+                    selectedProvider = provider,
+                    selectedListKey = null,
+                    manageSelectedListKey = null,
+                    listEditorState = null,
+                    showManageDialog = false
+                )
+            }
         }
     }
 
@@ -197,6 +215,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onSelectListTab(listKey: String) {
+        selectedListKeyState.value = listKey
         _uiState.update { current ->
             val updated = current.copy(selectedListKey = listKey)
             updated.withVisibleItems()
@@ -222,77 +241,13 @@ class LibraryViewModel @Inject constructor(
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
             val state = _uiState.value
-            val selectedList = state.listTabs.firstOrNull { it.key == state.selectedListKey }
-            val startMessage: String
-            val successMessage: String
-            val refreshBlock: suspend () -> Unit
-            when {
-                state.selectedPrimaryTab == LibraryPrimaryTab.UNIFIED_WATCHLIST -> {
-                    startMessage = "Syncing unified watchlist..."
-                    successMessage = "Unified watchlist synced"
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.PERSONAL -> {
-                    startMessage = "Syncing Trakt library..."
-                    successMessage = "Trakt library synced"
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.WATCHLIST &&
-                    (state.sourceMode == LibrarySourceMode.TRAKT || state.sourceMode == LibrarySourceMode.SIMKL) -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.REAL_DEBRID_LIST_KEY -> {
-                    startMessage = "Syncing Real-Debrid library..."
-                    successMessage = "Real-Debrid library synced"
-                    refreshBlock = { libraryRepository.refreshRealDebridNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.PREMIUMIZE_LIST_KEY -> {
-                    startMessage = "Syncing Premiumize library..."
-                    successMessage = "Premiumize library synced"
-                    refreshBlock = { libraryRepository.refreshPremiumizeNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.TORBOX_LIST_KEY -> {
-                    startMessage = "Syncing TorBox library..."
-                    successMessage = "TorBox library synced"
-                    refreshBlock = { libraryRepository.refreshTorBoxNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.SERVICE ||
-                    state.sourceMode == LibrarySourceMode.DEBRID -> {
-                    startMessage = "Syncing debrid libraries..."
-                    successMessage = "Debrid libraries synced"
-                    refreshBlock = { libraryRepository.refreshDebridNow() }
-                }
-
-                state.sourceMode == LibrarySourceMode.TRAKT -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                state.sourceMode == LibrarySourceMode.SIMKL -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshNow() }
-                }
-
-                else -> {
-                    startMessage = "Syncing library..."
-                    successMessage = "Library synced"
-                    refreshBlock = { libraryRepository.refreshNow() }
-                }
-            }
+            val provider = state.selectedProvider
+            val startMessage = "Syncing ${provider.label} library..."
+            val successMessage = "${provider.label} library synced"
 
             setTransientMessage(startMessage)
             runCatching {
-                refreshBlock()
+                libraryRepository.refreshProviderNow(provider, state.selectedListKey)
                 setTransientMessage(successMessage)
             }.onFailure { error ->
                 setError(error.message ?: "Failed to refresh library")
@@ -302,13 +257,15 @@ class LibraryViewModel @Inject constructor(
 
     fun onOpenManageLists() {
         _uiState.update { current ->
-            if (current.listTabs.none { it.type == LibraryListTab.Type.PERSONAL }) {
+            val manageableTabs = current.manageableListTabs()
+            if (manageableTabs.isEmpty()) {
                 return@update current
             }
             current.copy(
                 showManageDialog = true,
                 manageSelectedListKey = current.manageSelectedListKey
-                    ?: current.listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
+                    ?.takeIf { selectedKey -> manageableTabs.any { it.key == selectedKey } }
+                    ?: manageableTabs.firstOrNull()?.key
             )
         }
     }
@@ -337,12 +294,12 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onStartEditList() {
-        val selected = selectedManagePersonalList() ?: return
+        val selected = selectedManageList() ?: return
         _uiState.update {
             it.copy(
                 listEditorState = LibraryListEditorState(
                     mode = LibraryListEditorState.Mode.EDIT,
-                    listId = selected.traktListId?.toString(),
+                    listId = selected.providerMutationListId(),
                     name = selected.title,
                     description = selected.description.orEmpty(),
                     privacy = selected.privacy ?: TraktListPrivacy.PRIVATE
@@ -387,11 +344,13 @@ class LibraryViewModel @Inject constructor(
         if (_uiState.value.pendingOperation) return
 
         viewModelScope.launch {
+            val provider = _uiState.value.selectedProvider
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
                 when (editor.mode) {
                     LibraryListEditorState.Mode.CREATE -> {
-                        libraryRepository.createPersonalList(
+                        libraryRepository.createProviderList(
+                            provider = provider,
                             name = name,
                             description = editor.description.trim().ifBlank { null },
                             privacy = editor.privacy
@@ -401,7 +360,8 @@ class LibraryViewModel @Inject constructor(
                     LibraryListEditorState.Mode.EDIT -> {
                         val listId = editor.listId
                             ?: throw IllegalStateException("Invalid list")
-                        libraryRepository.updatePersonalList(
+                        libraryRepository.updateProviderList(
+                            provider = provider,
                             listId = listId,
                             name = name,
                             description = editor.description.trim().ifBlank { null },
@@ -420,14 +380,15 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onDeleteSelectedList() {
-        val selected = selectedManagePersonalList() ?: return
-        val listId = selected.traktListId?.toString() ?: return
+        val selected = selectedManageList() ?: return
+        val listId = selected.providerMutationListId() ?: return
         if (_uiState.value.pendingOperation) return
 
         viewModelScope.launch {
+            val provider = _uiState.value.selectedProvider
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
-                libraryRepository.deletePersonalList(listId)
+                libraryRepository.deleteProviderList(provider, listId)
                 setTransientMessage("List deleted")
             }.onSuccess {
                 _uiState.update { it.copy(pendingOperation = false) }
@@ -452,87 +413,131 @@ class LibraryViewModel @Inject constructor(
 
     private fun observeLibraryData() {
         viewModelScope.launch {
-            combine(
-                libraryRepository.sourceMode,
-                libraryRepository.isSyncing,
-                libraryRepository.hasProviderCache,
-                libraryRepository.libraryItems,
-                libraryRepository.listTabs
-            ) { sourceMode, isSyncing, hasProviderCache, items, listTabs ->
-                DataBundle(
-                    sourceMode = sourceMode,
-                    isSyncing = isSyncing,
-                    hasProviderCache = hasProviderCache,
-                    items = items,
-                    listTabs = listTabs
-                )
-            }.collectLatest { (sourceMode, isSyncing, hasProviderCache, items, listTabs) ->
+            libraryRepository.availableProviders.collectLatest { providers ->
+                val normalized = providers.ifEmpty {
+                    listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))
+                }
                 _uiState.update { current ->
-                    val supportsListTabs = listTabs.isNotEmpty()
-                    val nextSelectedList = when {
-                        supportsListTabs -> {
-                            current.selectedListKey
-                                ?.takeIf { key -> listTabs.any { it.key == key } }
-                                ?: listTabs.firstOrNull()?.key
-                        }
-                        else -> null
-                    }
-
-                    val nextManageSelected = current.manageSelectedListKey
-                        ?.takeIf { key ->
-                            listTabs.any { tab ->
-                                tab.key == key && tab.type == LibraryListTab.Type.PERSONAL
-                            }
-                        }
-                        ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
-
-                    val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
-                    val itemsForTypeTabs = if (supportsListTabs && !nextSelectedList.isNullOrBlank()) {
-                        items.filter { it.listKeys.contains(nextSelectedList) }
-                    } else {
-                        items
-                    }
-                    val typeTabs = buildTypeTabs(itemsForTypeTabs)
-                    val nextSelectedType = current.selectedTypeTab
-                        ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
-                        ?: LibraryTypeTab.All
-                    val sortOptions = if (
-                        selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
-                        selectedListTab?.type == LibraryListTab.Type.PERSONAL
-                    ) {
-                        LibrarySortOption.TraktOptions
-                    } else {
-                        LibrarySortOption.LocalOptions
-                    }
-                    val nextSelectedSort = current.selectedSortOption
-                        .takeIf { it in sortOptions }
-                        ?: if (
-                            selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
-                            selectedListTab?.type == LibraryListTab.Type.PERSONAL
-                        ) {
-                            LibrarySortOption.DEFAULT
-                        } else {
-                            LibrarySortOption.ADDED_DESC
-                        }
-
-                    val updated = current.copy(
-                        sourceMode = sourceMode,
-                        allItems = items,
-                        listTabs = listTabs,
-                        availableTypeTabs = typeTabs,
-                        availableSortOptions = sortOptions,
-                        selectedTypeTab = nextSelectedType,
-                        selectedListKey = nextSelectedList,
-                        selectedSortOption = nextSelectedSort,
-                        manageSelectedListKey = nextManageSelected,
-                        isSyncing = sourceMode != LibrarySourceMode.LOCAL && isSyncing,
-                        isLoading = (sourceMode == LibrarySourceMode.TRAKT || sourceMode == LibrarySourceMode.SIMKL) &&
-                            !hasProviderCache &&
-                            current.errorMessage == null
+                    val selectedAvailable = normalized.any { it.provider == current.selectedProvider }
+                    current.copy(
+                        availableProviders = normalized,
+                        selectedProvider = if (selectedAvailable) current.selectedProvider else LibraryProviderSelection.UNIFIED
                     )
-                    updated.withVisibleItems()
+                }
+                if (normalized.none { it.provider == selectedProviderState.value }) {
+                    selectedProviderState.value = LibraryProviderSelection.UNIFIED
+                    selectedListKeyState.value = null
                 }
             }
+        }
+        viewModelScope.launch {
+            combine(
+                selectedProviderState,
+                selectedListKeyState
+            ) { provider, selectedListKey ->
+                provider to selectedListKey
+            }.distinctUntilChanged().collectLatest { (provider, selectedListKey) ->
+                combine(
+                    libraryRepository.observeProviderSnapshot(provider, selectedListKey),
+                    libraryRepository.isSyncing,
+                    libraryRepository.hasProviderCache
+                ) { snapshot, isSyncing, hasProviderCache ->
+                    DataBundle(
+                        provider = snapshot.provider,
+                        sourceMode = snapshot.sourceMode,
+                        isSyncing = isSyncing,
+                        hasProviderCache = hasProviderCache,
+                        items = snapshot.items,
+                        listTabs = snapshot.listTabs,
+                        selectedListKey = snapshot.selectedListKey,
+                        supportsLists = snapshot.supportsLists,
+                        supportsListManagement = snapshot.supportsListManagement,
+                        listManagementMode = snapshot.listManagementMode,
+                        emptyReason = snapshot.emptyReason,
+                        listSelectorLabel = snapshot.listSelectorLabel
+                    )
+                }.collectLatest { bundle ->
+                    applyDataBundle(bundle)
+                }
+            }
+        }
+    }
+
+    private fun applyDataBundle(bundle: DataBundle) {
+        _uiState.update { current ->
+            val listTabs = bundle.listTabs
+            val items = bundle.items
+            val nextSelectedList = bundle.selectedListKey?.takeIf { key -> listTabs.any { it.key == key } }
+
+            if (selectedListKeyState.value != nextSelectedList) {
+                selectedListKeyState.value = nextSelectedList
+            }
+
+            val manageableTabs = listTabs.filter { tab ->
+                when (bundle.listManagementMode) {
+                    LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                    LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                    LibraryListManagementMode.SIMKL_STATUS,
+                    LibraryListManagementMode.NONE -> false
+                }
+            }
+            val nextManageSelected = current.manageSelectedListKey
+                ?.takeIf { key ->
+                    manageableTabs.any { tab -> tab.key == key }
+                }
+                ?: manageableTabs.firstOrNull()?.key
+
+            val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
+            val itemsForTypeTabs = if (bundle.supportsLists && !nextSelectedList.isNullOrBlank()) {
+                items.filter { it.listKeys.contains(nextSelectedList) }
+            } else {
+                items
+            }
+            val typeTabs = buildTypeTabs(itemsForTypeTabs)
+            val nextSelectedType = current.selectedTypeTab
+                ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
+                ?: LibraryTypeTab.All
+            val sortOptions = if (
+                selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                selectedListTab?.type == LibraryListTab.Type.PERSONAL
+            ) {
+                LibrarySortOption.TraktOptions
+            } else {
+                LibrarySortOption.LocalOptions
+            }
+            val nextSelectedSort = current.selectedSortOption
+                .takeIf { it in sortOptions }
+                ?: if (
+                    selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                    selectedListTab?.type == LibraryListTab.Type.PERSONAL
+                ) {
+                    LibrarySortOption.DEFAULT
+                } else {
+                    LibrarySortOption.ADDED_DESC
+                }
+
+            val updated = current.copy(
+                selectedProvider = bundle.provider,
+                sourceMode = bundle.sourceMode,
+                allItems = items,
+                listTabs = listTabs,
+                listSelectorLabel = bundle.listSelectorLabel,
+                supportsLists = bundle.supportsLists,
+                supportsListManagement = bundle.supportsListManagement,
+                listManagementMode = bundle.listManagementMode,
+                emptyReason = bundle.emptyReason,
+                availableTypeTabs = typeTabs,
+                availableSortOptions = sortOptions,
+                selectedTypeTab = nextSelectedType,
+                selectedListKey = nextSelectedList,
+                selectedSortOption = nextSelectedSort,
+                manageSelectedListKey = nextManageSelected,
+                isSyncing = bundle.sourceMode != LibrarySourceMode.LOCAL && bundle.isSyncing,
+                isLoading = (bundle.sourceMode == LibrarySourceMode.TRAKT || bundle.sourceMode == LibrarySourceMode.SIMKL) &&
+                    !bundle.hasProviderCache &&
+                    current.errorMessage == null
+            )
+            updated.withVisibleItems()
         }
     }
 
@@ -583,11 +588,18 @@ class LibraryViewModel @Inject constructor(
     }
 
     private data class DataBundle(
+        val provider: LibraryProviderSelection = LibraryProviderSelection.UNIFIED,
         val sourceMode: LibrarySourceMode,
         val isSyncing: Boolean,
         val hasProviderCache: Boolean,
         val items: List<LibraryEntry>,
-        val listTabs: List<LibraryListTab>
+        val listTabs: List<LibraryListTab>,
+        val selectedListKey: String? = null,
+        val supportsLists: Boolean = false,
+        val supportsListManagement: Boolean = false,
+        val listManagementMode: LibraryListManagementMode = LibraryListManagementMode.NONE,
+        val emptyReason: LibraryEmptyReason = LibraryEmptyReason.NONE,
+        val listSelectorLabel: String = "N/A"
     )
 
     private fun observeDebridBootstrap() {
@@ -634,24 +646,6 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun providerSyncStartMessage(sourceMode: LibrarySourceMode): String {
-        return when (sourceMode) {
-            LibrarySourceMode.TRAKT -> "Syncing Trakt library..."
-            LibrarySourceMode.SIMKL -> "Syncing SIMKL library..."
-            LibrarySourceMode.DEBRID -> "Syncing debrid libraries..."
-            LibrarySourceMode.LOCAL -> "Syncing library..."
-        }
-    }
-
-    private fun providerSyncSuccessMessage(sourceMode: LibrarySourceMode): String {
-        return when (sourceMode) {
-            LibrarySourceMode.TRAKT -> "Trakt library synced"
-            LibrarySourceMode.SIMKL -> "SIMKL library synced"
-            LibrarySourceMode.DEBRID -> "Debrid libraries synced"
-            LibrarySourceMode.LOCAL -> "Library synced"
-        }
-    }
-
     private fun providerSyncFailureMessage(sourceMode: LibrarySourceMode): String {
         return when (sourceMode) {
             LibrarySourceMode.TRAKT -> "Failed to sync Trakt library"
@@ -664,6 +658,7 @@ class LibraryViewModel @Inject constructor(
     private fun reorderSelectedList(moveUp: Boolean) {
         val state = _uiState.value
         if (state.pendingOperation) return
+        if (state.listManagementMode != LibraryListManagementMode.TRAKT_PERSONAL) return
 
         val personalTabs = state.listTabs.filter { it.type == LibraryListTab.Type.PERSONAL }
         val selectedKey = state.manageSelectedListKey ?: return
@@ -694,10 +689,27 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun selectedManagePersonalList(): LibraryListTab? {
+    private fun selectedManageList(): LibraryListTab? {
         val state = _uiState.value
         val selectedKey = state.manageSelectedListKey ?: return null
-        return state.listTabs.firstOrNull { it.key == selectedKey && it.type == LibraryListTab.Type.PERSONAL }
+        return state.manageableListTabs().firstOrNull { it.key == selectedKey }
+    }
+
+    private fun LibraryUiState.manageableListTabs(): List<LibraryListTab> {
+        return listTabs.filter { tab ->
+            when (listManagementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    }
+
+    private fun LibraryListTab.providerMutationListId(): String? {
+        return traktListId?.toString()
+            ?: mdbListId?.toString()
+            ?: key.removePrefix(TraktLibraryService.PERSONAL_KEY_PREFIX).takeIf { it != key && it.isNotBlank() }
     }
 
     private fun setError(message: String) {

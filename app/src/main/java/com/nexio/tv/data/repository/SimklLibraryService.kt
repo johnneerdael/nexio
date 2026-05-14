@@ -413,7 +413,7 @@ class SimklLibraryService @Inject constructor(
 
     private fun buildSnapshotFromItems(items: List<com.nexio.tv.data.remote.dto.simkl.SimklLibraryItemDto>): Snapshot {
         val tabs = listOf(
-            LibraryListTab(key = WATCHLIST_KEY, title = "SIMKL Watchlist", type = LibraryListTab.Type.WATCHLIST),
+            LibraryListTab(key = WATCHLIST_KEY, title = "Plan to Watch", type = LibraryListTab.Type.WATCHLIST),
             LibraryListTab(key = WATCHING_KEY, title = "Watching", type = LibraryListTab.Type.SERVICE),
             LibraryListTab(key = COMPLETED_KEY, title = "Completed", type = LibraryListTab.Type.SERVICE),
             LibraryListTab(key = HOLD_KEY, title = "On Hold", type = LibraryListTab.Type.SERVICE),
@@ -771,7 +771,7 @@ class SimklLibraryService @Inject constructor(
 
     private fun buildEmptySnapshot() = Snapshot(
         listTabs = listOf(
-            LibraryListTab(key = WATCHLIST_KEY, title = "SIMKL Watchlist", type = LibraryListTab.Type.WATCHLIST),
+            LibraryListTab(key = WATCHLIST_KEY, title = "Plan to Watch", type = LibraryListTab.Type.WATCHLIST),
             LibraryListTab(key = WATCHING_KEY, title = "Watching", type = LibraryListTab.Type.SERVICE),
             LibraryListTab(key = COMPLETED_KEY, title = "Completed", type = LibraryListTab.Type.SERVICE),
             LibraryListTab(key = HOLD_KEY, title = "On Hold", type = LibraryListTab.Type.SERVICE),

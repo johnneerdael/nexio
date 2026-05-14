@@ -3,6 +3,9 @@ package com.nexio.tv.domain.repository
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
+import com.nexio.tv.domain.model.LibraryProviderSnapshot
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
@@ -17,6 +20,12 @@ interface LibraryRepository {
     val libraryItems: Flow<List<LibraryEntry>>
     val listTabs: Flow<List<LibraryListTab>>
     val unifiedWatchlistMemberships: Flow<List<UnifiedWatchlistMembership>>
+    val availableProviders: Flow<List<LibraryProviderOption>>
+
+    fun observeProviderSnapshot(
+        provider: LibraryProviderSelection,
+        selectedListKey: String?
+    ): Flow<LibraryProviderSnapshot>
 
     fun isInLibrary(itemId: String, itemType: String): Flow<Boolean>
     fun isInWatchlist(itemId: String, itemType: String): Flow<Boolean>
@@ -46,4 +55,9 @@ interface LibraryRepository {
     suspend fun refreshRealDebridNow()
     suspend fun refreshPremiumizeNow()
     suspend fun refreshTorBoxNow()
+    suspend fun refreshEasyDebridNow()
+    suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?)
+    suspend fun createProviderList(provider: LibraryProviderSelection, name: String, description: String?, privacy: TraktListPrivacy)
+    suspend fun updateProviderList(provider: LibraryProviderSelection, listId: String, name: String, description: String?, privacy: TraktListPrivacy)
+    suspend fun deleteProviderList(provider: LibraryProviderSelection, listId: String)
 }

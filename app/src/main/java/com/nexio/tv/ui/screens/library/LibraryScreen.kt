@@ -85,6 +85,10 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.domain.model.LibraryEntry
+import com.nexio.tv.domain.model.LibraryEmptyReason
+import com.nexio.tv.domain.model.LibraryListManagementMode
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
 import java.util.Locale
 
 private const val KEY_REPEAT_THROTTLE_MS = 80L
@@ -189,11 +193,10 @@ fun LibraryScreen(
     val unifiedWatchlistRows by viewModel.unifiedWatchlistRows.collectAsState()
     val context = LocalContext.current
 
-    val isUnifiedWatchlistTab = uiState.selectedPrimaryTab == LibraryPrimaryTab.UNIFIED_WATCHLIST
-    val isTorBoxTab = !isUnifiedWatchlistTab &&
-        uiState.selectedListKey == com.nexio.tv.data.repository.DebridLibraryService.TORBOX_LIST_KEY
-    LaunchedEffect(uiState.selectedPrimaryTab, uiState.selectedListKey) {
-        if (isTorBoxTab) viewModel.refreshTorBoxLibraryNow()
+    val isUnifiedProvider = uiState.selectedProvider == LibraryProviderSelection.UNIFIED
+    val isTorBoxProvider = uiState.selectedProvider == LibraryProviderSelection.TORBOX
+    LaunchedEffect(uiState.selectedProvider) {
+        if (isTorBoxProvider) viewModel.refreshTorBoxLibraryNow()
     }
     LaunchedEffect(viewModel) {
         viewModel.directPlayCommands.collect { command ->
@@ -218,18 +221,17 @@ fun LibraryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val primaryFocusRequester = remember { FocusRequester() }
-    val selectorFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
     var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
     val unifiedWatchlistItems = remember(unifiedWatchlistRows) {
         unifiedWatchlistRows.map { row -> UnifiedWatchlistLibraryRailItem.entryFromRow(row) }
     }
-    val effectiveTypeTabs = remember(isUnifiedWatchlistTab, unifiedWatchlistItems, uiState.availableTypeTabs) {
-        if (isUnifiedWatchlistTab) buildLibraryTypeTabs(unifiedWatchlistItems) else uiState.availableTypeTabs
+    val effectiveTypeTabs = remember(isUnifiedProvider, unifiedWatchlistItems, uiState.availableTypeTabs) {
+        if (isUnifiedProvider) buildLibraryTypeTabs(unifiedWatchlistItems) else uiState.availableTypeTabs
     }
-    val effectiveSortOptions = remember(isUnifiedWatchlistTab, uiState.availableSortOptions) {
-        if (isUnifiedWatchlistTab) LibrarySortOption.TraktOptions else uiState.availableSortOptions
+    val effectiveSortOptions = remember(isUnifiedProvider, uiState.availableSortOptions) {
+        if (isUnifiedProvider) LibrarySortOption.TraktOptions else uiState.availableSortOptions
     }
     val effectiveSelectedTypeTab = remember(effectiveTypeTabs, uiState.selectedTypeTab) {
         uiState.selectedTypeTab?.takeIf { selected ->
@@ -241,13 +243,13 @@ fun LibraryScreen(
             ?: LibrarySortOption.DEFAULT
     }
     val visibleItems = remember(
-        isUnifiedWatchlistTab,
+        isUnifiedProvider,
         unifiedWatchlistItems,
         uiState.visibleItems,
         effectiveSelectedTypeTab,
         effectiveSelectedSortOption
     ) {
-        if (isUnifiedWatchlistTab) {
+        if (isUnifiedProvider) {
             unifiedWatchlistItems.visibleLibraryItems(
                 selectedTypeTab = effectiveSelectedTypeTab,
                 selectedSortOption = effectiveSelectedSortOption,
@@ -268,8 +270,8 @@ fun LibraryScreen(
     }
     val firstVisiblePosterKey = gridItemKeys.firstOrNull()
     val posterCardStyle = PosterCardDefaults.Style
-    val useReadableDebridListLayout = remember(isUnifiedWatchlistTab, uiState.selectedListKey) {
-        !isUnifiedWatchlistTab && usesReadableDebridListLayout(uiState.selectedListKey)
+    val useReadableDebridListLayout = remember(uiState.selectedProvider) {
+        usesReadableDebridProviderLayout(uiState.selectedProvider)
     }
 
     LaunchedEffect(uiState.isLoading) {
@@ -278,7 +280,7 @@ fun LibraryScreen(
         }
     }
 
-    LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size, uiState.selectedPrimaryTab) {
+    LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size, uiState.selectedProvider) {
         if (!uiState.isLoading && pendingPrimaryFocus) {
             val restoreKey = lastFocusedPosterKey
             val restoreIndex = restoreKey?.let { visibleItemIndexByKey[it] }
@@ -389,16 +391,7 @@ fun LibraryScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (isUnifiedWatchlistTab) {
-                        "WATCHLIST"
-                    } else {
-                        when (uiState.sourceMode) {
-                            LibrarySourceMode.TRAKT -> "TRAKT"
-                            LibrarySourceMode.SIMKL -> "SIMKL"
-                            LibrarySourceMode.DEBRID -> "DEBRID"
-                            LibrarySourceMode.LOCAL -> stringResource(R.string.library_source_local)
-                        }
-                    },
+                    text = uiState.selectedProvider.label.uppercase(Locale.ROOT),
                     style = MaterialTheme.typography.labelLarge,
                     color = if (showBuiltInHeader) NexioColors.TextTertiary else Color.Transparent,
                     fontWeight = FontWeight.Medium,
@@ -408,26 +401,25 @@ fun LibraryScreen(
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {
-            LibraryPrimaryTabsRow(
-                selectedTab = uiState.selectedPrimaryTab,
-                primaryFocusRequester = primaryFocusRequester,
-                onSelect = viewModel::onSelectPrimaryTab
-            )
-        }
-
-        item(span = { GridItemSpan(maxLineSpan) }) {
             LibrarySelectorsRow(
-                sourceMode = uiState.sourceMode,
-                listTabs = if (isUnifiedWatchlistTab) emptyList() else uiState.listTabs,
+                providerOptions = uiState.availableProviders,
+                selectedProvider = uiState.selectedProvider,
+                listTabs = uiState.listTabs,
                 typeTabs = effectiveTypeTabs,
                 sortOptions = effectiveSortOptions,
-                selectedListKey = if (isUnifiedWatchlistTab) null else uiState.selectedListKey,
+                selectedListKey = uiState.selectedListKey,
+                listSelectorLabel = uiState.listSelectorLabel,
+                supportsLists = uiState.supportsLists,
                 selectedTypeTab = effectiveSelectedTypeTab,
                 selectedSortOption = effectiveSelectedSortOption,
-                primaryFocusRequester = selectorFocusRequester,
+                primaryFocusRequester = primaryFocusRequester,
                 expandedPicker = expandedPicker,
                 onExpandedChange = { picker, shouldExpand ->
                     expandedPicker = if (shouldExpand) picker else null
+                },
+                onSelectProvider = { provider ->
+                    viewModel.onSelectProvider(provider)
+                    expandedPicker = null
                 },
                 onSelectList = { key ->
                     viewModel.onSelectListTab(key)
@@ -444,16 +436,15 @@ fun LibraryScreen(
             )
         }
 
-        if (isUnifiedWatchlistTab || uiState.listTabs.isNotEmpty() || uiState.sourceMode != LibrarySourceMode.LOCAL) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                LibraryActionsRow(
-                    pending = uiState.pendingOperation,
-                    isSyncing = uiState.isSyncing,
-                    canManageLists = !isUnifiedWatchlistTab && uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL },
-                    onManageLists = viewModel::onOpenManageLists,
-                    onRefresh = viewModel::onRefresh
-                )
-            }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            LibraryActionsRow(
+                pending = uiState.pendingOperation,
+                isSyncing = uiState.isSyncing,
+                canManageLists = uiState.supportsListManagement &&
+                    uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL || it.isMutableStaticList },
+                onManageLists = viewModel::onOpenManageLists,
+                onRefresh = viewModel::onRefresh
+            )
         }
 
         if (visibleItems.isEmpty()) {
@@ -463,25 +454,33 @@ fun LibraryScreen(
                 } else {
                     localizedTypeLabel(effectiveSelectedTypeTab.key).lowercase()
                 }
-                val title = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> if (isUnifiedWatchlistTab) {
-                        "No $selectedTypeLabel in watchlist"
-                    } else {
-                        stringResource(R.string.library_empty_local_title, selectedTypeLabel)
+                val title = if (uiState.emptyReason == LibraryEmptyReason.UNIFIED_NEEDS_TRACKER_AUTH) {
+                    "Connect a watchlist provider"
+                } else {
+                    when (uiState.sourceMode) {
+                        LibrarySourceMode.LOCAL -> if (isUnifiedProvider) {
+                            "No $selectedTypeLabel in watchlist"
+                        } else {
+                            stringResource(R.string.library_empty_local_title, selectedTypeLabel)
+                        }
+                        LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
+                        LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_title, selectedTypeLabel)
+                        LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_title, selectedTypeLabel)
                     }
-                    LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
-                    LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_title, selectedTypeLabel)
-                    LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_title, selectedTypeLabel)
                 }
-                val subtitle = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> if (isUnifiedWatchlistTab) {
-                        "Items from connected watchlist sources will appear here."
-                    } else {
-                        stringResource(R.string.library_empty_local_subtitle)
+                val subtitle = if (uiState.emptyReason == LibraryEmptyReason.UNIFIED_NEEDS_TRACKER_AUTH) {
+                    "Authenticate Trakt, SIMKL, and/or MDBList to build your Unified Watchlist."
+                } else {
+                    when (uiState.sourceMode) {
+                        LibrarySourceMode.LOCAL -> if (isUnifiedProvider) {
+                            "Items from connected watchlist sources will appear here."
+                        } else {
+                            stringResource(R.string.library_empty_local_subtitle)
+                        }
+                        LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_subtitle)
+                        LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_subtitle)
+                        LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_subtitle)
                     }
-                    LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_subtitle)
-                    LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_subtitle)
-                    LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_subtitle)
                 }
                 EmptyScreenState(
                     title = title,
@@ -506,7 +505,7 @@ fun LibraryScreen(
                     },
                     onClick = {
                         lastFocusedPosterKey = focusKey
-                        if (isTorBoxTab) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
+                        if (isTorBoxProvider) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
                     }
                 )
             }
@@ -524,7 +523,7 @@ fun LibraryScreen(
                     },
                     onClick = {
                         lastFocusedPosterKey = focusKey
-                        if (isTorBoxTab) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
+                        if (isTorBoxProvider) viewModel.onTorBoxItemClick(item) else onOpenEntry(item)
                     }
                 )
             }
@@ -533,9 +532,18 @@ fun LibraryScreen(
         item(span = { GridItemSpan(maxLineSpan) }) { Spacer(modifier = Modifier.height(8.dp)) }
     }
 
-    if (uiState.showManageDialog && uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL }) {
+    if (uiState.showManageDialog && uiState.listTabs.any { tab ->
+            when (uiState.listManagementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    ) {
         ManageListsDialog(
             tabs = uiState.listTabs,
+            managementMode = uiState.listManagementMode,
             selectedKey = uiState.manageSelectedListKey,
             errorMessage = uiState.errorMessage,
             pending = uiState.pendingOperation,
@@ -604,57 +612,25 @@ fun LibraryScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun LibraryPrimaryTabsRow(
-    selectedTab: LibraryPrimaryTab,
-    primaryFocusRequester: FocusRequester,
-    onSelect: (LibraryPrimaryTab) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        LibraryPrimaryTab.entries.forEach { tab ->
-            val selected = selectedTab == tab
-            Button(
-                onClick = { onSelect(tab) },
-                modifier = if (tab == LibraryPrimaryTab.UNIFIED_WATCHLIST) {
-                    Modifier.focusRequester(primaryFocusRequester)
-                } else {
-                    Modifier
-                },
-                colors = ButtonDefaults.colors(
-                    containerColor = if (selected) NexioColors.Secondary else NexioColors.BackgroundCard,
-                    contentColor = if (selected) NexioColors.OnSecondary else NexioColors.TextPrimary
-                )
-            ) {
-                Text(
-                    text = tab.label,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 private fun LibrarySelectorsRow(
-    sourceMode: LibrarySourceMode,
+    providerOptions: List<LibraryProviderOption>,
+    selectedProvider: LibraryProviderSelection,
     listTabs: List<LibraryListTab>,
     typeTabs: List<LibraryTypeTab>,
     sortOptions: List<LibrarySortOption>,
     selectedListKey: String?,
+    listSelectorLabel: String,
+    supportsLists: Boolean,
     selectedTypeTab: LibraryTypeTab?,
     selectedSortOption: LibrarySortOption,
     primaryFocusRequester: FocusRequester,
     expandedPicker: String?,
     onExpandedChange: (String, Boolean) -> Unit,
+    onSelectProvider: (LibraryProviderSelection) -> Unit,
     onSelectList: (String) -> Unit,
     onSelectType: (LibraryTypeTab) -> Unit,
     onSelectSort: (LibrarySortOption) -> Unit
 ) {
-    val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.title ?: "Select"
     val selectedTypeLabel = selectedTypeTab?.let { localizedTypeLabel(it.key) } ?: stringResource(R.string.library_type_all)
     val selectedSortLabel = selectedSortOption.label
 
@@ -662,29 +638,40 @@ private fun LibrarySelectorsRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (listTabs.isNotEmpty()) {
-            LibraryDropdownPicker(
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(primaryFocusRequester),
-                title = stringResource(R.string.library_filter_list),
-                value = selectedListLabel,
-                selectedValue = selectedListKey,
-                expanded = expandedPicker == "list",
-                options = listTabs.map { LibraryOption(it.title, it.key) },
-                onExpandedChange = { onExpandedChange("list", it) },
-                onSelect = { onSelectList(it.value) }
-            )
-        }
+        LibraryDropdownPicker(
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(primaryFocusRequester),
+            title = "Provider",
+            value = selectedProvider.label,
+            selectedValue = selectedProvider.name,
+            expanded = expandedPicker == "provider",
+            options = providerOptions.map { LibraryOption(it.label, it.provider.name) },
+            onExpandedChange = { onExpandedChange("provider", it) },
+            onSelect = { option ->
+                LibraryProviderSelection.valueOf(option.value).let(onSelectProvider)
+            }
+        )
 
         LibraryDropdownPicker(
-            modifier = if (listTabs.isNotEmpty()) {
-                Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            title = stringResource(R.string.library_filter_list),
+            value = listSelectorLabel,
+            selectedValue = selectedListKey ?: "__na__",
+            expanded = supportsLists && expandedPicker == "list",
+            options = if (supportsLists) {
+                listTabs.map { LibraryOption(it.title, it.key) }
             } else {
-                Modifier
-                    .width(420.dp)
-                    .focusRequester(primaryFocusRequester)
+                listOf(LibraryOption("N/A", "__na__"))
             },
+            onExpandedChange = { shouldExpand -> onExpandedChange("list", shouldExpand && supportsLists) },
+            onSelect = { option ->
+                if (supportsLists) onSelectList(option.value)
+            }
+        )
+
+        LibraryDropdownPicker(
+            modifier = Modifier.weight(1f),
             title = stringResource(R.string.library_filter_type),
             value = selectedTypeLabel,
             selectedValue = selectedTypeTab?.key,
@@ -953,6 +940,7 @@ private fun LibraryActionsRow(
 @Composable
 private fun ManageListsDialog(
     tabs: List<LibraryListTab>,
+    managementMode: LibraryListManagementMode,
     selectedKey: String?,
     errorMessage: String?,
     pending: Boolean,
@@ -964,12 +952,22 @@ private fun ManageListsDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val personalTabs = remember(tabs) { tabs.filter { it.type == LibraryListTab.Type.PERSONAL } }
+    val manageableTabs = remember(tabs, managementMode) {
+        tabs.filter { tab ->
+            when (managementMode) {
+                LibraryListManagementMode.TRAKT_PERSONAL -> tab.type == LibraryListTab.Type.PERSONAL
+                LibraryListManagementMode.MDBLIST_STATIC -> tab.isMutableStaticList
+                LibraryListManagementMode.SIMKL_STATUS,
+                LibraryListManagementMode.NONE -> false
+            }
+        }
+    }
+    val canReorder = managementMode == LibraryListManagementMode.TRAKT_PERSONAL
     val firstFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(personalTabs.size) {
-        val target = if (personalTabs.isNotEmpty()) firstFocusRequester else closeFocusRequester
+    LaunchedEffect(manageableTabs.size) {
+        val target = if (manageableTabs.isNotEmpty()) firstFocusRequester else closeFocusRequester
         val focused = runCatching { target.requestFocus() }.isSuccess
         if (!focused) {
             delay(16)
@@ -995,7 +993,10 @@ private fun ManageListsDialog(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
-                    text = stringResource(R.string.library_manage_trakt_lists),
+                    text = when (managementMode) {
+                        LibraryListManagementMode.MDBLIST_STATIC -> "Manage MDBList Lists"
+                        else -> stringResource(R.string.library_manage_trakt_lists)
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     color = NexioColors.TextPrimary
                 )
@@ -1008,7 +1009,7 @@ private fun ManageListsDialog(
                     )
                 }
 
-                if (personalTabs.isEmpty()) {
+                if (manageableTabs.isEmpty()) {
                     Text(
                         text = stringResource(R.string.library_no_lists),
                         style = MaterialTheme.typography.bodyMedium,
@@ -1021,12 +1022,12 @@ private fun ManageListsDialog(
                             .height(220.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(personalTabs, key = { it.key }) { tab ->
+                        items(manageableTabs, key = { it.key }) { tab ->
                             val selected = tab.key == selectedKey
                             Button(
                                 onClick = { onSelect(tab.key) },
                                 enabled = !pending,
-                                modifier = if (tab.key == personalTabs.firstOrNull()?.key) {
+                                modifier = if (tab.key == manageableTabs.firstOrNull()?.key) {
                                     Modifier
                                         .fillMaxWidth()
                                         .focusRequester(firstFocusRequester)
@@ -1067,7 +1068,7 @@ private fun ManageListsDialog(
                     ) { Text(stringResource(R.string.library_list_edit)) }
                     Button(
                         onClick = onMoveUp,
-                        enabled = !pending && selectedKey != null,
+                        enabled = !pending && selectedKey != null && canReorder,
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
                             contentColor = NexioColors.TextPrimary
@@ -1075,7 +1076,7 @@ private fun ManageListsDialog(
                     ) { Text(stringResource(R.string.library_list_move_up)) }
                     Button(
                         onClick = onMoveDown,
-                        enabled = !pending && selectedKey != null,
+                        enabled = !pending && selectedKey != null && canReorder,
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
                             contentColor = NexioColors.TextPrimary
