@@ -111,12 +111,13 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeAllProgress(): Flow<List<WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            val active = state.activeProviders
+            val active = state.activeProviders - TrackingProvider.MDBLIST
             when {
                 active.isEmpty() -> flowOf(emptyList())
                 active.size == 1 -> when (active.single()) {
                     TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
                     TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
+                    TrackingProvider.MDBLIST -> flowOf(emptyList())
                 }
                 // Both authed: concatenate both providers. Downstream
                 // ContinueWatchingMerger collapses cross-provider duplicates by idBundle
@@ -136,6 +137,7 @@ class DefaultTrackingProgressService @Inject constructor(
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeRemoteSnapshotLoaded()
                 TrackingProvider.TRAKT -> traktProgressService.observeRemoteSnapshotLoaded()
+                TrackingProvider.MDBLIST -> flowOf(false)
             }
         }
 
@@ -154,6 +156,7 @@ class DefaultTrackingProgressService @Inject constructor(
                             items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
                         )
                     }
+                TrackingProvider.MDBLIST -> flowOf(emptyList())
             }
         }
 
@@ -171,6 +174,7 @@ class DefaultTrackingProgressService @Inject constructor(
                             items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
                         )
                     }
+                TrackingProvider.MDBLIST -> flowOf(emptyList())
             }
         }
 
@@ -182,6 +186,7 @@ class DefaultTrackingProgressService @Inject constructor(
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeEpisodeProgress(contentId)
                 TrackingProvider.TRAKT -> traktProgressService.observeEpisodeProgress(contentId)
+                TrackingProvider.MDBLIST -> flowOf(emptyMap())
             }
         }
 
@@ -193,6 +198,7 @@ class DefaultTrackingProgressService @Inject constructor(
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeMovieWatched(contentId)
                 TrackingProvider.TRAKT -> traktProgressService.observeMovieWatched(contentId)
+                TrackingProvider.MDBLIST -> flowOf(false)
             }
         }
 
@@ -201,6 +207,7 @@ class DefaultTrackingProgressService @Inject constructor(
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.applyOptimisticProgress(progress)
             TrackingProvider.TRAKT -> traktProgressService.applyOptimisticProgress(progress)
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -209,6 +216,7 @@ class DefaultTrackingProgressService @Inject constructor(
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.applyOptimisticRemoval(contentId, season, episode)
             TrackingProvider.TRAKT -> traktProgressService.applyOptimisticRemoval(contentId, season, episode)
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -217,6 +225,7 @@ class DefaultTrackingProgressService @Inject constructor(
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.clearOptimistic()
             TrackingProvider.TRAKT -> traktProgressService.clearOptimistic()
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -225,6 +234,7 @@ class DefaultTrackingProgressService @Inject constructor(
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.invalidateLocalizedMetadata()
             TrackingProvider.TRAKT -> traktProgressService.invalidateLocalizedMetadata()
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -234,6 +244,7 @@ class DefaultTrackingProgressService @Inject constructor(
         when (state.effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
             TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -255,6 +266,7 @@ class DefaultTrackingProgressService @Inject constructor(
                 season = season,
                 episode = episode
             )
+            TrackingProvider.MDBLIST -> emptyList()
         }
     }
 
@@ -293,6 +305,7 @@ class DefaultTrackingProgressService @Inject constructor(
                 episode = episode,
                 removeShow = removeShow
             )
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 
@@ -317,6 +330,7 @@ class DefaultTrackingProgressService @Inject constructor(
                 episode = episode,
                 clearShow = clearShow
             )
+            TrackingProvider.MDBLIST -> Unit
         }
     }
 }

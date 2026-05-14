@@ -88,6 +88,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 
@@ -162,6 +163,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 
@@ -227,6 +229,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 
@@ -267,6 +270,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 
@@ -312,6 +316,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 
@@ -353,6 +358,7 @@ class LibraryRepositoryImplTest {
             trackingProviderStateService = trackingProviderStateService,
             traktLibraryService = traktLibraryService,
             simklLibraryService = simklLibraryService,
+            mdbListLibraryService = mockk<MDBListLibraryService>(relaxed = true),
             debridLibraryService = debridLibraryService
         )
 

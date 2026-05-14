@@ -29,10 +29,12 @@ class LibraryRepositoryImpl @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService,
     private val traktLibraryService: TraktLibraryService,
     private val simklLibraryService: SimklLibraryService,
+    private val mdbListLibraryService: MDBListLibraryService,
     private val debridLibraryService: DebridLibraryService,
     private val unifiedWatchlistRepository: UnifiedWatchlistRepository = UnifiedWatchlistRepository(
         traktLibraryService = traktLibraryService,
-        simklLibraryService = simklLibraryService
+        simklLibraryService = simklLibraryService,
+        mdbListLibraryService = mdbListLibraryService,
     )
 ) : LibraryRepository {
 
@@ -148,6 +150,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 if (!providerState.traktAuthenticated) return
                 traktLibraryService.toggleWatchlist(item)
             }
+            TrackingProvider.MDBLIST -> return
         }
     }
 
@@ -162,6 +165,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 if (providerState.traktAuthenticated) traktLibraryService.getMembershipSnapshot(item)
                 else ListMembershipSnapshot(listMembership = emptyMap())
             }
+            TrackingProvider.MDBLIST -> ListMembershipSnapshot(listMembership = emptyMap())
         }
     }
 
@@ -176,6 +180,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 if (!providerState.traktAuthenticated) return
                 traktLibraryService.applyMembershipChanges(item, changes)
             }
+            TrackingProvider.MDBLIST -> return
         }
     }
 
@@ -218,6 +223,9 @@ class LibraryRepositoryImpl @Inject constructor(
             TrackingProvider.TRAKT -> {
                 if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
             }
+            TrackingProvider.MDBLIST -> {
+                if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = true)
+            }
         }
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
     }
@@ -230,6 +238,9 @@ class LibraryRepositoryImpl @Inject constructor(
             }
             TrackingProvider.TRAKT -> {
                 if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
+            }
+            TrackingProvider.MDBLIST -> {
+                if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = true)
             }
         }
     }

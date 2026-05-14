@@ -2,6 +2,8 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.domain.model.TrackingProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EffectiveTrackingProviderStateTest {
@@ -11,8 +13,11 @@ class EffectiveTrackingProviderStateTest {
         val state = EffectiveTrackingProviderState(
             traktAuthenticated = true,
             simklAuthenticated = true,
+            mdbListAuthenticated = true,
         )
-        assertEquals(setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL), state.activeProviders)
+        assertEquals(setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST), state.activeProviders)
+        assertTrue(state.hasAuthenticatedProvider)
+        assertTrue(state.canReadEffectiveProvider)
     }
 
     @Test
@@ -38,7 +43,20 @@ class EffectiveTrackingProviderStateTest {
         val state = EffectiveTrackingProviderState(
             traktAuthenticated = false,
             simklAuthenticated = false,
+            mdbListAuthenticated = false,
         )
         assertEquals(emptySet<TrackingProvider>(), state.activeProviders)
+    }
+
+    @Test
+    fun `MDBList-only auth is active for scrobble but not readable for progress surfaces`() {
+        val state = EffectiveTrackingProviderState(
+            traktAuthenticated = false,
+            simklAuthenticated = false,
+            mdbListAuthenticated = true,
+        )
+        assertEquals(setOf(TrackingProvider.MDBLIST), state.activeProviders)
+        assertTrue(state.hasAuthenticatedProvider)
+        assertFalse(state.canReadEffectiveProvider)
     }
 }

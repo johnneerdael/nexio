@@ -371,6 +371,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 episode = episode,
                                 session = session
                             )
+                        TrackingProvider.MDBLIST -> return@forEach
                     }
                     traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
                 }
@@ -394,7 +395,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         assertCanWriteProfileState(profileSession)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.hasAuthenticatedProvider) {
+        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
             return
         }
         val session = accountSessionFor(providerState.effectiveProvider, profileSession)
@@ -415,6 +416,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         episode = episode,
                         session = session
                     )
+                TrackingProvider.MDBLIST -> return@runCatching
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
         }.onFailure {
@@ -432,7 +434,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         assertCanWriteProfileState(profileSession)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, null, null)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.hasAuthenticatedProvider) {
+        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
             return
         }
         val session = accountSessionFor(providerState.effectiveProvider, profileSession)
@@ -463,6 +465,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             clearShow = true,
                             session = session
                         )
+                    TrackingProvider.MDBLIST -> return@forEach
                 }
                 traktMutationOutboxCoordinator.enqueueAndDrain(deleteEnvelope)
             }
@@ -483,6 +486,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         removeShow = true,
                         session = session
                     )
+                TrackingProvider.MDBLIST -> return@runCatching
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(removeEnvelope)
         }.onFailure {
@@ -508,7 +512,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         watchProgressPreferences.saveProgress(profileSession.profileId, completed)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.hasAuthenticatedProvider) {
+        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
             return
         }
         val session = accountSessionFor(providerState.effectiveProvider, profileSession)
@@ -528,6 +532,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         year = null,
                         session = session
                     )
+                TrackingProvider.MDBLIST -> return@runCatching
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
         }.onFailure {

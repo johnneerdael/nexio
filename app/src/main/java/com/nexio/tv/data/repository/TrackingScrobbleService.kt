@@ -19,6 +19,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -83,6 +84,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
     private val rejectionReporter: ScrobbleRejectionReporter,
     private val animeSeasonProjectionResolver: AnimeSeasonProjectionResolver,
     private val idMappingService: AnimeIdMappingService,
+    private val mdbListScrobbleService: MDBListScrobbleService? = null,
 ) : TrackingScrobbleService {
 
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
@@ -98,6 +100,11 @@ class DefaultTrackingScrobbleService @Inject constructor(
             if (providerState.simklAuthenticated) {
                 launch {
                     simklScrobbleService.scrobbleStart(item, progressPercent, owner.ownerProfileId)
+                }
+            }
+            if (providerState.mdbListAuthenticated) {
+                launch {
+                    mdbListScrobbleService?.scrobbleStart(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
                 }
             }
         }
@@ -118,6 +125,11 @@ class DefaultTrackingScrobbleService @Inject constructor(
                     simklScrobbleService.scrobbleStop(item, progressPercent, owner.ownerProfileId)
                 }
             }
+            if (providerState.mdbListAuthenticated) {
+                launch {
+                    mdbListScrobbleService?.scrobbleStop(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                }
+            }
         }
     }
 
@@ -134,6 +146,11 @@ class DefaultTrackingScrobbleService @Inject constructor(
             if (providerState.simklAuthenticated) {
                 launch {
                     simklScrobbleService.scrobblePause(item, progressPercent, owner.ownerProfileId)
+                }
+            }
+            if (providerState.mdbListAuthenticated) {
+                launch {
+                    mdbListScrobbleService?.scrobblePause(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
                 }
             }
         }
@@ -174,6 +191,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
                 TrackingProvider.TRAKT -> traktScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
+                TrackingProvider.MDBLIST -> flowOf(TrackingWatchingNowState())
             }
         }
     }

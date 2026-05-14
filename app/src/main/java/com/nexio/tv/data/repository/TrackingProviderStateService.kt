@@ -29,10 +29,11 @@ data class EffectiveTrackingProviderState(
     )
     val effectiveProvider: TrackingProvider = TrackingProvider.TRAKT,
     val traktAuthenticated: Boolean = false,
-    val simklAuthenticated: Boolean = false
+    val simklAuthenticated: Boolean = false,
+    val mdbListAuthenticated: Boolean = false,
 ) {
     val hasAuthenticatedProvider: Boolean
-        get() = traktAuthenticated || simklAuthenticated
+        get() = traktAuthenticated || simklAuthenticated || mdbListAuthenticated
 
     // Every authenticated provider. Source of truth for scrobble fan-out routing.
     // effectiveProvider remains for display-only surfaces that need a single tag.
@@ -40,15 +41,17 @@ data class EffectiveTrackingProviderState(
         get() = buildSet {
             if (traktAuthenticated) add(TrackingProvider.TRAKT)
             if (simklAuthenticated) add(TrackingProvider.SIMKL)
+            if (mdbListAuthenticated) add(TrackingProvider.MDBLIST)
         }
 
     val canReadEffectiveProvider: Boolean
-        get() = hasAuthenticatedProvider
+        get() = traktAuthenticated || simklAuthenticated
 
     fun isProviderAuthenticated(provider: TrackingProvider): Boolean {
         return when (provider) {
             TrackingProvider.TRAKT -> traktAuthenticated
             TrackingProvider.SIMKL -> simklAuthenticated
+            TrackingProvider.MDBLIST -> mdbListAuthenticated
         }
     }
 }
@@ -61,7 +64,8 @@ class TrackingProviderStateService @Inject constructor(
     private val simklAuthDataStore: SimklAuthDataStore,
     private val profileManager: ProfileManager,
     private val profileModeRouter: ProfileModeRouter,
-    private val profileBoundary: ProfileBoundary
+    private val profileBoundary: ProfileBoundary,
+    private val mdbListSettingsReader: MDBListSettingsReader? = null,
 ) {
     val state: Flow<EffectiveTrackingProviderState> = combineTrackingState(
         profileManager.activeProfileId.flatMapLatest(::authStateForProfile)
@@ -95,11 +99,18 @@ class TrackingProviderStateService @Inject constructor(
             storedProvider = settings.trackingProvider,
             effectiveProvider = effectiveProvider,
             traktAuthenticated = authState.traktAuthenticated,
-            simklAuthenticated = authState.simklAuthenticated
+            simklAuthenticated = authState.simklAuthenticated,
+            mdbListAuthenticated = authState.mdbListAuthenticated,
         )
     }
 
-    private fun selectedProvider(provider: TrackingProvider): TrackingProvider = provider
+    private fun selectedProvider(provider: TrackingProvider): TrackingProvider {
+        return when (provider) {
+            TrackingProvider.TRAKT -> TrackingProvider.TRAKT
+            TrackingProvider.SIMKL -> TrackingProvider.SIMKL
+            TrackingProvider.MDBLIST -> TrackingProvider.TRAKT
+        }
+    }
 
     private fun authStateForProfile(profileId: Int): Flow<TrackingAuthState> {
         return when (val route = profileModeRouter.routeFor(profileId)) {
@@ -119,20 +130,23 @@ class TrackingProviderStateService @Inject constructor(
     ): Flow<TrackingAuthState> {
         return combine(
             traktAuthDataStore.stateForProfile(traktProfileId).map { it.isAuthenticated },
-            simklAuthDataStore.stateForProfile(simklProfileId).map { it.isAuthenticated }
-        ) { traktAuthenticated, simklAuthenticated ->
+            simklAuthDataStore.stateForProfile(simklProfileId).map { it.isAuthenticated },
+            mdbListSettingsReader?.settings?.map { it.enabled && it.apiKey.isNotBlank() } ?: flowOf(false),
+        ) { traktAuthenticated, simklAuthenticated, mdbListAuthenticated ->
             TrackingAuthState(
                 traktAuthenticated = traktAuthenticated,
-                simklAuthenticated = simklAuthenticated
+                simklAuthenticated = simklAuthenticated,
+                mdbListAuthenticated = mdbListAuthenticated,
             )
         }
     }
 
     private data class TrackingAuthState(
         val traktAuthenticated: Boolean = false,
-        val simklAuthenticated: Boolean = false
+        val simklAuthenticated: Boolean = false,
+        val mdbListAuthenticated: Boolean = false,
     ) {
         val hasAnyAuthenticatedProvider: Boolean
-            get() = traktAuthenticated || simklAuthenticated
+            get() = traktAuthenticated || simklAuthenticated || mdbListAuthenticated
     }
 }

@@ -32,6 +32,11 @@ class TestTrackingAccountScopeProvider : TrackingAccountScopeProvider {
         return when (provider) {
             TrackingProvider.TRAKT -> testTraktSession(profileId)
             TrackingProvider.SIMKL -> testSimklSession(profileId)
+            TrackingProvider.MDBLIST -> TrackingAuthSession(
+                provider = TrackingProvider.MDBLIST,
+                profileId = profileId,
+                credentialHash = "mdblist-test-credential"
+            )
         }
     }
 }

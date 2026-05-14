@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.first
 class WatchlistAutoRemoveCoordinator @Inject constructor(
     private val unifiedWatchlistRepository: Provider<UnifiedWatchlistRepository>,
     private val traktLibraryService: Provider<TraktLibraryService>,
-    private val simklLibraryService: Provider<SimklLibraryService>
+    private val simklLibraryService: Provider<SimklLibraryService>,
+    private val mdbListLibraryService: Provider<MDBListLibraryService>,
 ) {
     data class RemovePlan(
         val source: UnifiedWatchlistSource,
@@ -42,7 +43,7 @@ class WatchlistAutoRemoveCoordinator @Inject constructor(
             when (plans[i].source) {
                 UnifiedWatchlistSource.TRAKT -> traktLibraryService.get().removeWatchlistItem(item)
                 UnifiedWatchlistSource.SIMKL -> simklLibraryService.get().removeWatchlistItem(item)
-                UnifiedWatchlistSource.MDBLIST,
+                UnifiedWatchlistSource.MDBLIST -> mdbListLibraryService.get().removeWatchlistItem(item)
                 UnifiedWatchlistSource.LOCAL -> Unit
             }
         }
@@ -81,7 +82,7 @@ class WatchlistAutoRemoveCoordinator @Inject constructor(
             for (i in membership.sourceRefs.indices) {
                 val ref = membership.sourceRefs[i]
                 if (!ref.isWatchlistRef()) continue
-                if (ref.source == UnifiedWatchlistSource.MDBLIST || ref.source == UnifiedWatchlistSource.LOCAL) continue
+                if (ref.source == UnifiedWatchlistSource.LOCAL) continue
                 val plan = RemovePlan(ref.source, ref.rawKey, membership.authorityKey)
                 val lastSent = lastSentByDedupeKey[plan.dedupeKey]
                 if (lastSent != null && nowMs - lastSent < TTL_MS) continue
@@ -94,7 +95,7 @@ class WatchlistAutoRemoveCoordinator @Inject constructor(
             return when (source) {
                 UnifiedWatchlistSource.TRAKT -> listKey == TraktLibraryService.WATCHLIST_KEY
                 UnifiedWatchlistSource.SIMKL -> listKey == SimklLibraryService.WATCHLIST_KEY
-                UnifiedWatchlistSource.MDBLIST,
+                UnifiedWatchlistSource.MDBLIST -> listKey == MDBListLibraryService.WATCHLIST_KEY
                 UnifiedWatchlistSource.LOCAL -> false
             }
         }

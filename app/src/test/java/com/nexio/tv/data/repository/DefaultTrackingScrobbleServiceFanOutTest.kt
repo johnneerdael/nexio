@@ -19,6 +19,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
     private val traktService = mockk<TraktScrobbleService>(relaxed = true)
     private val simklService = mockk<SimklScrobbleService>(relaxed = true)
+    private val mdbListService = mockk<MDBListScrobbleService>(relaxed = true)
     private val providerStateService = mockk<TrackingProviderStateService>()
     private val rejectionReporter = mockk<ScrobbleRejectionReporter>(relaxed = true)
     private val animeProjectionResolver = mockk<AnimeSeasonProjectionResolver>(relaxed = true)
@@ -31,6 +32,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         rejectionReporter = rejectionReporter,
         animeSeasonProjectionResolver = animeProjectionResolver,
         idMappingService = animeIdMappingService,
+        mdbListScrobbleService = mdbListService,
     )
 
     private fun owner(profileId: Int = 1, sessionId: String = "session-x") = PlaybackOwnerContext(
@@ -45,12 +47,13 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         year = 2008,
     )
 
-    private fun stubState(trakt: Boolean, simkl: Boolean) {
+    private fun stubState(trakt: Boolean, simkl: Boolean, mdblist: Boolean = false) {
         val state = EffectiveTrackingProviderState(
             storedProvider = TrackingProvider.TRAKT,
             effectiveProvider = TrackingProvider.TRAKT,
             traktAuthenticated = trakt,
             simklAuthenticated = simkl,
+            mdbListAuthenticated = mdblist,
         )
         coEvery { providerStateService.currentState(any<Int>()) } returns state
         coEvery { providerStateService.currentState() } returns state
@@ -58,11 +61,12 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
     @Test
     fun `scrobbleStart dispatches to both providers when both authed`() = runTest {
-        stubState(trakt = true, simkl = true)
+        stubState(trakt = true, simkl = true, mdblist = true)
         newService().scrobbleStart(movieItem(), 10f, owner())
 
         coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, any()) }
         coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+        coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
     }
 
     @Test
@@ -72,6 +76,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
         coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+        coVerify(exactly = 0) { mdbListService.scrobbleStart(any(), any(), any(), any()) }
     }
 
     @Test
@@ -81,6 +86,17 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
         coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, any()) }
         coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { mdbListService.scrobbleStart(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `scrobbleStart dispatches only to MDBList when only MDBList authed`() = runTest {
+        stubState(trakt = false, simkl = false, mdblist = true)
+        newService().scrobbleStart(movieItem(), 10f, owner())
+
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
     }
 
     @Test
@@ -90,24 +106,27 @@ class DefaultTrackingScrobbleServiceFanOutTest {
 
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
         coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { mdbListService.scrobbleStart(any(), any(), any(), any()) }
     }
 
     @Test
     fun `scrobbleStop fans out`() = runTest {
-        stubState(trakt = true, simkl = true)
+        stubState(trakt = true, simkl = true, mdblist = true)
         newService().scrobbleStop(movieItem(), 95f, owner())
 
         coVerify(exactly = 1) { traktService.scrobbleStop(any(), 95f, 1, any()) }
         coVerify(exactly = 1) { simklService.scrobbleStop(any(), 95f, 1, any()) }
+        coVerify(exactly = 1) { mdbListService.scrobbleStop(any(), 95f, 1, any()) }
     }
 
     @Test
     fun `scrobblePause fans out`() = runTest {
-        stubState(trakt = true, simkl = true)
+        stubState(trakt = true, simkl = true, mdblist = true)
         newService().scrobblePause(movieItem(), 50f, owner())
 
         coVerify(exactly = 1) { traktService.scrobblePause(any(), 50f, 1, any()) }
         coVerify(exactly = 1) { simklService.scrobblePause(any(), 50f, 1, any()) }
+        coVerify(exactly = 1) { mdbListService.scrobblePause(any(), 50f, 1, any()) }
     }
 
     @Test
