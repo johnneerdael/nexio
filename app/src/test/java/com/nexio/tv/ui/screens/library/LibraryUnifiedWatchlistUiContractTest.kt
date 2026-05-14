@@ -23,7 +23,9 @@ class LibraryUnifiedWatchlistUiContractTest {
 
         assertTrue(screenSource.contains("viewModel.unifiedWatchlistRows.collectAsState()"))
         assertTrue(screenSource.contains("LibraryPrimaryTab.UNIFIED_WATCHLIST"))
-        assertTrue(screenSource.contains("UnifiedWatchlistLibraryRailItem.fromRow(row)"))
+        assertTrue(screenSource.contains("UnifiedWatchlistLibraryRailItem.entryFromRow(row)"))
+        assertTrue(screenSource.contains("LibraryRailItem.fromEntry(item)"))
+        assertFalse(screenSource.contains("items(unifiedWatchlistRows"))
         assertTrue(railItemSource.contains("posterProviderTag = null"))
 
         assertFalse(screenSource.contains("presentIn.joinToString"))

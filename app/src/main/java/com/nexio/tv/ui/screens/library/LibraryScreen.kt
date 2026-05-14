@@ -84,6 +84,8 @@ import com.nexio.tv.ui.util.formatAddonTypeLabel
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.LibraryEntry
+import java.util.Locale
 
 private const val KEY_REPEAT_THROTTLE_MS = 80L
 
@@ -103,6 +105,75 @@ private fun localizedTypeLabel(key: String): String = when (key.lowercase()) {
     "movie" -> stringResource(R.string.type_movie)
     "series" -> stringResource(R.string.type_series)
     else -> formatAddonTypeLabel(key)
+}
+
+private fun buildLibraryTypeTabs(items: List<LibraryEntry>): List<LibraryTypeTab> {
+    val byKey = linkedMapOf<String, LibraryTypeTab>()
+    for (i in items.indices) {
+        val key = items[i].type.trim().ifBlank { "unknown" }.lowercase(Locale.ROOT)
+        if (byKey.containsKey(key)) continue
+        byKey[key] = LibraryTypeTab(key = key, label = prettifyLibraryTypeLabel(key))
+    }
+    return listOf(LibraryTypeTab.All) + byKey.values
+}
+
+private fun prettifyLibraryTypeLabel(key: String): String {
+    return key
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { token ->
+            token.replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase(Locale.ROOT) else ch.toString()
+            }
+        }
+        .ifBlank { "Unknown" }
+}
+
+private fun List<LibraryEntry>.visibleLibraryItems(
+    selectedTypeTab: LibraryTypeTab,
+    selectedSortOption: LibrarySortOption,
+    selectedListType: LibraryListTab.Type?
+): List<LibraryEntry> {
+    val selectedTypeKey = selectedTypeTab.key
+    val typeFiltered = filter { entry ->
+        selectedTypeKey == LibraryTypeTab.ALL_KEY ||
+            entry.type.trim().lowercase(Locale.ROOT) == selectedTypeKey
+    }
+    return when (selectedSortOption) {
+        LibrarySortOption.DEFAULT -> if (
+            selectedListType == LibraryListTab.Type.WATCHLIST ||
+            selectedListType == LibraryListTab.Type.PERSONAL
+        ) {
+            typeFiltered.sortedWith(
+                compareBy<LibraryEntry> { it.traktRank ?: Int.MAX_VALUE }
+                    .thenByDescending { it.listedAt }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.id } }
+                    .thenBy { it.id }
+            )
+        } else {
+            typeFiltered
+        }
+        LibrarySortOption.ADDED_DESC -> typeFiltered.sortedWith(
+            compareByDescending<LibraryEntry> { it.listedAt }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.id } }
+                .thenBy { it.id }
+        )
+        LibrarySortOption.ADDED_ASC -> typeFiltered.sortedWith(
+            compareBy<LibraryEntry> { it.listedAt }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.id } }
+                .thenBy { it.id }
+        )
+        LibrarySortOption.TITLE_ASC -> typeFiltered.sortedWith(
+            compareBy<LibraryEntry> { it.name.ifBlank { it.id }.lowercase(Locale.ROOT) }
+                .thenBy { it.id }
+        )
+        LibrarySortOption.TITLE_DESC -> typeFiltered.sortedWith(
+            compareByDescending<LibraryEntry> { it.name.ifBlank { it.id }.lowercase(Locale.ROOT) }
+                .thenBy { it.id }
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -151,12 +222,43 @@ fun LibraryScreen(
     val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
     var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val gridItemKeys = remember(isUnifiedWatchlistTab, unifiedWatchlistRows, uiState.visibleItems) {
+    val unifiedWatchlistItems = remember(unifiedWatchlistRows) {
+        unifiedWatchlistRows.map { row -> UnifiedWatchlistLibraryRailItem.entryFromRow(row) }
+    }
+    val effectiveTypeTabs = remember(isUnifiedWatchlistTab, unifiedWatchlistItems, uiState.availableTypeTabs) {
+        if (isUnifiedWatchlistTab) buildLibraryTypeTabs(unifiedWatchlistItems) else uiState.availableTypeTabs
+    }
+    val effectiveSortOptions = remember(isUnifiedWatchlistTab, uiState.availableSortOptions) {
+        if (isUnifiedWatchlistTab) LibrarySortOption.TraktOptions else uiState.availableSortOptions
+    }
+    val effectiveSelectedTypeTab = remember(effectiveTypeTabs, uiState.selectedTypeTab) {
+        uiState.selectedTypeTab?.takeIf { selected ->
+            effectiveTypeTabs.any { it.key == selected.key }
+        } ?: LibraryTypeTab.All
+    }
+    val effectiveSelectedSortOption = remember(effectiveSortOptions, uiState.selectedSortOption) {
+        uiState.selectedSortOption.takeIf { it in effectiveSortOptions }
+            ?: LibrarySortOption.DEFAULT
+    }
+    val visibleItems = remember(
+        isUnifiedWatchlistTab,
+        unifiedWatchlistItems,
+        uiState.visibleItems,
+        effectiveSelectedTypeTab,
+        effectiveSelectedSortOption
+    ) {
         if (isUnifiedWatchlistTab) {
-            unifiedWatchlistRows.map { "unified:${it.membership.authorityKey}" }
+            unifiedWatchlistItems.visibleLibraryItems(
+                selectedTypeTab = effectiveSelectedTypeTab,
+                selectedSortOption = effectiveSelectedSortOption,
+                selectedListType = LibraryListTab.Type.WATCHLIST
+            )
         } else {
-            uiState.visibleItems.map { "${it.type}:${it.id}" }
+            uiState.visibleItems
         }
+    }
+    val gridItemKeys = remember(visibleItems) {
+        visibleItems.map { "${it.type}:${it.id}" }
     }
     val visibleItemIndexByKey = remember(gridItemKeys) {
         gridItemKeys.withIndex().associate { (index, key) -> key to index }
@@ -313,35 +415,33 @@ fun LibraryScreen(
             )
         }
 
-        if (!isUnifiedWatchlistTab) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                LibrarySelectorsRow(
-                    sourceMode = uiState.sourceMode,
-                    listTabs = uiState.listTabs,
-                    typeTabs = uiState.availableTypeTabs,
-                    sortOptions = uiState.availableSortOptions,
-                    selectedListKey = uiState.selectedListKey,
-                    selectedTypeTab = uiState.selectedTypeTab,
-                    selectedSortOption = uiState.selectedSortOption,
-                    primaryFocusRequester = selectorFocusRequester,
-                    expandedPicker = expandedPicker,
-                    onExpandedChange = { picker, shouldExpand ->
-                        expandedPicker = if (shouldExpand) picker else null
-                    },
-                    onSelectList = { key ->
-                        viewModel.onSelectListTab(key)
-                        expandedPicker = null
-                    },
-                    onSelectType = { type ->
-                        viewModel.onSelectTypeTab(type)
-                        expandedPicker = null
-                    },
-                    onSelectSort = { sort ->
-                        viewModel.onSelectSortOption(sort)
-                        expandedPicker = null
-                    }
-                )
-            }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            LibrarySelectorsRow(
+                sourceMode = uiState.sourceMode,
+                listTabs = if (isUnifiedWatchlistTab) emptyList() else uiState.listTabs,
+                typeTabs = effectiveTypeTabs,
+                sortOptions = effectiveSortOptions,
+                selectedListKey = if (isUnifiedWatchlistTab) null else uiState.selectedListKey,
+                selectedTypeTab = effectiveSelectedTypeTab,
+                selectedSortOption = effectiveSelectedSortOption,
+                primaryFocusRequester = selectorFocusRequester,
+                expandedPicker = expandedPicker,
+                onExpandedChange = { picker, shouldExpand ->
+                    expandedPicker = if (shouldExpand) picker else null
+                },
+                onSelectList = { key ->
+                    viewModel.onSelectListTab(key)
+                    expandedPicker = null
+                },
+                onSelectType = { type ->
+                    viewModel.onSelectTypeTab(type)
+                    expandedPicker = null
+                },
+                onSelectSort = { sort ->
+                    viewModel.onSelectSortOption(sort)
+                    expandedPicker = null
+                }
+            )
         }
 
         if (isUnifiedWatchlistTab || uiState.listTabs.isNotEmpty() || uiState.sourceMode != LibrarySourceMode.LOCAL) {
@@ -356,25 +456,29 @@ fun LibraryScreen(
             }
         }
 
-        if (isUnifiedWatchlistTab && unifiedWatchlistRows.isEmpty()) {
+        if (visibleItems.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyScreenState(
-                    title = "No unified watchlist items",
-                    subtitle = "Items from connected watchlist sources will appear here.",
-                    icon = Icons.Default.BookmarkBorder
-                )
-            }
-        } else if (!isUnifiedWatchlistTab && uiState.visibleItems.isEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                val selectedTypeLabel = uiState.selectedTypeTab?.let { localizedTypeLabel(it.key) }?.lowercase() ?: stringResource(R.string.library_type_items)
+                val selectedTypeLabel = if (effectiveSelectedTypeTab.key == LibraryTypeTab.ALL_KEY) {
+                    stringResource(R.string.library_type_items)
+                } else {
+                    localizedTypeLabel(effectiveSelectedTypeTab.key).lowercase()
+                }
                 val title = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_title, selectedTypeLabel)
+                    LibrarySourceMode.LOCAL -> if (isUnifiedWatchlistTab) {
+                        "No $selectedTypeLabel in watchlist"
+                    } else {
+                        stringResource(R.string.library_empty_local_title, selectedTypeLabel)
+                    }
                     LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
                     LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_title, selectedTypeLabel)
                     LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_title, selectedTypeLabel)
                 }
                 val subtitle = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_subtitle)
+                    LibrarySourceMode.LOCAL -> if (isUnifiedWatchlistTab) {
+                        "Items from connected watchlist sources will appear here."
+                    } else {
+                        stringResource(R.string.library_empty_local_subtitle)
+                    }
                     LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_subtitle)
                     LibrarySourceMode.SIMKL -> stringResource(R.string.library_empty_simkl_subtitle)
                     LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_subtitle)
@@ -387,27 +491,9 @@ fun LibraryScreen(
             }
         }
 
-        if (isUnifiedWatchlistTab) {
-            items(unifiedWatchlistRows, key = { "unified:${it.membership.authorityKey}" }) { row ->
-                val focusKey = "unified:${row.membership.authorityKey}"
-                val cardData = remember(row) { UnifiedWatchlistLibraryRailItem.fromRow(row) }
-                GridContentCard(
-                    item = cardData,
-                    posterCardStyle = posterCardStyle,
-                    focusRequester = posterFocusRequesters[focusKey],
-                    showLabel = true,
-                    onFocused = {
-                        lastFocusedPosterKey = focusKey
-                    },
-                    onClick = {
-                        lastFocusedPosterKey = focusKey
-                        onOpenEntry(cardData.source)
-                    }
-                )
-            }
-        } else if (useReadableDebridListLayout) {
+        if (useReadableDebridListLayout) {
             items(
-                items = uiState.visibleItems,
+                items = visibleItems,
                 key = { "${it.type}:${it.id}" },
                 span = { GridItemSpan(maxLineSpan) }
             ) { item ->
@@ -425,7 +511,7 @@ fun LibraryScreen(
                 )
             }
         } else {
-            items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
+            items(visibleItems, key = { "${it.type}:${it.id}" }) { item ->
                 val focusKey = "${item.type}:${item.id}"
                 val cardData = remember(item) { LibraryRailItem.fromEntry(item) }
                 GridContentCard(

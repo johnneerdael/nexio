@@ -71,14 +71,31 @@ internal data class UnifiedWatchlistLibraryRailItem(
     override val name: String get() = title
 
     companion object {
+        fun entryFromRow(row: UnifiedWatchlistRowItem): LibraryEntry = buildEntry(row)
+
         fun fromRow(row: UnifiedWatchlistRowItem): UnifiedWatchlistLibraryRailItem {
+            val displayItem = row.displayItem
+            val entry = buildEntry(row)
+            val title = entry.name
+            return UnifiedWatchlistLibraryRailItem(
+                itemKey = "${entry.type}:${entry.id}",
+                contentId = entry.id,
+                title = title,
+                rating = displayItem.rating,
+                posterRef = displayItem.artwork.poster,
+                posterProviderTag = null,
+                source = entry
+            )
+        }
+
+        private fun buildEntry(row: UnifiedWatchlistRowItem): LibraryEntry {
             val displayItem = row.displayItem
             val display = displayItem.display
             val membership = row.membership
             val title = display.title
                 ?: membership.title
                 ?: displayItem.contentId
-            val entry = LibraryEntry(
+            return LibraryEntry(
                 id = displayItem.contentId.ifBlank { membership.authorityKey },
                 type = displayItem.itemType.toApiString(membership.contentType.toApiString()),
                 name = title,
@@ -93,15 +110,6 @@ internal data class UnifiedWatchlistLibraryRailItem(
                 imdbId = membership.imdbId ?: displayItem.imdbId ?: displayItem.stableIds.imdb,
                 tmdbId = membership.tmdbId ?: displayItem.stableIds.tmdb?.toIntOrNull(),
                 traktId = membership.traktId ?: displayItem.stableIds.trakt?.toIntOrNull()
-            )
-            return UnifiedWatchlistLibraryRailItem(
-                itemKey = "unified:${membership.authorityKey}",
-                contentId = displayItem.contentId,
-                title = title,
-                rating = displayItem.rating,
-                posterRef = displayItem.artwork.poster,
-                posterProviderTag = null,
-                source = entry
             )
         }
     }
