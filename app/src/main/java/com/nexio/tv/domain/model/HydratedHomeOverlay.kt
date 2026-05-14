@@ -3,7 +3,7 @@ package com.nexio.tv.domain.model
 import androidx.compose.runtime.Immutable
 import java.security.MessageDigest
 
-private const val DEFAULT_HOME_OVERLAY_POLICY_VERSION = 1
+const val HOME_OVERLAY_POLICY_VERSION = 2
 
 enum class HomeItemHydrationState {
     PREVIEW_ONLY,
@@ -32,7 +32,7 @@ data class HydratedHomeOverlay(
     val imdbId: String?,
     val contentType: ContentType,
     val languageTag: String,
-    val policyVersion: Int = DEFAULT_HOME_OVERLAY_POLICY_VERSION,
+    val policyVersion: Int = HOME_OVERLAY_POLICY_VERSION,
     val fields: HomeDisplayMetadata,
     val fieldTrace: List<HydratedHomeFieldTrace>,
     val displayHash: String = fields.hydratedHomeDisplayHash(),
@@ -83,7 +83,7 @@ fun hydratedHomeOverlayKey(
     canonicalId: String,
     contentType: ContentType,
     languageTag: String,
-    policyVersion: Int = DEFAULT_HOME_OVERLAY_POLICY_VERSION
+    policyVersion: Int = HOME_OVERLAY_POLICY_VERSION
 ): String {
     return "canonical:${canonicalProvider.name}:${canonicalId.trim()}:type:${contentType.name}:lang:${languageTag.trim()}:policy:$policyVersion"
 }

@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HOME_OVERLAY_POLICY_VERSION
 import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.HydratedHomeOverlay
@@ -157,8 +158,6 @@ private const val SIMKL_ROW_NAME_MOVIE_TRENDING_MONTH = "SIMKL Trending Movies (
 private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
 
 private const val TMDB_RAIL_ADDON_ID = "tmdb"
-private const val HOME_HYDRATED_OVERLAY_POLICY_VERSION = 1
-
 internal fun HomeViewModel.invalidateHomeCatalogConfigurationPipeline(reason: String) {
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
@@ -710,7 +709,7 @@ internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<Catalog
         hydratedHomeOverlayStore.observeForItemKeys(
             itemKeys = itemKeys,
             languageTag = languageTag,
-            policyVersion = HOME_HYDRATED_OVERLAY_POLICY_VERSION
+            policyVersion = HOME_OVERLAY_POLICY_VERSION
         ).collectLatest { overlays ->
             // Keep the alias-shape the store emits — each rail row's requested alias is
             // its own key, so different rails of the same show coexist as separate map

@@ -365,7 +365,7 @@ class HydratedHomeOverlayStore @Inject constructor(
     ): HydratedHomeOverlay? {
         // Try matching across all stored language tags + policy versions for this
         // itemKey. In practice the store currently only ever holds languageTag=current
-        // AND policyVersion=DEFAULT_HOME_OVERLAY_POLICY_VERSION, but we don't have
+        // AND policyVersion=HOME_OVERLAY_POLICY_VERSION, but we don't have
         // those values here — walk the keyspace to find any alias for this itemKey.
         val trimmedItemKey = itemKey.trim()
         val matchingAliasKey = entryStore.aliasKeys().firstOrNull { key ->

@@ -22,6 +22,7 @@ import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
+import com.nexio.tv.domain.model.HOME_OVERLAY_POLICY_VERSION
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
@@ -563,7 +564,6 @@ class HomeHydrationCoordinator @Inject constructor(
     }
 
     private companion object {
-        const val HOME_OVERLAY_POLICY_VERSION = 1
         const val HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE = "home-rating-artwork"
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L

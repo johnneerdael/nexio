@@ -22,6 +22,18 @@ class HydratedHomeOverlayTest {
     }
 
     @Test
+    fun `default overlay policy invalidates stale persisted home overlays`() {
+        val key = hydratedHomeOverlayKey(
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "355567",
+            contentType = ContentType.SERIES,
+            languageTag = "en"
+        )
+
+        assertEquals("canonical:TVDB:355567:type:SERIES:lang:en:policy:2", key)
+    }
+
+    @Test
     fun `display hash changes when displayed fields change`() {
         val first = HomeDisplayMetadata(title = "Preview", poster = null).hydratedHomeDisplayHash()
         val second = HomeDisplayMetadata(title = "Canonical", poster = null).hydratedHomeDisplayHash()
