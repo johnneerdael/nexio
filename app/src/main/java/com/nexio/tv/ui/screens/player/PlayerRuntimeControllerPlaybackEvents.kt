@@ -482,8 +482,9 @@ private fun PlayerRuntimeController.startScrobbleHeartbeat() {
             if (!isActive || !backendIsPlaying() || !hasRequestedScrobbleStartForCurrentItem) continue
             val progressPercent = currentPlaybackProgressPercent()
             if (progressPercent < 1f || progressPercent >= 95f) continue
+            val hydrated = prehydrateScrobbleIds()
             trackingScrobbleService.scrobbleStart(
-                item = item,
+                item = item.withHydratedIds(hydrated),
                 progressPercent = progressPercent,
                 owner = playbackOwnerContext
             )

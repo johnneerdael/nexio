@@ -28,6 +28,14 @@ class PlayerScrobbleCrossWatchActionContractTest {
         assertFalse(body.contains("emitStopScrobbleForCurrentProgress()"))
     }
 
+    @Test
+    fun `heartbeat scrobble start uses hydrated ids`() {
+        val body = bodyOf(playbackEvents, "fun PlayerRuntimeController.startScrobbleHeartbeat")
+
+        assertTrue(body.contains("val hydrated = prehydrateScrobbleIds()"))
+        assertTrue(body.contains("item = item.withHydratedIds(hydrated)"))
+    }
+
     private fun bodyOf(source: String, marker: String): String {
         val start = source.indexOf(marker)
         require(start >= 0) { "$marker not found" }
