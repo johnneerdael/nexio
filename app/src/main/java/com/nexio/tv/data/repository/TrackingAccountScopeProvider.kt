@@ -24,6 +24,7 @@ class DefaultTrackingAccountScopeProvider @Inject constructor(
         return when (provider) {
             TrackingProvider.TRAKT -> traktAuthService.mutationAccountScopedSession(base)
             TrackingProvider.SIMKL -> simklAuthService.mutationAccountScopedSession(base)
+            TrackingProvider.MDBLIST -> base
         }
     }
 }
