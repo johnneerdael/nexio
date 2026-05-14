@@ -81,12 +81,14 @@ class TraktMutationOutboxWorker(
 
     suspend fun classifyFailure(
         failure: TraktMutationExecutionResult.Failure,
-        attemptCount: Int
+        attemptCount: Int,
+        provider: com.nexio.tv.domain.model.TrackingProvider? = null
     ): TraktMutationSettlement = mutex.withLock {
         policy.classifyFailure(
             failure = failure,
             attemptCount = attemptCount,
-            nowMs = timeProvider()
+            nowMs = timeProvider(),
+            provider = provider
         )
     }
 }

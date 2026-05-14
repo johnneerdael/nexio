@@ -144,7 +144,8 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
                 )
                 is TraktMutationExecutionResult.Failure -> worker.classifyFailure(
                     failure = execution,
-                    attemptCount = lease.envelope.attemptCount
+                    attemptCount = lease.envelope.attemptCount,
+                    provider = lease.envelope.provider
                 )
             }
 
