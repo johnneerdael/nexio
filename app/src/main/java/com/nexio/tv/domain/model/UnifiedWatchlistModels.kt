@@ -174,5 +174,5 @@ data class UnifiedWatchlistMembership(
 @Immutable
 data class UnifiedWatchlistRowItem(
     val membership: UnifiedWatchlistMembership,
-    val resolved: ResolvedDisplayItem? = null
+    val displayItem: ResolvedDisplayItem
 )
