@@ -644,6 +644,9 @@ class MetaDetailsViewModel @Inject constructor(
             } else {
                 null
             }
+            if (initialAddonMeta != null) {
+                applyFastSeedMeta(initialAddonMeta)
+            }
 
             val resolvedDetail = try {
                 loadResolvedDetailDocument(
@@ -678,6 +681,8 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 }
                 applyMetaWithEnrichment(meta, resolvedDetail)
+            } else if (initialAddonMeta != null) {
+                debugLog(TAG, "loadMeta using cached addon seed after unresolved detail route id=$metaLookupId")
             } else if (preferredAddonBaseUrl?.isNotBlank() == true) {
                 // Last-resort A: item came from an addon catalog rail and the router yielded nothing.
                 metaRepository.getMeta(
@@ -718,6 +723,15 @@ class MetaDetailsViewModel @Inject constructor(
                 Log.w(TAG, "loadMeta: no canonical route AND no resolvable addon origin for $metaLookupId")
                 _uiState.update { it.copy(isLoading = false, error = "Could not resolve metadata for $metaLookupId") }
             }
+        }
+    }
+
+    private fun applyFastSeedMeta(meta: Meta) {
+        meta.id.takeIf { it.isNotBlank() }?.let { loadedContentId ->
+            effectiveContentId.value = loadedContentId
+        }
+        _uiState.update { state ->
+            if (state.meta != null && !state.isLoading) state else state.withRefreshedMeta(meta)
         }
     }
 

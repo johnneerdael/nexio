@@ -25,13 +25,17 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -317,6 +321,68 @@ class MetaDetailsResolveRequestRoutingTest {
             assertEquals(1, videos.single().episode)
             assertEquals(listOf(1), viewModel.uiState.value.seasons)
             assertEquals("The Name of the Game", viewModel.uiState.value.episodesForSeason.single().title)
+        }
+
+    @Test
+    fun `addon cache seed renders before full detail route resolves`() =
+        runTest(dispatcher) {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val metaRepository = mockk<MetaRepository>(relaxed = true)
+            val routeMayComplete = CompletableDeferred<Unit>()
+            val cachedMeta = buildMinimalSeriesMeta().copy(
+                name = "Cached Detail Seed",
+                description = "Loaded from disk backed addon meta",
+                genres = listOf("Cached")
+            )
+
+            coEvery { facade.resolveRequest(any<MetadataRequest>()) } coAnswers {
+                routeMayComplete.await()
+                buildTvdbResolutionResult()
+            }
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
+            )
+            every {
+                metaRepository.getMeta(
+                    addonBaseUrl = any(),
+                    type = any(),
+                    id = any(),
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            } returns flowOf(com.nexio.tv.core.network.NetworkResult.Success(cachedMeta))
+
+            val viewModel = buildMetaDetailsViewModel(
+                meta = cachedMeta,
+                itemId = "tvdb:355567",
+                itemType = "series",
+                addonBaseUrl = "https://addon.example.com",
+                metaRepository = metaRepository,
+                metadataRouterFacade = facade
+            )
+
+            runCurrent()
+
+            val seededState = viewModel.uiState.value
+            assertFalse("cached addon meta should end the initial skeleton before route completion", seededState.isLoading)
+            assertEquals("Cached Detail Seed", seededState.meta?.name)
+            assertEquals(listOf("Cached"), seededState.meta?.genres)
+
+            routeMayComplete.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals("Sample TVDB Title", viewModel.uiState.value.meta?.name)
         }
 
     // ── helpers ──────────────────────────────────────────────────────────────────
