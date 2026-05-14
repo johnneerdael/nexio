@@ -633,6 +633,9 @@ private fun LibrarySelectorsRow(
 ) {
     val selectedTypeLabel = selectedTypeTab?.let { localizedTypeLabel(it.key) } ?: stringResource(R.string.library_type_all)
     val selectedSortLabel = selectedSortOption.label
+    val listFocusRequester = remember { FocusRequester() }
+    val typeFocusRequester = remember { FocusRequester() }
+    val sortFocusRequester = remember { FocusRequester() }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -654,7 +657,9 @@ private fun LibrarySelectorsRow(
         )
 
         LibraryDropdownPicker(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(listFocusRequester),
             title = stringResource(R.string.library_filter_list),
             value = listSelectorLabel,
             selectedValue = selectedListKey ?: "__na__",
@@ -667,11 +672,14 @@ private fun LibrarySelectorsRow(
             onExpandedChange = { shouldExpand -> onExpandedChange("list", shouldExpand && supportsLists) },
             onSelect = { option ->
                 if (supportsLists) onSelectList(option.value)
-            }
+            },
+            onMoveLeft = { primaryFocusRequester.requestFocus() }
         )
 
         LibraryDropdownPicker(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(typeFocusRequester),
             title = stringResource(R.string.library_filter_type),
             value = selectedTypeLabel,
             selectedValue = selectedTypeTab?.key,
@@ -680,13 +688,15 @@ private fun LibrarySelectorsRow(
             onExpandedChange = { onExpandedChange("type", it) },
             onSelect = { option ->
                 typeTabs.firstOrNull { it.key == option.value }?.let(onSelectType)
-            }
+            },
+            onMoveLeft = { listFocusRequester.requestFocus() }
         )
 
         if (sortOptions.isNotEmpty()) {
             LibraryDropdownPicker(
                 modifier = Modifier
-                    .weight(1f),
+                    .weight(1f)
+                    .focusRequester(sortFocusRequester),
                 title = stringResource(R.string.library_filter_sort),
                 value = selectedSortLabel,
                 selectedValue = selectedSortOption.key,
@@ -695,7 +705,8 @@ private fun LibrarySelectorsRow(
                 onExpandedChange = { onExpandedChange("sort", it) },
                 onSelect = { option ->
                     sortOptions.firstOrNull { it.key == option.value }?.let(onSelectSort)
-                }
+                },
+                onMoveLeft = { typeFocusRequester.requestFocus() }
             )
         }
     }
@@ -711,13 +722,28 @@ private fun LibraryDropdownPicker(
     expanded: Boolean,
     options: List<LibraryOption>,
     onExpandedChange: (Boolean) -> Unit,
-    onSelect: (LibraryOption) -> Unit
+    onSelect: (LibraryOption) -> Unit,
+    onMoveLeft: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var anchorSize by remember { mutableStateOf(IntSize.Zero) }
     var focusedOptionValue by remember(expanded) { mutableStateOf<String?>(null) }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.onPreviewKeyEvent { event ->
+            val native = event.nativeKeyEvent
+            val moveLeft = onMoveLeft
+            if (
+                native.action == AndroidKeyEvent.ACTION_DOWN &&
+                native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT &&
+                moveLeft != null
+            ) {
+                moveLeft.invoke()
+                return@onPreviewKeyEvent true
+            }
+            false
+        }
+    ) {
         Card(
             onClick = { onExpandedChange(!expanded) },
             modifier = Modifier

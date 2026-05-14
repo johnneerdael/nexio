@@ -49,4 +49,19 @@ class LibraryUnifiedWatchlistUiContractTest {
         assertTrue(modelsSource.contains("val listSelectorLabel: String = \"N/A\""))
         assertTrue(modelsSource.contains("val isMutableStaticList: Boolean = false"))
     }
+
+    @Test
+    fun `library selector row consumes left navigation between controls before sidebar`() {
+        val screenSource = File("app/src/main/java/com/nexio/tv/ui/screens/library/LibraryScreen.kt").readText()
+
+        assertTrue(screenSource.contains("val listFocusRequester = remember { FocusRequester() }"))
+        assertTrue(screenSource.contains("val typeFocusRequester = remember { FocusRequester() }"))
+        assertTrue(screenSource.contains("val sortFocusRequester = remember { FocusRequester() }"))
+        assertTrue(screenSource.contains("onMoveLeft = { primaryFocusRequester.requestFocus() }"))
+        assertTrue(screenSource.contains("onMoveLeft = { listFocusRequester.requestFocus() }"))
+        assertTrue(screenSource.contains("onMoveLeft = { typeFocusRequester.requestFocus() }"))
+        assertTrue(screenSource.contains("native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT"))
+        assertTrue(screenSource.contains("moveLeft.invoke()"))
+        assertTrue(screenSource.contains("return@onPreviewKeyEvent true"))
+    }
 }
