@@ -21,7 +21,8 @@ enum class RailSource {
     BUILT_IN_MDBLIST,
     BUILT_IN_TMDB,
     BUILT_IN_KITSU,
-    BUILT_IN_SIMKL_DISCOVERY
+    BUILT_IN_SIMKL_DISCOVERY,
+    UNIFIED_WATCHLIST
 }
 
 enum class ProviderId {

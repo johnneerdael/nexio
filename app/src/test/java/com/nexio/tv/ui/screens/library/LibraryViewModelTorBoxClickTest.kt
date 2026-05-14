@@ -1,11 +1,13 @@
 package com.nexio.tv.ui.screens.library
 
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
 import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
+import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -82,6 +84,7 @@ class LibraryViewModelTorBoxClickTest {
             layoutPreferenceDataStore = layoutPrefs(),
             torBoxDirectPlayHandler = handler,
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
         val emitted = mutableListOf<DirectPlayCommand>()
@@ -112,6 +115,7 @@ class LibraryViewModelTorBoxClickTest {
             layoutPreferenceDataStore = layoutPrefs(),
             torBoxDirectPlayHandler = handler,
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
         val emitted = mutableListOf<DirectPlayCommand>()
@@ -138,9 +142,23 @@ class LibraryViewModelTorBoxClickTest {
         return projector
     }
 
+    private fun unifiedWatchlistSurfacePublisher(): UnifiedWatchlistSurfacePublisher {
+        val publisher = mockk<UnifiedWatchlistSurfacePublisher>()
+        coEvery { publisher.publish(any(), any()) } returns true
+        return publisher
+    }
+
     private fun profileManager(): ProfileManager {
         val manager = mockk<ProfileManager>()
         every { manager.activeProfileId } returns MutableStateFlow(1)
+        every { manager.activeProfileSession } returns MutableStateFlow(
+            ActiveProfileSession(
+                profileId = 1,
+                sessionId = "test-session",
+                sessionOrdinal = 1L,
+                startedAtMs = 1L
+            )
+        )
         return manager
     }
 

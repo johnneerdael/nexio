@@ -4,6 +4,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
+import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -13,6 +15,7 @@ import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import com.nexio.tv.domain.repository.LibraryRepository
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +64,7 @@ class LibraryViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
 
@@ -84,6 +88,7 @@ class LibraryViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
 
@@ -132,6 +137,7 @@ class LibraryViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
 
@@ -157,6 +163,7 @@ class LibraryViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
 
@@ -189,6 +196,7 @@ class LibraryViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
             unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
             profileManager = profileManager(),
         )
 
@@ -216,9 +224,23 @@ class LibraryViewModelTest {
         return projector
     }
 
+    private fun unifiedWatchlistSurfacePublisher(): UnifiedWatchlistSurfacePublisher {
+        val publisher = mockk<UnifiedWatchlistSurfacePublisher>()
+        coEvery { publisher.publish(any(), any()) } returns true
+        return publisher
+    }
+
     private fun profileManager(): ProfileManager {
         val manager = mockk<ProfileManager>()
         every { manager.activeProfileId } returns MutableStateFlow(1)
+        every { manager.activeProfileSession } returns MutableStateFlow(
+            ActiveProfileSession(
+                profileId = 1,
+                sessionId = "test-session",
+                sessionOrdinal = 1L,
+                startedAtMs = 1L
+            )
+        )
         return manager
     }
 

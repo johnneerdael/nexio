@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
+import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
 import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
@@ -120,6 +121,7 @@ class LibraryViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val torBoxDirectPlayHandler: TorBoxDirectPlayHandler,
     private val unifiedWatchlistResolvedDisplayProjector: UnifiedWatchlistResolvedDisplayProjector,
+    private val unifiedWatchlistSurfacePublisher: UnifiedWatchlistSurfacePublisher,
     private val profileManager: ProfileManager,
 ) : ViewModel() {
 
@@ -535,6 +537,16 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun observeUnifiedWatchlistRows() {
+        viewModelScope.launch {
+            profileManager.activeProfileSession.collectLatest { profileSession ->
+                libraryRepository.unifiedWatchlistMemberships.collectLatest { memberships ->
+                    unifiedWatchlistSurfacePublisher.publish(
+                        profileSession = profileSession,
+                        memberships = memberships
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             profileManager.activeProfileId.collectLatest { profileId ->
                 unifiedWatchlistResolvedDisplayProjector
