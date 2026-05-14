@@ -4,11 +4,16 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListCreateListRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListCreateListResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListListItemsResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListListMutationResponseDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingResponseDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleClearRequestDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleClearResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedResponseDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedSyncRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistMutationRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import okhttp3.ResponseBody
@@ -101,6 +106,36 @@ interface MDBListApi {
         @Query("apikey") apiKey: String,
         @Body body: MDBListScrobbleRequestDto,
     ): Response<Unit>
+
+    @GET("sync/playback")
+    suspend fun getPlayback(
+        @Query("apikey") apiKey: String,
+    ): Response<MDBListPlaybackResponseDto>
+
+    @GET("sync/watched")
+    suspend fun getWatched(
+        @Query("apikey") apiKey: String,
+        @Query("limit") limit: Int = 1000,
+        @Query("offset") offset: Int = 0,
+    ): Response<MDBListWatchedResponseDto>
+
+    @POST("sync/watched")
+    suspend fun addWatched(
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListWatchedSyncRequestDto,
+    ): Response<Unit>
+
+    @POST("sync/watched/remove")
+    suspend fun removeWatched(
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListWatchedSyncRequestDto,
+    ): Response<Unit>
+
+    @POST("scrobble/clear")
+    suspend fun clearScrobble(
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListScrobbleClearRequestDto,
+    ): Response<MDBListScrobbleClearResponseDto>
 
     @GET
     suspend fun getRaw(
