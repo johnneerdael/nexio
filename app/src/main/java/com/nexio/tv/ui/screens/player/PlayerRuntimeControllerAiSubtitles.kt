@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player
 
+import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import com.nexio.tv.R
 import com.nexio.tv.data.repository.SubtitleTranslationService
@@ -146,6 +147,8 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
         return
     }
 
+    beginPendingAddonAiSubtitleSelection(sourceSubtitle)
+
     val requestGeneration = aiTranslationSelectionGeneration + 1L
     aiTranslationSelectionGeneration = requestGeneration
     aiSubtitleTranslationJob?.cancel()
@@ -239,6 +242,27 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
                     )
                 }
             }
+    }
+}
+
+private fun PlayerRuntimeController.beginPendingAddonAiSubtitleSelection(sourceSubtitle: Subtitle) {
+    deactivateAddonSubtitleOverlay()
+    assSsaRenderController?.disableRendering()
+    _exoPlayer?.let { player ->
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    }
+    _uiState.update {
+        it.copy(
+            selectedAddonSubtitle = sourceSubtitle,
+            selectedSubtitleTrackIndex = -1,
+            addonOverlayCues = emptyList(),
+            translatedBuiltInCues = emptyList(),
+            useBuiltInAiSubtitleOverlay = false
+        )
     }
 }
 

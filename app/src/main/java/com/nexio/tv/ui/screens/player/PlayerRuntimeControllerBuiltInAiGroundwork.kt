@@ -24,9 +24,21 @@ internal fun PlayerRuntimeController.currentBuiltInCueGroupIsTextOnly(): Boolean
 
 internal fun PlayerRuntimeController.shouldUseBuiltInAiTranslation(): Boolean {
     val state = _uiState.value
-    return state.aiSubtitlesEnabled &&
-        state.selectedAddonSubtitle == null &&
-        state.selectedSubtitleTrackIndex >= 0
+    return shouldUseBuiltInAiTranslationForState(
+        aiSubtitlesEnabled = state.aiSubtitlesEnabled,
+        selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null,
+        selectedSubtitleTrackIndex = state.selectedSubtitleTrackIndex
+    )
+}
+
+internal fun shouldUseBuiltInAiTranslationForState(
+    aiSubtitlesEnabled: Boolean,
+    selectedAddonSubtitlePresent: Boolean,
+    selectedSubtitleTrackIndex: Int
+): Boolean {
+    return aiSubtitlesEnabled &&
+        !selectedAddonSubtitlePresent &&
+        selectedSubtitleTrackIndex >= 0
 }
 
 internal fun shouldAllowBuiltInAiSubtitleEnable(

@@ -48,6 +48,14 @@ internal fun resolveOverlayCues(
     }
 }
 
+internal fun shouldSuppressNativeSubtitleView(
+    useBuiltInAiOverlay: Boolean,
+    useAssSsaRenderOverlay: Boolean,
+    isAddonAiSelectionPending: Boolean
+): Boolean {
+    return useBuiltInAiOverlay || useAssSsaRenderOverlay || isAddonAiSelectionPending
+}
+
 internal fun buildPlayerViewMutationPlan(
     previous: PlayerSurfaceRenderState?,
     current: PlayerSurfaceRenderState

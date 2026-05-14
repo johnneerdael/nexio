@@ -37,6 +37,28 @@ class PlayerVideoSurfaceStateTest {
     }
 
     @Test
+    fun `addon ai selection pending suppresses stale native subtitles`() {
+        assertTrue(
+            shouldSuppressNativeSubtitleView(
+                useBuiltInAiOverlay = false,
+                useAssSsaRenderOverlay = false,
+                isAddonAiSelectionPending = true
+            )
+        )
+    }
+
+    @Test
+    fun `native subtitles stay visible when no overlay owns rendering`() {
+        assertFalse(
+            shouldSuppressNativeSubtitleView(
+                useBuiltInAiOverlay = false,
+                useAssSsaRenderOverlay = false,
+                isAddonAiSelectionPending = false
+            )
+        )
+    }
+
+    @Test
     fun `mutation plan skips work when surface state is unchanged`() {
         val state = PlayerSurfaceRenderState(
             resizeMode = 1,

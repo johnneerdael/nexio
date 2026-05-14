@@ -518,8 +518,12 @@ fun PlayerScreen(
                             addonOverlayCues = uiState.addonOverlayCues
                         )
                     },
-                    suppressNativeSubtitles =
-                        uiState.useBuiltInAiSubtitleOverlay || uiState.useAssSsaRenderOverlay
+                    suppressNativeSubtitles = shouldSuppressNativeSubtitleView(
+                        useBuiltInAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
+                        useAssSsaRenderOverlay = uiState.useAssSsaRenderOverlay,
+                        isAddonAiSelectionPending = uiState.isAiSubtitleTranslating &&
+                            uiState.selectedAddonSubtitle != null
+                    )
                 ),
                 modifier = Modifier.fillMaxSize(),
                 assSsaRenderOverlayProvider = viewModel::setAssSsaRenderOverlayViewProvider

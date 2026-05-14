@@ -65,6 +65,26 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
     }
 
     @Test
+    fun `pending addon ai selection disables built in ai translation ownership`() {
+        assertEquals(
+            false,
+            shouldUseBuiltInAiTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = true,
+                selectedSubtitleTrackIndex = -1
+            )
+        )
+        assertEquals(
+            true,
+            shouldUseBuiltInAiTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrackIndex = 0
+            )
+        )
+    }
+
+    @Test
     fun `built in translator configuration token changes when provider configuration changes`() {
         val format = Format.Builder()
             .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
