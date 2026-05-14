@@ -20,6 +20,9 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.data.local.integration.MediaIdentityEntity
 import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
@@ -160,6 +163,64 @@ internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): L
         record.identityKey() in canonicalKeys || record.contentId in contentIds
     }
     return snapshot.records + missingSyntheticNextUpRecords
+}
+
+internal fun deriveLocalNextUpEntry(
+    seed: WatchProgress,
+    episodeMap: Map<Pair<Int, Int>, TvEpisodeMetadata>
+): TrackingNextUpEntry? {
+    val seedSeason = seed.season ?: return null
+    val seedEpisode = seed.episode ?: return null
+    val nextEpisode = episodeMap.entries
+        .asSequence()
+        .mapNotNull { (key, metadata) ->
+            val season = metadata.seasonNumber ?: key.first
+            val episode = metadata.episodeNumber ?: key.second
+            if (season <= 0 || episode <= 0) return@mapNotNull null
+            (season to episode) to metadata
+        }
+        .sortedWith(
+            compareBy<Pair<Pair<Int, Int>, TvEpisodeMetadata>> { it.first.first }
+                .thenBy { it.first.second }
+        )
+        .dropWhile { (episodeKey, _) ->
+            episodeKey.first < seedSeason || (episodeKey.first == seedSeason && episodeKey.second <= seedEpisode)
+        }
+        .firstOrNull()
+        ?: return null
+    val season = nextEpisode.first.first
+    val episode = nextEpisode.first.second
+    val metadata = nextEpisode.second
+    val contentId = seed.contentId.trim().takeIf { it.isNotBlank() } ?: return null
+    val firstAired = metadata.airDate
+    val firstAiredMs = firstAired
+        ?.takeIf { it.isNotBlank() }
+        ?.let { raw ->
+            AirDateGate.pendingTriggerMs(
+                firstAiredMs = 0L,
+                availabilityInstantMs = null,
+                tmdbAirDate = raw
+            )
+        }
+        ?: 0L
+
+    return TrackingNextUpEntry(
+        contentId = contentId,
+        contentType = seed.contentType.takeIf { it.isNotBlank() } ?: "series",
+        name = seed.name.takeIf { it.isNotBlank() } ?: contentId,
+        season = season,
+        episode = episode,
+        episodeTitle = metadata.title,
+        videoId = "$contentId:$season:$episode",
+        firstAired = firstAired,
+        firstAiredMs = firstAiredMs,
+        activityAtMs = seed.lastWatched,
+        poster = seed.poster,
+        backdrop = seed.backdrop,
+        logo = seed.logo,
+        traktShowId = seed.traktShowId,
+        traktEpisodeId = null
+    )
 }
 
 private fun ContinueWatchingSnapshot.withInvalidatedCanonicalRecords(): ContinueWatchingSnapshot {
@@ -915,6 +976,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
+        val localNextUpEntries = deriveLocalNextUpEntries(allProgress)
+        val combinedNextUpEntries = nextUpEntries + localNextUpEntries
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
         // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
@@ -930,7 +993,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
         }
         val records = ContinueWatchingMerger.merge(resolvedRecords)
-        val normalizedNextUpItems = nextUpEntries
+        val normalizedNextUpItems = combinedNextUpEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
             .filterNot { entry ->
@@ -1012,6 +1075,85 @@ class ContinueWatchingSnapshotService @Inject constructor(
             updatedAtMs = nowMs,
             scheduledReemit = scheduledReemit
         )
+    }
+
+    private suspend fun deriveLocalNextUpEntries(
+        allProgress: List<WatchProgress>
+    ): List<TrackingNextUpEntry> {
+        val facade = metadataRouterFacade ?: return emptyList()
+        val latestCompletedByContent = linkedMapOf<String, WatchProgress>()
+        for (i in allProgress.indices) {
+            val progress = allProgress[i]
+            if (!progress.isCompleted()) continue
+            if (!progress.contentType.equals("series", ignoreCase = true) &&
+                !progress.contentType.equals("tv", ignoreCase = true) &&
+                !progress.contentType.equals("anime", ignoreCase = true)
+            ) {
+                continue
+            }
+            if (progress.season == null || progress.episode == null) continue
+            val contentId = progress.contentId.trim()
+            if (contentId.isBlank()) continue
+            val existing = latestCompletedByContent[contentId]
+            if (existing == null || shouldPreferCompletedSeed(existing, progress)) {
+                latestCompletedByContent[contentId] = progress
+            }
+        }
+        if (latestCompletedByContent.isEmpty()) return emptyList()
+
+        val seeds = latestCompletedByContent.values
+            .sortedByDescending { it.lastWatched }
+            .take(30)
+        val entries = ArrayList<TrackingNextUpEntry>(seeds.size)
+        for (i in seeds.indices) {
+            val seed = seeds[i]
+            val episodeMap = fetchLocalNextUpEpisodeMap(facade, seed)
+            val entry = deriveLocalNextUpEntry(seed, episodeMap) ?: continue
+            entries += entry
+        }
+        return TvdbContinueWatchingTimingEnricher(
+            metadataRouterFacade = facade,
+            availabilityCalculator = TvdbAirAvailabilityCalculator()
+        ).enrich(entries)
+    }
+
+    private fun shouldPreferCompletedSeed(
+        existing: WatchProgress,
+        candidate: WatchProgress
+    ): Boolean {
+        if (candidate.lastWatched != existing.lastWatched) return candidate.lastWatched > existing.lastWatched
+        val candidateSeason = candidate.season ?: -1
+        val existingSeason = existing.season ?: -1
+        if (candidateSeason != existingSeason) return candidateSeason > existingSeason
+        return (candidate.episode ?: -1) > (existing.episode ?: -1)
+    }
+
+    private suspend fun fetchLocalNextUpEpisodeMap(
+        facade: MetadataRouterFacade,
+        seed: WatchProgress
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val contentType = ContentType.fromString(seed.contentType)
+        return try {
+            facade.fetchTvEpisodeEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = seed.contentId,
+                    contentType = contentType,
+                    sourceContext = MetadataSourceContext(itemType = seed.contentType),
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = seed.contentId,
+                    fallbackContentId = seed.videoId,
+                    contentType = contentType,
+                    seasonNumbers = emptyList()
+                )
+            ).value.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("ContinueWatching", "local next-up episode map failed for ${seed.contentId}: ${e.message}", e)
+            emptyMap()
+        }
     }
 
     private fun retainStableRowsFromPreviousSnapshot(

@@ -1773,7 +1773,10 @@ class TraktProgressService @Inject constructor(
                         val result = nextUpValidationSemaphore.withPermit {
                             validateNextUpCandidate(candidate.entry, hiddenProgress)
                         }
-                        val ttl = if (result is TraktNextUpValidationResult.CurrentAiredNextEpisode) {
+                        val ttl = if (
+                            result is TraktNextUpValidationResult.CurrentAiredNextEpisode ||
+                            result is TraktNextUpValidationResult.UpcomingNextEpisode
+                        ) {
                             nextUpValidationPositiveTtlMs
                         } else {
                             nextUpValidationNegativeTtlMs
@@ -1876,20 +1879,21 @@ class TraktProgressService @Inject constructor(
                 trace("next-up validation suppressed unknown-air-date episode: show=$canonicalId s${season}e$episode")
                 return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             }
+            val validatedEntry = candidate.copy(
+                season = season,
+                episode = episode,
+                episodeTitle = nextEpisode.title ?: candidate.episodeTitle,
+                videoId = episodeInfo.videoId,
+                firstAired = episodeInfo.released,
+                firstAiredMs = firstAiredMs,
+                traktEpisodeId = nextEpisode.ids?.trakt ?: candidate.traktEpisodeId
+            )
             if (firstAiredMs > nowMs) {
-                trace("next-up validation suppressed unaired episode: show=$canonicalId s${season}e$episode airs=${episodeInfo.released}")
-                return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+                trace("next-up validation preserved upcoming episode for release scheduling: show=$canonicalId s${season}e$episode airs=${episodeInfo.released}")
+                return TraktNextUpValidationResult.UpcomingNextEpisode(validatedEntry)
             }
             TraktNextUpValidationResult.CurrentAiredNextEpisode(
-                candidate.copy(
-                    season = season,
-                    episode = episode,
-                    episodeTitle = nextEpisode.title ?: candidate.episodeTitle,
-                    videoId = episodeInfo.videoId,
-                    firstAired = episodeInfo.released,
-                    firstAiredMs = firstAiredMs,
-                    traktEpisodeId = nextEpisode.ids?.trakt ?: candidate.traktEpisodeId
-                )
+                validatedEntry
             )
         } catch (e: Exception) {
             Log.w(TAG, "Failed to validate next-up for show=${candidate.contentId}", e)

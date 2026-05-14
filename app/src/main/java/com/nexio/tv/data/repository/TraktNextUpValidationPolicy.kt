@@ -23,6 +23,10 @@ internal sealed interface TraktNextUpValidationResult {
         val entry: TraktProgressService.NextUpEntry
     ) : TraktNextUpValidationResult
 
+    data class UpcomingNextEpisode(
+        val entry: TraktProgressService.NextUpEntry
+    ) : TraktNextUpValidationResult
+
     data object NoCurrentAiredNextEpisode : TraktNextUpValidationResult
     data object UnresolvedEpisode : TraktNextUpValidationResult
     data object Failed : TraktNextUpValidationResult
@@ -65,6 +69,7 @@ internal object TraktNextUpValidationPolicy {
     ): TraktProgressService.NextUpEntry? {
         return when (validationResult) {
             is TraktNextUpValidationResult.CurrentAiredNextEpisode -> validationResult.entry
+            is TraktNextUpValidationResult.UpcomingNextEpisode -> validationResult.entry
             TraktNextUpValidationResult.NoCurrentAiredNextEpisode -> null
             TraktNextUpValidationResult.UnresolvedEpisode -> null
             TraktNextUpValidationResult.Failed -> {

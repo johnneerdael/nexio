@@ -118,6 +118,29 @@ class TraktProgressServiceNextUpValidationTest {
     }
 
     @Test
+    fun `validated upcoming next episode is preserved for snapshot release scheduling`() {
+        val upcoming = TraktProgressService.NextUpEntry(
+            contentId = "the-boys",
+            name = "The Boys",
+            season = 5,
+            episode = 7,
+            episodeTitle = "Episode 7",
+            videoId = "the-boys:5:7",
+            firstAired = null,
+            firstAiredMs = 30_000L,
+            activityAtMs = 10_000L
+        )
+
+        val result = TraktNextUpValidationPolicy.resolvePublishableCandidate(
+            localCandidate = upcoming,
+            validationResult = TraktNextUpValidationResult.UpcomingNextEpisode(upcoming),
+            nowMs = 20_000L
+        )
+
+        assertEquals(upcoming, result)
+    }
+
+    @Test
     fun `validation no current aired next episode suppresses unknown date fallback`() {
         val localUnknownDate = TraktProgressService.NextUpEntry(
             contentId = "unknown-show",
