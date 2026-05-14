@@ -220,15 +220,12 @@ fun RailDisplaySeed.toPreviewRating(fallbackProvider: ProviderId? = null): Previ
 }
 
 fun RailItemPreview.bestSupportedRoutingId(): String = when {
-    stableIds.kitsu != null && prefersKitsuRouting() -> "kitsu:${stableIds.kitsu}"
+    stableIds.kitsu != null -> "kitsu:${stableIds.kitsu}"
     itemType == ContentType.MOVIE && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
     itemType == ContentType.SERIES && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
     itemType == ContentType.TV && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
     else -> sourceItemId
 }
-
-private fun RailItemPreview.prefersKitsuRouting(): Boolean =
-    sourceProvider == ProviderId.KITSU || railSource == RailSource.BUILT_IN_KITSU
 
 private fun ProviderId?.isTrustedTitleRatingProvider(): Boolean =
     this == ProviderId.IMDB || this == ProviderId.TMDB

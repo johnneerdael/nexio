@@ -128,7 +128,7 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `non kitsu series preview prefers tvdb over kitsu meta id`() {
+    fun `non kitsu series preview prefers kitsu over tvdb sidecar meta id`() {
         val preview = RailItemPreview(
             railId = "trakt_trending_anime",
             railSource = RailSource.BUILT_IN_TRAKT,
@@ -136,19 +136,19 @@ class RailItemPreviewTest {
             sourceItemId = "trakt:show:99",
             itemType = ContentType.SERIES,
             stableIds = ProviderIds(
-                kitsu = "7442",
+                kitsu = "1376",
                 tvdb = "79481"
             ),
-            display = RailDisplaySeed(title = "Fullmetal Alchemist", year = 2003),
+            display = RailDisplaySeed(title = "Death Note", year = 2006),
             sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
-            sourcePayloadHash = "hash-trakt-fma",
+            sourcePayloadHash = "hash-trakt-death-note",
             generatedAtMs = 1_000L
         )
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("tvdb:79481", meta.id)
-        assertEquals("Fullmetal Alchemist", meta.name)
+        assertEquals("kitsu:1376", meta.id)
+        assertEquals("Death Note", meta.name)
     }
 
     @Test
@@ -238,16 +238,16 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `best supported routing id prefers tvdb over kitsu for non kitsu series items`() {
+    fun `best supported routing id prefers kitsu over tvdb for non kitsu series items`() {
         val preview = railItemPreview(
             railSource = RailSource.BUILT_IN_TRAKT,
             sourceProvider = ProviderId.TRAKT,
             itemType = ContentType.SERIES,
-            stableIds = ProviderIds(kitsu = "42", tvdb = "11"),
+            stableIds = ProviderIds(kitsu = "1376", tvdb = "79481"),
             sourceItemId = "trakt:show:1"
         )
 
-        assertEquals("tvdb:11", preview.bestSupportedRoutingId())
+        assertEquals("kitsu:1376", preview.bestSupportedRoutingId())
     }
 
     @Test
