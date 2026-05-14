@@ -151,8 +151,8 @@ class FileBackedJsonObjectStore(
                     reader.beginObject()
                     while (reader.hasNext()) {
                         val key = reader.nextName()
-                        if (reader.peek() == JsonToken.NULL) {
-                            reader.nextNull()
+                        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                            reader.skipValue()
                             continue
                         }
                         val value = gson.fromJson<JsonObject>(reader, JsonObject::class.java)

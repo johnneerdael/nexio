@@ -15,6 +15,9 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
+import java.io.File
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -225,10 +228,111 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `legacy metadata prefs remain until migrated snapshot is flushed`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(
+            context = mockContext(prefs),
+            ioScope = TestScope(StandardTestDispatcher()),
+            debounceMs = 0L
+        )
+        prefs.edit()
+            .putString(
+                "tmdb_videos::550::movie::en::trailer",
+                tmdbVideosPayload(emptyList())
+            )
+            .commit()
+
+        assertEquals(
+            emptyList<TmdbVideoResult>(),
+            store.readTmdbTitleVideos(
+                tmdbId = 550,
+                mediaType = "movie",
+                languageTag = "en",
+                providerToken = "trailer"
+            )
+        )
+
+        assertFalse(store.snapshotFileForTest().exists())
+        assertTrue(prefs.getAll().isNotEmpty())
+    }
+
+    @Test
+    fun `legacy metadata prefs clear after successful file migration flush`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(
+            context = mockContext(prefs),
+            ioScope = TestScope(StandardTestDispatcher()),
+            debounceMs = 0L
+        )
+        prefs.edit()
+            .putString(
+                "tmdb_videos::550::movie::en::trailer",
+                tmdbVideosPayload(emptyList())
+            )
+            .commit()
+
+        assertEquals(
+            emptyList<TmdbVideoResult>(),
+            store.readTmdbTitleVideos(
+                tmdbId = 550,
+                mediaType = "movie",
+                languageTag = "en",
+                providerToken = "trailer"
+            )
+        )
+        store.flushPendingWritesForTest()
+
+        assertTrue(File(store.snapshotFileForTest().parentFile, "metadata_disk_cache_v1.json").exists())
+        assertEquals(emptyMap<String, Any>(), prefs.getAll())
+    }
+
+    @Test
+    fun `stale legacy metadata prefs clear after successful file snapshot load`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit()
+            .putString(
+                "tmdb_videos::legacy::movie::en::trailer",
+                tmdbVideosPayload(emptyList())
+            )
+            .commit()
+        val snapshotFile = store.snapshotFileForTest()
+        snapshotFile.parentFile?.mkdirs()
+        snapshotFile.writeText(
+            JsonObject().apply {
+                add(
+                    "tmdb_videos::550::movie::en::trailer",
+                    JsonObject().apply {
+                        add("value", com.google.gson.Gson().toJsonTree(emptyList<TmdbVideoResult>()))
+                        addProperty("languageEpoch", 0)
+                        addProperty("tmdbVideoSchemaVersion", 2)
+                        addProperty("updatedAtMs", System.currentTimeMillis())
+                    }
+                )
+            }.toString()
+        )
+
+        assertEquals(
+            emptyList<TmdbVideoResult>(),
+            store.readTmdbTitleVideos(
+                tmdbId = 550,
+                mediaType = "movie",
+                languageTag = "en",
+                providerToken = "trailer"
+            )
+        )
+
+        assertEquals(emptyMap<String, Any>(), prefs.getAll())
+    }
+
+    @Test
     fun `readMeta restores active poster provider entries with matching poster provider tag`() {
         val prefs = InMemorySharedPreferences()
         val store = MetadataDiskCacheStore(context = mockContext(prefs))
-        val meta = meta("tt1").copy(posterProviderTag = "rpdb")
+        val meta = meta("tt1").copy(
+            poster = "nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt1",
+            posterProviderTag = "rpdb"
+        )
 
         store.writeMeta("movie:tt1", "en", "RPDB:12345", meta)
         store.flushPendingWritesForTest()
@@ -984,6 +1088,15 @@ class MetadataDiskCacheStoreTest {
             publishedAt = "2024-01-01T00:00:00Z",
             id = key
         )
+    }
+
+    private fun tmdbVideosPayload(videos: List<TmdbVideoResult>): String {
+        return JsonObject().apply {
+            add("value", com.google.gson.Gson().toJsonTree(videos))
+            addProperty("languageEpoch", 0)
+            addProperty("tmdbVideoSchemaVersion", 2)
+            addProperty("updatedAtMs", System.currentTimeMillis())
+        }.toString()
     }
 
     private fun tmdbEnrichment(title: String): TmdbEnrichment {

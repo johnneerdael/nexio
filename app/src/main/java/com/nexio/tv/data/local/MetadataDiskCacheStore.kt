@@ -95,6 +95,7 @@ class MetadataDiskCacheStore @Inject constructor(
     private val cache = ConcurrentHashMap<String, JsonObject>()
     private val flushScheduled = AtomicBoolean(false)
     private val loaded = AtomicBoolean(false)
+    private val migratedFromLegacy = AtomicBoolean(false)
     private val loadLock = Any()
 
     internal constructor(
@@ -122,6 +123,7 @@ class MetadataDiskCacheStore @Inject constructor(
                 val file = snapshotFile()
                 if (file.exists()) {
                     loadSnapshotFromFile(file)
+                    clearStaleLegacyPrefsAfterSuccessfulFileLoad()
                 } else if (legacyPrefsExists()) {
                     migrateFromLegacyPrefs()
                     scheduleFlush()
@@ -178,11 +180,9 @@ class MetadataDiskCacheStore @Inject constructor(
                     ?.let { cache[key] = it }
             }
         }
-        // Note: deliberately NOT clearing the legacy prefs here. The snapshot file
-        // is the new source of truth once flush completes, and `ensureLoaded` will
-        // see the file and skip the legacy path on the next boot. Leaving the prefs
-        // file alone keeps a recoverable backup if the JSON snapshot ever gets
-        // corrupted, and avoids losing data on a crash between migration and flush.
+        // Do not clear legacy prefs here. They remain the crash-recovery source
+        // until the migrated cache has been written to the file snapshot.
+        migratedFromLegacy.set(true)
     }
 
     @androidx.annotation.VisibleForTesting
@@ -286,9 +286,36 @@ class MetadataDiskCacheStore @Inject constructor(
                     StandardCopyOption.REPLACE_EXISTING
                 )
             }
+            clearLegacyPrefsAfterSuccessfulMigrationFlush()
         } catch (e: Exception) {
             tempFile?.delete()
             throw e
+        }
+    }
+
+    private fun clearLegacyPrefsAfterSuccessfulMigrationFlush() {
+        if (!migratedFromLegacy.get()) return
+        clearLegacyPrefs().onSuccess { cleared ->
+            if (cleared) migratedFromLegacy.set(false)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to clear legacy metadata prefs after migration", error)
+        }
+    }
+
+    private fun clearStaleLegacyPrefsAfterSuccessfulFileLoad() {
+        val prefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.all.isEmpty()) return
+        clearLegacyPrefs().onFailure { error ->
+            Log.w(TAG, "Failed to clear stale legacy metadata prefs after file load", error)
+        }
+    }
+
+    private fun clearLegacyPrefs(): Result<Boolean> {
+        return runCatching {
+            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
         }
     }
 

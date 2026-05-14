@@ -3,12 +3,13 @@ package com.nexio.tv.data.repository
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonObject
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.data.local.AddonPreferences
+import com.nexio.tv.data.local.FileBackedJsonObjectStore
 import com.nexio.tv.data.integration.addon.AddonManifestIntegrationProvider
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.domain.model.Addon
@@ -29,9 +30,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.sync.AddonSyncService
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -49,6 +52,8 @@ class AddonRepositoryImpl @Inject constructor(
         private const val TAG = "AddonRepository"
         private const val MANIFEST_CACHE_PREFS = "addon_manifest_cache"
         private const val MANIFEST_CACHE_KEY = "manifests"
+        private const val MANIFEST_CACHE_FILE_DIR = "addon-manifest-cache-v1"
+        private const val MANIFEST_CACHE_FILE_NAME = "entries.json"
     }
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -101,31 +106,103 @@ class AddonRepositoryImpl @Inject constructor(
 
     private val gson = Gson()
     private val manifestCache = ConcurrentHashMap<String, Addon>()
+    private val manifestEntryStore by lazy {
+        FileBackedJsonObjectStore(
+            file = File(context.filesDir, "$MANIFEST_CACHE_FILE_DIR/$MANIFEST_CACHE_FILE_NAME")
+        )
+    }
 
     init {
         loadManifestCacheFromDisk()
     }
 
     private fun loadManifestCacheFromDisk() {
+        val store = manifestEntryStore
+        migrateLegacyManifestPrefsIfNeeded(store)
+        val loaded = linkedMapOf<String, Addon>()
         try {
-            val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
-            val json = prefs.getString(MANIFEST_CACHE_KEY, null) ?: return
-            val type = object : TypeToken<Map<String, Addon>>() {}.type
-            val cached: Map<String, Addon> = gson.fromJson(json, type) ?: return
-            manifestCache.putAll(cached)
-            Log.d(TAG, "Loaded ${cached.size} cached manifests from disk")
+            for ((rawKey, rawValue) in store.entries()) {
+                val cleanKey = safeCanonicalizeUrl(rawKey, "manifest file cache") ?: continue
+                val addon = decodeManifestCacheEntry(rawValue, cleanKey)
+                    ?: continue
+                loaded[cleanKey] = addon
+            }
+            manifestCache.clear()
+            manifestCache.putAll(loaded)
+            Log.d(TAG, "Loaded ${loaded.size} cached manifests from file store")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to load manifest cache from disk", e)
+            Log.w(TAG, "Failed to load manifest cache from file store", e)
         }
     }
 
-    private fun persistManifestCacheToDisk() {
-        try {
-            val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
-            prefs.edit().putString(MANIFEST_CACHE_KEY, gson.toJson(manifestCache.toMap())).apply()
+    private fun migrateLegacyManifestPrefsIfNeeded(store: FileBackedJsonObjectStore) {
+        val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
+        val json = prefs.getString(MANIFEST_CACHE_KEY, null)?.takeIf { it.isNotBlank() } ?: return
+        val cachedRoot = try {
+            gson.fromJson(json, JsonObject::class.java)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to persist manifest cache to disk", e)
+            Log.w(TAG, "Failed to parse legacy manifest cache prefs", e)
+            return
+        } ?: return
+
+        val existingFileKeys = store.keys()
+            .mapNotNull { key -> safeCanonicalizeUrl(key, "manifest file cache") }
+            .toSet()
+        val entriesToMigrate = linkedMapOf<String, JsonObject>()
+        for ((rawKey, rawValue) in cachedRoot.entrySet()) {
+            val cleanKey = safeCanonicalizeUrl(rawKey, "legacy manifest cache") ?: continue
+            if (cleanKey in existingFileKeys) continue
+            if (!rawValue.isJsonObject) continue
+            val addon = decodeManifestCacheEntry(rawValue.asJsonObject, cleanKey) ?: continue
+            entriesToMigrate[cleanKey] = gson.toJsonTree(addon).asJsonObject
         }
+
+        if (entriesToMigrate.isEmpty() || store.putAll(entriesToMigrate)) {
+            prefs.edit().remove(MANIFEST_CACHE_KEY).commit()
+        }
+    }
+
+    private suspend fun persistManifestCacheEntry(cleanBaseUrl: String, addon: Addon) {
+        withContext(Dispatchers.IO) {
+            persistManifestCacheEntryBlocking(cleanBaseUrl, addon)
+        }
+    }
+
+    private fun persistManifestCacheEntryBlocking(cleanBaseUrl: String, addon: Addon) {
+        try {
+            val cleanAddon = addon.copy(baseUrl = cleanBaseUrl)
+            if (manifestEntryStore.put(cleanBaseUrl, gson.toJsonTree(cleanAddon).asJsonObject)) {
+                manifestCache[cleanBaseUrl] = cleanAddon
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist manifest cache entry", e)
+        }
+    }
+
+    private suspend fun removeManifestCacheEntry(cleanBaseUrl: String) {
+        withContext(Dispatchers.IO) {
+            removeManifestCacheEntryBlocking(cleanBaseUrl)
+        }
+    }
+
+    private fun removeManifestCacheEntryBlocking(cleanBaseUrl: String) {
+        try {
+            if (manifestEntryStore.remove(cleanBaseUrl)) {
+                manifestCache.remove(cleanBaseUrl)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to remove manifest cache entry", e)
+        }
+    }
+
+    private fun decodeManifestCacheEntry(value: JsonObject, cleanBaseUrl: String): Addon? {
+        return runCatching {
+            val addon = gson.fromJson(value, Addon::class.java)
+                ?: return@runCatching null
+            addon.copy(baseUrl = cleanBaseUrl)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to decode manifest cache entry", error)
+        }.getOrNull()
     }
 
     override fun getInstalledAddons(): Flow<List<Addon>> =
@@ -201,8 +278,7 @@ class AddonRepositoryImpl @Inject constructor(
         return when (val result = addonManifestIntegrationProvider.getManifest(cleanBaseUrl, manifestUrl)) {
             is NetworkResult.Success -> {
                 val addon = result.data.toDomain(cleanBaseUrl).copy(parserPreset = parserPreset)
-                manifestCache[cleanBaseUrl] = addon
-                persistManifestCacheToDisk()
+                persistManifestCacheEntry(cleanBaseUrl, addon)
                 NetworkResult.Success(addon)
             }
             is NetworkResult.Error -> {
@@ -228,7 +304,7 @@ class AddonRepositoryImpl @Inject constructor(
 
     override suspend fun removeAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
-        manifestCache.remove(cleanUrl)
+        removeManifestCacheEntry(cleanUrl)
         preferences.removeAddon(cleanUrl)
         triggerRemoteSync()
     }
@@ -242,8 +318,7 @@ class AddonRepositoryImpl @Inject constructor(
         val cleanUrl = canonicalizeUrl(url)
         preferences.updateAddonParserPreset(cleanUrl, parserPreset)
         manifestCache[cleanUrl]?.let { cached ->
-            manifestCache[cleanUrl] = cached.copy(parserPreset = parserPreset)
-            persistManifestCacheToDisk()
+            persistManifestCacheEntry(cleanUrl, cached.copy(parserPreset = parserPreset))
         }
         triggerRemoteSync()
     }
@@ -252,8 +327,7 @@ class AddonRepositoryImpl @Inject constructor(
         val cleanUrl = canonicalizeUrl(url)
         preferences.updateAddonIsAnime(cleanUrl, isAnime)
         manifestCache[cleanUrl]?.let { cached ->
-            manifestCache[cleanUrl] = cached.copy(isAnime = isAnime)
-            persistManifestCacheToDisk()
+            persistManifestCacheEntry(cleanUrl, cached.copy(isAnime = isAnime))
         }
         triggerRemoteSync()
     }

@@ -196,6 +196,30 @@ class FileBackedJsonObjectStoreTest {
     }
 
     @Test
+    fun `wrong-type entry values are skipped while valid objects load`() {
+        val file = tmp.newFolder("cache").resolve("entries.json")
+        file.writeText(
+            """
+            {
+              "alpha": {"name": "A"},
+              "string": "bad",
+              "array": ["bad"],
+              "null": null
+            }
+            """.trimIndent(),
+            Charsets.UTF_8
+        )
+
+        val store = FileBackedJsonObjectStore(file)
+
+        assertEquals(setOf("alpha"), store.keys())
+        assertEquals("A", store.get("alpha")?.get("name")?.asString)
+        assertNull(store.get("string"))
+        assertNull(store.get("array"))
+        assertNull(store.get("null"))
+    }
+
+    @Test
     fun `missing file reads as empty`() {
         val file = tmp.newFolder("cache").resolve("entries.json")
 
