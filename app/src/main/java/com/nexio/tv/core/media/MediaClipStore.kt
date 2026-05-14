@@ -2,9 +2,7 @@ package com.nexio.tv.core.media
 
 import android.content.Context
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.data.local.FileBackedJsonObjectStore
 import com.nexio.tv.domain.model.ProviderIds
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -155,9 +153,13 @@ class MediaClipStore @Inject constructor(
     private val prefsName: String = DEFAULT_PREFS_NAME
     private val clock: () -> Long = { System.currentTimeMillis() }
     private val entryStore by lazy {
-        FileBackedJsonObjectStore(
-            file = File(context.filesDir, "${fileNamespace()}/entries.json")
-        ).also(::migrateLegacyPrefsIfNeeded)
+        MediaClipTypedStore(
+            file = File(context.filesDir, "${fileNamespace()}/entries.json"),
+            gson = gson
+        ).also { store ->
+            migrateV1FileIfNeeded(store)
+            migrateLegacyPrefsIfNeeded(store)
+        }
     }
 
     internal constructor(
@@ -189,23 +191,17 @@ class MediaClipStore @Inject constructor(
             }
             .distinctBy { record -> record.key }
         if (records.isEmpty()) return 0
-        val writes = linkedMapOf<String, JsonObject>()
-        for (record in records) {
-            writes[record.key] = gson.toJsonTree(record).asJsonObject
-        }
-        val committed = entryStore.putAll(writes)
-        if (committed) {
-            records.forEach { record ->
-                traceEvents?.emitMediaClipCandidateStored(
-                    itemKey = record.contentId,
-                    provider = record.provider,
-                    clipType = record.clipType,
-                    site = record.site,
-                    videoId = record.externalVideoId ?: record.youtubeId,
-                    scope = record.scopeKind,
-                    cacheDecision = "WRITE"
-                )
-            }
+        if (!entryStore.putAll(records)) return 0
+        records.forEach { record ->
+            traceEvents?.emitMediaClipCandidateStored(
+                itemKey = record.contentId,
+                provider = record.provider,
+                clipType = record.clipType,
+                site = record.site,
+                videoId = record.externalVideoId ?: record.youtubeId,
+                scope = record.scopeKind,
+                cacheDecision = "WRITE"
+            )
         }
         return records.size
     }
@@ -219,17 +215,18 @@ class MediaClipStore @Inject constructor(
     ): List<StoredMediaClip> {
         val now = nowMs()
         val normalizedLanguage = language?.trim()?.takeIf { it.isNotBlank() }
-        return entryStore.entries()
+        return entryStore.records()
             .asSequence()
-            .filter { (key, _) -> key.startsWith(KEY_PREFIX) }
-            .mapNotNull { (_, raw) -> decodeRecord(raw) }
-            .filter { record -> record.matchesIdentity(identity) }
-            .filter { record -> record.matchesScope(scope) }
-            .filter { record ->
-                clipTypes.isEmpty() || enumValueOrDefault(record.clipType, MediaClipType.UNKNOWN) in clipTypes
+            .mapNotNull { record ->
+                record.toStoredMediaClipIfMatching(
+                    identity = identity,
+                    scope = scope,
+                    clipTypes = clipTypes,
+                    normalizedLanguage = normalizedLanguage,
+                    nowMs = now,
+                    includeStale = includeStale
+                )
             }
-            .filter { record -> normalizedLanguage == null || record.language == null || record.language == normalizedLanguage }
-            .mapNotNull { record -> record.toStoredMediaClip(now, includeStale) }
             .sortedWith(
                 compareBy<StoredMediaClip> { if (it.cacheDecision == CacheDecision.HIT) 0 else 1 }
                     .thenBy { it.clipType.ordinal }
@@ -351,6 +348,25 @@ class MediaClipStore @Inject constructor(
             else -> null
         }
 
+    private fun StoredMediaClipRecord.toStoredMediaClipIfMatching(
+        identity: ContentIdentity,
+        scope: MediaClipScope,
+        clipTypes: Set<MediaClipType>,
+        normalizedLanguage: String?,
+        nowMs: Long,
+        includeStale: Boolean
+    ): StoredMediaClip? = runCatching {
+        if (!matchesIdentity(identity)) return@runCatching null
+        if (!matchesScope(scope)) return@runCatching null
+        if (clipTypes.isNotEmpty() && enumValueOrDefault(clipType, MediaClipType.UNKNOWN) !in clipTypes) {
+            return@runCatching null
+        }
+        if (normalizedLanguage != null && language != null && language != normalizedLanguage) {
+            return@runCatching null
+        }
+        toStoredMediaClip(nowMs, includeStale)
+    }.getOrNull()
+
     private fun StoredMediaClipRecord.matchesIdentity(identity: ContentIdentity): Boolean {
         val target = identity.normalized()
         if (contentId == target.contentId) return true
@@ -382,32 +398,41 @@ class MediaClipStore @Inject constructor(
             )
         )
 
-    private fun decodeRecord(raw: String): StoredMediaClipRecord? =
-        runCatching { gson.fromJson(raw, StoredMediaClipRecord::class.java) }.getOrNull()
-
-    private fun decodeRecord(raw: JsonObject): StoredMediaClipRecord? =
-        runCatching { gson.fromJson(raw, StoredMediaClipRecord::class.java) }.getOrNull()
-
     private fun prefs() = context.getSharedPreferences(mutablePrefsName ?: prefsName, Context.MODE_PRIVATE)
 
-    private fun fileNamespace(): String = mutablePrefsName ?: DEFAULT_FILE_NAMESPACE
+    private fun fileNamespace(): String =
+        mutablePrefsName
+            ?.takeUnless { it == DEFAULT_PREFS_NAME }
+            ?: DEFAULT_FILE_NAMESPACE
 
-    private fun migrateLegacyPrefsIfNeeded(store: FileBackedJsonObjectStore) {
+    private fun v1EntriesFile(): File =
+        File(
+            context.filesDir,
+            "${mutablePrefsName?.takeUnless { it == DEFAULT_PREFS_NAME } ?: "media-clip-store-v1"}/entries.json"
+        )
+
+    private fun migrateV1FileIfNeeded(store: MediaClipTypedStore) {
+        val v1File = v1EntriesFile()
+        if (!v1File.isFile) return
+        if (!store.migrateFromV1File(v1File)) return
+        if (v1File.canonicalFile != File(context.filesDir, "${fileNamespace()}/entries.json").canonicalFile) {
+            v1File.delete()
+        }
+    }
+
+    private fun migrateLegacyPrefsIfNeeded(store: MediaClipTypedStore) {
         val legacy = prefs()
         val legacyKeys = legacy.all.keys
             .filter { key -> key.startsWith(KEY_PREFIX) }
         if (legacyKeys.isEmpty()) return
 
-        val existingFileKeys = store.keys()
-        val entriesToMigrate = linkedMapOf<String, JsonObject>()
+        val entriesToMigrate = linkedMapOf<String, String>()
         for (key in legacyKeys) {
-            if (key in existingFileKeys) continue
             val raw = legacy.getString(key, null)?.takeIf { it.isNotBlank() } ?: continue
-            val record = decodeRecord(raw) ?: continue
-            entriesToMigrate[key] = gson.toJsonTree(record).asJsonObject
+            entriesToMigrate[key] = raw
         }
 
-        if (entriesToMigrate.isNotEmpty() && !store.putAll(entriesToMigrate)) return
+        if (!store.migrateLegacyEntries(entriesToMigrate)) return
 
         val editor = legacy.edit()
         for (key in legacyKeys) {
@@ -427,7 +452,7 @@ class MediaClipStore @Inject constructor(
 
     private companion object {
         const val DEFAULT_PREFS_NAME = "media_clip_store_v1"
-        const val DEFAULT_FILE_NAMESPACE = "media-clip-store-v1"
+        const val DEFAULT_FILE_NAMESPACE = "media-clip-store-v2"
         const val KEY_PREFIX = "media-clip:"
         const val SCOPE_TITLE = "title"
         const val SCOPE_SEASON = "season"
