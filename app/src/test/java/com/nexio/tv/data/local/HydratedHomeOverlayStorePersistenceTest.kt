@@ -74,13 +74,13 @@ class HydratedHomeOverlayStorePersistenceTest {
         )
         store.upsert(v2, aliases = setOf("movie:tmdb:550"))
         val disk = diskEntries(filesDir)
-        val overlayEntry = disk.getAsJsonObject("overlay::${v2.overlayKey}")
-        val aliasEntry = disk.getAsJsonObject("alias::en::policy:1::movie:tmdb:550")
+        val overlayEntry = disk.getAsJsonObject("overlays").getAsJsonObject(v2.overlayKey)
+        val aliasValue = disk.getAsJsonObject("aliases").get("alias::en::policy:1::movie:tmdb:550")
 
         assertEquals(1, overlayEntry.get("schemaVersion").asInt)
         assertEquals("tt0137523", overlayEntry.getAsJsonObject("value").getAsJsonObject("stableIdsSnapshot").get("imdb").asString)
-        assertEquals(v2.overlayKey, aliasEntry.get("overlayKey").asString)
-        FileBackedJsonObjectStore.resetSharedStateForTest(entriesFile(filesDir))
+        assertEquals(v2.overlayKey, aliasValue.asString)
+        HydratedHomeOverlayTypedStore.resetSharedStateForTest(entriesFile(filesDir))
 
         // Reinstantiate the store over the same prefs — equivalent to a cold-start re-read.
         val ctx2 = mockk<Context>()
@@ -161,9 +161,9 @@ class HydratedHomeOverlayStorePersistenceTest {
 
         assertEquals(emptyMap<String, Any>(), prefs.getAll())
         val disk = diskEntries(filesDir)
-        assertTrue(disk.has("overlay::${value.overlayKey}"))
-        assertEquals(value.overlayKey, disk.getAsJsonObject("alias::en::policy:1::movie:imdb:tt0137523").get("overlayKey").asString)
-        FileBackedJsonObjectStore.resetSharedStateForTest(entriesFile(filesDir))
+        assertTrue(disk.getAsJsonObject("overlays").has(value.overlayKey))
+        assertEquals(value.overlayKey, disk.getAsJsonObject("aliases").get("alias::en::policy:1::movie:imdb:tt0137523").asString)
+        HydratedHomeOverlayTypedStore.resetSharedStateForTest(entriesFile(filesDir))
         val reloadedContext = mockk<Context>()
         every { reloadedContext.filesDir } returns filesDir
         every { reloadedContext.getSharedPreferences(any(), any()) } returns prefs
@@ -176,7 +176,8 @@ class HydratedHomeOverlayStorePersistenceTest {
                 policyVersion = 1
             ).getValue("movie:imdb:tt0137523").fields.title
         )
-        assertTrue(File(filesDir, "hydrated-home-overlay-v1/entries.json").exists())
+        assertTrue(entriesFile(filesDir).exists())
+        assertTrue(!File(filesDir, "hydrated-home-overlay-v1/entries.json").exists())
     }
 
     @Test
@@ -209,12 +210,56 @@ class HydratedHomeOverlayStorePersistenceTest {
         assertEquals("Fight Club", out.fields.title)
         assertEquals(emptyMap<String, Any>(), prefs.getAll())
         val disk = diskEntries(filesDir)
-        assertEquals("Fight Club", disk.getAsJsonObject("overlay::${legacy.overlayKey}")
+        assertEquals("Fight Club", disk.getAsJsonObject("overlays").getAsJsonObject(legacy.overlayKey)
             .getAsJsonObject("value")
             .getAsJsonObject("fields")
             .get("title")
             .asString)
-        assertEquals(legacy.overlayKey, disk.getAsJsonObject("alias::en::policy:1::movie:tmdb:550").get("overlayKey").asString)
+        assertEquals(legacy.overlayKey, disk.getAsJsonObject("aliases").get("alias::en::policy:1::movie:tmdb:550").asString)
+    }
+
+    @Test
+    fun `v1 file migrates to v2 file then deletes v1 source`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val filesDir = tempDir("overlay-v1-file")
+        val context = mockk<Context>()
+        every { context.filesDir } returns filesDir
+        every { context.getSharedPreferences(any(), any()) } returns prefs
+        val legacy = overlay(
+            stableIdsSnapshot = ProviderIds(tmdb = "550", imdb = "tt0137523"),
+            settingsSignature = "p=rpdb;l=default;b=default;t=default;v=1"
+        )
+        val v1File = File(filesDir, "hydrated-home-overlay-v1/entries.json")
+        assertTrue(FileBackedJsonObjectStore(v1File).putAll(
+            mapOf(
+                "overlay::${legacy.overlayKey}" to JsonObject().apply {
+                    add("value", Gson().toJsonTree(legacy))
+                    addProperty("schemaVersion", 1)
+                },
+                "alias::en::policy:1::movie:tmdb:550" to JsonObject().apply {
+                    addProperty("overlayKey", legacy.overlayKey)
+                }
+            )
+        ))
+        FileBackedJsonObjectStore.resetSharedStateForTest(v1File)
+
+        val store = HydratedHomeOverlayStore(context)
+        val out = store.readForItemKeys(
+            itemKeys = setOf("movie:tmdb:550"),
+            languageTag = "en",
+            policyVersion = 1
+        ).getValue("movie:tmdb:550")
+
+        assertEquals("Fight Club", out.fields.title)
+        assertTrue(!v1File.exists())
+        val disk = diskEntries(filesDir)
+        assertEquals(legacy.overlayKey, disk.getAsJsonObject("aliases").get("alias::en::policy:1::movie:tmdb:550").asString)
+        assertEquals("Fight Club", disk.getAsJsonObject("overlays")
+            .getAsJsonObject(legacy.overlayKey)
+            .getAsJsonObject("value")
+            .getAsJsonObject("fields")
+            .get("title")
+            .asString)
     }
 
     @Test
@@ -239,7 +284,7 @@ class HydratedHomeOverlayStorePersistenceTest {
             .putString("alias::en::policy:1::movie:tmdb:550", stale.overlayKey)
             .commit()
 
-        FileBackedJsonObjectStore.resetSharedStateForTest(entriesFile(filesDir))
+        HydratedHomeOverlayTypedStore.resetSharedStateForTest(entriesFile(filesDir))
         val reloaded = HydratedHomeOverlayStore(context)
         val out = reloaded.readForItemKeys(
             itemKeys = setOf("movie:tmdb:550"),
@@ -250,7 +295,8 @@ class HydratedHomeOverlayStorePersistenceTest {
         assertEquals("Fight Club", out.fields.title)
         assertEquals(emptyMap<String, Any>(), prefs.getAll())
         assertEquals("Fight Club", diskEntries(filesDir)
-            .getAsJsonObject("overlay::${current.overlayKey}")
+            .getAsJsonObject("overlays")
+            .getAsJsonObject(current.overlayKey)
             .getAsJsonObject("value")
             .getAsJsonObject("fields")
             .get("title")
@@ -258,9 +304,9 @@ class HydratedHomeOverlayStorePersistenceTest {
     }
 
     @Test
-    fun `clearAll removes only overlay store entries`() = runTest {
+    fun `clearAll clears typed overlay store document`() = runTest {
         val prefs = InMemorySharedPreferences()
-        val filesDir = tempDir("overlay-clear-preserve")
+        val filesDir = tempDir("overlay-clear")
         val context = mockk<Context>()
         every { context.filesDir } returns filesDir
         every { context.getSharedPreferences(any(), any()) } returns prefs
@@ -270,23 +316,19 @@ class HydratedHomeOverlayStorePersistenceTest {
             settingsSignature = "p=rpdb;l=default;b=default;t=default;v=1"
         )
         store.upsert(value, aliases = setOf("movie:tmdb:550"))
-        assertTrue(FileBackedJsonObjectStore(entriesFile(filesDir)).put(
-            "unrelated::entry",
-            JsonObject().apply { addProperty("name", "keep") }
-        ))
 
         store.clearAll()
 
         val disk = diskEntries(filesDir)
-        assertEquals(setOf("unrelated::entry"), disk.keySet())
-        assertEquals("keep", disk.getAsJsonObject("unrelated::entry").get("name").asString)
+        assertEquals(emptySet<String>(), disk.getAsJsonObject("aliases").keySet())
+        assertEquals(emptySet<String>(), disk.getAsJsonObject("overlays").keySet())
     }
 
     private fun tempDir(prefix: String): File =
         Files.createTempDirectory(prefix).toFile()
 
     private fun entriesFile(filesDir: File): File =
-        File(filesDir, "hydrated-home-overlay-v1/entries.json")
+        File(filesDir, "hydrated-home-overlay-v2/entries.json")
 
     private fun diskEntries(filesDir: File): JsonObject {
         val file = entriesFile(filesDir)

@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -36,7 +37,7 @@ class HydratedHomeOverlayStoreTest {
 
         store.upsert(overlay, aliases = setOf("movie:tmdb:550", "movie:imdb:tt0137523"))
 
-        FileBackedJsonObjectStore.resetSharedStateForTest(entriesFile(filesDir))
+        HydratedHomeOverlayTypedStore.resetSharedStateForTest(entriesFile(filesDir))
         val recreatedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
         assertEquals(
             "Fight Club",
@@ -206,9 +207,10 @@ class HydratedHomeOverlayStoreTest {
         mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
             root.getAsJsonObject("value").addProperty("displayHash", "corrupted-display-hash")
         }
+        val reloadedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
 
         assertNull(
-            store.readByCanonicalIdentity(
+            reloadedStore.readByCanonicalIdentity(
                 canonicalProvider = ProviderId.TMDB,
                 canonicalId = "550",
                 contentType = ContentType.MOVIE,
@@ -218,7 +220,7 @@ class HydratedHomeOverlayStoreTest {
         )
         assertEquals(
             emptyMap<String, HydratedHomeOverlay>(),
-            store.readForItemKeys(
+            reloadedStore.readForItemKeys(
                 itemKeys = setOf("movie:tmdb:550"),
                 languageTag = "en",
                 policyVersion = 1
@@ -237,9 +239,10 @@ class HydratedHomeOverlayStoreTest {
         mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
             root.getAsJsonObject("value").addProperty("canonicalId", "551")
         }
+        val reloadedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
 
         assertNull(
-            store.readByCanonicalIdentity(
+            reloadedStore.readByCanonicalIdentity(
                 canonicalProvider = ProviderId.TMDB,
                 canonicalId = "550",
                 contentType = ContentType.MOVIE,
@@ -260,10 +263,11 @@ class HydratedHomeOverlayStoreTest {
         mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
             root.getAsJsonObject("value").addProperty("canonicalId", "551")
         }
+        val reloadedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
 
         assertEquals(
             emptyMap<String, HydratedHomeOverlay>(),
-            store.readForItemKeys(
+            reloadedStore.readForItemKeys(
                 itemKeys = setOf("movie:tmdb:550"),
                 languageTag = "en",
                 policyVersion = 1
@@ -282,10 +286,11 @@ class HydratedHomeOverlayStoreTest {
         mutateOverlayEntry(filesDir, overlay.overlayKey) { root ->
             root.getAsJsonObject("value").addProperty("languageTag", "nl")
         }
+        val reloadedStore = HydratedHomeOverlayStore(mockContext(prefs, filesDir))
 
         assertEquals(
             emptyMap<String, HydratedHomeOverlay>(),
-            store.readForItemKeys(
+            reloadedStore.readForItemKeys(
                 itemKeys = setOf("movie:tmdb:550"),
                 languageTag = "en",
                 policyVersion = 1
@@ -351,15 +356,19 @@ class HydratedHomeOverlayStoreTest {
         overlayKey: String,
         mutate: (JsonObject) -> Unit
     ) {
-        val store = FileBackedJsonObjectStore(File(filesDir, "hydrated-home-overlay-v1/entries.json"))
-        val entries = store.entries().toMutableMap()
-        val root = entries.getValue("overlay::$overlayKey")
+        val file = entriesFile(filesDir)
+        val gson = Gson()
+        val entries = gson.fromJson(file.readText(), JsonObject::class.java)
+        val root = entries
+            .getAsJsonObject("overlays")
+            .getAsJsonObject(overlayKey)
         mutate(root)
-        assertTrue(store.replaceAll(entries))
+        file.writeText(gson.toJson(entries))
+        HydratedHomeOverlayTypedStore.resetSharedStateForTest(file)
     }
 
     private fun entriesFile(filesDir: File): File =
-        File(filesDir, "hydrated-home-overlay-v1/entries.json")
+        File(filesDir, "hydrated-home-overlay-v2/entries.json")
 
     private fun tempDir(prefix: String): File =
         Files.createTempDirectory(prefix).toFile()

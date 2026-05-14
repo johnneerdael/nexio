@@ -18,6 +18,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.io.StringReader
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -158,6 +159,47 @@ class HydratedHomeOverlayTypedStore(
 
         for ((aliasKey, overlayKey) in migrated.aliases) {
             if (candidateAliases.containsKey(aliasKey)) continue
+            if (!candidateOverlays.containsKey(overlayKey)) continue
+            candidateAliases[aliasKey] = overlayKey
+            changed = true
+        }
+
+        if (!changed) return true
+        writeAndSwapLocked(candidateAliases, candidateOverlays)
+    }
+
+    fun migrateFromLegacyPrefsEntries(values: Map<String, *>): Boolean = synchronized(state.lock) {
+        ensureLoadedLocked()
+        if (values.isEmpty()) return true
+
+        val candidateAliases = linkedMapOf<String, String>().also { it.putAll(state.aliases) }
+        val candidateOverlays = linkedMapOf<String, StoredOverlayRecord>().also { it.putAll(state.overlays) }
+        val migratedAliases = linkedMapOf<String, String>()
+        var changed = false
+
+        for ((rawKey, rawValue) in values) {
+            val key = cleanKey(rawKey) ?: continue
+            val value = rawValue as? String ?: continue
+            when {
+                key.startsWith(OVERLAY_PREFIX) -> {
+                    val overlayKey = cleanKey(key.removePrefix(OVERLAY_PREFIX)) ?: continue
+                    if (candidateOverlays.containsKey(overlayKey)) continue
+                    val overlay = readLegacyPrefsOverlay(value, overlayKey) ?: continue
+                    candidateOverlays[overlay.overlayKey] = StoredOverlayRecord(
+                        schemaVersion = OVERLAY_SCHEMA_VERSION,
+                        value = overlay
+                    )
+                    changed = true
+                }
+                key.startsWith("alias::") -> {
+                    if (candidateAliases.containsKey(key)) continue
+                    val overlayKey = cleanKey(value) ?: continue
+                    migratedAliases[key] = overlayKey
+                }
+            }
+        }
+
+        for ((aliasKey, overlayKey) in migratedAliases) {
             if (!candidateOverlays.containsKey(overlayKey)) continue
             candidateAliases[aliasKey] = overlayKey
             changed = true
@@ -391,6 +433,29 @@ class HydratedHomeOverlayTypedStore(
         }
         reader.endObject()
         return overlayKey
+    }
+
+    private fun readLegacyPrefsOverlay(rawJson: String, expectedOverlayKey: String): HydratedHomeOverlay? {
+        return try {
+            StringReader(rawJson).use { sr ->
+                JsonReader(sr).use { reader ->
+                    if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                        reader.skipValue()
+                        null
+                    } else {
+                        readV1OverlayRecord(reader, expectedOverlayKey)
+                    }
+                }
+            }
+        } catch (_: JsonParseException) {
+            null
+        } catch (_: JsonIOException) {
+            null
+        } catch (_: IllegalStateException) {
+            null
+        } catch (_: IOException) {
+            null
+        }
     }
 
     @Suppress("SENSELESS_COMPARISON")
