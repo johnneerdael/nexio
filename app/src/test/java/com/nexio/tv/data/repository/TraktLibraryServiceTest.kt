@@ -539,8 +539,11 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        assertEquals(listOf("tt7654321"), service.observeAllItems().first().map { it.id })
-        assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY), service.observeListTabs().first().map { it.key })
+        assertEquals(listOf("tt1234567", "tmdb:321"), service.observeAllItems().first().map { it.id })
+        assertEquals(
+            listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"),
+            service.observeListTabs().first().map { it.key }
+        )
     }
 
     @Test

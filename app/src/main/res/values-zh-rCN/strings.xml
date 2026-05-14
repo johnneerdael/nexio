@@ -689,7 +689,7 @@
   <string name="search_voice_mic_permission">语音搜索需要麦克风权限。</string>
   <string name="search_voice_failed">语音识别失败，请重试。</string>
   <string name="search_voice_unavailable">此设备不支持语音搜索。</string>
-  <string name="library_syncing">正在同步 Trakt 媒体库\u2026</string>
+  <string name="library_syncing">Synchronizing unified library\u2026</string>
   <string name="library_title">媒体库</string>
   <string name="library_filter_list">列表</string>
   <string name="library_filter_type">类型</string>

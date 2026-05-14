@@ -7,6 +7,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistItemDto
+import com.nexio.tv.data.local.MDBListLibrarySnapshotStore
 import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
@@ -25,13 +26,23 @@ import javax.inject.Singleton
 class MDBListLibraryService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
+    private val snapshotStore: MDBListLibrarySnapshotStore? = null,
 ) {
     private val rows = MutableStateFlow<List<LibraryEntry>>(emptyList())
     private val tabs = MutableStateFlow<List<LibraryListTab>>(emptyList())
     private val refreshing = MutableStateFlow(false)
     private val refreshMutex = Mutex()
     private var lastRefreshMs: Long = 0L
-    private val cacheTtlMs = 6L * 60 * 60 * 1_000L
+    private var cachedListKey: String? = null
+
+    init {
+        snapshotStore?.read()?.let { snapshot ->
+            rows.value = snapshot.rows
+            tabs.value = snapshot.tabs
+            cachedListKey = snapshot.selectedListKey
+            lastRefreshMs = snapshot.updatedAtMs
+        }
+    }
 
     fun observeAllItems(): Flow<List<LibraryEntry>> = rows
     fun observeListTabs(): Flow<List<LibraryListTab>> = tabs
@@ -56,7 +67,11 @@ class MDBListLibraryService @Inject constructor(
     suspend fun ensureFresh(force: Boolean = false, selectedListKey: String? = null) {
         refreshMutex.withLock {
             val now = System.currentTimeMillis()
-            if (!force && rows.value.isNotEmpty() && now - lastRefreshMs < cacheTtlMs) return
+            val selectedListId = listIdFromKey(selectedListKey)
+            val listKey = selectedListId?.let(::personalListKey) ?: WATCHLIST_KEY
+            if (cachedListKey == listKey && lastRefreshMs > 0L) {
+                return
+            }
 
             refreshing.value = true
             try {
@@ -65,7 +80,9 @@ class MDBListLibraryService @Inject constructor(
                 if (!settings.enabled || apiKey.isBlank()) {
                     rows.value = emptyList()
                     tabs.value = emptyList()
+                    cachedListKey = null
                     lastRefreshMs = now
+                    persistSnapshot(now)
                     return
                 }
 
@@ -73,8 +90,6 @@ class MDBListLibraryService @Inject constructor(
                 val userLists = if (listsResponse.isSuccessful) listsResponse.body().orEmpty() else emptyList()
                 tabs.value = buildTabs(userLists)
 
-                val selectedListId = listIdFromKey(selectedListKey)
-                val listKey = selectedListId?.let(::personalListKey) ?: WATCHLIST_KEY
                 val body = if (selectedListId != null) {
                     api.getListItems(
                         listId = selectedListId,
@@ -94,12 +109,16 @@ class MDBListLibraryService @Inject constructor(
 
                 if (body == null) {
                     rows.value = emptyList()
+                    cachedListKey = listKey
                     lastRefreshMs = now
+                    persistSnapshot(now)
                     return
                 }
 
                 rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty(), listKey = listKey)
+                cachedListKey = listKey
                 lastRefreshMs = now
+                persistSnapshot(now)
             } finally {
                 refreshing.value = false
             }
@@ -181,6 +200,17 @@ class MDBListLibraryService @Inject constructor(
     }
 
     private fun personalListKey(listId: Long): String = "$PERSONAL_KEY_PREFIX$listId"
+
+    private fun persistSnapshot(updatedAtMs: Long = System.currentTimeMillis()) {
+        snapshotStore?.write(
+            MDBListLibrarySnapshotStore.Snapshot(
+                rows = rows.value,
+                tabs = tabs.value,
+                selectedListKey = cachedListKey,
+                updatedAtMs = updatedAtMs
+            )
+        )
+    }
 
     private fun listIdFromKey(key: String?): Long? {
         return key?.removePrefix(PERSONAL_KEY_PREFIX)?.takeIf { it != key }?.toLongOrNull()

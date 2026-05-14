@@ -113,13 +113,24 @@ class LibraryViewModelTest {
             isSyncing = MutableStateFlow(false),
             hasProviderCache = MutableStateFlow(false),
             libraryItems = MutableStateFlow(emptyList()),
-            listTabs = MutableStateFlow(emptyList())
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.TRAKT)
+                )
+            )
         )
         val viewModel = viewModel(repository)
 
         advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.TRAKT)
+        advanceUntilIdle()
 
-        assertEquals(1, repository.refreshProviderNowCalls)
+        assertEquals(
+            listOf(LibraryProviderSelection.UNIFIED, LibraryProviderSelection.TRAKT),
+            repository.refreshProviderCalls
+        )
         assertTrue(viewModel.uiState.value.isLoading)
 
         repository.isSyncing.value = true
@@ -138,6 +149,31 @@ class LibraryViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `unified selection bootstraps unified sync without trakt blocking loader`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(false),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.TRAKT)
+                )
+            )
+        )
+        val viewModel = viewModel(repository)
+
+        advanceUntilIdle()
+
+        assertEquals(LibraryProviderSelection.UNIFIED, viewModel.uiState.value.selectedProvider)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(listOf(LibraryProviderSelection.UNIFIED), repository.refreshProviderCalls)
+        assertEquals(0, repository.refreshProviderNowCalls)
     }
 
     @Test
@@ -174,13 +210,26 @@ class LibraryViewModelTest {
             hasProviderCache = MutableStateFlow(false),
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(emptyList()),
-            refreshProviderNowBlock = { throw IllegalStateException("Trakt unavailable") }
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.TRAKT)
+                )
+            ),
+            refreshProviderNowBlock = { provider ->
+                if (provider == LibraryProviderSelection.TRAKT) throw IllegalStateException("Trakt unavailable")
+            }
         )
         val viewModel = viewModel(repository)
 
         advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.TRAKT)
+        advanceUntilIdle()
 
-        assertEquals(1, repository.refreshProviderNowCalls)
+        assertEquals(
+            listOf(LibraryProviderSelection.UNIFIED, LibraryProviderSelection.TRAKT),
+            repository.refreshProviderCalls
+        )
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("Trakt unavailable", viewModel.uiState.value.errorMessage)
     }
@@ -217,7 +266,10 @@ class LibraryViewModelTest {
         viewModel.onRefresh()
         advanceUntilIdle()
 
-        assertEquals(listOf(LibraryProviderSelection.SIMKL), repository.refreshProviderCalls)
+        assertEquals(
+            listOf(LibraryProviderSelection.UNIFIED, LibraryProviderSelection.SIMKL),
+            repository.refreshProviderCalls
+        )
         assertEquals(null, viewModel.uiState.value.errorMessage)
     }
 
@@ -390,7 +442,7 @@ class LibraryViewModelTest {
             MutableStateFlow(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))),
         override val unifiedWatchlistMemberships: MutableStateFlow<List<UnifiedWatchlistMembership>> = MutableStateFlow(emptyList()),
         private val providerSnapshot: MutableStateFlow<LibraryProviderSnapshot>? = null,
-        private val refreshProviderNowBlock: suspend () -> Unit = {}
+        private val refreshProviderNowBlock: suspend (LibraryProviderSelection?) -> Unit = {}
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0
         val refreshProviderCalls = mutableListOf<LibraryProviderSelection>()
@@ -447,7 +499,7 @@ class LibraryViewModelTest {
 
         override suspend fun refreshProviderNow() {
             refreshProviderNowCalls += 1
-            refreshProviderNowBlock()
+            refreshProviderNowBlock(null)
         }
 
         override suspend fun refreshDebridNow() = Unit
@@ -462,6 +514,7 @@ class LibraryViewModelTest {
 
         override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) {
             refreshProviderCalls += provider
+            refreshProviderNowBlock(provider)
         }
 
         override suspend fun createProviderList(

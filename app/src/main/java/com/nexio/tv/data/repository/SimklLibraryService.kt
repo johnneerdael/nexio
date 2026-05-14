@@ -317,7 +317,7 @@ class SimklLibraryService @Inject constructor(
                     return@runCatching
                 }
 
-                val snapshot = if (force || isFirstSync) {
+                val snapshot = if (isFirstSync) {
                     // Phase 1: single GET /sync/all-items/ — no type filter, no date_from
                     fetchInitialSnapshot(session)
                 } else {
@@ -376,13 +376,16 @@ class SimklLibraryService @Inject constructor(
         previousTimestamps: ActivityTimestamps,
         baseSnapshot: Snapshot
     ): Snapshot? {
-        // If removals changed for ANY type, fall back to a full re-fetch so removed items are cleaned up
+        // A cached library is a one-time full snapshot. After that, never
+        // replace it with another full library sync; removals are advanced
+        // through the activity markers and provider mutations update the local
+        // snapshot optimistically.
         val removalsChanged =
             activities?.tvShows?.removedFromList != previousTimestamps.lastTvShowsRemovedFromListAt ||
             activities?.movies?.removedFromList != previousTimestamps.lastMoviesRemovedFromListAt ||
             activities?.anime?.removedFromList != previousTimestamps.lastAnimeRemovedFromListAt
         if (removalsChanged) {
-            return fetchInitialSnapshot(session)
+            Log.i(TAG, "SIMKL removal activity changed; preserving cached library and applying available deltas only")
         }
 
         // Per-type delta: fetch only types whose timestamp changed, using the saved timestamp as date_from

@@ -415,7 +415,7 @@
   <string name="next_episode_label">Siguiente episodio</string>
   <string name="search_keyboard_hint">Presiona Listo en el teclado para buscar</string>
   <string name="search_placeholder">Buscar películas y series</string>
-  <string name="library_syncing">Sincronizando la biblioteca de Trakt\u2026</string>
+  <string name="library_syncing">Synchronizing unified library\u2026</string>
   <string name="library_title">Biblioteca</string>
   <string name="library_filter_list">Lista</string>
   <string name="library_filter_type">Tipo</string>

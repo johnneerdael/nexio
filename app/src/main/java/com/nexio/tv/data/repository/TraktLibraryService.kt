@@ -108,6 +108,11 @@ class TraktLibraryService @Inject constructor(
         val updatedAtMs: Long = 0L
     )
 
+    private data class ActivityTimestamps(
+        val lastWatchlistUpdatedAt: String? = null,
+        val lastListsUpdatedAt: String? = null
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val snapshotState = MutableStateFlow(Snapshot())
     private val metadataState = MutableStateFlow<Map<String, LibraryMetadata>>(emptyMap())
@@ -118,6 +123,8 @@ class TraktLibraryService @Inject constructor(
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private var lastRefreshMs: Long = 0L
+    private var lastWatchlistUpdatedAt: String? = null
+    private var lastListsUpdatedAt: String? = null
 
     private val cacheTtlMs = 24L * 60 * 60 * 1_000L
     private val metadataHydrationLimit = 110
@@ -411,20 +418,6 @@ class TraktLibraryService @Inject constructor(
     private suspend fun refresh(force: Boolean, profileId: Int = activeProfileId()): Boolean {
         val now = System.currentTimeMillis()
         return refreshMutex.withLock {
-            // F2-F-07: manual staleness guard — `profileId == activeProfileId()` is functionally
-            // correct but inconsistent with assertCanWriteProfileState. Future migration: route
-            // through ProfileBoundaryEnforcer for unified observability (boundary_check trace
-            // events fire on PASS + FAIL). Until then, this guard prevents stale-profile writes
-            // without emitting a boundary_check trace event.
-            if (
-                profileId == activeProfileId() &&
-                !force &&
-                now - lastRefreshMs <= cacheTtlMs &&
-                snapshotState.value.updatedAtMs > 0L
-            ) {
-                return@withLock true
-            }
-
             val activeAtStart = profileId == activeProfileId()
             if (activeAtStart) refreshingState.value = true
             try {
@@ -434,11 +427,57 @@ class TraktLibraryService @Inject constructor(
                 } else {
                     persistedMetadataForProfile(profileId)
                 }
-                val refreshed = runCatching { fetchSnapshot(session) }.getOrNull() ?: return@withLock false
+                val currentSnapshot = if (profileId == activeProfileId()) {
+                    snapshotState.value
+                } else {
+                    snapshotFromPersisted(profileId)
+                }
+                val previousTimestamps = if (profileId == activeProfileId()) {
+                    currentActivityTimestamps()
+                } else {
+                    persistedActivityTimestamps(profileId)
+                }
+                val hasExistingCache = hasCache(currentSnapshot)
+                val currentTimestamps = if (hasExistingCache) {
+                    fetchActivityTimestamps(force) ?: previousTimestamps
+                } else {
+                    previousTimestamps
+                }
+                val refreshed = when {
+                    !hasExistingCache -> {
+                        runCatching { fetchSnapshot(session) }.getOrNull() ?: return@withLock false
+                    }
+                    previousTimestamps.lastWatchlistUpdatedAt == null &&
+                        previousTimestamps.lastListsUpdatedAt == null -> {
+                        persistAndRestoreSnapshot(
+                            snapshot = currentSnapshot,
+                            metadata = previousMetadata,
+                            profileId = profileId,
+                            timestamps = currentTimestamps
+                        )
+                        return@withLock true
+                    }
+                    !force &&
+                        now - lastRefreshMs <= cacheTtlMs &&
+                        currentTimestamps == previousTimestamps -> {
+                        return@withLock true
+                    }
+                    else -> fetchIncrementalSnapshot(
+                        session = session,
+                        baseSnapshot = currentSnapshot,
+                        previousTimestamps = previousTimestamps,
+                        currentTimestamps = currentTimestamps
+                    )
+                }
                 val baseSnapshot = applyMetadata(refreshed, previousMetadata)
                 val primedMetadata = primeMetadata(baseSnapshot.allEntries, previousMetadata)
                 val snapshotToPersist = applyMetadata(baseSnapshot, primedMetadata)
-                persistAndRestoreSnapshot(snapshotToPersist, primedMetadata, profileId = profileId)
+                persistAndRestoreSnapshot(
+                    snapshot = snapshotToPersist,
+                    metadata = primedMetadata,
+                    profileId = profileId,
+                    timestamps = currentTimestamps
+                )
                 if (profileId == activeProfileId()) {
                     hydrateMetadata(snapshotState.value.allEntries, profileId)
                 }
@@ -449,6 +488,39 @@ class TraktLibraryService @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun fetchActivityTimestamps(force: Boolean): ActivityTimestamps? {
+        if (force) {
+            runCatching { traktIntegrationProvider.invalidateLastActivities() }
+        }
+        return runCatching {
+            (traktIntegrationProvider.getLastActivities() as? IntegrationCallResult.Success)?.value?.let { activities ->
+                ActivityTimestamps(
+                    lastWatchlistUpdatedAt = activities.watchlist?.updatedAt,
+                    lastListsUpdatedAt = activities.lists?.updatedAt
+                )
+            }
+        }.getOrNull()
+    }
+
+    private suspend fun fetchIncrementalSnapshot(
+        session: TrackingAuthSession,
+        baseSnapshot: Snapshot,
+        previousTimestamps: ActivityTimestamps,
+        currentTimestamps: ActivityTimestamps
+    ): Snapshot {
+        val watchlistEntries = if (currentTimestamps.lastWatchlistUpdatedAt != previousTimestamps.lastWatchlistUpdatedAt) {
+            fetchWatchlistEntries(session)
+        } else {
+            null
+        }
+        val personalLists = if (currentTimestamps.lastListsUpdatedAt != previousTimestamps.lastListsUpdatedAt) {
+            fetchPersonalLists(session)
+        } else {
+            null
+        }
+        return mergeListRefresh(baseSnapshot, watchlistEntries, personalLists)
     }
 
     private suspend fun performOptimisticMutation(
@@ -651,6 +723,42 @@ class TraktLibraryService @Inject constructor(
         val tabs: List<LibraryListTab>,
         val entriesByList: Map<String, List<LibraryEntry>>
     )
+
+    private fun mergeListRefresh(
+        baseSnapshot: Snapshot,
+        watchlistEntries: List<LibraryEntry>?,
+        personalLists: PersonalListFetchResult?
+    ): Snapshot {
+        if (watchlistEntries == null && personalLists == null) {
+            return baseSnapshot.copy(updatedAtMs = System.currentTimeMillis())
+        }
+        val tabs = buildList {
+            add(
+                baseSnapshot.listTabs.firstOrNull { it.key == WATCHLIST_KEY }
+                    ?: LibraryListTab(
+                        key = WATCHLIST_KEY,
+                        title = "Trakt Watchlist",
+                        type = LibraryListTab.Type.WATCHLIST,
+                        sortBy = "rank",
+                        sortHow = "asc"
+                    )
+            )
+            if (personalLists != null) {
+                addAll(personalLists.tabs)
+            } else {
+                addAll(baseSnapshot.listTabs.filter { it.key != WATCHLIST_KEY })
+            }
+        }
+        val rawEntriesByList = linkedMapOf<String, List<LibraryEntry>>()
+        rawEntriesByList[WATCHLIST_KEY] = watchlistEntries ?: baseSnapshot.entriesByList[WATCHLIST_KEY].orEmpty()
+        val personalKeys = tabs.map { it.key }.filter { it != WATCHLIST_KEY }
+        for (i in personalKeys.indices) {
+            val key = personalKeys[i]
+            rawEntriesByList[key] = personalLists?.entriesByList?.get(key)
+                ?: baseSnapshot.entriesByList[key].orEmpty()
+        }
+        return rebuildSnapshot(tabs, rawEntriesByList)
+    }
 
     private suspend fun fetchPersonalLists(session: TrackingAuthSession): PersonalListFetchResult {
         val response = traktIntegrationProvider.getUserLists(
@@ -1245,6 +1353,12 @@ class TraktLibraryService @Inject constructor(
             rawEntriesByList = persisted.entriesByList
         ).copy(updatedAtMs = persisted.updatedAtMs)
         lastRefreshMs = persisted.updatedAtMs
+        applyActivityTimestamps(
+            ActivityTimestamps(
+                lastWatchlistUpdatedAt = persisted.lastWatchlistUpdatedAt,
+                lastListsUpdatedAt = persisted.lastListsUpdatedAt
+            )
+        )
         hasCacheState.value = hasCache(persisted)
         logDebug(
             "restore applied updatedAtMs=${snapshotState.value.updatedAtMs} " +
@@ -1267,6 +1381,14 @@ class TraktLibraryService @Inject constructor(
         restorePersistedState(persisted)
     }
 
+    private fun snapshotFromPersisted(profileId: Int): Snapshot {
+        val persisted = snapshotStore.read(profileId) ?: return Snapshot()
+        return rebuildSnapshot(
+            tabs = persisted.listTabs,
+            rawEntriesByList = persisted.entriesByList
+        ).copy(updatedAtMs = persisted.updatedAtMs)
+    }
+
     @androidx.annotation.VisibleForTesting
     internal fun testOnlyRestoreSnapshotForProfile(profileId: Int) {
         restoreSnapshotForProfile(profileId)
@@ -1287,10 +1409,31 @@ class TraktLibraryService @Inject constructor(
         }
     }
 
+    private fun persistedActivityTimestamps(profileId: Int): ActivityTimestamps {
+        val persisted = snapshotStore.read(profileId) ?: return ActivityTimestamps()
+        return ActivityTimestamps(
+            lastWatchlistUpdatedAt = persisted.lastWatchlistUpdatedAt,
+            lastListsUpdatedAt = persisted.lastListsUpdatedAt
+        )
+    }
+
+    private fun currentActivityTimestamps(): ActivityTimestamps {
+        return ActivityTimestamps(
+            lastWatchlistUpdatedAt = lastWatchlistUpdatedAt,
+            lastListsUpdatedAt = lastListsUpdatedAt
+        )
+    }
+
+    private fun applyActivityTimestamps(timestamps: ActivityTimestamps) {
+        lastWatchlistUpdatedAt = timestamps.lastWatchlistUpdatedAt
+        lastListsUpdatedAt = timestamps.lastListsUpdatedAt
+    }
+
     private suspend fun persistAndRestoreSnapshot(
         snapshot: Snapshot,
         metadata: Map<String, LibraryMetadata>,
-        profileId: Int = activeProfileId()
+        profileId: Int = activeProfileId(),
+        timestamps: ActivityTimestamps = currentActivityTimestamps()
     ) {
         logDebug(
             "persist start updatedAtMs=${snapshot.updatedAtMs} " +
@@ -1313,7 +1456,9 @@ class TraktLibraryService @Inject constructor(
                     genres = value.genres
                 )
             },
-            updatedAtMs = snapshot.updatedAtMs
+            updatedAtMs = snapshot.updatedAtMs,
+            lastWatchlistUpdatedAt = timestamps.lastWatchlistUpdatedAt,
+            lastListsUpdatedAt = timestamps.lastListsUpdatedAt
         )
         if (!hasCache(persisted)) {
             logDebug("persist aborted no cacheable content; clearing snapshot store")
@@ -1368,6 +1513,8 @@ class TraktLibraryService @Inject constructor(
         metadataState.value = emptyMap()
         collectionMembership.value = emptySet()
         lastRefreshMs = 0L
+        lastWatchlistUpdatedAt = null
+        lastListsUpdatedAt = null
         hasCacheState.value = false
     }
 
@@ -1390,8 +1537,17 @@ class TraktLibraryService @Inject constructor(
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
 
     private suspend fun mutationSession(profileId: Int = activeProfileId()): TrackingAuthSession {
-        return traktAuthService.mutationAccountScopedSession(
+        val scoped = traktAuthService.mutationAccountScopedSession(
             TrackingAuthSession(TrackingProvider.TRAKT, profileId)
+        )
+        val credentialHash = scoped.credentialHash?.takeIf { it.isNotBlank() }
+            ?: scoped.accountIdHash?.takeIf { it.isNotBlank() }
+            ?: "trakt-profile:$profileId"
+        return TrackingAuthSession(
+            provider = TrackingProvider.TRAKT,
+            profileId = profileId,
+            credentialHash = credentialHash,
+            accountIdHash = scoped.accountIdHash
         )
     }
 

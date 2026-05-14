@@ -70,7 +70,7 @@ class TraktLibrarySnapshotStore private constructor(
         private const val TAG = "TraktLibraryStore"
         internal const val BASE_PREFS_NAME = "trakt_library_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 2
+        private const val SCHEMA_VERSION = 3
         private const val SNAPSHOT_DIR = "trakt-library-snapshot-v1"
     }
 
@@ -89,7 +89,9 @@ class TraktLibrarySnapshotStore private constructor(
         val listTabs: List<LibraryListTab> = emptyList(),
         val entriesByList: Map<String, List<LibraryEntry>> = emptyMap(),
         val metadataByContentKey: Map<String, PersistedLibraryMetadata> = emptyMap(),
-        val updatedAtMs: Long = 0L
+        val updatedAtMs: Long = 0L,
+        val lastWatchlistUpdatedAt: String? = null,
+        val lastListsUpdatedAt: String? = null
     )
 
     private val gson = Gson()
@@ -177,6 +179,8 @@ class TraktLibrarySnapshotStore private constructor(
         var entriesByList: Map<String, List<LibraryEntry>> = emptyMap()
         var metadataByContentKey: Map<String, PersistedLibraryMetadata> = emptyMap()
         var updatedAtMs: Long = 0L
+        var lastWatchlistUpdatedAt: String? = null
+        var lastListsUpdatedAt: String? = null
 
         return runCatching {
             FileInputStream(file).use { fis ->
@@ -209,6 +213,8 @@ class TraktLibrarySnapshotStore private constructor(
                                     metadataByContentKey = decodeMetadata(element)
                                 }
                                 "updatedAtMs" -> updatedAtMs = reader.nextLong()
+                                "lastWatchlistUpdatedAt" -> lastWatchlistUpdatedAt = reader.nextStringOrNull()
+                                "lastListsUpdatedAt" -> lastListsUpdatedAt = reader.nextStringOrNull()
                                 else -> reader.skipValue()
                             }
                         }
@@ -220,7 +226,9 @@ class TraktLibrarySnapshotStore private constructor(
                 listTabs = listTabs,
                 entriesByList = entriesByList,
                 metadataByContentKey = metadataByContentKey,
-                updatedAtMs = updatedAtMs
+                updatedAtMs = updatedAtMs,
+                lastWatchlistUpdatedAt = lastWatchlistUpdatedAt,
+                lastListsUpdatedAt = lastListsUpdatedAt
             )
         }.onFailure { error ->
             logWarning("Failed to stream-read Trakt library snapshot", error)
@@ -246,6 +254,8 @@ class TraktLibrarySnapshotStore private constructor(
                     gson.toJson(encodeMetadata(snapshot.metadataByContentKey), JsonObject::class.java, writer)
 
                     writer.name("updatedAtMs").value(snapshot.updatedAtMs)
+                    writer.name("lastWatchlistUpdatedAt").value(snapshot.lastWatchlistUpdatedAt)
+                    writer.name("lastListsUpdatedAt").value(snapshot.lastListsUpdatedAt)
                     writer.endObject()
                 }
             }
@@ -319,7 +329,9 @@ class TraktLibrarySnapshotStore private constructor(
             listTabs = decodeListTabs(root.get("listTabs")),
             entriesByList = decodeEntriesByList(root.get("entriesByList")),
             metadataByContentKey = decodeMetadata(root.get("metadataByContentKey")),
-            updatedAtMs = root.longOrNull("updatedAtMs") ?: 0L
+            updatedAtMs = root.longOrNull("updatedAtMs") ?: 0L,
+            lastWatchlistUpdatedAt = root.stringOrNull("lastWatchlistUpdatedAt"),
+            lastListsUpdatedAt = root.stringOrNull("lastListsUpdatedAt")
         )
     }
 
@@ -561,6 +573,15 @@ class TraktLibrarySnapshotStore private constructor(
         return runCatching {
             get(key)?.takeIf { !it.isJsonNull }?.asFloat
         }.getOrNull()
+    }
+
+    private fun JsonReader.nextStringOrNull(): String? {
+        return if (peek() == JsonToken.NULL) {
+            nextNull()
+            null
+        } else {
+            nextString()
+        }
     }
 
     private fun logWarning(message: String, error: Throwable) {

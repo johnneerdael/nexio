@@ -144,7 +144,7 @@ class LibraryViewModel @Inject constructor(
     private val selectedListKeyState = MutableStateFlow<String?>(null)
 
     private var messageClearJob: Job? = null
-    private var initialTraktSyncRequested = false
+    private val initialProviderSyncRequested = mutableSetOf<LibraryProviderSelection>()
 
     internal fun onTorBoxItemClick(entry: LibraryEntry) {
         val match = Regex("""^tb:torrent:(\d+):file:(\d+)$""").matchEntire(entry.id) ?: return
@@ -186,7 +186,7 @@ class LibraryViewModel @Inject constructor(
         observeLibraryData()
         observeUnifiedWatchlistRows()
         observeDebridBootstrap()
-        observeTraktBootstrap()
+        observeLibraryBootstrap()
     }
 
     fun onSelectProvider(provider: LibraryProviderSelection) {
@@ -242,8 +242,16 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val state = _uiState.value
             val provider = state.selectedProvider
-            val startMessage = "Syncing ${provider.label} library..."
-            val successMessage = "${provider.label} library synced"
+            val startMessage = if (provider == LibraryProviderSelection.UNIFIED) {
+                "Synchronizing unified library."
+            } else {
+                "Syncing ${provider.label} library..."
+            }
+            val successMessage = if (provider == LibraryProviderSelection.UNIFIED) {
+                "Unified library synchronized"
+            } else {
+                "${provider.label} library synced"
+            }
 
             setTransientMessage(startMessage)
             runCatching {
@@ -532,8 +540,13 @@ class LibraryViewModel @Inject constructor(
                 selectedListKey = nextSelectedList,
                 selectedSortOption = nextSelectedSort,
                 manageSelectedListKey = nextManageSelected,
-                isSyncing = bundle.sourceMode != LibrarySourceMode.LOCAL && bundle.isSyncing,
-                isLoading = (bundle.sourceMode == LibrarySourceMode.TRAKT || bundle.sourceMode == LibrarySourceMode.SIMKL) &&
+                isSyncing = if (bundle.provider == LibraryProviderSelection.UNIFIED) {
+                    bundle.isSyncing
+                } else {
+                    bundle.sourceMode != LibrarySourceMode.LOCAL && bundle.isSyncing
+                },
+                isLoading = bundle.provider != LibraryProviderSelection.UNIFIED &&
+                    (bundle.sourceMode == LibrarySourceMode.TRAKT || bundle.sourceMode == LibrarySourceMode.SIMKL) &&
                     !bundle.hasProviderCache &&
                     current.errorMessage == null
             )
@@ -612,38 +625,49 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun observeTraktBootstrap() {
+    private fun observeLibraryBootstrap() {
         viewModelScope.launch {
             combine(
-                libraryRepository.sourceMode,
+                selectedProviderState,
+                libraryRepository.availableProviders,
                 libraryRepository.hasProviderCache
-            ) { sourceMode, hasProviderCache ->
-                sourceMode to hasProviderCache
-            }.collectLatest { (sourceMode, hasProviderCache) ->
-                when {
-                    sourceMode != LibrarySourceMode.TRAKT && sourceMode != LibrarySourceMode.SIMKL -> {
-                        initialTraktSyncRequested = false
+            ) { selectedProvider, availableProviders, hasProviderCache ->
+                BootstrapState(selectedProvider, availableProviders.map { it.provider }.toSet(), hasProviderCache)
+            }.distinctUntilChanged().collectLatest { state ->
+                val shouldBootstrap = when (state.selectedProvider) {
+                    LibraryProviderSelection.UNIFIED -> {
+                        state.availableProviders.any { it.isTrackerProvider() } &&
+                            initialProviderSyncRequested.add(LibraryProviderSelection.UNIFIED)
                     }
-
-                    hasProviderCache -> {
-                        initialTraktSyncRequested = true
+                    LibraryProviderSelection.TRAKT,
+                    LibraryProviderSelection.SIMKL,
+                    LibraryProviderSelection.MDBLIST -> {
+                        state.selectedProvider in state.availableProviders &&
+                            !state.hasProviderCache &&
+                            initialProviderSyncRequested.add(state.selectedProvider)
                     }
-
-                    !initialTraktSyncRequested -> {
-                        initialTraktSyncRequested = true
-                        runCatching {
-                            if (sourceMode == LibrarySourceMode.TRAKT || sourceMode == LibrarySourceMode.SIMKL) {
-                                libraryRepository.refreshProviderNow()
-                            } else {
-                                libraryRepository.refreshNow()
-                            }
-                        }.onFailure { error ->
-                            setError(error.message ?: providerSyncFailureMessage(sourceMode))
-                        }
-                    }
+                    else -> false
+                }
+                if (!shouldBootstrap) return@collectLatest
+                runCatching {
+                    libraryRepository.refreshProviderNow(state.selectedProvider, selectedListKeyState.value)
+                }.onFailure { error ->
+                    setError(error.message ?: providerSyncFailureMessage(_uiState.value.sourceMode))
                 }
             }
         }
+    }
+
+    private data class BootstrapState(
+        val selectedProvider: LibraryProviderSelection,
+        val availableProviders: Set<LibraryProviderSelection>,
+        val hasProviderCache: Boolean
+    )
+
+    private fun LibraryProviderSelection.isTrackerProvider(): Boolean {
+        return this == LibraryProviderSelection.TRAKT ||
+            this == LibraryProviderSelection.SIMKL ||
+            this == LibraryProviderSelection.MDBLIST
     }
 
     private fun providerSyncFailureMessage(sourceMode: LibrarySourceMode): String {

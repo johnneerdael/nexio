@@ -438,7 +438,7 @@
   <string name="discover_empty_no_content_subtitle">Essaie un autre genre ou catalogue</string>
   <string name="search_keyboard_hint">Appuie sur Terminé sur le clavier pour rechercher</string>
   <string name="search_placeholder">Rechercher des films et séries</string>
-  <string name="library_syncing">Synchronisation de la bibliothèque Trakt\u2026</string>
+  <string name="library_syncing">Synchronizing unified library\u2026</string>
   <string name="library_title">Bibliothèque</string>
   <string name="library_filter_list">Liste</string>
   <string name="library_filter_type">Type</string>

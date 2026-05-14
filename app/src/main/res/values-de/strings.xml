@@ -689,7 +689,7 @@
   <string name="search_voice_mic_permission">Für die Sprachsuche ist eine Mikrofonberechtigung erforderlich.</string>
   <string name="search_voice_failed">Die Spracherkennung ist fehlgeschlagen. Versuche es erneut.</string>
   <string name="search_voice_unavailable">Die Sprachsuche ist auf diesem Gerät nicht verfügbar.</string>
-  <string name="library_syncing">Trakt-Bibliothek wird synchronisiert\u2026</string>
+  <string name="library_syncing">Synchronizing unified library\u2026</string>
   <string name="library_title">Bibliothek</string>
   <string name="library_filter_list">Liste</string>
   <string name="library_filter_type">Typ</string>

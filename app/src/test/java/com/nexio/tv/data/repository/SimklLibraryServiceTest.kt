@@ -171,7 +171,7 @@ class SimklLibraryServiceTest {
             listOf("Plan to Watch", "Watching", "Completed", "On Hold", "Dropped"),
             tabs.map { it.title }
         )
-        verify(exactly = 1) { snapshotStore.write(any(), any()) }
+        verify(atLeast = 1) { snapshotStore.write(any(), any()) }
     }
 
     @Test

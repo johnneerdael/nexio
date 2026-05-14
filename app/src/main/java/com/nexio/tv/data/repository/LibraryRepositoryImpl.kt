@@ -279,33 +279,13 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun refreshNow() {
         val providerState = trackingProviderStateService.currentState()
-        when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> {
-                if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
-            }
-            TrackingProvider.TRAKT -> {
-                if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
-            }
-            TrackingProvider.MDBLIST -> {
-                if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = true)
-            }
-        }
+        refreshUnifiedTrackers(providerState)
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
     }
 
     override suspend fun refreshProviderNow() {
         val providerState = trackingProviderStateService.currentState()
-        when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> {
-                if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
-            }
-            TrackingProvider.TRAKT -> {
-                if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
-            }
-            TrackingProvider.MDBLIST -> {
-                if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = true)
-            }
-        }
+        refreshUnifiedTrackers(providerState)
     }
 
     override suspend fun refreshDebridNow() {
@@ -331,17 +311,25 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) {
         val providerState = trackingProviderStateService.currentState()
         when (provider) {
-            LibraryProviderSelection.UNIFIED -> refreshProviderNow()
+            LibraryProviderSelection.UNIFIED -> refreshUnifiedTrackers(providerState)
             LibraryProviderSelection.TRAKT -> if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
             LibraryProviderSelection.SIMKL -> if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
             LibraryProviderSelection.MDBLIST -> {
-                if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = true, selectedListKey = selectedListKey)
+                if (providerState.mdbListAuthenticated) {
+                    mdbListLibraryService.refreshNow(force = false, selectedListKey = selectedListKey)
+                }
             }
             LibraryProviderSelection.REAL_DEBRID -> refreshRealDebridNow()
             LibraryProviderSelection.PREMIUMIZE -> refreshPremiumizeNow()
             LibraryProviderSelection.TORBOX -> refreshTorBoxNow()
             LibraryProviderSelection.EASY_DEBRID -> refreshEasyDebridNow()
         }
+    }
+
+    private suspend fun refreshUnifiedTrackers(providerState: EffectiveTrackingProviderState) {
+        if (providerState.traktAuthenticated) traktLibraryService.ensureFresh()
+        if (providerState.simklAuthenticated) simklLibraryService.refreshNow(force = false)
+        if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = false)
     }
 
     override suspend fun createProviderList(

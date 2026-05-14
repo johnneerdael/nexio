@@ -1168,7 +1168,7 @@
     <string name="search_voice_failed_with_code">Voice recognition failed (code %1$d). Try again.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Syncing library\u2026</string>
+    <string name="library_syncing">Synchronizing unified library\u2026</string>
     <string name="library_title">Library</string>
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
