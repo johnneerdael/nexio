@@ -6,7 +6,6 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
 import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
-import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
 import com.nexio.tv.data.repository.TraktLibraryService
@@ -63,13 +62,6 @@ enum class LibrarySortOption(
     }
 }
 
-enum class LibraryPrimaryTab(
-    val label: String
-) {
-    UNIFIED_WATCHLIST("Unified Watchlist"),
-    PROVIDER_LIBRARY("Provider Library")
-}
-
 data class LibraryListEditorState(
     val mode: Mode,
     val listId: String? = null,
@@ -84,7 +76,6 @@ data class LibraryListEditorState(
 }
 
 data class LibraryUiState(
-    val selectedPrimaryTab: LibraryPrimaryTab = LibraryPrimaryTab.UNIFIED_WATCHLIST,
     val selectedProvider: LibraryProviderSelection = LibraryProviderSelection.UNIFIED,
     val availableProviders: List<LibraryProviderOption> = listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)),
     val sourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
@@ -198,12 +189,6 @@ class LibraryViewModel @Inject constructor(
         observeTraktBootstrap()
     }
 
-    fun onSelectPrimaryTab(tab: LibraryPrimaryTab) {
-        _uiState.update { current ->
-            if (current.selectedPrimaryTab == tab) current else current.copy(selectedPrimaryTab = tab)
-        }
-    }
-
     fun onSelectProvider(provider: LibraryProviderSelection) {
         selectedProviderState.value = provider
         selectedListKeyState.value = null
@@ -256,91 +241,13 @@ class LibraryViewModel @Inject constructor(
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
             val state = _uiState.value
-            if (state.selectedProvider != LibraryProviderSelection.UNIFIED) {
-                val provider = state.selectedProvider
-                val startMessage = "Syncing ${provider.label} library..."
-                val successMessage = "${provider.label} library synced"
-                setTransientMessage(startMessage)
-                runCatching {
-                    libraryRepository.refreshProviderNow(provider, state.selectedListKey)
-                    setTransientMessage(successMessage)
-                }.onFailure { error ->
-                    setError(error.message ?: "Failed to refresh library")
-                }
-                return@launch
-            }
-
-            val selectedList = state.listTabs.firstOrNull { it.key == state.selectedListKey }
-            val startMessage: String
-            val successMessage: String
-            val refreshBlock: suspend () -> Unit
-            when {
-                state.selectedPrimaryTab == LibraryPrimaryTab.UNIFIED_WATCHLIST -> {
-                    startMessage = "Syncing unified watchlist..."
-                    successMessage = "Unified watchlist synced"
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.PERSONAL -> {
-                    startMessage = "Syncing Trakt library..."
-                    successMessage = "Trakt library synced"
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.WATCHLIST &&
-                    (state.sourceMode == LibrarySourceMode.TRAKT || state.sourceMode == LibrarySourceMode.SIMKL) -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.REAL_DEBRID_LIST_KEY -> {
-                    startMessage = "Syncing Real-Debrid library..."
-                    successMessage = "Real-Debrid library synced"
-                    refreshBlock = { libraryRepository.refreshRealDebridNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.PREMIUMIZE_LIST_KEY -> {
-                    startMessage = "Syncing Premiumize library..."
-                    successMessage = "Premiumize library synced"
-                    refreshBlock = { libraryRepository.refreshPremiumizeNow() }
-                }
-
-                selectedList?.key == DebridLibraryService.TORBOX_LIST_KEY -> {
-                    startMessage = "Syncing TorBox library..."
-                    successMessage = "TorBox library synced"
-                    refreshBlock = { libraryRepository.refreshTorBoxNow() }
-                }
-
-                selectedList?.type == LibraryListTab.Type.SERVICE ||
-                    state.sourceMode == LibrarySourceMode.DEBRID -> {
-                    startMessage = "Syncing debrid libraries..."
-                    successMessage = "Debrid libraries synced"
-                    refreshBlock = { libraryRepository.refreshDebridNow() }
-                }
-
-                state.sourceMode == LibrarySourceMode.TRAKT -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshProviderNow() }
-                }
-
-                state.sourceMode == LibrarySourceMode.SIMKL -> {
-                    startMessage = providerSyncStartMessage(state.sourceMode)
-                    successMessage = providerSyncSuccessMessage(state.sourceMode)
-                    refreshBlock = { libraryRepository.refreshNow() }
-                }
-
-                else -> {
-                    startMessage = "Syncing library..."
-                    successMessage = "Library synced"
-                    refreshBlock = { libraryRepository.refreshNow() }
-                }
-            }
+            val provider = state.selectedProvider
+            val startMessage = "Syncing ${provider.label} library..."
+            val successMessage = "${provider.label} library synced"
 
             setTransientMessage(startMessage)
             runCatching {
-                refreshBlock()
+                libraryRepository.refreshProviderNow(provider, state.selectedListKey)
                 setTransientMessage(successMessage)
             }.onFailure { error ->
                 setError(error.message ?: "Failed to refresh library")
@@ -724,24 +631,6 @@ class LibraryViewModel @Inject constructor(
                     }
                 }
             }
-        }
-    }
-
-    private fun providerSyncStartMessage(sourceMode: LibrarySourceMode): String {
-        return when (sourceMode) {
-            LibrarySourceMode.TRAKT -> "Syncing Trakt library..."
-            LibrarySourceMode.SIMKL -> "Syncing SIMKL library..."
-            LibrarySourceMode.DEBRID -> "Syncing debrid libraries..."
-            LibrarySourceMode.LOCAL -> "Syncing library..."
-        }
-    }
-
-    private fun providerSyncSuccessMessage(sourceMode: LibrarySourceMode): String {
-        return when (sourceMode) {
-            LibrarySourceMode.TRAKT -> "Trakt library synced"
-            LibrarySourceMode.SIMKL -> "SIMKL library synced"
-            LibrarySourceMode.DEBRID -> "Debrid libraries synced"
-            LibrarySourceMode.LOCAL -> "Library synced"
         }
     }
 

@@ -18,12 +18,19 @@ class LibraryUnifiedWatchlistUiContractTest {
             ?.value
             .orEmpty()
 
-        assertTrue(viewModelSource.contains("val selectedPrimaryTab: LibraryPrimaryTab = LibraryPrimaryTab.UNIFIED_WATCHLIST"))
         assertTrue(viewModelSource.contains("val unifiedWatchlistRows: StateFlow<List<UnifiedWatchlistRowItem>>"))
         assertFalse(uiStateBlock.contains("unifiedWatchlistRows"))
 
         assertTrue(screenSource.contains("viewModel.unifiedWatchlistRows.collectAsState()"))
-        assertTrue(screenSource.contains("LibraryPrimaryTab.UNIFIED_WATCHLIST"))
+        assertFalse(screenSource.contains("LibraryPrimaryTabsRow("))
+        assertFalse(screenSource.contains("LibraryPrimaryTab.UNIFIED_WATCHLIST"))
+        assertTrue(screenSource.contains("title = \"Provider\""))
+        assertTrue(screenSource.contains("expandedPicker == \"provider\""))
+        assertTrue(screenSource.contains("title = stringResource(R.string.library_filter_list)"))
+        assertTrue(screenSource.contains("listSelectorLabel = uiState.listSelectorLabel"))
+        assertTrue(screenSource.contains("onSelectProvider"))
+        assertFalse(screenSource.contains("Provider Library"))
+        assertFalse(screenSource.contains("Unified Watchlist\""))
         assertTrue(screenSource.contains("UnifiedWatchlistLibraryRailItem.entryFromRow(row)"))
         assertTrue(screenSource.contains("LibraryRailItem.fromEntry(item)"))
         assertFalse(screenSource.contains("items(unifiedWatchlistRows"))

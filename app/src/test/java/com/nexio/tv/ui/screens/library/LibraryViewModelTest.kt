@@ -72,7 +72,6 @@ class LibraryViewModelTest {
             listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)),
             viewModel.uiState.value.availableProviders
         )
-        assertEquals(LibraryPrimaryTab.UNIFIED_WATCHLIST, viewModel.uiState.value.selectedPrimaryTab)
         assertEquals(emptyList<Any>(), viewModel.unifiedWatchlistRows.value)
     }
 
@@ -200,16 +199,24 @@ class LibraryViewModelTest {
                         type = LibraryListTab.Type.WATCHLIST
                     )
                 )
+            ),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.SIMKL)
+                )
             )
         )
         val viewModel = viewModel(repository)
 
         advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.SIMKL)
+        advanceUntilIdle()
         viewModel.onSelectListTab("simkl:plantowatch")
         viewModel.onRefresh()
         advanceUntilIdle()
 
-        assertEquals(1, repository.refreshProviderNowCalls)
+        assertEquals(listOf(LibraryProviderSelection.SIMKL), repository.refreshProviderCalls)
         assertEquals(null, viewModel.uiState.value.errorMessage)
     }
 
