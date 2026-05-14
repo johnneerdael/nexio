@@ -7,6 +7,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import kotlinx.coroutines.flow.Flow
 
 interface LibraryRepository {
@@ -15,6 +16,7 @@ interface LibraryRepository {
     val hasProviderCache: Flow<Boolean>
     val libraryItems: Flow<List<LibraryEntry>>
     val listTabs: Flow<List<LibraryListTab>>
+    val unifiedWatchlistMemberships: Flow<List<UnifiedWatchlistMembership>>
 
     fun isInLibrary(itemId: String, itemType: String): Flow<Boolean>
     fun isInWatchlist(itemId: String, itemType: String): Flow<Boolean>

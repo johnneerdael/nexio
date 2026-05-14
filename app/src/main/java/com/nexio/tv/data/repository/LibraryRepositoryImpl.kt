@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import com.nexio.tv.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -28,7 +29,11 @@ class LibraryRepositoryImpl @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService,
     private val traktLibraryService: TraktLibraryService,
     private val simklLibraryService: SimklLibraryService,
-    private val debridLibraryService: DebridLibraryService
+    private val debridLibraryService: DebridLibraryService,
+    private val unifiedWatchlistRepository: UnifiedWatchlistRepository = UnifiedWatchlistRepository(
+        traktLibraryService = traktLibraryService,
+        simklLibraryService = simklLibraryService
+    )
 ) : LibraryRepository {
 
     override val sourceMode: Flow<LibrarySourceMode> = combine(
@@ -98,6 +103,9 @@ class LibraryRepositoryImpl @Inject constructor(
                 debridTabs = debridTabs
             )
         }.distinctUntilChanged()
+
+    override val unifiedWatchlistMemberships: Flow<List<UnifiedWatchlistMembership>> =
+        unifiedWatchlistRepository.memberships
 
     override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> {
         return combine(

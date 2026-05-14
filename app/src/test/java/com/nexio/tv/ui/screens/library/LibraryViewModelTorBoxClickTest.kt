@@ -11,6 +11,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import com.nexio.tv.domain.repository.LibraryRepository
 import io.mockk.coEvery
 import io.mockk.every
@@ -129,6 +130,7 @@ class LibraryViewModelTorBoxClickTest {
         override val hasProviderCache: Flow<Boolean> = MutableStateFlow(true)
         override val libraryItems: Flow<List<LibraryEntry>> = MutableStateFlow(emptyList())
         override val listTabs: Flow<List<LibraryListTab>> = MutableStateFlow(emptyList())
+        override val unifiedWatchlistMemberships: Flow<List<UnifiedWatchlistMembership>> = flowOf(emptyList())
         override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
         override fun isInWatchlist(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
         override suspend fun toggleDefault(item: LibraryEntryInput) {}

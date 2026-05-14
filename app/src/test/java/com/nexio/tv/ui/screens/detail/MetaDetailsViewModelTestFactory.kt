@@ -250,6 +250,7 @@ fun defaultLibraryRepository(): LibraryRepository {
     val repo = mockk<LibraryRepository>(relaxed = true)
     every { repo.sourceMode } returns flowOf(LibrarySourceMode.LOCAL)
     every { repo.listTabs } returns flowOf(emptyList())
+    every { repo.unifiedWatchlistMemberships } returns flowOf(emptyList())
     every { repo.isInLibrary(any(), any()) } returns flowOf(false)
     every { repo.isInWatchlist(any(), any()) } returns flowOf(false)
     return repo

@@ -9,6 +9,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import com.nexio.tv.domain.repository.LibraryRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -180,6 +181,7 @@ class LibraryViewModelTest {
         override val hasProviderCache: MutableStateFlow<Boolean>,
         override val libraryItems: MutableStateFlow<List<LibraryEntry>>,
         override val listTabs: MutableStateFlow<List<LibraryListTab>>,
+        override val unifiedWatchlistMemberships: MutableStateFlow<List<UnifiedWatchlistMembership>> = MutableStateFlow(emptyList()),
         private val refreshProviderNowBlock: suspend () -> Unit = {}
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0
