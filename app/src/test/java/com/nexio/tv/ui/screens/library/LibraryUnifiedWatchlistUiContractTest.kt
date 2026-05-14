@@ -11,6 +11,7 @@ class LibraryUnifiedWatchlistUiContractTest {
         val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/library/LibraryViewModel.kt").readText()
         val screenSource = File("app/src/main/java/com/nexio/tv/ui/screens/library/LibraryScreen.kt").readText()
         val railItemSource = File("app/src/main/java/com/nexio/tv/ui/screens/library/LibraryRailItem.kt").readText()
+        val modelsSource = File("app/src/main/java/com/nexio/tv/domain/model/LibraryModels.kt").readText()
 
         val uiStateBlock = Regex("""data class LibraryUiState\((?s:.*?)\)\n\ninternal sealed interface""")
             .find(viewModelSource)
@@ -32,5 +33,13 @@ class LibraryUnifiedWatchlistUiContractTest {
         assertFalse(screenSource.contains("Next episode"))
         assertFalse(screenSource.contains("Continue Watching"))
         assertFalse(screenSource.contains("progress"))
+
+        assertTrue(modelsSource.contains("enum class LibraryProviderSelection"))
+        assertTrue(modelsSource.contains("UNIFIED(\"Unified\")"))
+        assertTrue(modelsSource.contains("EASY_DEBRID(\"EasyDebrid\")"))
+        assertTrue(modelsSource.contains("data class LibraryProviderSnapshot"))
+        assertTrue(modelsSource.contains("val provider: LibraryProviderSelection"))
+        assertTrue(modelsSource.contains("val listSelectorLabel: String = \"N/A\""))
+        assertTrue(modelsSource.contains("val isMutableStaticList: Boolean = false"))
     }
 }

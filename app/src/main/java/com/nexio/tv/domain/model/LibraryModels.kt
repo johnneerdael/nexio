@@ -62,6 +62,45 @@ enum class LibrarySourceMode {
     DEBRID
 }
 
+enum class LibraryProviderSelection(
+    val label: String
+) {
+    UNIFIED("Unified"),
+    TRAKT("Trakt"),
+    SIMKL("SIMKL"),
+    MDBLIST("MDBList"),
+    REAL_DEBRID("Real-Debrid"),
+    PREMIUMIZE("Premiumize"),
+    TORBOX("TorBox"),
+    EASY_DEBRID("EasyDebrid");
+
+    val isTracker: Boolean
+        get() = this == TRAKT || this == SIMKL || this == MDBLIST
+
+    val isDebrid: Boolean
+        get() = this == REAL_DEBRID || this == PREMIUMIZE || this == TORBOX || this == EASY_DEBRID
+}
+
+@Immutable
+data class LibraryProviderOption(
+    val provider: LibraryProviderSelection,
+    val label: String = provider.label
+)
+
+enum class LibraryListManagementMode {
+    NONE,
+    TRAKT_PERSONAL,
+    SIMKL_STATUS,
+    MDBLIST_STATIC
+}
+
+enum class LibraryEmptyReason {
+    NONE,
+    UNIFIED_NEEDS_TRACKER_AUTH,
+    PROVIDER_EMPTY,
+    PROVIDER_UNAVAILABLE
+}
+
 enum class TraktListPrivacy(val apiValue: String) {
     PRIVATE("private"),
     LINK("link"),
@@ -85,7 +124,11 @@ data class LibraryListTab(
     val description: String? = null,
     val privacy: TraktListPrivacy? = null,
     val sortBy: String? = null,
-    val sortHow: String? = null
+    val sortHow: String? = null,
+    val mdbListId: Long? = null,
+    val mdbListSlug: String? = null,
+    val mdbListType: String? = null,
+    val isMutableStaticList: Boolean = false
 ) {
     enum class Type {
         WATCHLIST,
@@ -93,6 +136,20 @@ data class LibraryListTab(
         SERVICE
     }
 }
+
+@Immutable
+data class LibraryProviderSnapshot(
+    val provider: LibraryProviderSelection,
+    val sourceMode: LibrarySourceMode,
+    val items: List<LibraryEntry> = emptyList(),
+    val listTabs: List<LibraryListTab> = emptyList(),
+    val selectedListKey: String? = null,
+    val supportsLists: Boolean = false,
+    val supportsListManagement: Boolean = false,
+    val listManagementMode: LibraryListManagementMode = LibraryListManagementMode.NONE,
+    val emptyReason: LibraryEmptyReason = LibraryEmptyReason.NONE,
+    val listSelectorLabel: String = "N/A"
+)
 
 @Immutable
 data class ListMembershipSnapshot(
