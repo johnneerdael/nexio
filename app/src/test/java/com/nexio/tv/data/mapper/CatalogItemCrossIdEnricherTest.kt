@@ -1,6 +1,7 @@
 package com.nexio.tv.data.mapper
 
 import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMapIndexes
 import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.metadata.router.AnimeIdScheme
@@ -63,6 +64,44 @@ class CatalogItemCrossIdEnricherTest {
         trailerYtIds = emptyList(),
         language = null,
         firstPaintStableIds = ProviderIds(kitsu = "12345")
+    )
+
+    private fun tmdbDeathNoteSeriesPreview(): MetaPreview = MetaPreview(
+        id = "tmdb:13916",
+        type = ContentType.SERIES,
+        rawType = "series",
+        name = "Death Note",
+        poster = "https://image.tmdb.org/p/death-note.jpg",
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = null,
+        releaseInfo = "2006",
+        runtime = null,
+        imdbRating = null,
+        genres = emptyList(),
+        trailerYtIds = emptyList(),
+        language = null,
+        firstPaintStableIds = ProviderIds(tmdb = "13916")
+    )
+
+    private fun tvdbDeathNoteSeriesPreview(): MetaPreview = MetaPreview(
+        id = "tvdb:79481",
+        type = ContentType.SERIES,
+        rawType = "series",
+        name = "Death Note",
+        poster = "https://artworks.thetvdb.com/death-note.jpg",
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = null,
+        releaseInfo = "2006",
+        runtime = null,
+        imdbRating = null,
+        genres = emptyList(),
+        trailerYtIds = emptyList(),
+        language = null,
+        firstPaintStableIds = ProviderIds(tvdb = "79481")
     )
 
     @Test
@@ -164,6 +203,86 @@ class CatalogItemCrossIdEnricherTest {
     }
 
     @Test
+    fun `tmdb anime series enriches kitsu while retaining tvdb sidecar`() = runTest {
+        val store = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = ParsedMetadataId(AnimeIdScheme.TMDB, "tv:13916", "tmdb:13916"),
+                    provider = MetadataPrimaryProvider.IMDB,
+                    providerId = "tt0877057",
+                    source = IdMappingSource.PROVIDER_LOOKUP,
+                    evidence = "tmdbTvToImdb"
+                ),
+                IdMapping(
+                    sourceId = ParsedMetadataId(AnimeIdScheme.TMDB, "tv:13916", "tmdb:13916"),
+                    provider = MetadataPrimaryProvider.TVDB,
+                    providerId = "79481",
+                    source = IdMappingSource.PROVIDER_LOOKUP,
+                    evidence = "tmdbTvToTvdb"
+                )
+            )
+        )
+        val overlayStore = relaxedOverlayStore()
+        val enricher = CatalogItemCrossIdEnricher(
+            idMappingStore = store,
+            stableIdBundleResolver = throwingResolver(),
+            animeIdMappingService = deathNoteAnimeMap(),
+            overlayStore = overlayStore
+        )
+        val preview = tmdbDeathNoteSeriesPreview()
+
+        val enriched = enricher.enrichFromCache(preview)
+
+        assertEquals("1376", enriched.firstPaintStableIds.kitsu)
+        assertEquals("79481", enriched.firstPaintStableIds.tvdb)
+        assertEquals("13916", enriched.firstPaintStableIds.tmdb)
+        assertEquals("tt0877057", enriched.firstPaintStableIds.imdb)
+        assertNotSame(preview, enriched)
+        coVerify(exactly = 1) {
+            overlayStore.markStaleIfWeakerIds(
+                itemKey = "series:tmdb:13916",
+                currentIds = enriched.firstPaintStableIds
+            )
+        }
+    }
+
+    @Test
+    fun `tvdb anime series enriches kitsu while retaining tvdb sidecar`() = runTest {
+        val store = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = ParsedMetadataId(AnimeIdScheme.TVDB, "79481", "tvdb:79481"),
+                    provider = MetadataPrimaryProvider.IMDB,
+                    providerId = "tt0877057",
+                    source = IdMappingSource.PROVIDER_LOOKUP,
+                    evidence = "tvdbSeriesToImdb"
+                )
+            )
+        )
+        val overlayStore = relaxedOverlayStore()
+        val enricher = CatalogItemCrossIdEnricher(
+            idMappingStore = store,
+            stableIdBundleResolver = throwingResolver(),
+            animeIdMappingService = deathNoteAnimeMap(),
+            overlayStore = overlayStore
+        )
+        val preview = tvdbDeathNoteSeriesPreview()
+
+        val enriched = enricher.enrichFromCache(preview)
+
+        assertEquals("1376", enriched.firstPaintStableIds.kitsu)
+        assertEquals("79481", enriched.firstPaintStableIds.tvdb)
+        assertEquals("tt0877057", enriched.firstPaintStableIds.imdb)
+        assertNotSame(preview, enriched)
+        coVerify(exactly = 1) {
+            overlayStore.markStaleIfWeakerIds(
+                itemKey = "series:tvdb:79481",
+                currentIds = enriched.firstPaintStableIds
+            )
+        }
+    }
+
+    @Test
     fun `already-imdb preview is returned unchanged with reference equality`() = runTest {
         val enricher = CatalogItemCrossIdEnricher(
             idMappingStore = InMemoryIdMappingStore(),
@@ -208,6 +327,27 @@ class CatalogItemCrossIdEnricherTest {
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         coEvery { store.markStaleIfWeakerIds(any(), any()) } returns Unit
         return store
+    }
+
+    private fun deathNoteAnimeMap(): AnimeIdMappingService = AnimeIdMappingService {
+        AnimeIdMapAsset(
+            schemaVersion = 1,
+            identityRecordsByKitsu = mapOf(
+                "1376" to AnimeIdMapRecord(
+                    kitsu = "1376",
+                    imdb = "tt0877057",
+                    tmdb = "13916",
+                    tvdb = "79481",
+                    mediaType = "series",
+                    sourceType = "tv"
+                )
+            ),
+            indexes = AnimeIdMapIndexes(
+                byTvdb = mapOf("79481" to listOf("1376")),
+                byTmdbTv = mapOf("13916" to listOf("1376")),
+                byImdb = mapOf("tt0877057" to listOf("1376"))
+            )
+        )
     }
 
     private fun throwingResolver(): StableIdBundleResolver =

@@ -1,6 +1,8 @@
 package com.nexio.tv.data.mapper
 
 import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.AnimeIdSource
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.AnimeIdScheme
 import com.nexio.tv.core.metadata.router.IdMappingStore
@@ -53,9 +55,13 @@ class CatalogItemCrossIdEnricher @Inject constructor(
     val resolutionUpdates: SharedFlow<CrossIdResolutionEvent> = _resolutionUpdates.asSharedFlow()
 
     suspend fun enrichFromCache(preview: MetaPreview): MetaPreview {
-        if (!preview.firstPaintStableIds.imdb.isNullOrBlank()) return preview
         val mediaKind = preview.type.toMediaKind() ?: return preview
         val parsed = MetadataIdParser.parse(preview.id)
+        if (!preview.firstPaintStableIds.imdb.isNullOrBlank() &&
+            preview.firstPaintStableIds.kitsu != null
+        ) {
+            return preview
+        }
 
         return when (parsed.scheme) {
             AnimeIdScheme.KITSU -> enrichFromAnimeMap(preview, parsed)
@@ -101,12 +107,13 @@ class CatalogItemCrossIdEnricher @Inject constructor(
             )
         )
 
+        val animeKitsuId = animeKitsuIdForProviderId(parsed, mediaKind)
         val current = preview.firstPaintStableIds
         val enrichedIds = current.copy(
             imdb = current.imdb ?: bundle.sidecars.imdbId,
             tmdb = current.tmdb ?: bundle.canonical.tmdbMovieId,
             tvdb = current.tvdb ?: bundle.canonical.tvdbSeriesId,
-            kitsu = current.kitsu ?: bundle.canonical.kitsuAnimeId
+            kitsu = current.kitsu ?: animeKitsuId ?: bundle.canonical.kitsuAnimeId
         )
         if (enrichedIds == current) return preview
 
@@ -140,12 +147,14 @@ class CatalogItemCrossIdEnricher @Inject constructor(
             value = typedValue,
             raw = parsed.raw
         )
-        val imdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId) ?: return preview
+        val imdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId)
         val tvdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.TVDB, sourceId)
+        val animeKitsuId = animeKitsuIdForProviderId(parsed, mediaKind)
         val current = preview.firstPaintStableIds
         val enrichedIds = current.copy(
-            imdb = imdbMapping.providerId,
-            tvdb = current.tvdb ?: tvdbMapping?.providerId
+            imdb = current.imdb ?: imdbMapping?.providerId,
+            tvdb = current.tvdb ?: tvdbMapping?.providerId,
+            kitsu = current.kitsu ?: animeKitsuId
         )
         if (enrichedIds == current) return preview
         overlayStore.markStaleIfWeakerIds(
@@ -162,9 +171,14 @@ class CatalogItemCrossIdEnricher @Inject constructor(
     ): MetaPreview {
         if (mediaKind != ContentMediaKind.SERIES) return preview
         val sourceId = ParsedMetadataId(AnimeIdScheme.TVDB, parsed.value, parsed.raw)
-        val imdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId) ?: return preview
+        val imdbMapping = idMappingStore.lookup(MetadataPrimaryProvider.IMDB, sourceId)
+        val animeKitsuId = animeKitsuIdForProviderId(parsed, mediaKind)
         val current = preview.firstPaintStableIds
-        val enrichedIds = current.copy(imdb = imdbMapping.providerId)
+        val enrichedIds = current.copy(
+            imdb = current.imdb ?: imdbMapping?.providerId,
+            tvdb = current.tvdb ?: parsed.value,
+            kitsu = current.kitsu ?: animeKitsuId
+        )
         if (enrichedIds == current) return preview
         overlayStore.markStaleIfWeakerIds(
             itemKey = homeDisplayItemKey(preview.apiType, preview.id),
@@ -191,6 +205,22 @@ class CatalogItemCrossIdEnricher @Inject constructor(
             currentIds = enriched
         )
         return preview.copy(firstPaintStableIds = enriched)
+    }
+
+    private fun animeKitsuIdForProviderId(
+        parsed: ParsedMetadataId,
+        mediaKind: ContentMediaKind
+    ): String? {
+        if (mediaKind != ContentMediaKind.SERIES) return null
+        val source = when (parsed.scheme) {
+            AnimeIdScheme.TMDB -> AnimeIdSource.TMDB
+            AnimeIdScheme.TVDB -> AnimeIdSource.TVDB
+            else -> return null
+        }
+        return animeIdMappingService.resolveKitsuId(
+            AnimeStremioId(source = source, value = parsed.value),
+            ContentMediaKind.SERIES
+        )
     }
 
     private fun ContentType.toMediaKind(): ContentMediaKind? = when (this) {
