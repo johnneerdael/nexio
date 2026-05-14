@@ -2,6 +2,7 @@ package com.nexio.tv.core.media
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import com.google.gson.stream.JsonReader
 import com.nexio.tv.data.local.FileBackedJsonObjectStore
 import java.io.BufferedReader
@@ -41,14 +42,19 @@ class MediaClipTypedStoreTest {
     fun `malformed v2 records are skipped without dropping valid records`() {
         val dir = Files.createTempDirectory("media-clip-typed-malformed").toFile()
         val file = File(dir, "media-clip-store-v2/entries.json")
-        file.parentFile.mkdirs()
+        file.parentFile?.mkdirs()
         file.writeText(
             """
             {
               "schemaVersion": 2,
               "records": {
                 "media-clip:valid": ${gson.toJson(record(key = "media-clip:valid", externalVideoId = "valid"))},
-                "media-clip:bad": { "key": "media-clip:bad" }
+                "media-clip:bad": { "key": "media-clip:bad" },
+                "media-clip:null-trace": ${gson.toJsonTree(record(key = "media-clip:null-trace", externalVideoId = "null-trace")).asJsonObject.apply { add("sourceTrace", gson.toJsonTree(listOf<String?>(null))) }},
+                "media-clip:bad-token": ${gson.toJsonTree(record(key = "media-clip:bad-token", externalVideoId = "bad-token")).asJsonObject.apply { add("sourceTrace", JsonObject()) }},
+                "media-clip:numeric-clip": ${gson.toJsonTree(record(key = "media-clip:numeric-clip", externalVideoId = "numeric-clip")).asJsonObject.apply { add("clipId", JsonPrimitive(123)) }},
+                "media-clip:numeric-trace": ${gson.toJsonTree(record(key = "media-clip:numeric-trace", externalVideoId = "numeric-trace")).asJsonObject.apply { add("sourceTrace", gson.toJsonTree(listOf(123))) }},
+                "media-clip:after": ${gson.toJson(record(key = "media-clip:after", externalVideoId = "after"))}
               }
             }
             """.trimIndent()
@@ -56,9 +62,14 @@ class MediaClipTypedStoreTest {
 
         val store = MediaClipTypedStore(file, gson)
         val valid = record(key = "media-clip:valid", externalVideoId = "valid")
+        val after = record(key = "media-clip:after", externalVideoId = "after")
 
-        assertEquals(listOf(valid), store.records())
+        assertEquals(listOf(valid, after), store.records())
         assertNull(store.record("media-clip:bad"))
+        assertNull(store.record("media-clip:null-trace"))
+        assertNull(store.record("media-clip:bad-token"))
+        assertNull(store.record("media-clip:numeric-clip"))
+        assertNull(store.record("media-clip:numeric-trace"))
     }
 
     @Test

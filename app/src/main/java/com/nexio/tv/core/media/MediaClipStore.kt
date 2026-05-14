@@ -116,6 +116,36 @@ data class StoredMediaClip(
     val cacheDecision: CacheDecision
 )
 
+internal data class StoredMediaClipRecord(
+    val key: String,
+    val clipId: String,
+    val contentId: String,
+    val itemType: String?,
+    val tmdbId: String?,
+    val tvdbId: String?,
+    val imdbId: String?,
+    val kitsuId: String?,
+    val provider: String,
+    val source: String,
+    val scopeKind: String,
+    val season: Int?,
+    val episode: Int?,
+    val clipType: String,
+    val title: String?,
+    val language: String?,
+    val site: String,
+    val externalVideoId: String?,
+    val playbackKind: String?,
+    val youtubeId: String?,
+    val providerUrlHash: String?,
+    val redactedUrl: String?,
+    val confidence: String,
+    val fetchedAtMs: Long,
+    val expiresAtMs: Long,
+    val staleUntilMs: Long,
+    val sourceTrace: List<String>
+)
+
 @Singleton
 class MediaClipStore @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -393,36 +423,6 @@ class MediaClipStore @Inject constructor(
         val youtubeId: String? = null,
         val providerUrlHash: String? = null,
         val redactedUrl: String? = null
-    )
-
-    private data class StoredMediaClipRecord(
-        val key: String,
-        val clipId: String,
-        val contentId: String,
-        val itemType: String?,
-        val tmdbId: String?,
-        val tvdbId: String?,
-        val imdbId: String?,
-        val kitsuId: String?,
-        val provider: String,
-        val source: String,
-        val scopeKind: String,
-        val season: Int?,
-        val episode: Int?,
-        val clipType: String,
-        val title: String?,
-        val language: String?,
-        val site: String,
-        val externalVideoId: String?,
-        val playbackKind: String?,
-        val youtubeId: String?,
-        val providerUrlHash: String?,
-        val redactedUrl: String?,
-        val confidence: String,
-        val fetchedAtMs: Long,
-        val expiresAtMs: Long,
-        val staleUntilMs: Long,
-        val sourceTrace: List<String>
     )
 
     private companion object {
