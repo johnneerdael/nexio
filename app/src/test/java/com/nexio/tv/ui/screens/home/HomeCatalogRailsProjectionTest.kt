@@ -49,6 +49,29 @@ class HomeCatalogRailsProjectionTest {
         )
     }
 
+    @Test
+    fun `empty home rails clear legacy effective order`() {
+        val liveDefinitions = listOf(
+            definition("tmdb_trending_movies", "TMDB Trending"),
+            definition("kitsu_trending_anime", "Kitsu Trending")
+        )
+        val legacyEffective = EffectiveHomeRailOrder.Empty.copy(
+            visibleKeys = listOf(HomeRailKey("tmdb_trending_movies"), HomeRailKey("kitsu_trending_anime"))
+        )
+
+        val result = resolveEffectiveHomeOrderForCatalogRails(
+            configuredRails = emptyList(),
+            liveDefinitions = liveDefinitions,
+            legacyEffectiveOrder = legacyEffective
+        )
+
+        assertEquals(emptyList<HomeRailKey>(), result.visibleKeys)
+        assertEquals(
+            listOf(HomeRailKey("tmdb_trending_movies"), HomeRailKey("kitsu_trending_anime")),
+            result.prunedKeys
+        )
+    }
+
     private fun definition(key: String, title: String) = HomeRailDefinition(
         key = HomeRailKey(key),
         family = RailFamily.fromOrderKey(key),

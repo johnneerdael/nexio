@@ -94,7 +94,6 @@ internal fun resolveEffectiveHomeOrderForCatalogRails(
         rails = configuredRails,
         liveDefinitions = liveDefinitions
     )
-    if (visibleKeys.isEmpty() && configuredRails.isEmpty()) return legacyEffectiveOrder
     return legacyEffectiveOrder.copy(
         visibleKeys = visibleKeys,
         newlyDiscoveredKeys = emptyList(),
