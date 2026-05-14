@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.integration.mdblist.MDBListLibraryService
+import com.nexio.tv.data.local.MDBListLibrarySnapshotStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListListItemsResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
@@ -9,6 +11,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import com.nexio.tv.domain.model.MDBListSettings
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -27,6 +30,8 @@ class MDBListLibraryServiceTest {
         val service = MDBListLibraryService(
             api = api,
             settingsReader = flowSettingsReader(settings),
+            snapshotStore = snapshotStore(),
+            profileManager = profileManager()
         )
 
         service.refreshNow(force = true)
@@ -72,6 +77,8 @@ class MDBListLibraryServiceTest {
         val service = MDBListLibraryService(
             api = api,
             settingsReader = flowSettingsReader(settings),
+            snapshotStore = snapshotStore(),
+            profileManager = profileManager()
         )
 
         service.refreshNow(force = true)
@@ -107,6 +114,8 @@ class MDBListLibraryServiceTest {
         val service = MDBListLibraryService(
             api = api,
             settingsReader = flowSettingsReader(settings),
+            snapshotStore = snapshotStore(),
+            profileManager = profileManager()
         )
         service.refreshNow(force = true)
 
@@ -138,6 +147,8 @@ class MDBListLibraryServiceTest {
         val service = MDBListLibraryService(
             api = api,
             settingsReader = flowSettingsReader(settings),
+            snapshotStore = snapshotStore(),
+            profileManager = profileManager()
         )
         service.refreshNow(force = true, selectedListKey = "mdblist:list:10")
 
@@ -150,4 +161,16 @@ class MDBListLibraryServiceTest {
         object : MDBListSettingsReader {
             override val settings = settings
         }
+
+    private fun snapshotStore(): MDBListLibrarySnapshotStore {
+        val store = mockk<MDBListLibrarySnapshotStore>(relaxed = true)
+        every { store.read(any()) } returns null
+        return store
+    }
+
+    private fun profileManager(): ProfileManager {
+        val manager = mockk<ProfileManager>()
+        every { manager.activeProfileId } returns MutableStateFlow(1)
+        return manager
+    }
 }

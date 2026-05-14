@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,7 +45,6 @@ class LibraryRepositoryImpl @Inject constructor(
         mdbListLibraryService = mdbListLibraryService,
     )
 ) : LibraryRepository {
-
     override val sourceMode: Flow<LibrarySourceMode> = combine(
         trackingProviderStateService.state,
         traktLibraryService.observeHasCache(),
@@ -118,57 +119,138 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override val availableProviders: Flow<List<LibraryProviderOption>> = combine(
         trackingProviderStateService.state,
-        debridLibraryService.observeListTabs()
-    ) { providerState, debridTabs ->
+        debridLibraryService.observeAvailableProviders()
+    ) { providerState, debridProviders ->
         buildList {
             add(LibraryProviderOption(LibraryProviderSelection.UNIFIED))
             if (providerState.traktAuthenticated) add(LibraryProviderOption(LibraryProviderSelection.TRAKT))
             if (providerState.simklAuthenticated) add(LibraryProviderOption(LibraryProviderSelection.SIMKL))
             if (providerState.mdbListAuthenticated) add(LibraryProviderOption(LibraryProviderSelection.MDBLIST))
-            if (debridTabs.any { it.key == DebridLibraryService.REAL_DEBRID_LIST_KEY }) {
+            if (LibraryProviderSelection.REAL_DEBRID in debridProviders) {
                 add(LibraryProviderOption(LibraryProviderSelection.REAL_DEBRID))
             }
-            if (debridTabs.any { it.key == DebridLibraryService.PREMIUMIZE_LIST_KEY }) {
+            if (LibraryProviderSelection.PREMIUMIZE in debridProviders) {
                 add(LibraryProviderOption(LibraryProviderSelection.PREMIUMIZE))
             }
-            if (debridTabs.any { it.key == DebridLibraryService.TORBOX_LIST_KEY }) {
+            if (LibraryProviderSelection.TORBOX in debridProviders) {
                 add(LibraryProviderOption(LibraryProviderSelection.TORBOX))
             }
-            if (debridTabs.any { it.key == DebridLibraryService.EASY_DEBRID_LIST_KEY }) {
+            if (LibraryProviderSelection.EASY_DEBRID in debridProviders) {
                 add(LibraryProviderOption(LibraryProviderSelection.EASY_DEBRID))
             }
         }
-    }.distinctUntilChanged()
+    }
+        .onStart { emit(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))) }
+        .distinctUntilChanged()
 
     override fun observeProviderSnapshot(
         provider: LibraryProviderSelection,
         selectedListKey: String?
     ): Flow<LibraryProviderSnapshot> {
-        return combine(
-            trackingProviderStateService.state.map { it as Any? },
-            traktLibraryService.observeAllItems().map { it as Any? },
-            simklLibraryService.observeAllItems().map { it as Any? },
-            mdbListLibraryService.observeAllItems().map { it as Any? },
-            debridLibraryService.observeItems().map { it as Any? },
-            traktLibraryService.observeListTabs().map { it as Any? },
-            simklLibraryService.observeListTabs().map { it as Any? },
-            mdbListLibraryService.observeListTabs().map { it as Any? },
-            debridLibraryService.observeListTabs().map { it as Any? }
-        ) { values ->
-            @Suppress("UNCHECKED_CAST")
-            providerSnapshotFor(
-                provider = provider,
-                selectedListKey = selectedListKey,
-                providerState = values[0] as EffectiveTrackingProviderState,
-                traktItems = values[1] as List<LibraryEntry>,
-                simklItems = values[2] as List<LibraryEntry>,
-                mdbItems = values[3] as List<LibraryEntry>,
-                debridItems = values[4] as List<LibraryEntry>,
-                traktTabs = values[5] as List<LibraryListTab>,
-                simklTabs = values[6] as List<LibraryListTab>,
-                mdbTabs = values[7] as List<LibraryListTab>,
-                debridTabs = values[8] as List<LibraryListTab>
-            )
+        return when (provider) {
+            LibraryProviderSelection.UNIFIED -> trackingProviderStateService.state
+                .map { providerState ->
+                    providerSnapshotFor(
+                        provider = provider,
+                        selectedListKey = selectedListKey,
+                        providerState = providerState,
+                        traktItems = emptyList(),
+                        simklItems = emptyList(),
+                        mdbItems = emptyList(),
+                        debridItems = emptyList(),
+                        traktTabs = emptyList(),
+                        simklTabs = emptyList(),
+                        mdbTabs = emptyList(),
+                        debridTabs = emptyList()
+                    )
+                }
+                .onStart {
+                    emit(
+                        LibraryProviderSnapshot(
+                            provider = LibraryProviderSelection.UNIFIED,
+                            sourceMode = LibrarySourceMode.LOCAL
+                        )
+                    )
+                }
+            LibraryProviderSelection.TRAKT -> combine(
+                trackingProviderStateService.state,
+                traktLibraryService.observeAllItems(),
+                traktLibraryService.observeListTabs()
+            ) { providerState, items, tabs ->
+                providerSnapshotFor(
+                    provider = provider,
+                    selectedListKey = selectedListKey,
+                    providerState = providerState,
+                    traktItems = items,
+                    simklItems = emptyList(),
+                    mdbItems = emptyList(),
+                    debridItems = emptyList(),
+                    traktTabs = tabs,
+                    simklTabs = emptyList(),
+                    mdbTabs = emptyList(),
+                    debridTabs = emptyList()
+                )
+            }
+            LibraryProviderSelection.SIMKL -> combine(
+                trackingProviderStateService.state,
+                simklLibraryService.observeAllItems(),
+                simklLibraryService.observeListTabs()
+            ) { providerState, items, tabs ->
+                providerSnapshotFor(
+                    provider = provider,
+                    selectedListKey = selectedListKey,
+                    providerState = providerState,
+                    traktItems = emptyList(),
+                    simklItems = items,
+                    mdbItems = emptyList(),
+                    debridItems = emptyList(),
+                    traktTabs = emptyList(),
+                    simklTabs = tabs,
+                    mdbTabs = emptyList(),
+                    debridTabs = emptyList()
+                )
+            }
+            LibraryProviderSelection.MDBLIST -> combine(
+                trackingProviderStateService.state,
+                mdbListLibraryService.observeAllItems(),
+                mdbListLibraryService.observeListTabs()
+            ) { providerState, items, tabs ->
+                providerSnapshotFor(
+                    provider = provider,
+                    selectedListKey = selectedListKey,
+                    providerState = providerState,
+                    traktItems = emptyList(),
+                    simklItems = emptyList(),
+                    mdbItems = items,
+                    debridItems = emptyList(),
+                    traktTabs = emptyList(),
+                    simklTabs = emptyList(),
+                    mdbTabs = tabs,
+                    debridTabs = emptyList()
+                )
+            }
+            LibraryProviderSelection.REAL_DEBRID,
+            LibraryProviderSelection.PREMIUMIZE,
+            LibraryProviderSelection.TORBOX,
+            LibraryProviderSelection.EASY_DEBRID -> combine(
+                trackingProviderStateService.state,
+                debridLibraryService.observeItems(),
+                debridLibraryService.observeListTabs()
+            ) { providerState, items, tabs ->
+                providerSnapshotFor(
+                    provider = provider,
+                    selectedListKey = selectedListKey,
+                    providerState = providerState,
+                    traktItems = emptyList(),
+                    simklItems = emptyList(),
+                    mdbItems = emptyList(),
+                    debridItems = items,
+                    traktTabs = emptyList(),
+                    simklTabs = emptyList(),
+                    mdbTabs = emptyList(),
+                    debridTabs = tabs
+                )
+            }
         }.distinctUntilChanged()
     }
 
@@ -278,14 +360,12 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        val providerState = trackingProviderStateService.currentState()
-        refreshUnifiedTrackers(providerState)
+        refreshUnifiedTrackers()
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
     }
 
     override suspend fun refreshProviderNow() {
-        val providerState = trackingProviderStateService.currentState()
-        refreshUnifiedTrackers(providerState)
+        refreshUnifiedTrackers()
     }
 
     override suspend fun refreshDebridNow() {
@@ -309,16 +389,11 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) {
-        val providerState = trackingProviderStateService.currentState()
         when (provider) {
-            LibraryProviderSelection.UNIFIED -> refreshUnifiedTrackers(providerState)
-            LibraryProviderSelection.TRAKT -> if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
-            LibraryProviderSelection.SIMKL -> if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
-            LibraryProviderSelection.MDBLIST -> {
-                if (providerState.mdbListAuthenticated) {
-                    mdbListLibraryService.refreshNow(force = false, selectedListKey = selectedListKey)
-                }
-            }
+            LibraryProviderSelection.UNIFIED -> refreshUnifiedTrackers()
+            LibraryProviderSelection.TRAKT -> traktLibraryService.refreshNow()
+            LibraryProviderSelection.SIMKL -> simklLibraryService.refreshNow()
+            LibraryProviderSelection.MDBLIST -> mdbListLibraryService.refreshNow(force = false, selectedListKey = selectedListKey)
             LibraryProviderSelection.REAL_DEBRID -> refreshRealDebridNow()
             LibraryProviderSelection.PREMIUMIZE -> refreshPremiumizeNow()
             LibraryProviderSelection.TORBOX -> refreshTorBoxNow()
@@ -326,10 +401,18 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun refreshUnifiedTrackers(providerState: EffectiveTrackingProviderState) {
-        if (providerState.traktAuthenticated) traktLibraryService.ensureFresh()
-        if (providerState.simklAuthenticated) simklLibraryService.refreshNow(force = false)
-        if (providerState.mdbListAuthenticated) mdbListLibraryService.refreshNow(force = false)
+    private suspend fun refreshUnifiedTrackers() {
+        supervisorScope {
+            launch {
+                runCatching { traktLibraryService.ensureFresh() }
+            }
+            launch {
+                runCatching { simklLibraryService.refreshNow(force = false) }
+            }
+            launch {
+                runCatching { mdbListLibraryService.refreshNow(force = false) }
+            }
+        }
     }
 
     override suspend fun createProviderList(

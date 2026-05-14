@@ -27,6 +27,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateLookupResu
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryProviderSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -37,7 +38,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -86,14 +86,12 @@ class DebridLibraryService @Inject constructor(
         return snapshotState
             .map { it.listTabs }
             .distinctUntilChanged()
-            .onStart { ensureFresh(force = false) }
     }
 
     fun observeItems(): Flow<List<LibraryEntry>> {
         return snapshotState
             .map { it.items }
             .distinctUntilChanged()
-            .onStart { ensureFresh(force = false) }
     }
 
     suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): DebridBenchmarkCandidateLookupResult {
@@ -289,16 +287,24 @@ class DebridLibraryService @Inject constructor(
     fun observeIsRefreshing(): Flow<Boolean> = refreshingState
 
     fun observeIsConnected(): Flow<Boolean> {
+        return observeAvailableProviders()
+            .map { it.isNotEmpty() }
+            .distinctUntilChanged()
+    }
+
+    fun observeAvailableProviders(): Flow<Set<LibraryProviderSelection>> {
         return combine(
             realDebridAuthDataStore.isAuthenticated,
             premiumizeSettingsDataStore.settings,
             torBoxSettingsDataStore.settings,
             easyDebridSettingsDataStore.settings
         ) { rdAuthenticated, premiumizeSettings, torBoxSettings, easyDebridSettings ->
-            rdAuthenticated ||
-                premiumizeSettings.apiKey.isNotBlank() ||
-                torBoxSettings.apiKey.isNotBlank() ||
-                easyDebridSettings.apiKey.isNotBlank()
+            buildSet {
+                if (rdAuthenticated) add(LibraryProviderSelection.REAL_DEBRID)
+                if (premiumizeSettings.apiKey.isNotBlank()) add(LibraryProviderSelection.PREMIUMIZE)
+                if (torBoxSettings.apiKey.isNotBlank()) add(LibraryProviderSelection.TORBOX)
+                if (easyDebridSettings.apiKey.isNotBlank()) add(LibraryProviderSelection.EASY_DEBRID)
+            }
         }.distinctUntilChanged()
     }
 

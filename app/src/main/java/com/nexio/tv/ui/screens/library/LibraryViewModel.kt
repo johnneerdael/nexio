@@ -15,6 +15,7 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibraryListManagementMode
 import com.nexio.tv.domain.model.LibraryProviderOption
 import com.nexio.tv.domain.model.LibraryProviderSelection
+import com.nexio.tv.domain.model.LibraryProviderSnapshot
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.model.UnifiedWatchlistRowItem
@@ -95,7 +96,7 @@ data class LibraryUiState(
     val sortSelectionVersion: Long = 0L,
     val posterCardWidthDp: Int = 126,
     val posterCardCornerRadiusDp: Int = 12,
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val isSyncing: Boolean = false,
     val errorMessage: String? = null,
     val transientMessage: String? = null,
@@ -127,7 +128,6 @@ class LibraryViewModel @Inject constructor(
     private val unifiedWatchlistSurfacePublisher: UnifiedWatchlistSurfacePublisher,
     private val profileManager: ProfileManager,
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
@@ -185,8 +185,8 @@ class LibraryViewModel @Inject constructor(
         observeLayoutPreferences()
         observeLibraryData()
         observeUnifiedWatchlistRows()
-        observeDebridBootstrap()
         observeLibraryBootstrap()
+        refreshUnifiedLibraryOnEntry()
     }
 
     fun onSelectProvider(provider: LibraryProviderSelection) {
@@ -203,6 +203,15 @@ class LibraryViewModel @Inject constructor(
                     listEditorState = null,
                     showManageDialog = false
                 )
+            }
+        }
+        if (provider.isDebridProvider() && initialProviderSyncRequested.add(provider)) {
+            viewModelScope.launch {
+                runCatching {
+                    libraryRepository.refreshProviderNow(provider, null)
+                }.onFailure { error ->
+                    setError(error.message ?: providerSyncFailureMessage(LibrarySourceMode.DEBRID))
+                }
             }
         }
     }
@@ -445,30 +454,47 @@ class LibraryViewModel @Inject constructor(
             ) { provider, selectedListKey ->
                 provider to selectedListKey
             }.distinctUntilChanged().collectLatest { (provider, selectedListKey) ->
-                combine(
-                    libraryRepository.observeProviderSnapshot(provider, selectedListKey),
-                    libraryRepository.isSyncing,
-                    libraryRepository.hasProviderCache
-                ) { snapshot, isSyncing, hasProviderCache ->
-                    DataBundle(
-                        provider = snapshot.provider,
-                        sourceMode = snapshot.sourceMode,
-                        isSyncing = isSyncing,
-                        hasProviderCache = hasProviderCache,
-                        items = snapshot.items,
-                        listTabs = snapshot.listTabs,
-                        selectedListKey = snapshot.selectedListKey,
-                        supportsLists = snapshot.supportsLists,
-                        supportsListManagement = snapshot.supportsListManagement,
-                        listManagementMode = snapshot.listManagementMode,
-                        emptyReason = snapshot.emptyReason,
-                        listSelectorLabel = snapshot.listSelectorLabel
-                    )
-                }.collectLatest { bundle ->
-                    applyDataBundle(bundle)
+                if (provider == LibraryProviderSelection.UNIFIED) {
+                    libraryRepository.observeProviderSnapshot(provider, selectedListKey)
+                        .collectLatest { snapshot ->
+                            applyDataBundle(snapshot.toDataBundle(isSyncing = false, hasProviderCache = true))
+                        }
+                } else {
+                    combine(
+                        libraryRepository.observeProviderSnapshot(provider, selectedListKey),
+                        libraryRepository.isSyncing,
+                        libraryRepository.hasProviderCache
+                    ) { snapshot, isSyncing, hasProviderCache ->
+                        snapshot.toDataBundle(
+                            isSyncing = isSyncing,
+                            hasProviderCache = hasProviderCache
+                        )
+                    }.collectLatest { bundle ->
+                        applyDataBundle(bundle)
+                    }
                 }
             }
         }
+    }
+
+    private fun LibraryProviderSnapshot.toDataBundle(
+        isSyncing: Boolean,
+        hasProviderCache: Boolean
+    ): DataBundle {
+        return DataBundle(
+            provider = provider,
+            sourceMode = sourceMode,
+            isSyncing = isSyncing,
+            hasProviderCache = hasProviderCache,
+            items = items,
+            listTabs = listTabs,
+            selectedListKey = selectedListKey,
+            supportsLists = supportsLists,
+            supportsListManagement = supportsListManagement,
+            listManagementMode = listManagementMode,
+            emptyReason = emptyReason,
+            listSelectorLabel = listSelectorLabel
+        )
     }
 
     private fun applyDataBundle(bundle: DataBundle) {
@@ -540,11 +566,9 @@ class LibraryViewModel @Inject constructor(
                 selectedListKey = nextSelectedList,
                 selectedSortOption = nextSelectedSort,
                 manageSelectedListKey = nextManageSelected,
-                isSyncing = if (bundle.provider == LibraryProviderSelection.UNIFIED) {
-                    bundle.isSyncing
-                } else {
-                    bundle.sourceMode != LibrarySourceMode.LOCAL && bundle.isSyncing
-                },
+                isSyncing = bundle.provider != LibraryProviderSelection.UNIFIED &&
+                    bundle.sourceMode != LibrarySourceMode.LOCAL &&
+                    bundle.isSyncing,
                 isLoading = bundle.provider != LibraryProviderSelection.UNIFIED &&
                     (bundle.sourceMode == LibrarySourceMode.TRAKT || bundle.sourceMode == LibrarySourceMode.SIMKL) &&
                     !bundle.hasProviderCache &&
@@ -615,16 +639,6 @@ class LibraryViewModel @Inject constructor(
         val listSelectorLabel: String = "N/A"
     )
 
-    private fun observeDebridBootstrap() {
-        viewModelScope.launch {
-            runCatching {
-                libraryRepository.refreshDebridNow()
-            }.onFailure { error ->
-                setError(error.message ?: providerSyncFailureMessage(LibrarySourceMode.DEBRID))
-            }
-        }
-    }
-
     private fun observeLibraryBootstrap() {
         viewModelScope.launch {
             combine(
@@ -664,10 +678,28 @@ class LibraryViewModel @Inject constructor(
         val hasProviderCache: Boolean
     )
 
+    private fun refreshUnifiedLibraryOnEntry() {
+        if (!initialProviderSyncRequested.add(LibraryProviderSelection.UNIFIED)) return
+        viewModelScope.launch {
+            runCatching {
+                libraryRepository.refreshProviderNow(LibraryProviderSelection.UNIFIED, null)
+            }.onFailure { error ->
+                setError(error.message ?: "Failed to refresh unified library")
+            }
+        }
+    }
+
     private fun LibraryProviderSelection.isTrackerProvider(): Boolean {
         return this == LibraryProviderSelection.TRAKT ||
             this == LibraryProviderSelection.SIMKL ||
             this == LibraryProviderSelection.MDBLIST
+    }
+
+    private fun LibraryProviderSelection.isDebridProvider(): Boolean {
+        return this == LibraryProviderSelection.REAL_DEBRID ||
+            this == LibraryProviderSelection.PREMIUMIZE ||
+            this == LibraryProviderSelection.TORBOX ||
+            this == LibraryProviderSelection.EASY_DEBRID
     }
 
     private fun providerSyncFailureMessage(sourceMode: LibrarySourceMode): String {

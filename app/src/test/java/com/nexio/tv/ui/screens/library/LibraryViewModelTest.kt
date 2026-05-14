@@ -191,10 +191,18 @@ class LibraryViewModelTest {
                         type = LibraryListTab.Type.WATCHLIST
                     )
                 )
+            ),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.TRAKT)
+                )
             )
         )
         val viewModel = viewModel(repository)
 
+        advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.TRAKT)
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isLoading)
@@ -295,7 +303,14 @@ class LibraryViewModelTest {
         viewModel.onRefresh()
         advanceUntilIdle()
 
-        assertEquals(listOf(LibraryProviderSelection.REAL_DEBRID), repository.refreshProviderCalls)
+        assertEquals(
+            listOf(
+                LibraryProviderSelection.UNIFIED,
+                LibraryProviderSelection.REAL_DEBRID,
+                LibraryProviderSelection.REAL_DEBRID
+            ),
+            repository.refreshProviderCalls
+        )
         assertEquals(0, repository.refreshProviderNowCalls)
     }
 

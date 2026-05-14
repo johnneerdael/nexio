@@ -15,6 +15,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -36,15 +37,15 @@ class LibraryRepositoryImplTest {
                 simklAuthenticated = true,
                 mdbListAuthenticated = true
             ),
-            debridTabs = listOf(
-                LibraryListTab(DebridLibraryService.REAL_DEBRID_LIST_KEY, "Real-Debrid", LibraryListTab.Type.SERVICE),
-                LibraryListTab(DebridLibraryService.PREMIUMIZE_LIST_KEY, "Premiumize", LibraryListTab.Type.SERVICE),
-                LibraryListTab(DebridLibraryService.TORBOX_LIST_KEY, "TorBox", LibraryListTab.Type.SERVICE),
-                LibraryListTab(DebridLibraryService.EASY_DEBRID_LIST_KEY, "EasyDebrid", LibraryListTab.Type.SERVICE)
+            debridProviders = setOf(
+                LibraryProviderSelection.REAL_DEBRID,
+                LibraryProviderSelection.PREMIUMIZE,
+                LibraryProviderSelection.TORBOX,
+                LibraryProviderSelection.EASY_DEBRID
             )
         )
 
-        val providers = fixture.repository.availableProviders.first().map { it.provider }
+        val providers = fixture.repository.availableProviders.drop(1).first().map { it.provider }
 
         assertEquals(
             listOf(
@@ -165,6 +166,7 @@ class LibraryRepositoryImplTest {
         every { simklLibraryService.observeListTabs() } returns flowOf(emptyList())
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeItems() } returns flowOf(emptyList())
         every { debridLibraryService.observeListTabs() } returns flowOf(emptyList())
@@ -240,6 +242,7 @@ class LibraryRepositoryImplTest {
         every { simklLibraryService.observeListTabs() } returns flowOf(emptyList())
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeItems() } returns blockedItems
         every { debridLibraryService.observeListTabs() } returns blockedListTabs
@@ -306,6 +309,7 @@ class LibraryRepositoryImplTest {
         every { simklLibraryService.observeListTabs() } returns flowOf(simklTabs)
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeItems() } returns flowOf(emptyList())
         every { debridLibraryService.observeListTabs() } returns flowOf(emptyList())
@@ -341,6 +345,7 @@ class LibraryRepositoryImplTest {
         every { traktLibraryService.observeHasCache() } returns flowOf(false)
         every { simklLibraryService.observeHasCache() } returns flowOf(true)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { traktLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
@@ -387,6 +392,7 @@ class LibraryRepositoryImplTest {
         every { traktLibraryService.observeHasCache() } returns flowOf(false)
         every { simklLibraryService.observeHasCache() } returns flowOf(true)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { traktLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
@@ -429,6 +435,7 @@ class LibraryRepositoryImplTest {
         every { traktLibraryService.observeHasCache() } returns flowOf(false)
         every { simklLibraryService.observeHasCache() } returns flowOf(true)
         every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(emptySet())
         every { traktLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
@@ -481,7 +488,8 @@ class LibraryRepositoryImplTest {
         traktTabs: List<LibraryListTab> = emptyList(),
         simklTabs: List<LibraryListTab> = emptyList(),
         mdbTabs: List<LibraryListTab> = emptyList(),
-        debridTabs: List<LibraryListTab> = emptyList()
+        debridTabs: List<LibraryListTab> = emptyList(),
+        debridProviders: Set<LibraryProviderSelection> = emptySet()
     ): RepositoryFixture {
         val trackingProviderStateService = mockk<TrackingProviderStateService>()
         val traktLibraryService = mockk<TraktLibraryService>(relaxed = true)
@@ -504,7 +512,8 @@ class LibraryRepositoryImplTest {
         every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { mdbListLibraryService.observeIsRefreshing() } returns flowOf(false)
         every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
-        every { debridLibraryService.observeIsConnected() } returns flowOf(debridTabs.isNotEmpty())
+        every { debridLibraryService.observeIsConnected() } returns flowOf(debridProviders.isNotEmpty())
+        every { debridLibraryService.observeAvailableProviders() } returns flowOf(debridProviders)
         return RepositoryFixture(
             LibraryRepositoryImpl(
                 trackingProviderStateService = trackingProviderStateService,

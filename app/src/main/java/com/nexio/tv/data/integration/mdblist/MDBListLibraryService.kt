@@ -7,6 +7,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistItemDto
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.MDBListLibrarySnapshotStore
 import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.domain.model.LibraryEntry
@@ -26,7 +27,8 @@ import javax.inject.Singleton
 class MDBListLibraryService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
-    private val snapshotStore: MDBListLibrarySnapshotStore? = null,
+    private val snapshotStore: MDBListLibrarySnapshotStore,
+    private val profileManager: ProfileManager,
 ) {
     private val rows = MutableStateFlow<List<LibraryEntry>>(emptyList())
     private val tabs = MutableStateFlow<List<LibraryListTab>>(emptyList())
@@ -36,7 +38,7 @@ class MDBListLibraryService @Inject constructor(
     private var cachedListKey: String? = null
 
     init {
-        snapshotStore?.read()?.let { snapshot ->
+        snapshotStore.read(activeProfileId())?.let { snapshot ->
             rows.value = snapshot.rows
             tabs.value = snapshot.tabs
             cachedListKey = snapshot.selectedListKey
@@ -202,15 +204,18 @@ class MDBListLibraryService @Inject constructor(
     private fun personalListKey(listId: Long): String = "$PERSONAL_KEY_PREFIX$listId"
 
     private fun persistSnapshot(updatedAtMs: Long = System.currentTimeMillis()) {
-        snapshotStore?.write(
+        snapshotStore.write(
             MDBListLibrarySnapshotStore.Snapshot(
                 rows = rows.value,
                 tabs = tabs.value,
                 selectedListKey = cachedListKey,
                 updatedAtMs = updatedAtMs
-            )
+            ),
+            activeProfileId()
         )
     }
+
+    private fun activeProfileId(): Int = profileManager.activeProfileId.value
 
     private fun listIdFromKey(key: String?): Long? {
         return key?.removePrefix(PERSONAL_KEY_PREFIX)?.takeIf { it != key }?.toLongOrNull()

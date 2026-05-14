@@ -49,13 +49,13 @@ class LibraryRepositoryMergeTest {
     }
 
     @Test
-    fun `library view model actively refreshes debrid integrations on startup`() {
+    fun `library view model refreshes debrid integrations after provider selection`() {
         val source = sourceFile("com/nexio/tv/ui/screens/library/LibraryViewModel.kt").toFile().readText()
 
         assertTrue(
-            "LibraryViewModel should not rely on passive flow startup for Real-Debrid and Premiumize tabs",
-            source.contains("observeDebridBootstrap()") &&
-                source.contains("libraryRepository.refreshDebridNow()")
+            "LibraryViewModel should keep debrid refresh off Unified startup and refresh selected debrid providers explicitly",
+            source.contains("provider.isDebridProvider()") &&
+                source.contains("libraryRepository.refreshProviderNow(provider, null)")
         )
     }
 
