@@ -46,6 +46,9 @@ class ResolvedDisplaySurfaceRepository(
     fun observeScreensaverSurface(profileId: Int): Flow<List<ResolvedDisplayItem>> =
         observeSurface(SCREENSAVER_SURFACE_KEY, profileId)
 
+    fun observeUnifiedWatchlistSurface(profileId: Int): Flow<List<ResolvedDisplayItem>> =
+        observeSurface(UNIFIED_WATCHLIST_SURFACE_KEY, profileId)
+
     private fun observeSurface(surfaceKey: String, profileId: Int): Flow<List<ResolvedDisplayItem>> =
         surfaces
             .map { bySurface -> bySurface[surfaceKey]?.get(profileId).orEmpty() }
@@ -170,12 +173,14 @@ class ResolvedDisplaySurfaceRepository(
     companion object {
         const val HOME_SURFACE_KEY = "home"
         const val SCREENSAVER_SURFACE_KEY = "screensaver"
+        const val UNIFIED_WATCHLIST_SURFACE_KEY = "unified_watchlist"
     }
 }
 
 private fun isSupportedSurface(surfaceKey: String): Boolean =
     surfaceKey == ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY ||
-        surfaceKey == ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY
+        surfaceKey == ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY ||
+        surfaceKey == ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY
 
 private fun mergeIncrementalItems(
     existing: List<ResolvedDisplayItem>,
@@ -243,7 +248,8 @@ private fun shouldSuppressSurfaceUpdate(
     // withPreservedTrailerState only allocates a copy() when restoring a trailer
     // (rare); in the common no-op steady-state path it returns `this`, so element
     // refs stay stable and this short-circuit fires.
-    ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY ->
+    ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+    ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY ->
         existing.refEqualsByIndex(nextItems)
     else -> false
 }

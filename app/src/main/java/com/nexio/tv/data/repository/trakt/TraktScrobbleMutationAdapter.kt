@@ -102,6 +102,9 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     }
 
     private suspend fun executeScrobble(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        if (envelope.shouldSuppressScrobbleSend()) {
+            return TraktMutationExecutionResult.Success(httpStatusCode = null)
+        }
         val requestBody = envelope.buildScrobbleRequestBody()
         val session = envelope.session()
         val action = envelope.scrobbleAction()
@@ -189,11 +192,13 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         private const val PAYLOAD_YEAR = "year"
         private const val PAYLOAD_IMDB = "imdb"
         private const val PAYLOAD_TMDB = "tmdb"
+        private const val PAYLOAD_TVDB = "tvdb"
         private const val PAYLOAD_TRAKT = "trakt"
         private const val PAYLOAD_SHOW_TITLE = "showTitle"
         private const val PAYLOAD_SHOW_YEAR = "showYear"
         private const val PAYLOAD_SHOW_IMDB = "showImdb"
         private const val PAYLOAD_SHOW_TMDB = "showTmdb"
+        private const val PAYLOAD_SHOW_TVDB = "showTvdb"
         private const val PAYLOAD_SHOW_TRAKT = "showTrakt"
         private const val PAYLOAD_SEASON = "season"
         private const val PAYLOAD_NUMBER = "number"
@@ -201,6 +206,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         private const val PAYLOAD_ACTION = "action"
         private const val PAYLOAD_PROGRESS = "progress"
         private const val PAYLOAD_MESSAGE = "message"
+        private const val PAYLOAD_SUPPRESS_SEND = "suppressSend"
 
         private const val METADATA_ROLLBACK_ACTIVE = "rollbackActive"
         private const val METADATA_ROLLBACK_TITLE = "rollbackTitle"
@@ -220,11 +226,12 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             optimisticVersion: Long,
             session: TrackingAuthSession
         ): TraktMutationEnvelope {
-            val effectiveAction = coerceAction(action, progressPercent)
+            val suppressSend = shouldSuppressScrobbleSend(action, progressPercent)
             val payload = JsonObject().apply {
                 populateItem(item)
-                addProperty(PAYLOAD_ACTION, effectiveAction)
+                addProperty(PAYLOAD_ACTION, action)
                 addProperty(PAYLOAD_PROGRESS, progressPercent.coerceIn(0f, 100f))
+                if (suppressSend) addProperty(PAYLOAD_SUPPRESS_SEND, true)
             }
             return TraktMutationEnvelope(
                 profileId = session.profileId,
@@ -241,13 +248,12 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             )
         }
 
-        // Trakt rejects /scrobble/pause at >= 80% with HTTP 422. Above that threshold the
-        // request would enter the outbox WAITING_RETRY -> TERMINAL_FAILED cycle on every
-        // backoff iteration. Coerce to "stop" upstream — the equivalent semantic at that
-        // progress is that playback ended, not that it paused.
-        // CrossWatch reference: providers/scrobble/trakt/sink.py:750
-        private fun coerceAction(action: String, progressPercent: Float): String =
-            if (action == "pause" && progressPercent >= TRAKT_PAUSE_REJECTION_THRESHOLD) "stop" else action
+        // Trakt rejects /scrobble/pause at >= 80% with HTTP 422. CrossWatch avoids
+        // converting that pause into stop because stop can mark the item watched.
+        // Suppress the invalid pause instead; true completion still enters through
+        // emitCompletionScrobbleStop -> /scrobble/stop.
+        private fun shouldSuppressScrobbleSend(action: String, progressPercent: Float): Boolean =
+            action == "pause" && progressPercent >= TRAKT_PAUSE_REJECTION_THRESHOLD
 
         private const val TRAKT_PAUSE_REJECTION_THRESHOLD = 80f
 
@@ -285,6 +291,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                     item.year?.let { addProperty(PAYLOAD_YEAR, it) }
                     item.ids.imdb?.let { addProperty(PAYLOAD_IMDB, it) }
                     item.ids.tmdb?.let { addProperty(PAYLOAD_TMDB, it) }
+                    item.ids.tvdb?.let { addProperty(PAYLOAD_TVDB, it) }
                     item.ids.trakt?.let { addProperty(PAYLOAD_TRAKT, it) }
                 }
 
@@ -294,6 +301,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                     item.showYear?.let { addProperty(PAYLOAD_SHOW_YEAR, it) }
                     item.showIds.imdb?.let { addProperty(PAYLOAD_SHOW_IMDB, it) }
                     item.showIds.tmdb?.let { addProperty(PAYLOAD_SHOW_TMDB, it) }
+                    item.showIds.tvdb?.let { addProperty(PAYLOAD_SHOW_TVDB, it) }
                     item.showIds.trakt?.let { addProperty(PAYLOAD_SHOW_TRAKT, it) }
                     addProperty(PAYLOAD_SEASON, item.season)
                     addProperty(PAYLOAD_NUMBER, item.number)
@@ -321,6 +329,10 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             return payload.get(PAYLOAD_ACTION)?.asString ?: "stop"
         }
 
+        private fun TraktMutationEnvelope.shouldSuppressScrobbleSend(): Boolean {
+            return payload.get(PAYLOAD_SUPPRESS_SEND)?.asBoolean == true
+        }
+
         private fun TraktMutationEnvelope.optimisticVersion(): Long {
             return metadata.get(METADATA_OPTIMISTIC_VERSION)?.asLong
                 ?: error("Missing optimistic version metadata")
@@ -344,6 +356,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                         ids = TraktIdsDto(
                             imdb = payload.get(PAYLOAD_IMDB)?.asString,
                             tmdb = payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asInt,
+                            tvdb = payload.get(PAYLOAD_TVDB)?.takeIf { !it.isJsonNull }?.asInt,
                             trakt = payload.get(PAYLOAD_TRAKT)?.takeIf { !it.isJsonNull }?.asInt
                         )
                     ),
@@ -358,6 +371,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                         ids = TraktIdsDto(
                             imdb = payload.get(PAYLOAD_SHOW_IMDB)?.asString,
                             tmdb = payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asInt,
+                            tvdb = payload.get(PAYLOAD_SHOW_TVDB)?.takeIf { !it.isJsonNull }?.asInt,
                             trakt = payload.get(PAYLOAD_SHOW_TRAKT)?.takeIf { !it.isJsonNull }?.asInt
                         )
                     ),
@@ -381,6 +395,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                         ids = TraktIdsDto(
                             imdb = payload.get(PAYLOAD_IMDB)?.asString,
                             tmdb = payload.get(PAYLOAD_TMDB)?.takeIf { !it.isJsonNull }?.asInt,
+                            tvdb = payload.get(PAYLOAD_TVDB)?.takeIf { !it.isJsonNull }?.asInt,
                             trakt = payload.get(PAYLOAD_TRAKT)?.takeIf { !it.isJsonNull }?.asInt
                         )
                     ),
@@ -395,6 +410,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                         ids = TraktIdsDto(
                             imdb = payload.get(PAYLOAD_SHOW_IMDB)?.asString,
                             tmdb = payload.get(PAYLOAD_SHOW_TMDB)?.takeIf { !it.isJsonNull }?.asInt,
+                            tvdb = payload.get(PAYLOAD_SHOW_TVDB)?.takeIf { !it.isJsonNull }?.asInt,
                             trakt = payload.get(PAYLOAD_SHOW_TRAKT)?.takeIf { !it.isJsonNull }?.asInt
                         )
                     ),

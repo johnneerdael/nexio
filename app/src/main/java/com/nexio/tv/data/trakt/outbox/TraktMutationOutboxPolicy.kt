@@ -1,6 +1,7 @@
 package com.nexio.tv.data.trakt.outbox
 
 import java.io.IOException
+import com.nexio.tv.domain.model.TrackingProvider
 
 class TraktMutationOutboxPolicy(
     private val transientStatusCodes: Set<Int> = setOf(429, 500, 502, 503, 504, 520, 521, 522),
@@ -143,7 +144,7 @@ class TraktMutationOutboxPolicy(
 
         val nextWritableAtMs = when (settlement) {
             is TraktMutationSettlement.Retryable -> {
-                if (settlement.httpStatusCode == 429) {
+                if (settlement.httpStatusCode == 429 || settlement.httpStatusCode == 423) {
                     maxOf(snapshot.nextWritableAtMs, settlement.retryAtMs, nowMs + minWriteIntervalMs)
                 } else {
                     maxOf(snapshot.nextWritableAtMs, nowMs + minWriteIntervalMs)
@@ -169,11 +170,12 @@ class TraktMutationOutboxPolicy(
     fun classifyFailure(
         failure: TraktMutationExecutionResult.Failure,
         attemptCount: Int,
-        nowMs: Long
+        nowMs: Long,
+        provider: TrackingProvider? = null
     ): TraktMutationSettlement {
         val statusCode = failure.httpStatusCode
         val reason = failure.reason ?: failure.throwable?.message ?: "Unknown Trakt failure"
-        if (statusCode == 429) {
+        if (statusCode == 429 || (statusCode == 423 && provider == TrackingProvider.SIMKL)) {
             val retryDelayMs = parseRetryAfterMs(failure.retryAfterHeader) ?: fallbackRetryDelayMs(attemptCount)
             return TraktMutationSettlement.Retryable(
                 retryAtMs = nowMs + retryDelayMs,

@@ -1,7 +1,9 @@
 package com.nexio.tv.ui.screens.library
 
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
+import com.nexio.tv.data.repository.UnifiedWatchlistResolvedDisplayProjector
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -9,6 +11,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
+import com.nexio.tv.domain.model.UnifiedWatchlistMembership
 import com.nexio.tv.domain.repository.LibraryRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -45,6 +48,29 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `library opens on unified watchlist primary tab`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.LOCAL),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList())
+        )
+        val viewModel = LibraryViewModel(
+            libraryRepository = repository,
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(LibraryPrimaryTab.UNIFIED_WATCHLIST, viewModel.uiState.value.selectedPrimaryTab)
+        assertEquals(emptyList<Any>(), viewModel.unifiedWatchlistRows.value)
+    }
+
+    @Test
     fun `first uncached trakt session auto-syncs and blocks until cache exists`() = runTest(dispatcher) {
         val repository = FakeLibraryRepository(
             sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
@@ -57,6 +83,8 @@ class LibraryViewModelTest {
             libraryRepository = repository,
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
 
         advanceUntilIdle()
@@ -103,6 +131,8 @@ class LibraryViewModelTest {
             libraryRepository = repository,
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
 
         advanceUntilIdle()
@@ -126,6 +156,8 @@ class LibraryViewModelTest {
             libraryRepository = repository,
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
 
         advanceUntilIdle()
@@ -156,6 +188,8 @@ class LibraryViewModelTest {
             libraryRepository = repository,
             layoutPreferenceDataStore = layoutPreferenceDataStore(),
             torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            profileManager = profileManager(),
         )
 
         advanceUntilIdle()
@@ -174,12 +208,27 @@ class LibraryViewModelTest {
         return store
     }
 
+    private fun unifiedWatchlistProjector(): UnifiedWatchlistResolvedDisplayProjector {
+        val projector = mockk<UnifiedWatchlistResolvedDisplayProjector>()
+        every {
+            projector.observeRows(any(), any<Flow<List<UnifiedWatchlistMembership>>>())
+        } returns flowOf(emptyList())
+        return projector
+    }
+
+    private fun profileManager(): ProfileManager {
+        val manager = mockk<ProfileManager>()
+        every { manager.activeProfileId } returns MutableStateFlow(1)
+        return manager
+    }
+
     private class FakeLibraryRepository(
         override val sourceMode: MutableStateFlow<LibrarySourceMode>,
         override val isSyncing: MutableStateFlow<Boolean>,
         override val hasProviderCache: MutableStateFlow<Boolean>,
         override val libraryItems: MutableStateFlow<List<LibraryEntry>>,
         override val listTabs: MutableStateFlow<List<LibraryListTab>>,
+        override val unifiedWatchlistMemberships: MutableStateFlow<List<UnifiedWatchlistMembership>> = MutableStateFlow(emptyList()),
         private val refreshProviderNowBlock: suspend () -> Unit = {}
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0

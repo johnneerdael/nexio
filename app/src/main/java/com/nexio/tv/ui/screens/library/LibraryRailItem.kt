@@ -4,9 +4,11 @@ import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.UnifiedWatchlistRowItem
 import com.nexio.tv.ui.components.RailCardData
 
 /**
@@ -52,6 +54,56 @@ internal data class LibraryRailItem(
             posterProviderTag = null,
             source = entry
         )
+    }
+}
+
+@Immutable
+internal data class UnifiedWatchlistLibraryRailItem(
+    val itemKey: String,
+    val contentId: String,
+    val title: String,
+    val rating: TitleRating?,
+    override val posterRef: ArtworkDisplayRef?,
+    override val posterProviderTag: String?,
+    val source: LibraryEntry
+) : RailCardData {
+    override val id: String get() = contentId
+    override val name: String get() = title
+
+    companion object {
+        fun fromRow(row: UnifiedWatchlistRowItem): UnifiedWatchlistLibraryRailItem {
+            val displayItem = row.displayItem
+            val display = displayItem.display
+            val membership = row.membership
+            val title = display.title
+                ?: membership.title
+                ?: displayItem.contentId
+            val entry = LibraryEntry(
+                id = displayItem.contentId.ifBlank { membership.authorityKey },
+                type = displayItem.itemType.toApiString(membership.contentType.toApiString()),
+                name = title,
+                poster = displayItem.artwork.poster.toLegacyArtworkString(),
+                background = displayItem.artwork.backdrop.toLegacyArtworkString(),
+                logo = displayItem.artwork.logo.toLegacyArtworkString(),
+                description = display.overview,
+                releaseInfo = display.year?.toString() ?: membership.year?.toString(),
+                imdbRating = displayItem.rating?.value?.toFloat(),
+                genres = display.genres,
+                addonBaseUrl = null,
+                imdbId = membership.imdbId ?: displayItem.imdbId ?: displayItem.stableIds.imdb,
+                tmdbId = membership.tmdbId ?: displayItem.stableIds.tmdb?.toIntOrNull(),
+                traktId = membership.traktId ?: displayItem.stableIds.trakt?.toIntOrNull()
+            )
+            return UnifiedWatchlistLibraryRailItem(
+                itemKey = "unified:${membership.authorityKey}",
+                contentId = displayItem.contentId,
+                title = title,
+                rating = displayItem.rating,
+                posterRef = displayItem.artwork.poster,
+                posterProviderTag = null,
+                source = entry
+            )
+        }
     }
 }
 

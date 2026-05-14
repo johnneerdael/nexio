@@ -10,7 +10,7 @@ import java.io.File
  *
  * Trakt semantics:
  *  - `/scrobble/stop` with progress ≥ 80% → item marked **watched**
- *  - `/scrobble/stop` with progress < 80%  → recorded as **pause** only
+ *  - `/scrobble/pause` with progress < 80% → recorded as in-progress pause
  *
  * The split is enforced by two distinct extension functions:
  *  - [emitCompletionScrobbleStop] — early-returns when progress < 80f, preventing a
@@ -87,8 +87,8 @@ class PlayerScrobbleThresholdSplitContractTest {
             completionBody.contains("< 80f")
         )
         assertTrue(
-            "emitPauseScrobble must delegate to emitScrobbleStop (the shared dispatch path)",
-            pauseBody.contains("emitScrobbleStop(")
+            "emitPauseScrobble must dispatch the provider pause endpoint",
+            pauseBody.contains("trackingScrobbleService.scrobblePause(")
         )
         assertTrue(
             "emitCompletionScrobbleStop must delegate to emitScrobbleStop (the shared dispatch path)",
@@ -97,22 +97,26 @@ class PlayerScrobbleThresholdSplitContractTest {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 3. emitPauseScrobble is the only path below-80 — does NOT call
-    //    trackingScrobbleService.scrobbleStop directly
+    // 3. emitPauseScrobble is the only path below-80 — it calls provider pause,
+    //    not provider stop.
     // ──────────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `emitStopScrobbleForCurrentProgress split contract - emitPauseScrobble does not call trackingScrobbleService directly`() {
+    fun `emitStopScrobbleForCurrentProgress split contract - emitPauseScrobble calls tracking pause directly`() {
         val body = bodyOf("fun PlayerRuntimeController.emitPauseScrobble")
 
         assertTrue(
             "emitPauseScrobble must NOT call trackingScrobbleService.scrobbleStop directly — " +
-                "it must go through emitScrobbleStop to preserve the shared dispatch contract",
+                "pause must not mark watched through provider stop",
             !body.contains("trackingScrobbleService.scrobbleStop")
         )
         assertTrue(
-            "emitPauseScrobble must delegate to emitScrobbleStop",
-            body.contains("emitScrobbleStop(")
+            "emitPauseScrobble must call trackingScrobbleService.scrobblePause",
+            body.contains("trackingScrobbleService.scrobblePause(")
+        )
+        assertTrue(
+            "emitPauseScrobble must not delegate to emitScrobbleStop",
+            !body.contains("emitScrobbleStop(")
         )
     }
 

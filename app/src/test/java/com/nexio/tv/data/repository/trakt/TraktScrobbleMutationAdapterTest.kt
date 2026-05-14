@@ -16,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -118,10 +119,11 @@ class TraktScrobbleMutationAdapterTest {
             session = testTraktSession()
         )
         assertEquals("pause", envelope.payload.get("action").asString)
+        assertFalse(envelope.payload.has("suppressSend"))
     }
 
     @Test
-    fun `pause action at exactly 80 percent coerces to stop`() {
+    fun `pause action at exactly 80 percent is suppressed`() {
         val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
             item = movieItem("Arrival"),
             action = "pause",
@@ -130,11 +132,12 @@ class TraktScrobbleMutationAdapterTest {
             optimisticVersion = 1L,
             session = testTraktSession()
         )
-        assertEquals("stop", envelope.payload.get("action").asString)
+        assertEquals("pause", envelope.payload.get("action").asString)
+        assertTrue(envelope.payload.get("suppressSend").asBoolean)
     }
 
     @Test
-    fun `pause action above 80 percent coerces to stop`() {
+    fun `pause action above 80 percent is suppressed`() {
         val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
             item = movieItem("Arrival"),
             action = "pause",
@@ -143,7 +146,8 @@ class TraktScrobbleMutationAdapterTest {
             optimisticVersion = 1L,
             session = testTraktSession()
         )
-        assertEquals("stop", envelope.payload.get("action").asString)
+        assertEquals("pause", envelope.payload.get("action").asString)
+        assertTrue(envelope.payload.get("suppressSend").asBoolean)
     }
 
     @Test

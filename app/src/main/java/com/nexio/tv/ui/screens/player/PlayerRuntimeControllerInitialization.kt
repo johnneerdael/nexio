@@ -1068,7 +1068,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             stopProgressUpdates()
                             stopWatchProgressSaving()
                             if (playbackState != Player.STATE_BUFFERING) {
-                                emitStopScrobbleForCurrentProgress()
+                                emitPauseScrobble(currentPlaybackProgressPercent())
                             }
                             
                             saveWatchProgress()
