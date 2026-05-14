@@ -93,6 +93,7 @@ interface TrackingProgressService {
 class DefaultTrackingProgressService @Inject constructor(
     private val traktProgressService: TraktProgressService,
     private val simklProgressService: SimklProgressService,
+    private val mdbListProgressService: MDBListProgressService? = null,
     private val trackingProviderStateService: TrackingProviderStateService,
     private val tvdbContinueWatchingTimingEnricher: TvdbContinueWatchingTimingEnricher = TvdbContinueWatchingTimingEnricher()
 ) : TrackingProgressService {
@@ -111,23 +112,30 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeAllProgress(): Flow<List<WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
-            val active = state.activeProviders - TrackingProvider.MDBLIST
+            val active = state.activeProviders
             when {
                 active.isEmpty() -> flowOf(emptyList())
                 active.size == 1 -> when (active.single()) {
                     TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
                     TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
-                    TrackingProvider.MDBLIST -> flowOf(emptyList())
+                    TrackingProvider.MDBLIST -> mdbListProgressService?.observeAllProgress() ?: flowOf(emptyList())
                 }
-                // Both authed: concatenate both providers. Downstream
+                // Multiple authed: concatenate provider rows. Downstream
                 // ContinueWatchingMerger collapses cross-provider duplicates by idBundle
                 // and routes conflicts through ContinueWatchingProgressDiffPlanner.
-                else -> combine(
-                    traktProgressService.observeAllProgress(),
-                    simklProgressService.observeAllProgress(),
-                ) { traktItems, simklItems -> traktItems + simklItems }
+                else -> combine(active.map(::allProgressFlowForProvider)) { providerRows ->
+                    providerRows.flatMap { it }
+                }
             }
         }
+
+    private fun allProgressFlowForProvider(provider: TrackingProvider): Flow<List<WatchProgress>> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
+            TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
+            TrackingProvider.MDBLIST -> mdbListProgressService?.observeAllProgress() ?: flowOf(emptyList())
+        }
+    }
 
     override fun observeRemoteSnapshotLoaded(): Flow<Boolean> =
         trackingProviderStateService.state.flatMapLatest { state ->

@@ -17,6 +17,7 @@ class DefaultTrackingProgressServiceDualSourceTest {
 
     private val traktService = mockk<TraktProgressService>(relaxed = true)
     private val simklService = mockk<SimklProgressService>(relaxed = true)
+    private val mdbListService = mockk<MDBListProgressService>(relaxed = true)
     private val providerStateService = mockk<TrackingProviderStateService>(relaxed = true)
     private val stateFlow = MutableStateFlow(EffectiveTrackingProviderState())
 
@@ -25,6 +26,7 @@ class DefaultTrackingProgressServiceDualSourceTest {
         return DefaultTrackingProgressService(
             traktProgressService = traktService,
             simklProgressService = simklService,
+            mdbListProgressService = mdbListService,
             trackingProviderStateService = providerStateService,
         )
     }
@@ -48,6 +50,37 @@ class DefaultTrackingProgressServiceDualSourceTest {
         val sources = emitted.map { it.source }.toSet()
         assertEquals(
             setOf(WatchProgress.SOURCE_TRAKT_PLAYBACK, WatchProgress.SOURCE_SIMKL_PLAYBACK),
+            sources,
+        )
+    }
+
+    @Test
+    fun `observeAllProgress concatenates Trakt Simkl and MDBList when all three authed`() = runTest {
+        every { traktService.observeAllProgress() } returns flowOf(
+            listOf(progress(contentId = "tt-trakt", source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+        )
+        every { simklService.observeAllProgress() } returns flowOf(
+            listOf(progress(contentId = "tt-simkl", source = WatchProgress.SOURCE_SIMKL_PLAYBACK))
+        )
+        every { mdbListService.observeAllProgress() } returns flowOf(
+            listOf(progress(contentId = "tt-mdb", source = WatchProgress.SOURCE_MDBLIST_PLAYBACK))
+        )
+        stateFlow.value = EffectiveTrackingProviderState(
+            traktAuthenticated = true,
+            simklAuthenticated = true,
+            mdbListAuthenticated = true,
+        )
+
+        val emitted = newService().observeAllProgress().first()
+
+        assertEquals(3, emitted.size)
+        val sources = emitted.map { it.source }.toSet()
+        assertEquals(
+            setOf(
+                WatchProgress.SOURCE_TRAKT_PLAYBACK,
+                WatchProgress.SOURCE_SIMKL_PLAYBACK,
+                WatchProgress.SOURCE_MDBLIST_PLAYBACK,
+            ),
             sources,
         )
     }
