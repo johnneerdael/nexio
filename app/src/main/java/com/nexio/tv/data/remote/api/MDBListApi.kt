@@ -1,16 +1,24 @@
 package com.nexio.tv.data.remote.api
 
+import com.nexio.tv.data.remote.dto.mdblist.MDBListCreateListRequestDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListCreateListResponseDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListListItemsResponseDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListListMutationResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListScrobbleRequestDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListUpdateListRequestDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListUserListDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistMutationRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistResponseDto
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.PUT
 import retrofit2.http.Query
 import retrofit2.http.QueryMap
 import retrofit2.http.Url
@@ -39,6 +47,49 @@ interface MDBListApi {
 
     @POST("watchlist/items/{action}")
     suspend fun mutateWatchlistItems(
+        @Path("action") action: String,
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListWatchlistMutationRequestDto,
+    ): Response<Unit>
+
+    @GET("lists/user")
+    suspend fun getMyLists(
+        @Query("apikey") apiKey: String,
+        @Query("sort") sort: String = "ranked",
+        @Query("unified") unified: Boolean = true,
+    ): Response<List<MDBListUserListDto>>
+
+    @GET("lists/{listid}/items")
+    suspend fun getListItems(
+        @Path("listid") listId: Long,
+        @Query("apikey") apiKey: String,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int,
+        @Query("unified") unified: Boolean = true,
+    ): Response<MDBListListItemsResponseDto>
+
+    @POST("lists/user/add")
+    suspend fun createStaticList(
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListCreateListRequestDto,
+    ): Response<MDBListCreateListResponseDto>
+
+    @PUT("lists/{listid}")
+    suspend fun updateStaticList(
+        @Path("listid") listId: Long,
+        @Query("apikey") apiKey: String,
+        @Body body: MDBListUpdateListRequestDto,
+    ): Response<MDBListListMutationResponseDto>
+
+    @DELETE("lists/{listid}")
+    suspend fun deleteStaticList(
+        @Path("listid") listId: Long,
+        @Query("apikey") apiKey: String,
+    ): Response<MDBListListMutationResponseDto>
+
+    @POST("lists/{listid}/items/{action}")
+    suspend fun mutateStaticListItems(
+        @Path("listid") listId: Long,
         @Path("action") action: String,
         @Query("apikey") apiKey: String,
         @Body body: MDBListWatchlistMutationRequestDto,

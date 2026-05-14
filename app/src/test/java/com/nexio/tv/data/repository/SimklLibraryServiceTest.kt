@@ -67,7 +67,7 @@ class SimklLibraryServiceTest {
             listTabs = listOf(
                 com.nexio.tv.domain.model.LibraryListTab(
                     key = SimklLibraryService.WATCHLIST_KEY,
-                    title = "SIMKL Watchlist",
+                    title = "Plan to Watch",
                     type = com.nexio.tv.domain.model.LibraryListTab.Type.WATCHLIST
                 )
             ),
@@ -155,7 +155,10 @@ class SimklLibraryServiceTest {
         assertEquals(1, items.size)
         assertEquals("Inception", items.first().name)
         assertTrue(memberships.contains(SimklLibraryService.WATCHLIST_KEY))
-        assertTrue(tabs.any { it.key == SimklLibraryService.WATCHLIST_KEY && it.title == "SIMKL Watchlist" })
+        assertEquals(
+            listOf("Plan to Watch", "Watching", "Completed", "On Hold", "Dropped"),
+            tabs.map { it.title }
+        )
         verify(exactly = 1) { snapshotStore.write(any(), any()) }
     }
 
