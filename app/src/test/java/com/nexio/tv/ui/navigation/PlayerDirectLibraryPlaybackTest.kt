@@ -130,6 +130,26 @@ class PlayerDirectLibraryPlaybackTest {
         )
     }
 
+    @Test
+    fun `series player back returns to existing detail before creating fallback detail`() {
+        val source = sourceFile("com/nexio/tv/ui/navigation/NexioNavHost.kt").toFile().readText()
+        val playerBackBlock = source.substringAfter("val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)")
+            .substringBefore("onPlaybackEnded =")
+
+        assertTrue(
+            "Player back must restore the existing hydrated detail entry when deterministic autoplay removed Stream",
+            playerBackBlock.contains("navController.getBackStackEntry(Screen.Detail.route)")
+        )
+        assertTrue(
+            "Player back must pop to the existing detail entry instead of creating a second detail screen",
+            playerBackBlock.contains("navController.popBackStack(Screen.Detail.route, inclusive = false)")
+        )
+        assertTrue(
+            "Fallback detail route must preserve addon context from player args",
+            playerBackBlock.contains("addonBaseUrl = args.getString(\"addonBaseUrl\")")
+        )
+    }
+
     private fun sourceFile(relativePath: String): Path {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relative = Paths.get("app", "src", "main", "java")

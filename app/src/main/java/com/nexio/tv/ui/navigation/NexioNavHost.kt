@@ -811,17 +811,28 @@ fun NexioNavHost(
                             contentType.equals("series", ignoreCase = true) &&
                             contentId.isNotBlank()
                         ) {
-                            navController.navigate(
-                                Screen.Detail.createRoute(
-                                    itemId = contentId,
-                                    itemType = contentType,
-                                    addonBaseUrl = null,
-                                    returnFocusSeason = args.getString("season")?.toIntOrNull(),
-                                    returnFocusEpisode = args.getString("episode")?.toIntOrNull()
-                                )
-                            ) {
-                                popUpTo(Screen.Stream.route) { inclusive = true }
-                                launchSingleTop = true
+                            val season = args.getString("season")?.toIntOrNull()
+                            val episode = args.getString("episode")?.toIntOrNull()
+                            val detailEntry = runCatching {
+                                navController.getBackStackEntry(Screen.Detail.route)
+                            }.getOrNull()
+                            if (detailEntry != null) {
+                                detailEntry.savedStateHandle["returnFocusSeason"] = season
+                                detailEntry.savedStateHandle["returnFocusEpisode"] = episode
+                                navController.popBackStack(Screen.Detail.route, inclusive = false)
+                            } else {
+                                navController.navigate(
+                                    Screen.Detail.createRoute(
+                                        itemId = contentId,
+                                        itemType = contentType,
+                                        addonBaseUrl = args.getString("addonBaseUrl"),
+                                        returnFocusSeason = season,
+                                        returnFocusEpisode = episode
+                                    )
+                                ) {
+                                    popUpTo(Screen.Stream.route) { inclusive = true }
+                                    launchSingleTop = true
+                                }
                             }
                         } else {
                             navController.popBackStack()
