@@ -29,10 +29,12 @@ class LibraryRepositoryImpl @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService,
     private val traktLibraryService: TraktLibraryService,
     private val simklLibraryService: SimklLibraryService,
+    private val mdbListLibraryService: MDBListLibraryService,
     private val debridLibraryService: DebridLibraryService,
     private val unifiedWatchlistRepository: UnifiedWatchlistRepository = UnifiedWatchlistRepository(
         traktLibraryService = traktLibraryService,
-        simklLibraryService = simklLibraryService
+        simklLibraryService = simklLibraryService,
+        mdbListLibraryService = mdbListLibraryService,
     )
 ) : LibraryRepository {
 

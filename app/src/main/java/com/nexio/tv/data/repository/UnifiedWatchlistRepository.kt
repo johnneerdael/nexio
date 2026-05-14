@@ -14,13 +14,15 @@ import javax.inject.Singleton
 @Singleton
 class UnifiedWatchlistRepository @Inject constructor(
     private val traktLibraryService: TraktLibraryService,
-    private val simklLibraryService: SimklLibraryService
+    private val simklLibraryService: SimklLibraryService,
+    private val mdbListLibraryService: MDBListLibraryService,
 ) {
     val memberships: Flow<List<UnifiedWatchlistMembership>> = combine(
         traktLibraryService.observeAllItems(),
-        simklLibraryService.observeAllItems()
-    ) { traktItems, simklItems ->
-        val sourceItems = ArrayList<UnifiedWatchlistSourceItem>(traktItems.size + simklItems.size)
+        simklLibraryService.observeAllItems(),
+        mdbListLibraryService.observeAllItems(),
+    ) { traktItems, simklItems, mdbListItems ->
+        val sourceItems = ArrayList<UnifiedWatchlistSourceItem>(traktItems.size + simklItems.size + mdbListItems.size)
         for (i in traktItems.indices) {
             val item = traktItems[i]
             if (TraktLibraryService.WATCHLIST_KEY in item.listKeys) {
@@ -31,6 +33,12 @@ class UnifiedWatchlistRepository @Inject constructor(
             val item = simklItems[i]
             if (SimklLibraryService.WATCHLIST_KEY in item.listKeys) {
                 sourceItems += item.toUnifiedWatchlistSourceItem(UnifiedWatchlistSource.SIMKL, SimklLibraryService.WATCHLIST_KEY)
+            }
+        }
+        for (i in mdbListItems.indices) {
+            val item = mdbListItems[i]
+            if (MDBListLibraryService.WATCHLIST_KEY in item.listKeys) {
+                sourceItems += item.toUnifiedWatchlistSourceItem(UnifiedWatchlistSource.MDBLIST, MDBListLibraryService.WATCHLIST_KEY)
             }
         }
         UnifiedWatchlistMembershipReducer.reduce(sourceItems)

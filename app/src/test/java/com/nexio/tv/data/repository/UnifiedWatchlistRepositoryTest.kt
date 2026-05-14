@@ -16,10 +16,12 @@ class UnifiedWatchlistRepositoryTest {
     fun `combines trakt and simkl watchlist rows without requiring both sources`() = runTest {
         val trakt = mockk<TraktLibraryService>()
         val simkl = mockk<SimklLibraryService>()
+        val mdblist = mockk<MDBListLibraryService>()
         every { trakt.observeAllItems() } returns flowOf(listOf(entry("tt2543164", setOf(TraktLibraryService.WATCHLIST_KEY))))
         every { simkl.observeAllItems() } returns flowOf(emptyList())
+        every { mdblist.observeAllItems() } returns flowOf(emptyList())
 
-        val repo = UnifiedWatchlistRepository(trakt, simkl)
+        val repo = UnifiedWatchlistRepository(trakt, simkl, mdblist)
         val rows = repo.memberships.first()
 
         assertEquals(1, rows.size)
@@ -30,12 +32,33 @@ class UnifiedWatchlistRepositoryTest {
     fun `ignores non watchlist provider list memberships`() = runTest {
         val trakt = mockk<TraktLibraryService>()
         val simkl = mockk<SimklLibraryService>()
+        val mdblist = mockk<MDBListLibraryService>()
         every { trakt.observeAllItems() } returns flowOf(listOf(entry("tt1111111", setOf("personal:list"))))
         every { simkl.observeAllItems() } returns flowOf(listOf(entry("tt2222222", setOf(SimklLibraryService.COMPLETED_KEY))))
+        every { mdblist.observeAllItems() } returns flowOf(listOf(entry("tt3333333", setOf("mdblist:other"))))
 
-        val repo = UnifiedWatchlistRepository(trakt, simkl)
+        val repo = UnifiedWatchlistRepository(trakt, simkl, mdblist)
 
         assertEquals(emptyList<Any>(), repo.memberships.first())
+    }
+
+    @Test
+    fun `merges mdblist watchlist rows with matching strong ids`() = runTest {
+        val trakt = mockk<TraktLibraryService>()
+        val simkl = mockk<SimklLibraryService>()
+        val mdblist = mockk<MDBListLibraryService>()
+        every { trakt.observeAllItems() } returns flowOf(listOf(entry("tt0137523", setOf(TraktLibraryService.WATCHLIST_KEY))))
+        every { simkl.observeAllItems() } returns flowOf(emptyList())
+        every { mdblist.observeAllItems() } returns flowOf(listOf(entry("tt0137523", setOf(MDBListLibraryService.WATCHLIST_KEY))))
+
+        val repo = UnifiedWatchlistRepository(trakt, simkl, mdblist)
+        val rows = repo.memberships.first()
+
+        assertEquals(1, rows.size)
+        assertEquals(
+            setOf(UnifiedWatchlistSource.TRAKT, UnifiedWatchlistSource.MDBLIST),
+            rows.single().presentIn
+        )
     }
 
     private fun entry(id: String, listKeys: Set<String>) = LibraryEntry(
