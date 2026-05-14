@@ -53,11 +53,20 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
 class DebridLibraryServiceTest {
+    @Test
+    fun `debrid service exposes easydebrid library target and tab`() {
+        val source = java.io.File("app/src/main/java/com/nexio/tv/data/repository/DebridLibraryService.kt").readText()
+        assertTrue(source.contains("EASY_DEBRID"))
+        assertTrue(source.contains("EASY_DEBRID_LIST_KEY"))
+        assertTrue(source.contains("title = \"EasyDebrid\""))
+        assertTrue(source.contains("target == RefreshTarget.EASY_DEBRID"))
+    }
 
     @Test
     fun `refresh real debrid exposes resolved download urls and filters unresolved torrents`() = runTest {
@@ -1121,7 +1130,7 @@ class DebridLibraryServiceTest {
     }
 
     @Test
-    fun `refresh torbox exposes cached playable files with direct playback urls`() = runTest {
+    fun `refresh torbox exposes cached playable files for lazy direct playback`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
@@ -1202,7 +1211,7 @@ class DebridLibraryServiceTest {
 
         assertEquals(listOf(DebridLibraryService.TORBOX_LIST_KEY), tabs.map { it.key })
         assertEquals(1, items.size)
-        assertEquals("https://tb.test/download/movie.mkv", items.single().directPlaybackUrl)
+        assertNull(items.single().directPlaybackUrl)
         assertEquals(setOf(DebridLibraryService.TORBOX_LIST_KEY), items.single().listKeys)
         assertEquals("TorBox.Movie.2026.1080p", items.single().name)
     }

@@ -399,6 +399,18 @@ class DebridLibraryService @Inject constructor(
                 }
             }
 
+            if (refreshEasyDebrid) {
+                val easyDebridApiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
+                if (easyDebridApiKey.isNotBlank() && hasEasyDebridAccount(easyDebridApiKey)) {
+                    tabs += LibraryListTab(
+                        key = EASY_DEBRID_LIST_KEY,
+                        title = "EasyDebrid",
+                        type = LibraryListTab.Type.SERVICE,
+                        description = "EasyDebrid library view."
+                    )
+                }
+            }
+
             snapshotState.value = Snapshot(
                 listTabs = tabs,
                 items = items.sortedByDescending { it.listedAt },

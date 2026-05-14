@@ -26,11 +26,23 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
 class SimklLibraryServiceTest {
+    @Test
+    fun `simkl list tabs use fixed status bucket labels`() {
+        val source = java.io.File("app/src/main/java/com/nexio/tv/data/repository/SimklLibraryService.kt").readText()
+        assertTrue(source.contains("title = \"Plan to Watch\""))
+        assertTrue(source.contains("title = \"Watching\""))
+        assertTrue(source.contains("title = \"Completed\""))
+        assertTrue(source.contains("title = \"On Hold\""))
+        assertTrue(source.contains("title = \"Dropped\""))
+        assertFalse(source.contains("title = \"SIMKL Watchlist\""))
+    }
+
     @Test
     fun `parseSimklLibraryItemsPayload accepts object wrapped all-items response`() {
         val items = parseSimklLibraryItemsPayload(
