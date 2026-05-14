@@ -4,6 +4,7 @@ import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistItemDto
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
+import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,14 +20,18 @@ class MDBListLibraryService @Inject constructor(
     private val settingsReader: MDBListSettingsReader,
 ) {
     private val rows = MutableStateFlow<List<LibraryEntry>>(emptyList())
+    private val tabs = MutableStateFlow<List<LibraryListTab>>(emptyList())
+    private val refreshing = MutableStateFlow(false)
     private val refreshMutex = Mutex()
     private var lastRefreshMs: Long = 0L
     private val cacheTtlMs = 6L * 60 * 60 * 1_000L
 
     fun observeAllItems(): Flow<List<LibraryEntry>> = rows
+    fun observeListTabs(): Flow<List<LibraryListTab>> = tabs
+    fun observeIsRefreshing(): Flow<Boolean> = refreshing
 
-    suspend fun refreshNow(force: Boolean = false) {
-        ensureFresh(force)
+    suspend fun refreshNow(force: Boolean = false, selectedListKey: String? = null) {
+        ensureFresh(force = force, selectedListKey = selectedListKey)
     }
 
     suspend fun removeWatchlistItem(item: LibraryEntryInput) {
@@ -41,35 +46,61 @@ class MDBListLibraryService @Inject constructor(
         rows.value = removeItem(rows.value, item)
     }
 
-    suspend fun ensureFresh(force: Boolean = false) {
+    suspend fun ensureFresh(force: Boolean = false, selectedListKey: String? = null) {
         refreshMutex.withLock {
             val now = System.currentTimeMillis()
             if (!force && rows.value.isNotEmpty() && now - lastRefreshMs < cacheTtlMs) return
 
-            val settings = settingsReader.settings.first()
-            val apiKey = settings.apiKey.trim()
-            if (!settings.enabled || apiKey.isBlank()) {
-                rows.value = emptyList()
-                lastRefreshMs = now
-                return
-            }
+            refreshing.value = true
+            try {
+                val settings = settingsReader.settings.first()
+                val apiKey = settings.apiKey.trim()
+                if (!settings.enabled || apiKey.isBlank()) {
+                    rows.value = emptyList()
+                    tabs.value = emptyList()
+                    lastRefreshMs = now
+                    return
+                }
 
-            val response = api.getWatchlistItems(
-                apiKey = apiKey,
-                limit = WATCHLIST_LIMIT,
-                offset = 0,
-                unified = true,
-            )
-            val body = response.body()
-            if (!response.isSuccessful || body == null) {
-                rows.value = emptyList()
-                lastRefreshMs = now
-                return
-            }
+                val response = api.getWatchlistItems(
+                    apiKey = apiKey,
+                    limit = WATCHLIST_LIMIT,
+                    offset = 0,
+                    unified = true,
+                )
+                val body = response.body()
+                if (!response.isSuccessful || body == null) {
+                    rows.value = emptyList()
+                    tabs.value = emptyList()
+                    lastRefreshMs = now
+                    return
+                }
 
-            rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty())
-            lastRefreshMs = now
+                rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty())
+                tabs.value = listOf(
+                    LibraryListTab(
+                        key = WATCHLIST_KEY,
+                        title = "Watchlist",
+                        type = LibraryListTab.Type.WATCHLIST
+                    )
+                )
+                lastRefreshMs = now
+            } finally {
+                refreshing.value = false
+            }
         }
+    }
+
+    suspend fun createStaticList(name: String, private: Boolean) {
+        throw IllegalStateException("MDBList static list creation is not implemented yet")
+    }
+
+    suspend fun updateStaticList(listId: String, name: String, private: Boolean) {
+        throw IllegalStateException("MDBList static list update is not implemented yet")
+    }
+
+    suspend fun deleteStaticList(listId: String) {
+        throw IllegalStateException("MDBList static list deletion is not implemented yet")
     }
 
     private fun buildRows(
@@ -126,6 +157,7 @@ class MDBListLibraryService @Inject constructor(
 
     companion object {
         const val WATCHLIST_KEY = "mdblist:watchlist"
+        const val PERSONAL_KEY_PREFIX = "mdblist:list:"
         private const val WATCHLIST_LIMIT = 1000
     }
 }

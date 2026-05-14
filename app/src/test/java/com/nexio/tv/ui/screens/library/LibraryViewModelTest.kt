@@ -9,6 +9,9 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
+import com.nexio.tv.domain.model.LibraryProviderSnapshot
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
@@ -254,6 +257,23 @@ class LibraryViewModelTest {
         private val refreshProviderNowBlock: suspend () -> Unit = {}
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0
+        override val availableProviders: Flow<List<LibraryProviderOption>> =
+            MutableStateFlow(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)))
+
+        override fun observeProviderSnapshot(
+            provider: LibraryProviderSelection,
+            selectedListKey: String?
+        ): Flow<LibraryProviderSnapshot> {
+            return flowOf(
+                LibraryProviderSnapshot(
+                    provider = provider,
+                    sourceMode = sourceMode.value,
+                    items = libraryItems.value,
+                    listTabs = listTabs.value,
+                    selectedListKey = selectedListKey
+                )
+            )
+        }
 
         override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
 
@@ -294,5 +314,26 @@ class LibraryViewModelTest {
         override suspend fun refreshPremiumizeNow() = Unit
 
         override suspend fun refreshTorBoxNow() = Unit
+
+        override suspend fun refreshEasyDebridNow() = Unit
+
+        override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) = Unit
+
+        override suspend fun createProviderList(
+            provider: LibraryProviderSelection,
+            name: String,
+            description: String?,
+            privacy: TraktListPrivacy
+        ) = Unit
+
+        override suspend fun updateProviderList(
+            provider: LibraryProviderSelection,
+            listId: String,
+            name: String,
+            description: String?,
+            privacy: TraktListPrivacy
+        ) = Unit
+
+        override suspend fun deleteProviderList(provider: LibraryProviderSelection, listId: String) = Unit
     }
 }

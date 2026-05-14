@@ -11,6 +11,9 @@ import com.nexio.tv.data.repository.UnifiedWatchlistSurfacePublisher
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
+import com.nexio.tv.domain.model.LibraryProviderSnapshot
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
@@ -169,6 +172,20 @@ class LibraryViewModelTorBoxClickTest {
         override val libraryItems: Flow<List<LibraryEntry>> = MutableStateFlow(emptyList())
         override val listTabs: Flow<List<LibraryListTab>> = MutableStateFlow(emptyList())
         override val unifiedWatchlistMemberships: Flow<List<UnifiedWatchlistMembership>> = flowOf(emptyList())
+        override val availableProviders: Flow<List<LibraryProviderOption>> =
+            flowOf(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)))
+        override fun observeProviderSnapshot(
+            provider: LibraryProviderSelection,
+            selectedListKey: String?
+        ): Flow<LibraryProviderSnapshot> {
+            return flowOf(
+                LibraryProviderSnapshot(
+                    provider = provider,
+                    sourceMode = LibrarySourceMode.LOCAL,
+                    selectedListKey = selectedListKey
+                )
+            )
+        }
         override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
         override fun isInWatchlist(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
         override suspend fun toggleDefault(item: LibraryEntryInput) {}
@@ -184,5 +201,21 @@ class LibraryViewModelTorBoxClickTest {
         override suspend fun refreshRealDebridNow() {}
         override suspend fun refreshPremiumizeNow() {}
         override suspend fun refreshTorBoxNow() {}
+        override suspend fun refreshEasyDebridNow() {}
+        override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) {}
+        override suspend fun createProviderList(
+            provider: LibraryProviderSelection,
+            name: String,
+            description: String?,
+            privacy: TraktListPrivacy
+        ) {}
+        override suspend fun updateProviderList(
+            provider: LibraryProviderSelection,
+            listId: String,
+            name: String,
+            description: String?,
+            privacy: TraktListPrivacy
+        ) {}
+        override suspend fun deleteProviderList(provider: LibraryProviderSelection, listId: String) {}
     }
 }
