@@ -14,10 +14,11 @@ class WatchlistAutoRemoveCoordinatorTest {
         val membership = UnifiedWatchlistMembership(
             authorityKey = "movie:tmdb:550",
             contentType = ContentType.MOVIE,
-            presentIn = setOf(UnifiedWatchlistSource.TRAKT, UnifiedWatchlistSource.SIMKL),
+            presentIn = setOf(UnifiedWatchlistSource.TRAKT, UnifiedWatchlistSource.SIMKL, UnifiedWatchlistSource.MDBLIST),
             sourceRefs = listOf(
                 UnifiedWatchlistSourceRef(UnifiedWatchlistSource.TRAKT, rawKey = "trakt-raw", listKey = "watchlist"),
-                UnifiedWatchlistSourceRef(UnifiedWatchlistSource.SIMKL, rawKey = "simkl-raw", listKey = "simkl:plantowatch")
+                UnifiedWatchlistSourceRef(UnifiedWatchlistSource.SIMKL, rawKey = "simkl-raw", listKey = "simkl:plantowatch"),
+                UnifiedWatchlistSourceRef(UnifiedWatchlistSource.MDBLIST, rawKey = "mdblist-raw", listKey = "mdblist:watchlist")
             ),
             confidence = UnifiedWatchlistMembershipConfidence.STRONG,
             title = "Fight Club",
@@ -35,7 +36,8 @@ class WatchlistAutoRemoveCoordinatorTest {
         assertEquals(
             listOf(
                 WatchlistAutoRemoveCoordinator.RemovePlan(UnifiedWatchlistSource.TRAKT, "trakt-raw", "movie:tmdb:550"),
-                WatchlistAutoRemoveCoordinator.RemovePlan(UnifiedWatchlistSource.SIMKL, "simkl-raw", "movie:tmdb:550")
+                WatchlistAutoRemoveCoordinator.RemovePlan(UnifiedWatchlistSource.SIMKL, "simkl-raw", "movie:tmdb:550"),
+                WatchlistAutoRemoveCoordinator.RemovePlan(UnifiedWatchlistSource.MDBLIST, "mdblist-raw", "movie:tmdb:550")
             ),
             plans
         )

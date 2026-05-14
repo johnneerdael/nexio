@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistItemDto
 import com.nexio.tv.domain.model.LibraryEntry
+import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.PosterShape
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,18 @@ class MDBListLibraryService @Inject constructor(
 
     suspend fun refreshNow(force: Boolean = false) {
         ensureFresh(force)
+    }
+
+    suspend fun removeWatchlistItem(item: LibraryEntryInput) {
+        val settings = settingsReader.settings.first()
+        val apiKey = settings.apiKey.trim()
+        if (!settings.enabled || apiKey.isBlank()) return
+        api.mutateWatchlistItems(
+            action = "remove",
+            apiKey = apiKey,
+            body = com.nexio.tv.data.repository.mdblist.MDBListIdMapper.watchlistPayloadFor(item),
+        )
+        rows.value = removeItem(rows.value, item)
     }
 
     suspend fun ensureFresh(force: Boolean = false) {
@@ -69,6 +82,20 @@ class MDBListLibraryService @Inject constructor(
         }
         for (i in shows.indices) {
             out += shows[i].toLibraryEntry(type = "series")
+        }
+        return out
+    }
+
+    private fun removeItem(current: List<LibraryEntry>, item: LibraryEntryInput): List<LibraryEntry> {
+        val itemImdb = item.imdbId?.takeIf { it.isNotBlank() }
+        val itemTmdb = item.tmdbId
+        val out = ArrayList<LibraryEntry>(current.size)
+        for (i in current.indices) {
+            val row = current[i]
+            val matches = (itemImdb != null && row.imdbId == itemImdb) ||
+                (itemTmdb != null && row.tmdbId == itemTmdb) ||
+                row.id == item.itemId
+            if (!matches) out += row
         }
         return out
     }
