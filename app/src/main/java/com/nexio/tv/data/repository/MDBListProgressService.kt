@@ -32,6 +32,16 @@ class MDBListProgressService @Inject constructor(
                 .associateBy { it.season!! to it.episode!! }
         }
 
+    fun observeMovieWatched(contentId: String): Flow<Boolean> =
+        allProgress.map { rows ->
+            rows.any { progress ->
+                progress.contentId == contentId &&
+                    progress.season == null &&
+                    progress.episode == null &&
+                    progress.isCompleted()
+            }
+        }
+
     suspend fun refreshNowImmediate() {
         val settings = settingsReader.settings.first()
         val apiKey = settings.apiKey.trim()

@@ -1,6 +1,5 @@
-// effectiveProvider still routes watch-progress mutation envelopes here.
-// Phase 3 of the scrobble + CW dual-provider plan migrates the envelope builders
-// to dual-emit (one per authenticated provider). Suppression tracks that migration.
+// effectiveProvider remains in display-only compatibility state. Watch-progress
+// mutations route through activeProviders and best-effort fan-out here.
 // Plan: docs/superpowers/plans/2026-05-12-scrobble-cw-dual-provider-overhaul.md
 @file:Suppress("DEPRECATION")
 
@@ -15,10 +14,12 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.WatchProgressPreferences
+import com.nexio.tv.data.repository.mdblist.MDBListProgressMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.data.repository.trakt.TraktProgressHistoryMutationAdapter
+import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -345,36 +346,42 @@ class WatchProgressRepositoryImpl @Inject constructor(
         assertCanWriteProfileState(profileSession)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        val isAuthenticated = providerState.traktAuthenticated || providerState.simklAuthenticated
-        if (!isAuthenticated) {
+        if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) return
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
-            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
-                .forEach { playbackId ->
-                    val envelope = when (providerState.effectiveProvider) {
-                        TrackingProvider.SIMKL ->
-                            SimklProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
-                                playbackId = playbackId,
+            val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
+            val envelopes = mutableListOf<TraktMutationEnvelope>()
+            for (i in sessions.indices) {
+                val session = sessions[i]
+                when (session.provider) {
+                    TrackingProvider.TRAKT,
+                    TrackingProvider.SIMKL -> {
+                        for (playbackIndex in playbackIds.indices) {
+                            envelopes += buildPlaybackDeleteEnvelope(
+                                provider = session.provider,
+                                playbackId = playbackIds[playbackIndex],
                                 contentId = contentId,
                                 season = season,
                                 episode = episode,
+                                clearShow = false,
                                 session = session
                             )
-                        TrackingProvider.TRAKT ->
-                            TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
-                                playbackId = playbackId,
-                                contentId = contentId,
-                                season = season,
-                                episode = episode,
-                                session = session
-                            )
-                        TrackingProvider.MDBLIST -> return@forEach
+                        }
                     }
-                    traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
+                    TrackingProvider.MDBLIST ->
+                        envelopes += MDBListProgressMutationAdapter.buildPlaybackClearEnvelope(
+                            contentId = contentId,
+                            season = season,
+                            episode = episode,
+                            session = session
+                        )
                 }
+            }
+            enqueueBestEffort(envelopes)
         }.onFailure {
             trackingProgressService.rollbackQueuedPlaybackDelete(
                 contentId = contentId,
@@ -395,30 +402,25 @@ class WatchProgressRepositoryImpl @Inject constructor(
         assertCanWriteProfileState(profileSession)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
+        if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) return
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
-            val envelope = when (providerState.effectiveProvider) {
-                TrackingProvider.SIMKL ->
-                    SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
-                        contentId = contentId,
-                        season = season,
-                        episode = episode,
-                        session = session
-                    )
-                TrackingProvider.TRAKT ->
-                    TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
-                        contentId = contentId,
-                        season = season,
-                        episode = episode,
-                        session = session
-                    )
-                TrackingProvider.MDBLIST -> return@runCatching
+            val envelopes = mutableListOf<TraktMutationEnvelope>()
+            for (i in sessions.indices) {
+                envelopes += buildHistoryRemoveEnvelope(
+                    provider = sessions[i].provider,
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    removeShow = false,
+                    session = sessions[i]
+                )
             }
-            traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
+            enqueueBestEffort(envelopes)
         }.onFailure {
             trackingProgressService.rollbackQueuedHistoryRemove(
                 contentId = contentId,
@@ -434,10 +436,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         assertCanWriteProfileState(profileSession)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, null, null)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
+        if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) return
         val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
             contentId = contentId,
             season = null,
@@ -445,50 +448,43 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         trackingProgressService.applyOptimisticRemoval(contentId, null, null)
         runCatching {
-            playbackIds.forEach { playbackId ->
-                val deleteEnvelope = when (providerState.effectiveProvider) {
-                    TrackingProvider.SIMKL ->
-                        SimklProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
-                            playbackId = playbackId,
+            val envelopes = mutableListOf<TraktMutationEnvelope>()
+            for (i in sessions.indices) {
+                val session = sessions[i]
+                when (session.provider) {
+                    TrackingProvider.TRAKT,
+                    TrackingProvider.SIMKL -> {
+                        for (playbackIndex in playbackIds.indices) {
+                            envelopes += buildPlaybackDeleteEnvelope(
+                                provider = session.provider,
+                                playbackId = playbackIds[playbackIndex],
+                                contentId = contentId,
+                                season = null,
+                                episode = null,
+                                clearShow = true,
+                                session = session
+                            )
+                        }
+                    }
+                    TrackingProvider.MDBLIST ->
+                        envelopes += MDBListProgressMutationAdapter.buildPlaybackClearEnvelope(
                             contentId = contentId,
                             season = null,
                             episode = null,
                             clearShow = true,
                             session = session
                         )
-                    TrackingProvider.TRAKT ->
-                        TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
-                            playbackId = playbackId,
-                            contentId = contentId,
-                            season = null,
-                            episode = null,
-                            clearShow = true,
-                            session = session
-                        )
-                    TrackingProvider.MDBLIST -> return@forEach
                 }
-                traktMutationOutboxCoordinator.enqueueAndDrain(deleteEnvelope)
+                envelopes += buildHistoryRemoveEnvelope(
+                    provider = session.provider,
+                    contentId = contentId,
+                    season = null,
+                    episode = null,
+                    removeShow = true,
+                    session = session
+                )
             }
-            val removeEnvelope = when (providerState.effectiveProvider) {
-                TrackingProvider.SIMKL ->
-                    SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
-                        contentId = contentId,
-                        season = null,
-                        episode = null,
-                        removeShow = true,
-                        session = session
-                    )
-                TrackingProvider.TRAKT ->
-                    TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
-                        contentId = contentId,
-                        season = null,
-                        episode = null,
-                        removeShow = true,
-                        session = session
-                    )
-                TrackingProvider.MDBLIST -> return@runCatching
-            }
-            traktMutationOutboxCoordinator.enqueueAndDrain(removeEnvelope)
+            enqueueBestEffort(envelopes)
         }.onFailure {
             trackingProgressService.rollbackQueuedHistoryRemove(
                 contentId = contentId,
@@ -512,29 +508,23 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         watchProgressPreferences.saveProgress(profileSession.profileId, completed)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.traktAuthenticated && !providerState.simklAuthenticated) {
+        if (!providerState.hasAuthenticatedProvider) {
             return
         }
-        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) return
         runCatching {
-            val envelope = when (providerState.effectiveProvider) {
-                TrackingProvider.SIMKL ->
-                    SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
-                        progress = completed,
-                        title = completed.name.takeIf { it.isNotBlank() },
-                        year = null,
-                        session = session
-                    )
-                TrackingProvider.TRAKT ->
-                    TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
-                        progress = completed,
-                        title = completed.name.takeIf { it.isNotBlank() },
-                        year = null,
-                        session = session
-                    )
-                TrackingProvider.MDBLIST -> return@runCatching
+            val envelopes = mutableListOf<TraktMutationEnvelope>()
+            for (i in sessions.indices) {
+                envelopes += buildHistoryAddEnvelope(
+                    provider = sessions[i].provider,
+                    progress = completed,
+                    title = completed.name.takeIf { it.isNotBlank() },
+                    year = null,
+                    session = sessions[i]
+                )
             }
-            traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
+            enqueueBestEffort(envelopes)
         }.onFailure {
             trackingProgressService.applyOptimisticRemoval(
                 contentId = completed.contentId,
@@ -561,7 +551,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) return
         if (episodes.isEmpty()) return
-        val session = accountSessionFor(providerState.effectiveProvider, profileSession)
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) return
 
         val showContentId = meta.id
 
@@ -583,38 +574,22 @@ class WatchProgressRepositoryImpl @Inject constructor(
         snapshotService.applyEpisodesMarked(episodeRefs)
 
         val episodeNumbers = episodes.mapNotNull { it.episodeNumber }
-        if (providerState.effectiveProvider == TrackingProvider.SIMKL) {
-            try {
-                traktMutationOutboxCoordinator.enqueueAndDrain(
-                    SimklSeasonMarkMutationAdapter.buildEnvelope(
-                        showContentId = showContentId,
-                        showTitle = meta.name,
-                        showYear = extractYear(meta.releaseInfo),
-                        isAnime = meta.rawType.equals("anime", ignoreCase = true),
-                        seasonNumber = seasonNumber,
-                        episodeNumbers = episodeNumbers,
-                        rollbackState = rollbackState,
-                        session = session
-                    )
-                )
-            } catch (e: Exception) {
-                snapshotService.rollbackEpisodes(rollbackState)
-                snapshotService.ensureFresh(force = true)
-                throw e
-            }
-            return
-        }
+        val hasTraktSession = sessions.any { it.provider == TrackingProvider.TRAKT }
 
-        // 4. Resolve Trakt episode IDs in parallel — map<episodeNumber, TraktEpisodeRef>
-        val epNumToTraktRef = trackingProgressService.resolveSeasonEpisodeTraktIds(
-            showContentId = showContentId,
-            season = seasonNumber,
-            episodeNumbers = episodeNumbers
-        )
+        // 4. Resolve Trakt episode IDs only when Trakt is one of the mutation targets.
+        val epNumToTraktRef = if (hasTraktSession) {
+            trackingProgressService.resolveSeasonEpisodeTraktIds(
+                showContentId = showContentId,
+                season = seasonNumber,
+                episodeNumbers = episodeNumbers
+            )
+        } else {
+            emptyMap()
+        }
         val initialNotFoundEpisodeNumbers = episodeNumbers.toSet() - epNumToTraktRef.keys
         val traktRefs = epNumToTraktRef.values.toList()
 
-        if (traktRefs.isEmpty()) {
+        if (hasTraktSession && traktRefs.isEmpty() && sessions.size == 1) {
             if (initialNotFoundEpisodeNumbers.isNotEmpty()) {
                 snapshotService.rollbackEpisodes(
                     rollbackState.filterEpisodeNumbers(initialNotFoundEpisodeNumbers)
@@ -624,21 +599,50 @@ class WatchProgressRepositoryImpl @Inject constructor(
             return
         }
 
-        if (initialNotFoundEpisodeNumbers.isNotEmpty()) {
+        if (hasTraktSession && initialNotFoundEpisodeNumbers.isNotEmpty()) {
             snapshotService.rollbackEpisodes(
                 rollbackState.filterEpisodeNumbers(initialNotFoundEpisodeNumbers)
             )
         }
 
-        // 5. One batched POST via SeasonMarkBatcher; settlement is handled asynchronously by the outbox.
+        // 5. One provider-specific batched mutation per authenticated tracker; settlement is handled by the outbox.
         try {
-            seasonMarkBatcher.markSeasonWatched(
-                showContentId = showContentId,
-                seasonNumber = seasonNumber,
-                episodes = traktRefs,
-                rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys),
-                profileId = session.profileId
-            )
+            val envelopes = mutableListOf<TraktMutationEnvelope>()
+            for (i in sessions.indices) {
+                val session = sessions[i]
+                when (session.provider) {
+                    TrackingProvider.TRAKT -> if (traktRefs.isNotEmpty()) {
+                        seasonMarkBatcher.markSeasonWatched(
+                            showContentId = showContentId,
+                            seasonNumber = seasonNumber,
+                            episodes = traktRefs,
+                            rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys),
+                            profileId = session.profileId
+                        )
+                    }
+                    TrackingProvider.SIMKL ->
+                        envelopes += SimklSeasonMarkMutationAdapter.buildEnvelope(
+                            showContentId = showContentId,
+                            showTitle = meta.name,
+                            showYear = extractYear(meta.releaseInfo),
+                            isAnime = meta.rawType.equals("anime", ignoreCase = true),
+                            seasonNumber = seasonNumber,
+                            episodeNumbers = episodeNumbers,
+                            rollbackState = rollbackState,
+                            session = session
+                        )
+                    TrackingProvider.MDBLIST ->
+                        envelopes += MDBListProgressMutationAdapter.buildSeasonHistoryAddEnvelope(
+                            showContentId = showContentId,
+                            showTitle = meta.name,
+                            showYear = extractYear(meta.releaseInfo),
+                            seasonNumber = seasonNumber,
+                            episodeNumbers = episodeNumbers,
+                            session = session
+                        )
+                }
+            }
+            enqueueBestEffort(envelopes)
         } catch (e: Exception) {
             snapshotService.rollbackEpisodes(rollbackState)
             snapshotService.ensureFresh(force = true)
@@ -703,6 +707,149 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!candidateIsPlayback && existingIsPlayback) return false
 
         return false
+    }
+
+    private suspend fun accountSessionsForActiveProviders(
+        providerState: EffectiveTrackingProviderState,
+        profileSession: ActiveProfileSession
+    ): List<TrackingAuthSession> {
+        val providers = providerState.activeProviders.toList()
+        val sessions = mutableListOf<TrackingAuthSession>()
+        for (i in providers.indices) {
+            runCatching {
+                accountSessionFor(providers[i], profileSession)
+            }.onSuccess { session ->
+                sessions += session
+            }.onFailure { error ->
+                Log.w(TAG, "Skipping ${providers[i]} mutation because account scope failed: ${error.message}")
+            }
+        }
+        return sessions
+    }
+
+    private suspend fun enqueueBestEffort(envelopes: List<TraktMutationEnvelope>) {
+        var successes = 0
+        var firstFailure: Throwable? = null
+        for (i in envelopes.indices) {
+            runCatching {
+                traktMutationOutboxCoordinator.enqueueAndDrain(envelopes[i])
+            }.onSuccess {
+                successes += 1
+            }.onFailure { error ->
+                if (firstFailure == null) firstFailure = error
+                Log.w(TAG, "Provider mutation failed for ${envelopes[i].provider}: ${error.message}")
+            }
+        }
+        if (envelopes.isNotEmpty() && successes == 0) {
+            throw firstFailure ?: IllegalStateException("All provider mutations failed")
+        }
+    }
+
+    private fun buildHistoryAddEnvelope(
+        provider: TrackingProvider,
+        progress: WatchProgress,
+        title: String?,
+        year: Int?,
+        session: TrackingAuthSession
+    ): TraktMutationEnvelope {
+        return when (provider) {
+            TrackingProvider.TRAKT ->
+                TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
+                    progress = progress,
+                    title = title,
+                    year = year,
+                    session = session
+                )
+            TrackingProvider.SIMKL ->
+                SimklProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
+                    progress = progress,
+                    title = title,
+                    year = year,
+                    session = session
+                )
+            TrackingProvider.MDBLIST ->
+                MDBListProgressMutationAdapter.buildHistoryAddEnvelope(
+                    progress = progress,
+                    title = title,
+                    year = year,
+                    session = session
+                )
+        }
+    }
+
+    private fun buildHistoryRemoveEnvelope(
+        provider: TrackingProvider,
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        removeShow: Boolean,
+        session: TrackingAuthSession
+    ): TraktMutationEnvelope {
+        return when (provider) {
+            TrackingProvider.TRAKT ->
+                TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    removeShow = removeShow,
+                    session = session
+                )
+            TrackingProvider.SIMKL ->
+                SimklProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    removeShow = removeShow,
+                    session = session
+                )
+            TrackingProvider.MDBLIST ->
+                MDBListProgressMutationAdapter.buildHistoryRemoveEnvelope(
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    removeShow = removeShow,
+                    session = session
+                )
+        }
+    }
+
+    private fun buildPlaybackDeleteEnvelope(
+        provider: TrackingProvider,
+        playbackId: Long,
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        clearShow: Boolean,
+        session: TrackingAuthSession
+    ): TraktMutationEnvelope {
+        return when (provider) {
+            TrackingProvider.TRAKT ->
+                TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
+                    playbackId = playbackId,
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    clearShow = clearShow,
+                    session = session
+                )
+            TrackingProvider.SIMKL ->
+                SimklProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
+                    playbackId = playbackId,
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    clearShow = clearShow,
+                    session = session
+                )
+            TrackingProvider.MDBLIST ->
+                MDBListProgressMutationAdapter.buildPlaybackClearEnvelope(
+                    contentId = contentId,
+                    season = season,
+                    episode = episode,
+                    clearShow = clearShow,
+                    session = session
+                )
+        }
     }
 
     private suspend fun accountSessionFor(
