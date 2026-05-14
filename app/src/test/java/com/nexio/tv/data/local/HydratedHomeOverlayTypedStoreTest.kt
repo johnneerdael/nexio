@@ -43,19 +43,24 @@ class HydratedHomeOverlayTypedStoreTest {
     fun `malformed v2 entries are skipped without dropping valid entries`() {
         val dir = Files.createTempDirectory("overlay-typed-malformed").toFile()
         val file = File(dir, "hydrated-home-overlay-v2/entries.json")
-        file.parentFile.mkdirs()
+        file.parentFile?.mkdirs()
         file.writeText(
             """
             {
               "schemaVersion": 2,
               "aliases": {
                 "alias::en::policy:1::movie:tmdb:550": "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+                "alias::overflow": "canonical:overflow",
                 "alias::bad": { "not": "a string" }
               },
               "overlays": {
                 "canonical:TMDB:550:type:MOVIE:lang:en:policy:1": {
                   "schemaVersion": 1,
                   "value": ${gson.toJson(overlay(title = "Fight Club"))}
+                },
+                "canonical:overflow": {
+                  "schemaVersion": 999999999999,
+                  "value": ${gson.toJson(overlay(title = "Overflow", overlayKey = "canonical:overflow"))}
                 },
                 "canonical:bad": { "schemaVersion": 1, "value": "bad" }
               }
@@ -68,6 +73,8 @@ class HydratedHomeOverlayTypedStoreTest {
         assertEquals("canonical:TMDB:550:type:MOVIE:lang:en:policy:1", store.aliasOverlayKey("alias::en::policy:1::movie:tmdb:550"))
         assertEquals("Fight Club", store.overlay("canonical:TMDB:550:type:MOVIE:lang:en:policy:1")?.fields?.title)
         assertNull(store.aliasOverlayKey("alias::bad"))
+        assertNull(store.aliasOverlayKey("alias::overflow"))
+        assertNull(store.overlay("canonical:overflow"))
         assertNull(store.overlay("canonical:bad"))
     }
 
@@ -131,10 +138,13 @@ class HydratedHomeOverlayTypedStoreTest {
         assertEquals("Current", reloaded.overlay(current.overlayKey)?.fields?.title)
     }
 
-    private fun overlay(title: String): HydratedHomeOverlay {
+    private fun overlay(
+        title: String,
+        overlayKey: String = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1"
+    ): HydratedHomeOverlay {
         val fields = HomeDisplayMetadata(title = title, poster = "rpdb://550.jpg")
         return HydratedHomeOverlay(
-            overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+            overlayKey = overlayKey,
             itemKey = "movie:tmdb:550",
             canonicalProvider = ProviderId.TMDB,
             canonicalId = "550",
