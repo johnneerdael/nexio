@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.integration.mdblist.MDBListProgressService
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
@@ -9,6 +10,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedSyncRequestDto
 import com.nexio.tv.domain.model.MDBListSettings
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -30,8 +32,9 @@ class MDBListProgressServiceTest {
             )
         )
 
-        assertEquals("tt0137523", request.movies!!.single().ids.imdb)
-        assertEquals(550, request.movies!!.single().ids.tmdb)
+        val movie = request.movies!!.single()
+        assertEquals("tt0137523", movie.ids.imdb)
+        assertEquals(550, movie.ids.tmdb)
     }
 
     @Test
@@ -86,7 +89,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings))
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager())
 
         service.refreshNowImmediate()
 
@@ -126,7 +129,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings))
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager())
 
         service.refreshNowImmediate()
 
@@ -143,4 +146,10 @@ class MDBListProgressServiceTest {
         object : MDBListSettingsReader {
             override val settings = settings
         }
+
+    private fun profileManager(activeProfileId: MutableStateFlow<Int> = MutableStateFlow(1)): ProfileManager {
+        val manager = mockk<ProfileManager>()
+        every { manager.activeProfileId } returns activeProfileId
+        return manager
+    }
 }

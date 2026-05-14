@@ -550,8 +550,8 @@ internal suspend fun applyPosterRatingsProviderSelection(
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore
 ) {
     val provider = when {
-        settings.topPostersEnabled -> ArtworkProviderChoiceKey.TOP_POSTERS
         settings.rpdbEnabled -> ArtworkProviderChoiceKey.RPDB
+        settings.topPostersEnabled -> ArtworkProviderChoiceKey.TOP_POSTERS
         else -> ArtworkProviderChoiceKey.DEFAULT
     }
 

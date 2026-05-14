@@ -41,7 +41,7 @@ class MDBListProgressMutationAdapter @Inject constructor(
     override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) = Unit
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val apiKey = currentApiKey()
+        val apiKey = currentApiKey(envelope.profileId)
         val response = when (envelope.mutationKind) {
             MUTATION_KIND_HISTORY_ADD -> api.addWatched(apiKey, envelope.watchedBody())
             MUTATION_KIND_SEASON_HISTORY_ADD -> api.addWatched(apiKey, envelope.watchedBody())
@@ -65,7 +65,7 @@ class MDBListProgressMutationAdapter @Inject constructor(
     }
 
     override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
-        progressService.refreshNowImmediate()
+        progressService.refreshNowImmediate(envelope.profileId)
     }
 
     override suspend fun rollbackToServerTruth(
@@ -73,8 +73,8 @@ class MDBListProgressMutationAdapter @Inject constructor(
         failure: TraktMutationSettlement.TerminalFailure
     ) = Unit
 
-    private suspend fun currentApiKey(): String {
-        return settingsReader.settings.first().apiKey.trim()
+    private suspend fun currentApiKey(profileId: Int): String {
+        return settingsReader.settingsForProfile(profileId).first().apiKey.trim()
     }
 
     companion object {

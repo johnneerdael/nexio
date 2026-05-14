@@ -92,6 +92,7 @@ class ProfileSettingsScopeContractTest {
             "HomeCatalogSnapshotStore",
             "LayoutPreferenceDataStore",
             "LibraryPreferences",
+            "MDBListLibrarySnapshotStore",
             "MDBListDiscoverySnapshotStore",
             "MDBListSettingsDataStore",
             "MetadataDiskCacheStore",
@@ -147,6 +148,7 @@ class ProfileSettingsScopeContractTest {
             "PlayerSettingsDataStore",
             "TraktSettingsDataStore",
             "SimklSettingsDataStore",
+            "MDBListSettingsDataStore",
             "TraktAuthDataStore",
             "SimklAuthDataStore"
         ).forEach { store ->
@@ -196,6 +198,7 @@ class ProfileSettingsScopeContractTest {
             "ContinueWatchingSnapshotStore",
             "TraktLibrarySnapshotStore",
             "TraktDiscoverySnapshotStore",
+            "MDBListLibrarySnapshotStore",
             "MDBListDiscoverySnapshotStore",
             "SimklLibrarySnapshotStore",
             "SimklDiscoverySnapshotStore",
@@ -810,9 +813,9 @@ class ProfileSettingsScopeContractTest {
             "Home should render canonical Continue Watching rows from snapshot.records when records are present",
             canonicalRecordsTimeline > rawFallbackReturn
         )
-        val inProgressRouteStart = navSource.indexOf("is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(")
+        val inProgressRouteStart = navSource.indexOf("is ContinueWatchingItem.InProgress ->")
         val resumeVideoIdArg = navSource.indexOf("videoId = item.progress.videoId", startIndex = inProgressRouteStart)
-        val streamVideoIdArg = navSource.indexOf("streamVideoId = item.streamFetchVideoId", startIndex = inProgressRouteStart)
+        val streamVideoIdArg = navSource.indexOf("streamVideoId = streamFetchVideoIdForCw(", startIndex = inProgressRouteStart)
         val nextUpRouteStart = navSource.indexOf("is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(")
         assertTrue("CW in-progress playback route should exist", inProgressRouteStart >= 0)
         assertTrue("CW in-progress playback should preserve the resume videoId", resumeVideoIdArg > inProgressRouteStart)
@@ -878,10 +881,12 @@ class ProfileSettingsScopeContractTest {
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 
-        assertTrue(source.contains("if (!providerState.traktAuthenticated) return"))
-        assertTrue(source.contains("if (!providerState.simklAuthenticated) return"))
-        assertTrue(source.contains("if (!providerState.traktAuthenticated) return false"))
-        assertTrue(source.contains("if (!providerState.simklAuthenticated) return false"))
+        assertTrue(source.contains("if (providerState.traktAuthenticated)"))
+        assertTrue(source.contains("if (providerState.simklAuthenticated)"))
+        assertTrue(source.contains("if (providerState.mdbListAuthenticated)"))
+        assertTrue(source.contains("mdbListScrobbleService?.scrobbleStart(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
+        assertTrue(source.contains("mdbListScrobbleService?.scrobbleStop(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
+        assertTrue(source.contains("mdbListScrobbleService?.scrobblePause(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
     }
 
     @Test

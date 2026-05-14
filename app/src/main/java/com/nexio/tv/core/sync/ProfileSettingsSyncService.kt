@@ -80,6 +80,7 @@ class ProfileSettingsSyncService @Inject constructor(
     val syncedFeatures = listOf(
         "trakt_settings",
         "simkl_settings",
+        "mdblist_settings",
         "player_settings",
         "layout_settings",
         "theme_settings"

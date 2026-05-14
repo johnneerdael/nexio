@@ -1,14 +1,17 @@
 package com.nexio.tv.data.integration.mdblist
 
 import android.util.Log
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedResponseDto
 import com.nexio.tv.data.repository.MDBListSettingsReader
 import com.nexio.tv.domain.model.WatchProgress
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -16,39 +19,65 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class MDBListProgressService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
+    private val profileManager: ProfileManager,
 ) {
-    private val allProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
-    private val loaded = MutableStateFlow(false)
+    private class RuntimeState {
+        val allProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
+        val loaded = MutableStateFlow(false)
 
-    fun observeAllProgress(): Flow<List<WatchProgress>> = allProgress
-    fun observeRemoteSnapshotLoaded(): Flow<Boolean> = loaded
+        fun clear() {
+            allProgress.value = emptyList()
+            loaded.value = false
+        }
+    }
 
-    fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
-        allProgress.map { rows ->
-            rows.asSequence()
-                .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                .associateBy { it.season!! to it.episode!! }
+    private val states = mutableMapOf<Int, RuntimeState>()
+
+    private fun activeProfileId(): Int = profileManager.activeProfileId.value.takeIf { it in 1..4 } ?: 1
+
+    private fun stateFor(profileId: Int = activeProfileId()): RuntimeState =
+        synchronized(states) {
+            states.getOrPut(profileId) { RuntimeState() }
         }
 
-    fun observeMovieWatched(contentId: String): Flow<Boolean> =
-        allProgress.map { rows ->
-            rows.any { progress ->
-                progress.contentId == contentId &&
-                    progress.season == null &&
-                    progress.episode == null &&
-                    progress.isCompleted()
+    fun observeAllProgress(): Flow<List<WatchProgress>> =
+        profileManager.activeProfileId.flatMapLatest { profileId -> stateFor(profileId).allProgress }
+
+    fun observeRemoteSnapshotLoaded(): Flow<Boolean> =
+        profileManager.activeProfileId.flatMapLatest { profileId -> stateFor(profileId).loaded }
+
+    fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
+        profileManager.activeProfileId.flatMapLatest { profileId ->
+            stateFor(profileId).allProgress.map { rows ->
+                rows.asSequence()
+                    .filter { it.contentId == contentId && it.season != null && it.episode != null }
+                    .associateBy { it.season!! to it.episode!! }
             }
         }
 
-    suspend fun refreshNowImmediate() {
-        val settings = settingsReader.settings.first()
+    fun observeMovieWatched(contentId: String): Flow<Boolean> =
+        profileManager.activeProfileId.flatMapLatest { profileId ->
+            stateFor(profileId).allProgress.map { rows ->
+                rows.any { progress ->
+                    progress.contentId == contentId &&
+                        progress.season == null &&
+                        progress.episode == null &&
+                        progress.isCompleted()
+                }
+            }
+        }
+
+    suspend fun refreshNowImmediate(profileId: Int? = null) {
+        val profileId = profileId?.takeIf { it in 1..4 } ?: activeProfileId()
+        val runtime = stateFor(profileId)
+        val settings = settingsReader.settingsForProfile(profileId).first()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
-            allProgress.value = emptyList()
-            loaded.value = false
+            runtime.clear()
             return
         }
 
@@ -61,8 +90,8 @@ class MDBListProgressService @Inject constructor(
 
         val playbackRows = playback?.body()?.toPlaybackProgress().orEmpty()
         val watchedRows = watched?.body()?.toWatchedProgress().orEmpty()
-        allProgress.value = (playbackRows + watchedRows).sortedByDescending { it.lastWatched }
-        loaded.value = playback?.isSuccessful == true || watched?.isSuccessful == true
+        runtime.allProgress.value = (playbackRows + watchedRows).sortedByDescending { it.lastWatched }
+        runtime.loaded.value = playback?.isSuccessful == true || watched?.isSuccessful == true
     }
 
     companion object {

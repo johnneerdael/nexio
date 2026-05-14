@@ -623,8 +623,14 @@ class AccountSettingsSyncService @Inject constructor(
                 disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
                 homeCatalogRails = layoutPreferenceDataStore.homeCatalogRails.drop(1).map { Unit },
                 tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
-                mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
-                mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                mdbListSettings = mdbListSettingsDataStore
+                    .settingsForProfile(profileModeRouter.defaultLegacyProfileId())
+                    .drop(1)
+                    .map { Unit },
+                mdbListCatalogPreferences = mdbListSettingsDataStore
+                    .catalogPreferencesForProfile(profileModeRouter.defaultLegacyProfileId())
+                    .drop(1)
+                    .map { Unit },
                 omdbSettings = omdbSettingsDataStore.settings.drop(1).map { Unit },
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
@@ -678,6 +684,8 @@ class AccountSettingsSyncService @Inject constructor(
             path.startsWith("catalogs.home") ||
             path.startsWith("catalogs.trakt") ||
             path.startsWith("catalogs.simkl") ||
+            path.startsWith("catalogs.mdblist") ||
+            path == "integrations.mdblist" ||
             path == "integrations.kitsuAuth" ||
             path == "integrations.traktAuth" ||
             path == "integrations.simklAuth" ||
@@ -1182,8 +1190,9 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun buildLocalPayload(): AccountConfigSyncPayload {
         val tmdb = tmdbSettingsDataStore.settings.first()
-        val mdbList = mdbListSettingsDataStore.settings.first()
-        val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val mdbList = mdbListSettingsDataStore.settingsForProfile(defaultProfileId).first()
+        val mdbListPrefs = mdbListSettingsDataStore.catalogPreferencesForProfile(defaultProfileId).first()
         val isPrimaryProfile = isDefaultLegacyActive()
         val heroCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.heroCatalogSelections.first() else emptyList()
         val homeCatalogOrderKeys = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogOrderKeys.first() else emptyList()
@@ -1205,7 +1214,6 @@ class AccountSettingsSyncService @Inject constructor(
         val easyDebrid = easyDebridSettingsDataStore.settings.first()
         val easyDebridAccount = easyDebridService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
-        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
         val traktAuth = traktAuthDataStore.stateForProfile(defaultProfileId).first()
         val simklAuth = simklAuthDataStore.stateForProfile(defaultProfileId).first()
         val kitsuAuth = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
@@ -1408,14 +1416,15 @@ class AccountSettingsSyncService @Inject constructor(
         }
 
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
-            mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
-            mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
-            mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
-            mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
-            mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd)
-            mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
-            mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
-            mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
+            val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+            mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience, profileId = defaultProfileId)
+            mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic, profileId = defaultProfileId)
         }
         // Null catalogs.mdblist / null inner fields = absent in payload, leave target unchanged.
         // Empty list ([]) = present and intentionally empty, apply as cleared.
@@ -1427,7 +1436,8 @@ class AccountSettingsSyncService @Inject constructor(
                 mdbListSettingsDataStore.setCatalogPreferences(
                     hiddenPersonalListKeys = hidden.toSet(),
                     selectedTopListKeys = selected.toSet(),
-                    catalogOrder = order
+                    catalogOrder = order,
+                    profileId = profileModeRouter.defaultLegacyProfileId()
                 )
             }
         }
@@ -1507,7 +1517,7 @@ class AccountSettingsSyncService @Inject constructor(
     private suspend fun clearLocalAccountSecrets() {
         tmdbSettingsDataStore.setApiKey("")
         tvdbSettingsDataStore.clearCredentials()
-        mdbListSettingsDataStore.setApiKey("")
+        mdbListSettingsDataStore.setApiKey("", profileId = profileModeRouter.defaultLegacyProfileId())
         omdbSettingsDataStore.setApiKey("")
         subtitleTranslationSettingsDataStore.setApiKey("")
         animeSkipSettingsDataStore.setClientId("")
@@ -1570,18 +1580,20 @@ class AccountSettingsSyncService @Inject constructor(
         tmdbSettingsDataStore.setUseMoreLikeThis(settings.integrations.tmdb.useMoreLikeThis)
         tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
 
-        mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
-        mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
-        mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
-        mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
-        mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd)
-        mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
-        mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
-        mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience, profileId = defaultProfileId)
+        mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic, profileId = defaultProfileId)
         mdbListSettingsDataStore.setCatalogPreferences(
             hiddenPersonalListKeys = settings.integrations.mdblist.hiddenPersonalListKeys.toSet(),
             selectedTopListKeys = settings.integrations.mdblist.selectedTopListKeys.toSet(),
-            catalogOrder = settings.integrations.mdblist.catalogOrder
+            catalogOrder = settings.integrations.mdblist.catalogOrder,
+            profileId = defaultProfileId
         )
 
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
@@ -1602,7 +1614,6 @@ class AccountSettingsSyncService @Inject constructor(
         )
 
         val remoteKitsu = settings.integrations.kitsuAuth
-        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
         val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
         kitsuAuthDataStore.saveForProfile(
             defaultProfileId,
@@ -1678,7 +1689,10 @@ class AccountSettingsSyncService @Inject constructor(
         val simkl = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val kitsu = kitsuAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         return AccountSecretPushSnapshot(
-            mdbListApiKey = mdbListSettingsDataStore.settings.first().apiKey,
+            mdbListApiKey = mdbListSettingsDataStore
+                .settingsForProfile(profileModeRouter.defaultLegacyProfileId())
+                .first()
+                .apiKey,
             omdbApiKey = omdbSettingsDataStore.settings.first().apiKey,
             subtitleTranslationApiKey = subtitleTranslationSettings.apiKey,
             legacyGeminiApiKey = legacyGeminiApiKeySecretForPush(
@@ -2184,7 +2198,9 @@ class AccountSettingsSyncService @Inject constructor(
         sectionKeys: Set<AccountSettingsSectionKey>
     ) {
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
-            secrets.mdbListApiKey?.let { mdbListSettingsDataStore.setApiKey(it) }
+            secrets.mdbListApiKey?.let {
+                mdbListSettingsDataStore.setApiKey(it, profileId = profileModeRouter.defaultLegacyProfileId())
+            }
         }
         if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
             secrets.omdbApiKey?.let { omdbSettingsDataStore.setApiKey(it) }

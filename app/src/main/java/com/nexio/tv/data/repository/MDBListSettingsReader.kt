@@ -8,6 +8,7 @@ import javax.inject.Singleton
 
 interface MDBListSettingsReader {
     val settings: Flow<MDBListSettings>
+    fun settingsForProfile(profileId: Int): Flow<MDBListSettings> = settings
 }
 
 @Singleton
@@ -15,4 +16,6 @@ class DataStoreMDBListSettingsReader @Inject constructor(
     private val dataStore: MDBListSettingsDataStore,
 ) : MDBListSettingsReader {
     override val settings: Flow<MDBListSettings> = dataStore.settings
+    override fun settingsForProfile(profileId: Int): Flow<MDBListSettings> =
+        dataStore.settingsForProfile(profileId)
 }

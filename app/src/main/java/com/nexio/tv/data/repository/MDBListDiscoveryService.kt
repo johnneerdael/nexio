@@ -162,7 +162,7 @@ class MDBListDiscoveryService @Inject constructor(
         force: Boolean,
         profileId: Int = profileManager.activeProfileId.value
     ) = withContext(Dispatchers.IO) {
-        val settings = mdbListSettingsDataStore.settings.first()
+        val settings = mdbListSettingsDataStore.settingsForProfile(profileId).first()
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
@@ -189,7 +189,7 @@ class MDBListDiscoveryService @Inject constructor(
 
             val personalLists = fetchPersonalLists(apiKey, profileId)
             val topLists = fetchTopLists(apiKey, profileId)
-            val catalogPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+            val catalogPrefs = mdbListSettingsDataStore.catalogPreferencesForProfile(profileId).first()
             val customCatalogs = fetchSelectedCatalogs(
                 apiKey = apiKey,
                 profileId = profileId,

@@ -15,8 +15,10 @@ import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TraktListPrivacy
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,38 +26,57 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class MDBListLibraryService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
     private val snapshotStore: MDBListLibrarySnapshotStore,
     private val profileManager: ProfileManager,
 ) {
-    private val rows = MutableStateFlow<List<LibraryEntry>>(emptyList())
-    private val tabs = MutableStateFlow<List<LibraryListTab>>(emptyList())
-    private val refreshing = MutableStateFlow(false)
-    private val refreshMutex = Mutex()
-    private var lastRefreshMs: Long = 0L
-    private var cachedListKey: String? = null
+    private class RuntimeState(
+        snapshot: MDBListLibrarySnapshotStore.Snapshot? = null
+    ) {
+        val rows = MutableStateFlow(snapshot?.rows ?: emptyList())
+        val tabs = MutableStateFlow(snapshot?.tabs ?: emptyList())
+        val refreshing = MutableStateFlow(false)
+        var lastRefreshMs: Long = snapshot?.updatedAtMs ?: 0L
+        var cachedListKey: String? = snapshot?.selectedListKey
 
-    init {
-        snapshotStore.read(activeProfileId())?.let { snapshot ->
-            rows.value = snapshot.rows
-            tabs.value = snapshot.tabs
-            cachedListKey = snapshot.selectedListKey
-            lastRefreshMs = snapshot.updatedAtMs
+        fun clear(now: Long) {
+            rows.value = emptyList()
+            tabs.value = emptyList()
+            cachedListKey = null
+            lastRefreshMs = now
         }
     }
 
-    fun observeAllItems(): Flow<List<LibraryEntry>> = rows
-    fun observeListTabs(): Flow<List<LibraryListTab>> = tabs
-    fun observeIsRefreshing(): Flow<Boolean> = refreshing
+    private val refreshMutex = Mutex()
+    private val states = mutableMapOf<Int, RuntimeState>()
+
+    private fun stateFor(profileId: Int = activeProfileId()): RuntimeState =
+        synchronized(states) {
+            states.getOrPut(profileId) {
+                RuntimeState(snapshotStore.read(profileId))
+            }
+        }
+
+    fun observeAllItems(): Flow<List<LibraryEntry>> =
+        profileManager.activeProfileId.flatMapLatest { profileId -> stateFor(profileId).rows }
+
+    fun observeListTabs(): Flow<List<LibraryListTab>> =
+        profileManager.activeProfileId.flatMapLatest { profileId -> stateFor(profileId).tabs }
+
+    fun observeIsRefreshing(): Flow<Boolean> =
+        profileManager.activeProfileId.flatMapLatest { profileId -> stateFor(profileId).refreshing }
 
     suspend fun refreshNow(force: Boolean = false, selectedListKey: String? = null) {
         ensureFresh(force = force, selectedListKey = selectedListKey)
     }
 
     suspend fun removeWatchlistItem(item: LibraryEntryInput) {
-        val settings = settingsReader.settings.first()
+        val profileId = activeProfileId()
+        val runtime = stateFor(profileId)
+        val settings = settingsReader.settingsForProfile(profileId).first()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) return
         api.mutateWatchlistItems(
@@ -63,34 +84,45 @@ class MDBListLibraryService @Inject constructor(
             apiKey = apiKey,
             body = com.nexio.tv.data.repository.mdblist.MDBListIdMapper.watchlistPayloadFor(item),
         )
-        rows.value = removeItem(rows.value, item)
+        runtime.rows.value = removeItem(runtime.rows.value, item)
+        persistSnapshot(profileId, runtime)
     }
 
     suspend fun ensureFresh(force: Boolean = false, selectedListKey: String? = null) {
+        ensureFreshForProfile(
+            profileId = activeProfileId(),
+            force = force,
+            selectedListKey = selectedListKey
+        )
+    }
+
+    private suspend fun ensureFreshForProfile(
+        profileId: Int,
+        force: Boolean = false,
+        selectedListKey: String? = null
+    ) {
         refreshMutex.withLock {
+            val runtime = stateFor(profileId)
             val now = System.currentTimeMillis()
             val selectedListId = listIdFromKey(selectedListKey)
             val listKey = selectedListId?.let(::personalListKey) ?: WATCHLIST_KEY
-            if (cachedListKey == listKey && lastRefreshMs > 0L) {
+            if (!force && runtime.cachedListKey == listKey && runtime.lastRefreshMs > 0L) {
                 return
             }
 
-            refreshing.value = true
+            runtime.refreshing.value = true
             try {
-                val settings = settingsReader.settings.first()
+                val settings = settingsReader.settingsForProfile(profileId).first()
                 val apiKey = settings.apiKey.trim()
                 if (!settings.enabled || apiKey.isBlank()) {
-                    rows.value = emptyList()
-                    tabs.value = emptyList()
-                    cachedListKey = null
-                    lastRefreshMs = now
-                    persistSnapshot(now)
+                    runtime.clear(now)
+                    persistSnapshot(profileId, runtime, now)
                     return
                 }
 
                 val listsResponse = api.getMyLists(apiKey = apiKey, sort = "ranked", unified = false)
                 val userLists = if (listsResponse.isSuccessful) listsResponse.body().orEmpty() else emptyList()
-                tabs.value = buildTabs(userLists)
+                runtime.tabs.value = buildTabs(userLists)
 
                 val body = if (selectedListId != null) {
                     api.getListItems(
@@ -110,41 +142,44 @@ class MDBListLibraryService @Inject constructor(
                 }
 
                 if (body == null) {
-                    rows.value = emptyList()
-                    cachedListKey = listKey
-                    lastRefreshMs = now
-                    persistSnapshot(now)
+                    runtime.rows.value = emptyList()
+                    runtime.cachedListKey = listKey
+                    runtime.lastRefreshMs = now
+                    persistSnapshot(profileId, runtime, now)
                     return
                 }
 
-                rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty(), listKey = listKey)
-                cachedListKey = listKey
-                lastRefreshMs = now
-                persistSnapshot(now)
+                runtime.rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty(), listKey = listKey)
+                runtime.cachedListKey = listKey
+                runtime.lastRefreshMs = now
+                persistSnapshot(profileId, runtime, now)
             } finally {
-                refreshing.value = false
+                runtime.refreshing.value = false
             }
         }
     }
 
     suspend fun createStaticList(name: String, private: Boolean) {
-        val apiKey = requireApiKey() ?: return
+        val profileId = activeProfileId()
+        val apiKey = requireApiKey(profileId) ?: return
         api.createStaticList(apiKey, MDBListCreateListRequestDto(name = name, private = private))
-        ensureFresh(force = true)
+        ensureFreshForProfile(profileId = profileId, force = true)
     }
 
     suspend fun updateStaticList(listId: String, name: String, private: Boolean) {
-        val apiKey = requireApiKey() ?: return
+        val profileId = activeProfileId()
+        val apiKey = requireApiKey(profileId) ?: return
         val id = listId.toLongOrNull() ?: listIdFromKey(listId) ?: return
         api.updateStaticList(id, apiKey, MDBListUpdateListRequestDto(name = name, private = private))
-        ensureFresh(force = true, selectedListKey = personalListKey(id))
+        ensureFreshForProfile(profileId = profileId, force = true, selectedListKey = personalListKey(id))
     }
 
     suspend fun deleteStaticList(listId: String) {
-        val apiKey = requireApiKey() ?: return
+        val profileId = activeProfileId()
+        val apiKey = requireApiKey(profileId) ?: return
         val id = listId.toLongOrNull() ?: listIdFromKey(listId) ?: return
         api.deleteStaticList(id, apiKey)
-        ensureFresh(force = true)
+        ensureFreshForProfile(profileId = profileId, force = true)
     }
 
     private fun buildRows(
@@ -203,15 +238,19 @@ class MDBListLibraryService @Inject constructor(
 
     private fun personalListKey(listId: Long): String = "$PERSONAL_KEY_PREFIX$listId"
 
-    private fun persistSnapshot(updatedAtMs: Long = System.currentTimeMillis()) {
+    private fun persistSnapshot(
+        profileId: Int,
+        runtime: RuntimeState,
+        updatedAtMs: Long = System.currentTimeMillis()
+    ) {
         snapshotStore.write(
             MDBListLibrarySnapshotStore.Snapshot(
-                rows = rows.value,
-                tabs = tabs.value,
-                selectedListKey = cachedListKey,
+                rows = runtime.rows.value,
+                tabs = runtime.tabs.value,
+                selectedListKey = runtime.cachedListKey,
                 updatedAtMs = updatedAtMs
             ),
-            activeProfileId()
+            profileId
         )
     }
 
@@ -221,8 +260,8 @@ class MDBListLibraryService @Inject constructor(
         return key?.removePrefix(PERSONAL_KEY_PREFIX)?.takeIf { it != key }?.toLongOrNull()
     }
 
-    private suspend fun requireApiKey(): String? {
-        val settings = settingsReader.settings.first()
+    private suspend fun requireApiKey(profileId: Int): String? {
+        val settings = settingsReader.settingsForProfile(profileId).first()
         val apiKey = settings.apiKey.trim()
         return apiKey.takeIf { settings.enabled && it.isNotBlank() }
     }

@@ -1,23 +1,19 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.MDBListSettings
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.mdbListSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "mdblist_settings"
-)
 
 data class MDBListCatalogPreferences(
     val hiddenPersonalListKeys: Set<String> = emptySet(),
@@ -36,11 +32,17 @@ data class MDBListCatalogPreferences(
 }
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class MDBListSettingsDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val factory: ProfileDataStoreFactory,
+    private val profileManager: ProfileManager
 ) {
-    private val dataStore = context.mdbListSettingsDataStore
-    private fun store() = dataStore
+    private companion object {
+        private const val FEATURE = "mdblist_settings"
+    }
+
+    private fun store(profileId: Int = profileManager.activeProfileId.value): DataStore<Preferences> =
+        factory.get(profileId, FEATURE)
 
     private val enabledKey = booleanPreferencesKey("mdblist_enabled")
     private val apiKeyKey = stringPreferencesKey("mdblist_api_key")
@@ -55,7 +57,12 @@ class MDBListSettingsDataStore @Inject constructor(
     private val selectedTopListKeysKey = stringSetPreferencesKey("mdblist_selected_top_list_keys")
     private val catalogOrderCsvKey = stringPreferencesKey("mdblist_catalog_order_csv")
 
-    val settings: Flow<MDBListSettings> = dataStore.data.map { prefs ->
+    val settings: Flow<MDBListSettings> = profileManager.activeProfileId.flatMapLatest(::settingsForProfile)
+
+    val catalogPreferences: Flow<MDBListCatalogPreferences> =
+        profileManager.activeProfileId.flatMapLatest(::catalogPreferencesForProfile)
+
+    fun settingsForProfile(profileId: Int): Flow<MDBListSettings> = store(profileId).data.map { prefs ->
         MDBListSettings(
             enabled = prefs[enabledKey] ?: false,
             apiKey = prefs[apiKeyKey] ?: "",
@@ -69,63 +76,72 @@ class MDBListSettingsDataStore @Inject constructor(
         )
     }
 
-    val catalogPreferences: Flow<MDBListCatalogPreferences> = dataStore.data.map { prefs ->
-        MDBListCatalogPreferences(
-            hiddenPersonalListKeys = prefs[hiddenPersonalListKeysKey] ?: emptySet(),
-            selectedTopListKeys = prefs[selectedTopListKeysKey] ?: emptySet(),
-            catalogOrder = parseCatalogOrder(prefs[catalogOrderCsvKey])
-        )
+    fun catalogPreferencesForProfile(profileId: Int): Flow<MDBListCatalogPreferences> =
+        store(profileId).data.map { prefs ->
+            MDBListCatalogPreferences(
+                hiddenPersonalListKeys = prefs[hiddenPersonalListKeysKey] ?: emptySet(),
+                selectedTopListKeys = prefs[selectedTopListKeysKey] ?: emptySet(),
+                catalogOrder = parseCatalogOrder(prefs[catalogOrderCsvKey])
+            )
+        }
+
+    suspend fun setEnabled(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[enabledKey] = enabled }
     }
 
-    suspend fun setEnabled(enabled: Boolean) {
-        store().edit { it[enabledKey] = enabled }
+    suspend fun setApiKey(apiKey: String, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[apiKeyKey] = apiKey.trim() }
     }
 
-    suspend fun setApiKey(apiKey: String) {
-        store().edit { it[apiKeyKey] = apiKey.trim() }
+    suspend fun setShowTrakt(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showTraktKey] = enabled }
     }
 
-    suspend fun setShowTrakt(enabled: Boolean) {
-        store().edit { it[showTraktKey] = enabled }
+    suspend fun setShowImdb(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showImdbKey] = enabled }
     }
 
-    suspend fun setShowImdb(enabled: Boolean) {
-        store().edit { it[showImdbKey] = enabled }
+    suspend fun setShowTmdb(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showTmdbKey] = enabled }
     }
 
-    suspend fun setShowTmdb(enabled: Boolean) {
-        store().edit { it[showTmdbKey] = enabled }
+    suspend fun setShowLetterboxd(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showLetterboxdKey] = enabled }
     }
 
-    suspend fun setShowLetterboxd(enabled: Boolean) {
-        store().edit { it[showLetterboxdKey] = enabled }
+    suspend fun setShowTomatoes(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showTomatoesKey] = enabled }
     }
 
-    suspend fun setShowTomatoes(enabled: Boolean) {
-        store().edit { it[showTomatoesKey] = enabled }
+    suspend fun setShowAudience(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showAudienceKey] = enabled }
     }
 
-    suspend fun setShowAudience(enabled: Boolean) {
-        store().edit { it[showAudienceKey] = enabled }
+    suspend fun setShowMetacritic(enabled: Boolean, profileId: Int? = null) {
+        store(profileId ?: profileManager.activeProfileId.value).edit { it[showMetacriticKey] = enabled }
     }
 
-    suspend fun setShowMetacritic(enabled: Boolean) {
-        store().edit { it[showMetacriticKey] = enabled }
-    }
-
-    suspend fun setPersonalListEnabled(listKey: String, enabled: Boolean) {
+    suspend fun setPersonalListEnabled(
+        listKey: String,
+        enabled: Boolean,
+        profileId: Int? = null
+    ) {
         val key = listKey.trim()
         if (key.isBlank()) return
-        store().edit { prefs ->
+        store(profileId ?: profileManager.activeProfileId.value).edit { prefs ->
             val current = prefs[hiddenPersonalListKeysKey] ?: emptySet()
             prefs[hiddenPersonalListKeysKey] = if (enabled) current - key else current + key
         }
     }
 
-    suspend fun setTopListSelected(listKey: String, selected: Boolean) {
+    suspend fun setTopListSelected(
+        listKey: String,
+        selected: Boolean,
+        profileId: Int? = null
+    ) {
         val key = listKey.trim()
         if (key.isBlank()) return
-        store().edit { prefs ->
+        store(profileId ?: profileManager.activeProfileId.value).edit { prefs ->
             val current = prefs[selectedTopListKeysKey] ?: emptySet()
             prefs[selectedTopListKeysKey] = if (selected) current + key else current - key
         }
@@ -134,9 +150,10 @@ class MDBListSettingsDataStore @Inject constructor(
     suspend fun setCatalogPreferences(
         hiddenPersonalListKeys: Set<String>,
         selectedTopListKeys: Set<String>,
-        catalogOrder: List<String>
+        catalogOrder: List<String>,
+        profileId: Int? = null
     ) {
-        store().edit { prefs ->
+        store(profileId ?: profileManager.activeProfileId.value).edit { prefs ->
             prefs[hiddenPersonalListKeysKey] = hiddenPersonalListKeys.filter { it.isNotBlank() }.toSet()
             prefs[selectedTopListKeysKey] = selectedTopListKeys.filter { it.isNotBlank() }.toSet()
             val sanitizedOrder = catalogOrder
@@ -151,10 +168,15 @@ class MDBListSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun moveCatalog(listKey: String, direction: Int, availableKeys: Set<String>) {
+    suspend fun moveCatalog(
+        listKey: String,
+        direction: Int,
+        availableKeys: Set<String>,
+        profileId: Int? = null
+    ) {
         val key = listKey.trim()
         if (key.isBlank() || direction == 0 || key !in availableKeys) return
-        store().edit { prefs ->
+        store(profileId ?: profileManager.activeProfileId.value).edit { prefs ->
             val currentOrder = sanitizeCatalogOrder(
                 parseCatalogOrder(prefs[catalogOrderCsvKey]),
                 availableKeys

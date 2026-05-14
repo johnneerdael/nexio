@@ -29,7 +29,7 @@ class DefaultTrackingAccountScopeProvider @Inject constructor(
             TrackingProvider.TRAKT -> traktAuthGateway.mutationAccountScopedSession(base)
             TrackingProvider.SIMKL -> simklAuthGateway.mutationAccountScopedSession(base)
             TrackingProvider.MDBLIST -> {
-                val apiKey = mdbListSettingsReader.settings.first().apiKey.trim()
+                val apiKey = mdbListSettingsReader.settingsForProfile(profileId).first().apiKey.trim()
                 require(apiKey.isNotBlank()) {
                     "MDBList mutation envelopes require a configured API key"
                 }
