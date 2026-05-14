@@ -140,15 +140,69 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         }
         if (logApi) logTraktScrobbleResponse(endpoint, envelope, response)
 
-        return if (response.isSuccessful || response.code() == 409) {
-            TraktMutationExecutionResult.Success(httpStatusCode = response.code())
+        val finalResponse = if (response.code() == 404 && envelope.isEpisodeScrobble()) {
+            val rescueBody = buildEpisodeSearchRescueRequestBody(envelope, session)
+            if (rescueBody != null) {
+                val rescueEndpoint = "$endpoint rescue"
+                if (logApi) {
+                    logTraktScrobbleRequest(
+                        endpoint = rescueEndpoint,
+                        envelope = envelope,
+                        body = rescueBody
+                    )
+                }
+                traktIntegrationProvider.scrobble(
+                    session = session,
+                    action = action,
+                    body = rescueBody
+                )?.also { rescueResponse ->
+                    if (logApi) logTraktScrobbleResponse(rescueEndpoint, envelope, rescueResponse)
+                } ?: response
+            } else {
+                response
+            }
+        } else {
+            response
+        }
+
+        return if (finalResponse.isSuccessful || finalResponse.code() == 409) {
+            TraktMutationExecutionResult.Success(httpStatusCode = finalResponse.code())
         } else {
             TraktMutationExecutionResult.Failure(
-                httpStatusCode = response.code(),
-                retryAfterHeader = response.headers()["Retry-After"],
-                reason = "Trakt scrobble failed (${response.code()})"
+                httpStatusCode = finalResponse.code(),
+                retryAfterHeader = finalResponse.headers()["Retry-After"],
+                reason = "Trakt scrobble failed (${finalResponse.code()})"
             )
         }
+    }
+
+    private suspend fun buildEpisodeSearchRescueRequestBody(
+        envelope: TraktMutationEnvelope,
+        session: TrackingAuthSession
+    ): TraktScrobbleRequestDto? {
+        val candidates = envelope.episodeSearchCandidates()
+        for (i in candidates.indices) {
+            val candidate = candidates[i]
+            val searchResponse = traktIntegrationProvider.searchById(
+                session = session,
+                idType = candidate.idType,
+                id = candidate.id,
+                type = "episode",
+                limit = 1
+            ) ?: continue
+            if (!searchResponse.isSuccessful) continue
+
+            val hits = searchResponse.body().orEmpty()
+            for (hitIndex in hits.indices) {
+                val ids = hits[hitIndex].episode?.ids?.takeIf { it.hasAnyRescueId() } ?: continue
+                return TraktScrobbleRequestDto(
+                    episode = TraktEpisodeDto(ids = ids),
+                    progress = envelope.progressPercent(),
+                    appVersion = BuildConfig.VERSION_NAME
+                )
+            }
+        }
+        return null
     }
 
     private suspend fun isScrobbleApiLoggingEnabled(): Boolean {
@@ -346,10 +400,43 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             return payload.get(PAYLOAD_SUPPRESS_SEND)?.asBoolean == true
         }
 
-        private fun TraktMutationEnvelope.isCompletedStopScrobble(): Boolean {
-            val progress = payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat ?: 0f
-            return mutationKind == MUTATION_KIND_SCROBBLE && scrobbleAction() == "stop" && progress >= 95f
+        private fun TraktMutationEnvelope.isEpisodeScrobble(): Boolean {
+            return mutationKind == MUTATION_KIND_SCROBBLE && payload.get(PAYLOAD_ITEM_TYPE)?.asString == "episode"
         }
+
+        private fun TraktMutationEnvelope.isCompletedStopScrobble(): Boolean {
+            return mutationKind == MUTATION_KIND_SCROBBLE && scrobbleAction() == "stop" && progressPercent() >= 95f
+        }
+
+        private fun TraktMutationEnvelope.progressPercent(): Float =
+            payload.get(PAYLOAD_PROGRESS)?.takeIf { !it.isJsonNull }?.asFloat ?: 0f
+
+        private data class EpisodeSearchCandidate(
+            val idType: String,
+            val id: String
+        )
+
+        private fun TraktMutationEnvelope.episodeSearchCandidates(): List<EpisodeSearchCandidate> {
+            if (!isEpisodeScrobble()) return emptyList()
+            val candidates = ArrayList<EpisodeSearchCandidate>(3)
+            payload.get(PAYLOAD_SHOW_TMDB)
+                ?.takeIf { !it.isJsonNull }
+                ?.asInt
+                ?.let { candidates += EpisodeSearchCandidate("tmdb", it.toString()) }
+            payload.get(PAYLOAD_SHOW_IMDB)
+                ?.takeIf { !it.isJsonNull }
+                ?.asString
+                ?.takeIf { it.isNotBlank() }
+                ?.let { candidates += EpisodeSearchCandidate("imdb", it) }
+            payload.get(PAYLOAD_SHOW_TVDB)
+                ?.takeIf { !it.isJsonNull }
+                ?.asInt
+                ?.let { candidates += EpisodeSearchCandidate("tvdb", it.toString()) }
+            return candidates
+        }
+
+        private fun TraktIdsDto.hasAnyRescueId(): Boolean =
+            trakt != null || tmdb != null || imdb != null || tvdb != null
 
         private fun TraktMutationEnvelope.toUnifiedWatchlistMembershipOrNull(): UnifiedWatchlistMembership? {
             val itemType = payload.get(PAYLOAD_ITEM_TYPE)?.asString

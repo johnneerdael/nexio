@@ -31,6 +31,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktSearchResultDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowProgressResponseDto
@@ -132,6 +133,15 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktCheckinRequestDto
     ): Response<TraktCheckinResponseDto>
+
+    @GET("search/{id_type}/{id}")
+    suspend fun searchById(
+        @Header("Authorization") authorization: String,
+        @Path("id_type") idType: String,
+        @Path(value = "id", encoded = true) id: String,
+        @Query("type") type: String,
+        @Query("limit") limit: Int = 1
+    ): Response<List<TraktSearchResultDto>>
 
     @GET("sync/last_activities")
     suspend fun getLastActivities(

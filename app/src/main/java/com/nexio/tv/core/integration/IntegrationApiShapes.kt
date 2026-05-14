@@ -220,6 +220,7 @@ object TraktApiShapes {
     const val PLAYBACK_DELETE = "trakt.playback.delete"
     const val SCROBBLE = "trakt.scrobble"
     const val CHECKIN = "trakt.checkin"
+    const val SEARCH_BY_ID = "trakt.search.by_id"
     // Media detail
     const val MOVIE_COMMENTS = "trakt.movie.comments"
     const val SHOW_COMMENTS = "trakt.show.comments"

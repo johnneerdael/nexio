@@ -955,6 +955,27 @@ class TraktIntegrationProvider @Inject constructor(
             traktApi.checkin(authorization, body)
         }
 
+    suspend fun searchById(
+        session: TrackingAuthSession,
+        idType: String,
+        id: String,
+        type: String,
+        limit: Int = 1
+    ) = executeAuthorizedResponseCall(
+        session = session,
+        apiShapeId = TraktApiShapes.SEARCH_BY_ID,
+        operationKey = "trakt.search.$idType.$type",
+        workClass = IntegrationWorkClass.SCROBBLE
+    ) { authorization ->
+        traktApi.searchById(
+            authorization = authorization,
+            idType = idType,
+            id = id,
+            type = type,
+            limit = limit
+        )
+    }
+
     suspend fun scrobble(
         session: TrackingAuthSession,
         action: String,

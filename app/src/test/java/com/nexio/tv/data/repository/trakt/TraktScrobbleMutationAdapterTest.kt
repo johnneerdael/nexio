@@ -4,7 +4,10 @@ import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthState
+import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktSearchResultDto
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
@@ -15,6 +18,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -174,6 +178,65 @@ class TraktScrobbleMutationAdapterTest {
             session = testTraktSession()
         )
         assertEquals("stop", envelope.payload.get("action").asString)
+    }
+
+    @Test
+    fun `episode 404 retries once with episode ids from trakt search`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = TraktWatchingNowStateController(),
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TraktScrobbleItem.Episode(
+                showTitle = "The Show",
+                showYear = 2025,
+                showIds = TraktIdsDto(tmdb = 123, imdb = "tt1234567"),
+                season = 1,
+                number = 2,
+                episodeTitle = "Episode Two"
+            ),
+            action = "stop",
+            progressPercent = 95f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession(profileId = 2)
+        )
+
+        val scrobbleBodies = mutableListOf<TraktScrobbleRequestDto>()
+        coEvery {
+            traktIntegrationProvider.scrobble(any(), "stop", capture(scrobbleBodies))
+        } returnsMany listOf(
+            Response.error(404, "".toResponseBody()),
+            Response.success(null)
+        )
+        coEvery {
+            traktIntegrationProvider.searchById(
+                session = any(),
+                idType = "tmdb",
+                id = "123",
+                type = "episode",
+                limit = 1
+            )
+        } returns Response.success(
+            listOf(
+                TraktSearchResultDto(
+                    type = "episode",
+                    episode = TraktEpisodeDto(ids = TraktIdsDto(trakt = 98765))
+                )
+            )
+        )
+
+        val result = adapter.execute(envelope)
+
+        assertTrue(result is TraktMutationExecutionResult.Success)
+        assertEquals(2, scrobbleBodies.size)
+        assertEquals(123, scrobbleBodies.first().show?.ids?.tmdb)
+        assertEquals(98765, scrobbleBodies.last().episode?.ids?.trakt)
+        assertEquals(null, scrobbleBodies.last().show)
     }
 
     private fun movieItem(title: String) = TraktScrobbleItem.Movie(
