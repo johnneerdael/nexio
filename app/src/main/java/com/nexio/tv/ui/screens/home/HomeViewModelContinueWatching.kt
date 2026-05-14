@@ -61,6 +61,8 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val CONTINUE_WATCHING_EPISODE_SUFFIX = Regex(":s\\d+e\\d+$", RegexOption.IGNORE_CASE)
+
 /**
  * Pure dedup function: collapses entries that share the same projected identity key into one row.
  * The first occurrence of each key is kept; subsequent duplicates are dropped.
@@ -90,7 +92,20 @@ private fun continueWatchingDedupKeys(
     primaryKey: String
 ): List<String> = buildList {
     primaryKey.trim().takeIf { it.isNotEmpty() }?.let(::add)
+    seriesParentDedupKey(item, primaryKey)?.let(::add)
+    seriesParentDedupKey(item, item.contentId())?.let(::add)
     nextUpTitleEpisodeKey(item)?.let(::add)
+}
+
+private fun seriesParentDedupKey(item: ContinueWatchingItem, rawKey: String): String? {
+    if (!isSeriesType(item.contentType())) return null
+    val normalized = rawKey
+        .trim()
+        .removePrefix("series:")
+        .replace(CONTINUE_WATCHING_EPISODE_SUFFIX, "")
+        .takeIf { it.isNotEmpty() }
+        ?: return null
+    return "series-parent:$normalized"
 }
 
 private fun nextUpTitleEpisodeKey(item: ContinueWatchingItem): String? {

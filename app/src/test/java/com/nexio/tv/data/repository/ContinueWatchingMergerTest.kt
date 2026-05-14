@@ -400,7 +400,7 @@ class ContinueWatchingMergerTest {
     }
 
     @Test
-    fun `episode records only merge when season and episode also match`() {
+    fun `episode records keep only the most recently watched episode for a series`() {
         val s5e14 = resumeIdentity(
             source = ContinueWatchingSource.LOCAL,
             contentId = "tt0903747",
@@ -438,7 +438,8 @@ class ContinueWatchingMergerTest {
                 ),
             )
         )
-        assertEquals(2, merged.size)
+        assertEquals(1, merged.size)
+        assertEquals("series:imdb:tt0903747:s5e15", merged.single().contentId)
     }
 
     @Test

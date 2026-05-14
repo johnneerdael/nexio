@@ -71,7 +71,10 @@ object ContinueWatchingMerger {
                 groups[root] = mergeRecords(groups[root], sorted[idx])
             }
         }
-        return groups.values.filterNotNull().sortedByDescending { it.updatedAt }
+        return groups.values
+            .filterNotNull()
+            .collapseSeriesEpisodesByParent()
+            .sortedByDescending { it.updatedAt }
     }
 
     /**
@@ -91,6 +94,98 @@ object ContinueWatchingMerger {
         trackingIdentity?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix) }
         canonicalKey?.canonicalParent?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix) }
         return keys.toList()
+    }
+
+    /**
+     * Continue Watching is a series-level rail: if multiple episodes for the same show
+     * survive episode-level alias merging, keep the most recent episode row only.
+     */
+    private fun List<ContinueWatchingRecord>.collapseSeriesEpisodesByParent(): List<ContinueWatchingRecord> {
+        if (size <= 1) return this
+        val parent = IntArray(size) { it }
+        fun find(x: Int): Int {
+            var cur = x
+            while (parent[cur] != cur) {
+                parent[cur] = parent[parent[cur]]
+                cur = parent[cur]
+            }
+            return cur
+        }
+        fun union(a: Int, b: Int) {
+            val ra = find(a)
+            val rb = find(b)
+            if (ra != rb) parent[ra] = rb
+        }
+
+        val byBucket = HashMap<String, MutableList<Int>>()
+        for (idx in indices) {
+            val keys = this[idx].seriesParentBucketKeys()
+            for (key in keys) {
+                byBucket.getOrPut(key) { mutableListOf() }.add(idx)
+            }
+        }
+        for (indicesForBucket in byBucket.values) {
+            for (i in 1 until indicesForBucket.size) union(indicesForBucket[0], indicesForBucket[i])
+        }
+
+        val selected = LinkedHashMap<Int, ContinueWatchingRecord>()
+        for (idx in indices) {
+            val record = this[idx]
+            val root = find(idx)
+            val existing = selected[root]
+            if (existing == null || shouldPreferSeriesEpisode(record, existing)) {
+                selected[root] = record
+            }
+        }
+        return selected.values.toList()
+    }
+
+    private fun ContinueWatchingRecord.seriesParentBucketKeys(): List<String> {
+        if (episodeContext == null) return emptyList()
+        val keys = LinkedHashSet<String>()
+        keys.addAll(idBundle.toParentBucketKeys())
+        displayIdentity?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix = "") }
+        trackingIdentity?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix = "") }
+        canonicalKey?.canonicalParent?.providerIds?.let { keys.addAllProviderKeys(it, episodeSuffix = "") }
+        normalizedSeriesParentId(parentId)?.let { keys.add("parent:$it") }
+        normalizedSeriesParentId(contentId)?.let { keys.add("parent:$it") }
+        return keys.toList()
+    }
+
+    private fun ContinueWatchingIdBundle.toParentBucketKeys(): List<String> = buildList {
+        imdb?.takeIf { it.isNotBlank() }?.let { add("imdb:$it") }
+        tmdb?.takeIf { it.isNotBlank() }?.let { add("tmdb:$it") }
+        tvdb?.takeIf { it.isNotBlank() }?.let { add("tvdb:$it") }
+        kitsu?.takeIf { it.isNotBlank() }?.let { add("kitsu:$it") }
+        mal?.takeIf { it.isNotBlank() }?.let { add("mal:$it") }
+        anilist?.takeIf { it.isNotBlank() }?.let { add("anilist:$it") }
+        anidb?.takeIf { it.isNotBlank() }?.let { add("anidb:$it") }
+        trakt?.takeIf { it.isNotBlank() }?.let { add("trakt:$it") }
+        simkl?.takeIf { it.isNotBlank() }?.let { add("simkl:$it") }
+    }
+
+    private fun normalizedSeriesParentId(value: String?): String? {
+        val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return raw
+            .removePrefix("series:")
+            .replace(Regex(":s\\d+e\\d+$", RegexOption.IGNORE_CASE), "")
+            .takeIf { it.isNotEmpty() }
+    }
+
+    private fun shouldPreferSeriesEpisode(
+        candidate: ContinueWatchingRecord,
+        existing: ContinueWatchingRecord
+    ): Boolean {
+        if (candidate.updatedAt != existing.updatedAt) return candidate.updatedAt > existing.updatedAt
+        val candidateEpisode = candidate.episodeContext
+        val existingEpisode = existing.episodeContext
+        val candidateSeason = candidateEpisode?.season ?: -1
+        val existingSeason = existingEpisode?.season ?: -1
+        if (candidateSeason != existingSeason) return candidateSeason > existingSeason
+        val candidateNumber = candidateEpisode?.number ?: -1
+        val existingNumber = existingEpisode?.number ?: -1
+        if (candidateNumber != existingNumber) return candidateNumber > existingNumber
+        return candidate.identityKey() < existing.identityKey()
     }
 
     private fun MutableSet<String>.addAllProviderKeys(

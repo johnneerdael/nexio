@@ -143,6 +143,20 @@ class HomeViewModelContinueWatchingProjectionTest {
     }
 
     @Test
+    fun `in progress entries for the same series keep only the first episode row`() {
+        val newerEpisode = inProgressItem("tvdb:393268", season = 2, episode = 2, lastWatched = 2_000L)
+        val olderEpisode = inProgressItem("series:tvdb:393268", season = 2, episode = 1, lastWatched = 1_000L)
+
+        val result = dedupContinueWatchingByProjectedIdentity(
+            items = listOf(newerEpisode, olderEpisode),
+            identityKeyFor = { it.canonicalOrContentKey() }
+        )
+
+        assertEquals("Only the most recent row for a series should survive", 1, result.size)
+        assertEquals(2, result[0].episode())
+    }
+
+    @Test
     fun `empty list returns empty list`() {
         val result = dedupContinueWatchingByProjectedIdentity(
             items = emptyList(),
