@@ -31,3 +31,14 @@ Trakt episode scrobble failures with HTTP 404 MUST retry once using `/search/{id
 - **WHEN** Trakt search returns episode IDs
 - **THEN** the scrobble is retried with the returned episode IDs
 - **AND** success settles the original outbox mutation.
+
+### Requirement: MDBList scrobble extension seam is documented
+
+MDBList scrobble writes MUST be added through the existing tracking service and provider mutation outbox architecture, not as direct playback-time network calls.
+
+#### Scenario: Future MDBList scrobble implementation follows the outbox seam
+
+- **GIVEN** MDBList scrobble writes are implemented after this change
+- **WHEN** playback emits start, pause, stop, or completion events
+- **THEN** MDBList writes are routed through a provider-specific scrobble service and mutation adapter
+- **AND** the adapter uses MDBList scrobble endpoints, hydrated IDs, profile ownership, scrobble priority, and the shared completed-watchlist auto-remove coordinator.

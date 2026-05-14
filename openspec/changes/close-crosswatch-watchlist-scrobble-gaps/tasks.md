@@ -6,4 +6,4 @@
 - [x] 4. Add completed-scrobble watchlist auto-remove coordinator.
 - [x] 5. Add Trakt episode 404 fallback search.
 - [ ] 6. Add tests and run targeted Gradle checks.
-- [ ] 7. Document MDBList scrobble extension seam.
+- [x] 7. Document MDBList scrobble extension seam.
