@@ -251,6 +251,28 @@ class ModernHomeRowsArtworkModelTest {
         assertFalse(legacyModel.url.value.contains("portrait-backdrop-token"))
     }
 
+    @Test
+    fun `card renders artwork layer when only fallback model exists`() {
+        val item = carouselItem(
+            artwork = null,
+            poster = "https://image.tmdb.org/t/p/w500/fallback-poster.jpg?token=poster"
+        )
+        val fallback = resolveModernCarouselCardFallbackArtworkModel(
+            item = item.carousel,
+            metaPreview = item.preview,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false
+        )
+
+        assertTrue(shouldRenderModernCarouselArtwork(primaryModel = null, fallbackModel = fallback))
+    }
+
+    @Test
+    fun `card renders placeholder only when primary and fallback are missing`() {
+        assertFalse(shouldRenderModernCarouselArtwork(primaryModel = null, fallbackModel = null))
+    }
+
     /**
      * Companion preview kept alongside the [ModernCarouselItem] for test
      * convenience. ModernCarouselItem.metaPreview was dropped to eliminate

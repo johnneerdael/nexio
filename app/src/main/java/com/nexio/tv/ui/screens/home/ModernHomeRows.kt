@@ -213,6 +213,11 @@ internal fun resolveModernCarouselCardFallbackArtworkModel(
     )
 }
 
+internal fun shouldRenderModernCarouselArtwork(
+    primaryModel: Any?,
+    fallbackModel: Any?
+): Boolean = primaryModel != null || fallbackModel != null
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ModernContinueWatchingRowItem(
@@ -959,7 +964,10 @@ private fun ModernCarouselCard(
     }
     var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
-    val hasImage = coilModel != null
+    val hasImage = shouldRenderModernCarouselArtwork(
+        primaryModel = coilModel,
+        fallbackModel = fallbackArtworkModel
+    )
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
             logoModel != null &&

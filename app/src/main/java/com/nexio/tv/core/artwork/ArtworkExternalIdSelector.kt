@@ -57,10 +57,19 @@ class ArtworkExternalIdSelector {
             return animeIds + listOfNotNull(providerIds.imdb.toId("imdb", numeric = false))
         }
 
+        if (imageType == ArtworkType.THUMBNAIL) {
+            return listOfNotNull(
+                providerIds.tvdb.toId("tvdb", numeric = true),
+                providerIds.tmdb.toTmdbId(mediaKind),
+                providerIds.imdb.toId("imdb", numeric = false),
+                providerIds.trakt.toId("trakt", numeric = true)
+            )
+        }
+
         return listOfNotNull(
-            providerIds.tvdb.toId("tvdb", numeric = true),
             providerIds.tmdb.toTmdbId(mediaKind),
             providerIds.imdb.toId("imdb", numeric = false),
+            providerIds.tvdb.toId("tvdb", numeric = true),
             providerIds.trakt.toId("trakt", numeric = true)
         )
     }

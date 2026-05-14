@@ -118,6 +118,31 @@ class ArtworkExternalIdSelectorTest {
     }
 
     @Test
+    fun `top posters tv poster prefers tmdb and imdb before tvdb`() {
+        val ids = selector.selectIds(
+            provider = IntegrationProvider.TOP_POSTERS,
+            imageType = ArtworkType.POSTER,
+            mediaKind = MetadataMediaKind.SERIES,
+            providerIds = ProviderIds(
+                tvdb = "355567",
+                tmdb = "76479",
+                imdb = "tt1190634",
+                trakt = "171028"
+            )
+        )
+
+        assertEquals(
+            listOf(
+                ArtworkProviderExternalId("tmdb", "series-76479"),
+                ArtworkProviderExternalId("imdb", "tt1190634"),
+                ArtworkProviderExternalId("tvdb", "355567"),
+                ArtworkProviderExternalId("trakt", "171028")
+            ),
+            ids
+        )
+    }
+
+    @Test
     fun `selector trims ids and ignores blanks`() {
         val ids = selector.selectIds(
             provider = IntegrationProvider.TOP_POSTERS,
