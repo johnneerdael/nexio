@@ -75,9 +75,33 @@ internal fun dedupContinueWatchingByProjectedIdentity(
 ): List<ContinueWatchingItem> {
     val seen = linkedSetOf<String>()
     return items.filter { item ->
-        val key = identityKeyFor(item)
-        seen.add(key)           // returns false when already present → item is dropped
+        val keys = continueWatchingDedupKeys(item, identityKeyFor(item))
+        if (keys.any { key -> key in seen }) {
+            false
+        } else {
+            seen.addAll(keys)
+            true
+        }
     }
+}
+
+private fun continueWatchingDedupKeys(
+    item: ContinueWatchingItem,
+    primaryKey: String
+): List<String> = buildList {
+    primaryKey.trim().takeIf { it.isNotEmpty() }?.let(::add)
+    nextUpTitleEpisodeKey(item)?.let(::add)
+}
+
+private fun nextUpTitleEpisodeKey(item: ContinueWatchingItem): String? {
+    if (item !is ContinueWatchingItem.NextUp) return null
+    val normalizedTitle = item.info.name
+        .trim()
+        .lowercase(Locale.ROOT)
+        .replace(Regex("\\s+"), " ")
+        .takeIf { it.isNotEmpty() }
+        ?: return null
+    return "next-up:${item.info.contentType.lowercase(Locale.ROOT)}:$normalizedTitle:s${item.info.season}e${item.info.episode}"
 }
 
 /**

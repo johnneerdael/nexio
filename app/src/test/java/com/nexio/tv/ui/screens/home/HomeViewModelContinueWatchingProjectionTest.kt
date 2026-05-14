@@ -38,6 +38,29 @@ class HomeViewModelContinueWatchingProjectionTest {
         )
     )
 
+    private fun nextUpItem(
+        contentId: String,
+        name: String,
+        season: Int,
+        episode: Int,
+        lastWatched: Long = 1_000L
+    ) = ContinueWatchingItem.NextUp(
+        info = NextUpInfo(
+            contentId = contentId,
+            contentType = "series",
+            name = name,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "$contentId:$season:$episode",
+            season = season,
+            episode = episode,
+            episodeTitle = "Episode $episode",
+            thumbnail = null,
+            lastWatched = lastWatched
+        )
+    )
+
     // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
@@ -103,6 +126,20 @@ class HomeViewModelContinueWatchingProjectionTest {
         )
 
         assertEquals("Items with distinct projected keys must each appear", 2, result.size)
+    }
+
+    @Test
+    fun `next up entries with same title and episode collapse across provider ids`() {
+        val tvdbItem = nextUpItem("tvdb:79481", name = "Death Note", season = 1, episode = 2)
+        val kitsuItem = nextUpItem("kitsu:1376", name = "Death Note", season = 1, episode = 2)
+
+        val result = dedupContinueWatchingByProjectedIdentity(
+            items = listOf(tvdbItem, kitsuItem),
+            identityKeyFor = { it.canonicalOrContentKey() }
+        )
+
+        assertEquals("Provider aliases for the same next-up episode must collapse", 1, result.size)
+        assertEquals("tvdb:79481", result[0].contentId())
     }
 
     @Test

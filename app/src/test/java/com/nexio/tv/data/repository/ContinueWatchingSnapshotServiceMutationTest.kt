@@ -228,6 +228,71 @@ class ContinueWatchingSnapshotServiceMutationTest {
         assertEquals(StreamIdScheme.IMDB_MOVIE, record.streamFetchIdentity?.idScheme)
     }
 
+    @Test
+    fun `retained records are suppressed when completed progress uses raw provider id`() {
+        val service = buildService()
+        val staleRecord = canonicalRecord(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = resume(
+                    contentId = "tvdb:355567",
+                    videoId = "tvdb:355567:5:7",
+                    season = 5,
+                    episode = 7,
+                    lastWatched = 1_000L,
+                    progressPercent = 62f,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                languageTag = "en"
+            )
+        ).copy(
+            parentId = "series:tvdb:355567",
+            contentId = "series:tvdb:355567:s5e7"
+        )
+        val completedLocalProgress = resume(
+            contentId = "tvdb:355567",
+            videoId = "tvdb:355567_s5e7",
+            season = 5,
+            episode = 7,
+            lastWatched = 2_000L,
+            progressPercent = 95f,
+            source = WatchProgress.SOURCE_LOCAL
+        )
+        val previous = ContinueWatchingSnapshot(
+            nextUpItems = listOf(
+                TrackingNextUpEntry(
+                    contentId = "tvdb:other",
+                    name = "Other",
+                    season = 1,
+                    episode = 2,
+                    episodeTitle = null,
+                    videoId = "tvdb:other:1:2",
+                    firstAired = null,
+                    firstAiredMs = 0L,
+                    activityAtMs = 1_000L
+                )
+            ),
+            records = listOf(staleRecord),
+            updatedAtMs = 1_000L
+        )
+
+        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
+            "retainStableRowsFromPreviousSnapshot",
+            ContinueWatchingSnapshot::class.java,
+            ContinueWatchingSnapshot::class.java,
+            List::class.java
+        )
+        method.isAccessible = true
+        val retained = method.invoke(
+            service,
+            ContinueWatchingSnapshot(updatedAtMs = 2_000L),
+            previous,
+            listOf(completedLocalProgress)
+        ) as ContinueWatchingSnapshot
+
+        assertTrue("completed local episode must suppress stale retained record", retained.records.isEmpty())
+    }
+
     private fun roastResolvedDisplayItem(): ResolvedDisplayItem = ResolvedDisplayItem(
         itemKey = "movie:tmdb:1658982",
         contentId = "tmdb:1658982",

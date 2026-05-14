@@ -1165,7 +1165,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (
             previous.resumeItems.isEmpty() &&
             previous.nextUpItems.isEmpty() &&
-            previous.traktUpNextItems.isEmpty()
+            previous.traktUpNextItems.isEmpty() &&
+            previous.records.isEmpty()
         ) {
             return candidate
         }
@@ -1186,20 +1187,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
             previous = previous.traktUpNextItems,
             completionAnchors = completionAnchors
         )
-
-        if (
-            retainedResumeItems === candidate.resumeItems &&
-            retainedNextUpItems === candidate.nextUpItems &&
-            retainedTraktUpNextItems === candidate.traktUpNextItems
-        ) {
-            return candidate
-        }
-
         val retainedRecords = retainMissingRecords(
             candidate = candidate.records,
             previous = previous.records,
             completionAnchors = completionAnchors
         )
+
+        if (
+            retainedResumeItems === candidate.resumeItems &&
+            retainedNextUpItems === candidate.nextUpItems &&
+            retainedTraktUpNextItems === candidate.traktUpNextItems &&
+            retainedRecords === candidate.records
+        ) {
+            return candidate
+        }
 
         return candidate.copy(
             resumeItems = retainedResumeItems,
@@ -1265,12 +1266,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
         candidate.forEach { record ->
             byKey[recordRetentionKey(record)] = record
         }
+        var retainedAny = false
         previous.forEach { record ->
             val key = recordRetentionKey(record)
             if (key in byKey) return@forEach
-            if (record.isSuppressedByCompletionAnchor(completionAnchors[record.parentId])) return@forEach
+            if (record.isSuppressedByCompletionAnchor(completionAnchorForRecord(record, completionAnchors))) {
+                return@forEach
+            }
             byKey[key] = record
+            retainedAny = true
         }
+        if (!retainedAny) return candidate
         return ContinueWatchingMerger.merge(byKey.values.toList())
     }
 
@@ -1282,6 +1288,82 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun recordRetentionKey(record: ContinueWatchingRecord): String =
         "${record.parentId}|${record.contentId}|${record.episodeContext?.season ?: -1}|${record.episodeContext?.number ?: -1}"
+
+    private fun completionAnchorForRecord(
+        record: ContinueWatchingRecord,
+        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>
+    ): ContinueWatchingCompletionAnchor? {
+        return completionAnchorLookupKeysForRecord(record)
+            .firstNotNullOfOrNull { key -> completionAnchors[key] }
+    }
+
+    private fun completionAnchorLookupKeysForRecord(record: ContinueWatchingRecord): List<String> {
+        val keys = LinkedHashSet<String>()
+
+        fun add(rawKey: String?) {
+            val key = rawKey?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            keys += key
+            stripTypedMediaPrefix(key)?.let { stripped ->
+                keys += stripped
+                stripEpisodeSuffix(stripped)?.let { keys += it }
+            }
+            stripEpisodeSuffix(key)?.let { keys += it }
+        }
+
+        add(record.parentId)
+        add(record.contentId)
+        record.resumeIdentities.forEach { identity ->
+            add(identity.contentId)
+            add(identity.videoId)
+        }
+        record.canonicalKey?.canonicalParent?.let { identity -> keys.addContentIdentityKeys(identity) }
+        record.displayIdentity?.let { identity -> keys.addContentIdentityKeys(identity) }
+        add(record.idBundle.priorityKey())
+
+        return keys.toList()
+    }
+
+    private fun MutableSet<String>.addContentIdentityKeys(identity: ContentIdentity) {
+        identity.canonicalProvider?.let { provider ->
+            identity.canonicalId?.let { id ->
+                add("${provider.name.lowercase()}:$id")
+            }
+        }
+        val providerIds = identity.providerIds
+        providerIds.imdb?.let { add("imdb:$it") }
+        providerIds.tmdb?.let { add("tmdb:$it") }
+        providerIds.tvdb?.let { add("tvdb:$it") }
+        providerIds.trakt?.let { add("trakt:$it") }
+        providerIds.simkl?.let { add("simkl:$it") }
+        providerIds.kitsu?.let { add("kitsu:$it") }
+        providerIds.mal?.let { add("mal:$it") }
+        providerIds.anilist?.let { add("anilist:$it") }
+        providerIds.anidb?.let { add("anidb:$it") }
+    }
+
+    private fun stripTypedMediaPrefix(key: String): String? {
+        val seriesPrefix = "series:"
+        val moviePrefix = "movie:"
+        val stripped = when {
+            key.startsWith(seriesPrefix) -> key.removePrefix(seriesPrefix)
+            key.startsWith(moviePrefix) -> key.removePrefix(moviePrefix)
+            else -> null
+        }
+        return stripped?.takeIf { it.isNotBlank() && it != key }
+    }
+
+    private fun stripEpisodeSuffix(key: String): String? {
+        val suffixStart = key.lastIndexOf(":s")
+        if (suffixStart <= 0 || !key.endsWithEpisodeSuffix(suffixStart)) return null
+        return key.substring(0, suffixStart).takeIf { it.isNotBlank() }
+    }
+
+    private fun String.endsWithEpisodeSuffix(suffixStart: Int): Boolean {
+        val eIndex = indexOf('e', startIndex = suffixStart + 2)
+        if (eIndex <= suffixStart + 2 || eIndex == lastIndex) return false
+        return substring(suffixStart + 2, eIndex).all(Char::isDigit) &&
+            substring(eIndex + 1).all(Char::isDigit)
+    }
 
     private data class ContinueWatchingCompletionAnchor(
         val season: Int?,
