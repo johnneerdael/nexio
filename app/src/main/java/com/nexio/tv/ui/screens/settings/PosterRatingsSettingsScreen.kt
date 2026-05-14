@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -50,6 +51,7 @@ import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
+import kotlinx.coroutines.launch
 
 @Composable
 fun PosterRatingsSettingsContent(
@@ -67,6 +69,14 @@ fun PosterRatingsSettingsContent(
     val context = LocalContext.current
     val rpdbError = stringResource(R.string.poster_ratings_rpdb_invalid_api_key)
     val topError = stringResource(R.string.poster_ratings_top_invalid_api_key)
+    val settingsListState = rememberLazyListState()
+    val settingsScrollScope = rememberCoroutineScope()
+
+    fun scrollSettingsRowIntoView(index: Int) {
+        settingsScrollScope.launch {
+            settingsListState.animateScrollToItem(index)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.validationError.collect { provider ->
@@ -91,69 +101,99 @@ fun PosterRatingsSettingsContent(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            ArtworkProviderSelectorRow(
-                type = ArtworkTypeKey.POSTER,
-                title = stringResource(R.string.poster_ratings_poster_provider_title),
-                subtitle = stringResource(R.string.poster_ratings_poster_provider_subtitle),
-                uiState = uiState,
-                onClick = { providerDialogType = ArtworkTypeKey.POSTER },
-                modifier = if (initialFocusRequester != null) {
-                    Modifier.focusRequester(initialFocusRequester)
-                } else {
-                    Modifier
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                state = settingsListState,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 4.dp)
+            ) {
+                item(key = "poster_provider") {
+                    ArtworkProviderSelectorRow(
+                        type = ArtworkTypeKey.POSTER,
+                        title = stringResource(R.string.poster_ratings_poster_provider_title),
+                        subtitle = stringResource(R.string.poster_ratings_poster_provider_subtitle),
+                        uiState = uiState,
+                        onClick = { providerDialogType = ArtworkTypeKey.POSTER },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        },
+                        onFocused = { scrollSettingsRowIntoView(0) }
+                    )
                 }
-            )
 
-            ArtworkProviderSelectorRow(
-                type = ArtworkTypeKey.LOGO,
-                title = stringResource(R.string.poster_ratings_logo_provider_title),
-                subtitle = stringResource(R.string.poster_ratings_logo_provider_subtitle),
-                uiState = uiState,
-                onClick = { providerDialogType = ArtworkTypeKey.LOGO }
-            )
+                item(key = "logo_provider") {
+                    ArtworkProviderSelectorRow(
+                        type = ArtworkTypeKey.LOGO,
+                        title = stringResource(R.string.poster_ratings_logo_provider_title),
+                        subtitle = stringResource(R.string.poster_ratings_logo_provider_subtitle),
+                        uiState = uiState,
+                        onClick = { providerDialogType = ArtworkTypeKey.LOGO },
+                        onFocused = { scrollSettingsRowIntoView(1) }
+                    )
+                }
 
-            ArtworkProviderSelectorRow(
-                type = ArtworkTypeKey.BACKDROP,
-                title = stringResource(R.string.poster_ratings_backdrop_provider_title),
-                subtitle = stringResource(R.string.poster_ratings_backdrop_provider_subtitle),
-                uiState = uiState,
-                onClick = { providerDialogType = ArtworkTypeKey.BACKDROP }
-            )
+                item(key = "backdrop_provider") {
+                    ArtworkProviderSelectorRow(
+                        type = ArtworkTypeKey.BACKDROP,
+                        title = stringResource(R.string.poster_ratings_backdrop_provider_title),
+                        subtitle = stringResource(R.string.poster_ratings_backdrop_provider_subtitle),
+                        uiState = uiState,
+                        onClick = { providerDialogType = ArtworkTypeKey.BACKDROP },
+                        onFocused = { scrollSettingsRowIntoView(2) }
+                    )
+                }
 
-            ArtworkProviderSelectorRow(
-                type = ArtworkTypeKey.THUMBNAIL,
-                title = stringResource(R.string.poster_ratings_thumbnail_provider_title),
-                subtitle = stringResource(R.string.poster_ratings_thumbnail_provider_subtitle),
-                uiState = uiState,
-                onClick = { providerDialogType = ArtworkTypeKey.THUMBNAIL }
-            )
+                item(key = "thumbnail_provider") {
+                    ArtworkProviderSelectorRow(
+                        type = ArtworkTypeKey.THUMBNAIL,
+                        title = stringResource(R.string.poster_ratings_thumbnail_provider_title),
+                        subtitle = stringResource(R.string.poster_ratings_thumbnail_provider_subtitle),
+                        uiState = uiState,
+                        onClick = { providerDialogType = ArtworkTypeKey.THUMBNAIL },
+                        onFocused = { scrollSettingsRowIntoView(3) }
+                    )
+                }
 
-            SettingsActionRow(
-                title = stringResource(R.string.poster_ratings_api_key_title),
-                subtitle = stringResource(R.string.poster_ratings_rpdb_api_key_availability_subtitle),
-                value = maskApiKey(uiState.rpdbApiKey, stringResource(R.string.mdblist_not_set)),
-                onClick = { showRpdbDialog = true }
-            )
+                item(key = "rpdb_key") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.poster_ratings_api_key_title),
+                        subtitle = stringResource(R.string.poster_ratings_rpdb_api_key_availability_subtitle),
+                        value = maskApiKey(uiState.rpdbApiKey, stringResource(R.string.mdblist_not_set)),
+                        onClick = { showRpdbDialog = true },
+                        onFocused = { scrollSettingsRowIntoView(4) }
+                    )
+                }
 
-            SettingsActionRow(
-                title = stringResource(R.string.poster_ratings_api_key_title),
-                subtitle = topPostersApiKeySubtitle(uiState),
-                value = maskApiKey(uiState.topPostersApiKey, stringResource(R.string.mdblist_not_set)),
-                onClick = { showTopDialog = true }
-            )
+                item(key = "topposters_key") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.poster_ratings_api_key_title),
+                        subtitle = topPostersApiKeySubtitle(uiState),
+                        value = maskApiKey(uiState.topPostersApiKey, stringResource(R.string.mdblist_not_set)),
+                        onClick = { showTopDialog = true },
+                        onFocused = { scrollSettingsRowIntoView(5) }
+                    )
+                }
 
-            SettingsActionRow(
-                title = stringResource(R.string.poster_ratings_invalidate_cache_title),
-                subtitle = if (posterCacheInvalidated) {
-                    stringResource(R.string.poster_ratings_invalidate_cache_done)
-                } else if (posterCacheInvalidating) {
-                    stringResource(R.string.poster_ratings_invalidate_cache_progress)
-                } else {
-                    stringResource(R.string.poster_ratings_invalidate_cache_subtitle)
-                },
-                enabled = !posterCacheInvalidating,
-                onClick = { viewModel.onEvent(PosterRatingsSettingsEvent.InvalidatePosterCache) }
-            )
+                item(key = "invalidate_cache") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.poster_ratings_invalidate_cache_title),
+                        subtitle = if (posterCacheInvalidated) {
+                            stringResource(R.string.poster_ratings_invalidate_cache_done)
+                        } else if (posterCacheInvalidating) {
+                            stringResource(R.string.poster_ratings_invalidate_cache_progress)
+                        } else {
+                            stringResource(R.string.poster_ratings_invalidate_cache_subtitle)
+                        },
+                        enabled = !posterCacheInvalidating,
+                        onClick = { viewModel.onEvent(PosterRatingsSettingsEvent.InvalidatePosterCache) },
+                        onFocused = { scrollSettingsRowIntoView(6) }
+                    )
+                }
+            }
         }
     }
 
@@ -209,7 +249,8 @@ private fun ArtworkProviderSelectorRow(
     subtitle: String,
     uiState: PosterRatingsSettingsUiState,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {}
 ) {
     val choices = uiState.availableChoicesFor(type.toArtworkType())
     SettingsActionRow(
@@ -218,7 +259,8 @@ private fun ArtworkProviderSelectorRow(
         value = providerChoiceLabel(uiState.selectedProviderFor(type)),
         enabled = choices.size > 1,
         onClick = onClick,
-        modifier = modifier
+        modifier = modifier,
+        onFocused = onFocused
     )
 }
 

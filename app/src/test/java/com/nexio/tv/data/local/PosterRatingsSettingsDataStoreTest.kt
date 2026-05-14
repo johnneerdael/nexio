@@ -160,4 +160,20 @@ class PosterRatingsSettingsDataStoreTest {
         assertEquals("TP-key", defaultSettings.topPostersApiKey)
         assertEquals(ArtworkProviderChoiceKey.DEFAULT, defaultSettings.selection.posterProvider)
     }
+
+    @Test
+    fun `remote poster flags can coexist and prefer Top Posters when both are enabled`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = PosterRatingsSettingsDataStore(context)
+
+        applyPosterRatingsProviderSelection(
+            settings = PosterRatingsSyncSettings(
+                rpdbEnabled = true,
+                topPostersEnabled = true
+            ),
+            posterRatingsSettingsDataStore = store
+        )
+
+        assertEquals(ArtworkProviderChoiceKey.TOP_POSTERS, store.settings.first().selection.posterProvider)
+    }
 }
