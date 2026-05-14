@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -54,7 +55,7 @@ class LibraryViewModelTest {
     }
 
     @Test
-    fun `library opens on unified watchlist primary tab`() = runTest(dispatcher) {
+    fun `library opens with unified selected provider`() = runTest(dispatcher) {
         val repository = FakeLibraryRepository(
             sourceMode = MutableStateFlow(LibrarySourceMode.LOCAL),
             isSyncing = MutableStateFlow(false),
@@ -62,19 +63,47 @@ class LibraryViewModelTest {
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(emptyList())
         )
-        val viewModel = LibraryViewModel(
-            libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore(),
-            torBoxDirectPlayHandler = mockk(relaxed = true),
-            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
-            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
-            profileManager = profileManager(),
-        )
+        val viewModel = viewModel(repository)
 
         advanceUntilIdle()
 
+        assertEquals(LibraryProviderSelection.UNIFIED, viewModel.uiState.value.selectedProvider)
+        assertEquals(
+            listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)),
+            viewModel.uiState.value.availableProviders
+        )
         assertEquals(LibraryPrimaryTab.UNIFIED_WATCHLIST, viewModel.uiState.value.selectedPrimaryTab)
         assertEquals(emptyList<Any>(), viewModel.unifiedWatchlistRows.value)
+    }
+
+    @Test
+    fun `selected provider falls back to unified when option disappears`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.TRAKT)
+                )
+            )
+        )
+        val viewModel = viewModel(repository)
+
+        advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.TRAKT)
+        advanceUntilIdle()
+
+        assertEquals(LibraryProviderSelection.TRAKT, viewModel.uiState.value.selectedProvider)
+
+        repository.availableProviders.value = listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))
+        advanceUntilIdle()
+
+        assertEquals(LibraryProviderSelection.UNIFIED, viewModel.uiState.value.selectedProvider)
+        assertEquals(null, viewModel.uiState.value.selectedListKey)
     }
 
     @Test
@@ -86,14 +115,7 @@ class LibraryViewModelTest {
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(emptyList())
         )
-        val viewModel = LibraryViewModel(
-            libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore(),
-            torBoxDirectPlayHandler = mockk(relaxed = true),
-            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
-            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
-            profileManager = profileManager(),
-        )
+        val viewModel = viewModel(repository)
 
         advanceUntilIdle()
 
@@ -135,14 +157,7 @@ class LibraryViewModelTest {
                 )
             )
         )
-        val viewModel = LibraryViewModel(
-            libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore(),
-            torBoxDirectPlayHandler = mockk(relaxed = true),
-            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
-            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
-            profileManager = profileManager(),
-        )
+        val viewModel = viewModel(repository)
 
         advanceUntilIdle()
 
@@ -161,14 +176,7 @@ class LibraryViewModelTest {
             listTabs = MutableStateFlow(emptyList()),
             refreshProviderNowBlock = { throw IllegalStateException("Trakt unavailable") }
         )
-        val viewModel = LibraryViewModel(
-            libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore(),
-            torBoxDirectPlayHandler = mockk(relaxed = true),
-            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
-            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
-            profileManager = profileManager(),
-        )
+        val viewModel = viewModel(repository)
 
         advanceUntilIdle()
 
@@ -194,14 +202,7 @@ class LibraryViewModelTest {
                 )
             )
         )
-        val viewModel = LibraryViewModel(
-            libraryRepository = repository,
-            layoutPreferenceDataStore = layoutPreferenceDataStore(),
-            torBoxDirectPlayHandler = mockk(relaxed = true),
-            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
-            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
-            profileManager = profileManager(),
-        )
+        val viewModel = viewModel(repository)
 
         advanceUntilIdle()
         viewModel.onSelectListTab("simkl:plantowatch")
@@ -210,6 +211,43 @@ class LibraryViewModelTest {
 
         assertEquals(1, repository.refreshProviderNowCalls)
         assertEquals(null, viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `debrid provider refresh routes by selected provider`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.DEBRID),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(emptyList()),
+            availableProviders = MutableStateFlow(
+                listOf(
+                    LibraryProviderOption(LibraryProviderSelection.UNIFIED),
+                    LibraryProviderOption(LibraryProviderSelection.REAL_DEBRID)
+                )
+            )
+        )
+        val viewModel = viewModel(repository)
+
+        advanceUntilIdle()
+        viewModel.onSelectProvider(LibraryProviderSelection.REAL_DEBRID)
+        viewModel.onRefresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf(LibraryProviderSelection.REAL_DEBRID), repository.refreshProviderCalls)
+        assertEquals(0, repository.refreshProviderNowCalls)
+    }
+
+    private fun viewModel(repository: FakeLibraryRepository): LibraryViewModel {
+        return LibraryViewModel(
+            libraryRepository = repository,
+            layoutPreferenceDataStore = layoutPreferenceDataStore(),
+            torBoxDirectPlayHandler = mockk(relaxed = true),
+            unifiedWatchlistResolvedDisplayProjector = unifiedWatchlistProjector(),
+            unifiedWatchlistSurfacePublisher = unifiedWatchlistSurfacePublisher(),
+            profileManager = profileManager(),
+        )
     }
 
     private fun layoutPreferenceDataStore(): LayoutPreferenceDataStore {
@@ -253,26 +291,35 @@ class LibraryViewModelTest {
         override val hasProviderCache: MutableStateFlow<Boolean>,
         override val libraryItems: MutableStateFlow<List<LibraryEntry>>,
         override val listTabs: MutableStateFlow<List<LibraryListTab>>,
+        override val availableProviders: MutableStateFlow<List<LibraryProviderOption>> =
+            MutableStateFlow(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))),
         override val unifiedWatchlistMemberships: MutableStateFlow<List<UnifiedWatchlistMembership>> = MutableStateFlow(emptyList()),
+        private val providerSnapshot: MutableStateFlow<LibraryProviderSnapshot>? = null,
         private val refreshProviderNowBlock: suspend () -> Unit = {}
     ) : LibraryRepository {
         var refreshProviderNowCalls: Int = 0
-        override val availableProviders: Flow<List<LibraryProviderOption>> =
-            MutableStateFlow(listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)))
+        val refreshProviderCalls = mutableListOf<LibraryProviderSelection>()
 
         override fun observeProviderSnapshot(
             provider: LibraryProviderSelection,
             selectedListKey: String?
         ): Flow<LibraryProviderSnapshot> {
-            return flowOf(
+            val explicitSnapshot = providerSnapshot
+            if (explicitSnapshot != null) return explicitSnapshot
+            return combine(sourceMode, libraryItems, listTabs) { sourceMode, items, tabs ->
+                val nextSelectedList = selectedListKey
+                    ?.takeIf { key -> tabs.any { it.key == key } }
+                    ?: tabs.firstOrNull()?.key
                 LibraryProviderSnapshot(
                     provider = provider,
-                    sourceMode = sourceMode.value,
-                    items = libraryItems.value,
-                    listTabs = listTabs.value,
-                    selectedListKey = selectedListKey
+                    sourceMode = sourceMode,
+                    items = items,
+                    listTabs = tabs,
+                    selectedListKey = nextSelectedList,
+                    supportsLists = tabs.isNotEmpty(),
+                    listSelectorLabel = tabs.firstOrNull { it.key == nextSelectedList }?.title ?: "N/A"
                 )
-            )
+            }
         }
 
         override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
@@ -317,7 +364,9 @@ class LibraryViewModelTest {
 
         override suspend fun refreshEasyDebridNow() = Unit
 
-        override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) = Unit
+        override suspend fun refreshProviderNow(provider: LibraryProviderSelection, selectedListKey: String?) {
+            refreshProviderCalls += provider
+        }
 
         override suspend fun createProviderList(
             provider: LibraryProviderSelection,

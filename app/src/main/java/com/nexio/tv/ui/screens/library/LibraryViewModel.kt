@@ -11,7 +11,11 @@ import com.nexio.tv.data.repository.TorBoxDirectPlayHandler
 import com.nexio.tv.data.repository.TorBoxResolvedPlayback
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.domain.model.LibraryEntry
+import com.nexio.tv.domain.model.LibraryEmptyReason
 import com.nexio.tv.domain.model.LibraryListTab
+import com.nexio.tv.domain.model.LibraryListManagementMode
+import com.nexio.tv.domain.model.LibraryProviderOption
+import com.nexio.tv.domain.model.LibraryProviderSelection
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.model.UnifiedWatchlistRowItem
@@ -27,6 +31,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -80,10 +85,17 @@ data class LibraryListEditorState(
 
 data class LibraryUiState(
     val selectedPrimaryTab: LibraryPrimaryTab = LibraryPrimaryTab.UNIFIED_WATCHLIST,
+    val selectedProvider: LibraryProviderSelection = LibraryProviderSelection.UNIFIED,
+    val availableProviders: List<LibraryProviderOption> = listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED)),
     val sourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val allItems: List<LibraryEntry> = emptyList(),
     val visibleItems: List<LibraryEntry> = emptyList(),
     val listTabs: List<LibraryListTab> = emptyList(),
+    val listSelectorLabel: String = "N/A",
+    val supportsLists: Boolean = false,
+    val supportsListManagement: Boolean = false,
+    val listManagementMode: LibraryListManagementMode = LibraryListManagementMode.NONE,
+    val emptyReason: LibraryEmptyReason = LibraryEmptyReason.NONE,
     val availableTypeTabs: List<LibraryTypeTab> = emptyList(),
     val availableSortOptions: List<LibrarySortOption> = emptyList(),
     val selectedListKey: String? = null,
@@ -137,6 +149,9 @@ class LibraryViewModel @Inject constructor(
     private val _unifiedWatchlistRows = MutableStateFlow<List<UnifiedWatchlistRowItem>>(emptyList())
     val unifiedWatchlistRows: StateFlow<List<UnifiedWatchlistRowItem>> = _unifiedWatchlistRows.asStateFlow()
 
+    private val selectedProviderState = MutableStateFlow(LibraryProviderSelection.UNIFIED)
+    private val selectedListKeyState = MutableStateFlow<String?>(null)
+
     private var messageClearJob: Job? = null
     private var initialTraktSyncRequested = false
 
@@ -189,6 +204,24 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    fun onSelectProvider(provider: LibraryProviderSelection) {
+        selectedProviderState.value = provider
+        selectedListKeyState.value = null
+        _uiState.update { current ->
+            if (current.selectedProvider == provider) {
+                current
+            } else {
+                current.copy(
+                    selectedProvider = provider,
+                    selectedListKey = null,
+                    manageSelectedListKey = null,
+                    listEditorState = null,
+                    showManageDialog = false
+                )
+            }
+        }
+    }
+
     fun onSelectTypeTab(tab: LibraryTypeTab) {
         _uiState.update { current ->
             val updated = current.copy(selectedTypeTab = tab)
@@ -197,6 +230,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onSelectListTab(listKey: String) {
+        selectedListKeyState.value = listKey
         _uiState.update { current ->
             val updated = current.copy(selectedListKey = listKey)
             updated.withVisibleItems()
@@ -222,6 +256,20 @@ class LibraryViewModel @Inject constructor(
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
             val state = _uiState.value
+            if (state.selectedProvider != LibraryProviderSelection.UNIFIED) {
+                val provider = state.selectedProvider
+                val startMessage = "Syncing ${provider.label} library..."
+                val successMessage = "${provider.label} library synced"
+                setTransientMessage(startMessage)
+                runCatching {
+                    libraryRepository.refreshProviderNow(provider, state.selectedListKey)
+                    setTransientMessage(successMessage)
+                }.onFailure { error ->
+                    setError(error.message ?: "Failed to refresh library")
+                }
+                return@launch
+            }
+
             val selectedList = state.listTabs.firstOrNull { it.key == state.selectedListKey }
             val startMessage: String
             val successMessage: String
@@ -452,87 +500,125 @@ class LibraryViewModel @Inject constructor(
 
     private fun observeLibraryData() {
         viewModelScope.launch {
-            combine(
-                libraryRepository.sourceMode,
-                libraryRepository.isSyncing,
-                libraryRepository.hasProviderCache,
-                libraryRepository.libraryItems,
-                libraryRepository.listTabs
-            ) { sourceMode, isSyncing, hasProviderCache, items, listTabs ->
-                DataBundle(
-                    sourceMode = sourceMode,
-                    isSyncing = isSyncing,
-                    hasProviderCache = hasProviderCache,
-                    items = items,
-                    listTabs = listTabs
-                )
-            }.collectLatest { (sourceMode, isSyncing, hasProviderCache, items, listTabs) ->
+            libraryRepository.availableProviders.collectLatest { providers ->
+                val normalized = providers.ifEmpty {
+                    listOf(LibraryProviderOption(LibraryProviderSelection.UNIFIED))
+                }
                 _uiState.update { current ->
-                    val supportsListTabs = listTabs.isNotEmpty()
-                    val nextSelectedList = when {
-                        supportsListTabs -> {
-                            current.selectedListKey
-                                ?.takeIf { key -> listTabs.any { it.key == key } }
-                                ?: listTabs.firstOrNull()?.key
-                        }
-                        else -> null
-                    }
-
-                    val nextManageSelected = current.manageSelectedListKey
-                        ?.takeIf { key ->
-                            listTabs.any { tab ->
-                                tab.key == key && tab.type == LibraryListTab.Type.PERSONAL
-                            }
-                        }
-                        ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
-
-                    val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
-                    val itemsForTypeTabs = if (supportsListTabs && !nextSelectedList.isNullOrBlank()) {
-                        items.filter { it.listKeys.contains(nextSelectedList) }
-                    } else {
-                        items
-                    }
-                    val typeTabs = buildTypeTabs(itemsForTypeTabs)
-                    val nextSelectedType = current.selectedTypeTab
-                        ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
-                        ?: LibraryTypeTab.All
-                    val sortOptions = if (
-                        selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
-                        selectedListTab?.type == LibraryListTab.Type.PERSONAL
-                    ) {
-                        LibrarySortOption.TraktOptions
-                    } else {
-                        LibrarySortOption.LocalOptions
-                    }
-                    val nextSelectedSort = current.selectedSortOption
-                        .takeIf { it in sortOptions }
-                        ?: if (
-                            selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
-                            selectedListTab?.type == LibraryListTab.Type.PERSONAL
-                        ) {
-                            LibrarySortOption.DEFAULT
-                        } else {
-                            LibrarySortOption.ADDED_DESC
-                        }
-
-                    val updated = current.copy(
-                        sourceMode = sourceMode,
-                        allItems = items,
-                        listTabs = listTabs,
-                        availableTypeTabs = typeTabs,
-                        availableSortOptions = sortOptions,
-                        selectedTypeTab = nextSelectedType,
-                        selectedListKey = nextSelectedList,
-                        selectedSortOption = nextSelectedSort,
-                        manageSelectedListKey = nextManageSelected,
-                        isSyncing = sourceMode != LibrarySourceMode.LOCAL && isSyncing,
-                        isLoading = (sourceMode == LibrarySourceMode.TRAKT || sourceMode == LibrarySourceMode.SIMKL) &&
-                            !hasProviderCache &&
-                            current.errorMessage == null
+                    val selectedAvailable = normalized.any { it.provider == current.selectedProvider }
+                    current.copy(
+                        availableProviders = normalized,
+                        selectedProvider = if (selectedAvailable) current.selectedProvider else LibraryProviderSelection.UNIFIED
                     )
-                    updated.withVisibleItems()
+                }
+                if (normalized.none { it.provider == selectedProviderState.value }) {
+                    selectedProviderState.value = LibraryProviderSelection.UNIFIED
+                    selectedListKeyState.value = null
                 }
             }
+        }
+        viewModelScope.launch {
+            combine(
+                selectedProviderState,
+                selectedListKeyState
+            ) { provider, selectedListKey ->
+                provider to selectedListKey
+            }.distinctUntilChanged().collectLatest { (provider, selectedListKey) ->
+                combine(
+                    libraryRepository.observeProviderSnapshot(provider, selectedListKey),
+                    libraryRepository.isSyncing,
+                    libraryRepository.hasProviderCache
+                ) { snapshot, isSyncing, hasProviderCache ->
+                    DataBundle(
+                        provider = snapshot.provider,
+                        sourceMode = snapshot.sourceMode,
+                        isSyncing = isSyncing,
+                        hasProviderCache = hasProviderCache,
+                        items = snapshot.items,
+                        listTabs = snapshot.listTabs,
+                        selectedListKey = snapshot.selectedListKey,
+                        supportsLists = snapshot.supportsLists,
+                        supportsListManagement = snapshot.supportsListManagement,
+                        listManagementMode = snapshot.listManagementMode,
+                        emptyReason = snapshot.emptyReason,
+                        listSelectorLabel = snapshot.listSelectorLabel
+                    )
+                }.collectLatest { bundle ->
+                    applyDataBundle(bundle)
+                }
+            }
+        }
+    }
+
+    private fun applyDataBundle(bundle: DataBundle) {
+        _uiState.update { current ->
+            val listTabs = bundle.listTabs
+            val items = bundle.items
+            val nextSelectedList = bundle.selectedListKey?.takeIf { key -> listTabs.any { it.key == key } }
+
+            if (selectedListKeyState.value != nextSelectedList) {
+                selectedListKeyState.value = nextSelectedList
+            }
+
+            val nextManageSelected = current.manageSelectedListKey
+                ?.takeIf { key ->
+                    listTabs.any { tab ->
+                        tab.key == key && tab.type == LibraryListTab.Type.PERSONAL
+                    }
+                }
+                ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
+
+            val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
+            val itemsForTypeTabs = if (bundle.supportsLists && !nextSelectedList.isNullOrBlank()) {
+                items.filter { it.listKeys.contains(nextSelectedList) }
+            } else {
+                items
+            }
+            val typeTabs = buildTypeTabs(itemsForTypeTabs)
+            val nextSelectedType = current.selectedTypeTab
+                ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
+                ?: LibraryTypeTab.All
+            val sortOptions = if (
+                selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                selectedListTab?.type == LibraryListTab.Type.PERSONAL
+            ) {
+                LibrarySortOption.TraktOptions
+            } else {
+                LibrarySortOption.LocalOptions
+            }
+            val nextSelectedSort = current.selectedSortOption
+                .takeIf { it in sortOptions }
+                ?: if (
+                    selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                    selectedListTab?.type == LibraryListTab.Type.PERSONAL
+                ) {
+                    LibrarySortOption.DEFAULT
+                } else {
+                    LibrarySortOption.ADDED_DESC
+                }
+
+            val updated = current.copy(
+                selectedProvider = bundle.provider,
+                sourceMode = bundle.sourceMode,
+                allItems = items,
+                listTabs = listTabs,
+                listSelectorLabel = bundle.listSelectorLabel,
+                supportsLists = bundle.supportsLists,
+                supportsListManagement = bundle.supportsListManagement,
+                listManagementMode = bundle.listManagementMode,
+                emptyReason = bundle.emptyReason,
+                availableTypeTabs = typeTabs,
+                availableSortOptions = sortOptions,
+                selectedTypeTab = nextSelectedType,
+                selectedListKey = nextSelectedList,
+                selectedSortOption = nextSelectedSort,
+                manageSelectedListKey = nextManageSelected,
+                isSyncing = bundle.sourceMode != LibrarySourceMode.LOCAL && bundle.isSyncing,
+                isLoading = (bundle.sourceMode == LibrarySourceMode.TRAKT || bundle.sourceMode == LibrarySourceMode.SIMKL) &&
+                    !bundle.hasProviderCache &&
+                    current.errorMessage == null
+            )
+            updated.withVisibleItems()
         }
     }
 
@@ -583,11 +669,18 @@ class LibraryViewModel @Inject constructor(
     }
 
     private data class DataBundle(
+        val provider: LibraryProviderSelection = LibraryProviderSelection.UNIFIED,
         val sourceMode: LibrarySourceMode,
         val isSyncing: Boolean,
         val hasProviderCache: Boolean,
         val items: List<LibraryEntry>,
-        val listTabs: List<LibraryListTab>
+        val listTabs: List<LibraryListTab>,
+        val selectedListKey: String? = null,
+        val supportsLists: Boolean = false,
+        val supportsListManagement: Boolean = false,
+        val listManagementMode: LibraryListManagementMode = LibraryListManagementMode.NONE,
+        val emptyReason: LibraryEmptyReason = LibraryEmptyReason.NONE,
+        val listSelectorLabel: String = "N/A"
     )
 
     private fun observeDebridBootstrap() {
