@@ -105,4 +105,61 @@ class ArtworkProviderResolverTest {
             result
         )
     }
+
+    @Test fun `FANART_TV explicit + capable returns FANART_TV`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val chosen = resolver.resolve(
+            artworkType = ArtworkType.POSTER,
+            contentType = ContentType.MOVIE,
+            isAnime = false,
+            availableIds = ProviderIds(tmdb = "550"),
+            settings = settings
+        )
+        assertEquals(
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            chosen
+        )
+    }
+
+    @Test fun `FANART_TV explicit + ANIME falls through to ContentTypeDefaults (ADDON)`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val chosen = resolver.resolve(
+            artworkType = ArtworkType.POSTER,
+            contentType = ContentType.SERIES,
+            isAnime = true,
+            availableIds = ProviderIds(tvdb = "1"),
+            settings = settings
+        )
+        assertEquals(
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            chosen
+        )
+    }
+
+    @Test fun `FANART_TV explicit + missing TMDB id falls through to ADDON`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val chosen = resolver.resolve(
+            artworkType = ArtworkType.POSTER,
+            contentType = ContentType.MOVIE,
+            isAnime = false,
+            availableIds = ProviderIds(imdb = "tt0137523"),
+            settings = settings
+        )
+        assertEquals(
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            chosen
+        )
+    }
 }
