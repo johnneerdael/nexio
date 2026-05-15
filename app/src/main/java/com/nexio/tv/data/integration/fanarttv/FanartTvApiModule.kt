@@ -1,5 +1,11 @@
 package com.nexio.tv.data.integration.fanarttv
 
+import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver
+import com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability
+import com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGenerator
+import com.nexio.tv.core.artwork.fanarttv.FanartTvIdSelector
+import com.nexio.tv.core.artwork.fanarttv.FanartTvImagePicker
 import com.nexio.tv.core.artwork.fanarttv.FanartTvLookup
 import com.squareup.moshi.Moshi
 import dagger.Binds
@@ -39,5 +45,21 @@ abstract class FanartTvApiModule {
         fun provideFanartTvApi(
             @Named("fanartTv") retrofit: Retrofit
         ): FanartTvApi = retrofit.create(FanartTvApi::class.java)
+
+        @Provides
+        @Singleton
+        fun provideFanartTvCandidateGenerator(
+            lookup: FanartTvLookup,
+            capabilityResolver: ArtworkProviderCapabilityResolver
+        ): FanartTvCandidateGenerator =
+            FanartTvCandidateGenerator(
+                availabilityProvider = {
+                    FanartTvAvailability.from(BuildConfig.FANARTTV_API_KEY)
+                },
+                idSelector = FanartTvIdSelector(),
+                picker = FanartTvImagePicker(),
+                lookup = lookup,
+                capabilityResolver = capabilityResolver
+            )
     }
 }
