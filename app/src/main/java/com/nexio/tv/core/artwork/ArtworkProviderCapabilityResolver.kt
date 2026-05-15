@@ -85,7 +85,7 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
     ): String? =
         when (provider) {
             is ArtworkProviderId.RuntimeProvider ->
-                provider.settingsAwareRejectionReason(imageType, ids, settings)
+                provider.settingsAwareRejectionReason(imageType, ids, mediaKind, settings)
             else -> null
         }
 
@@ -104,6 +104,7 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
     private fun ArtworkProviderId.RuntimeProvider.settingsAwareRejectionReason(
         imageType: ArtworkType,
         ids: ProviderIds,
+        mediaKind: MetadataMediaKind,
         settings: ArtworkProviderSettings
     ): String? {
         val descriptor = descriptor() ?: return null
@@ -114,6 +115,7 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
         return when (providerId) {
             IntegrationProvider.RPDB -> rpdbRejectionReason(imageType, ids, settings)
             IntegrationProvider.TOP_POSTERS -> topPostersRejectionReason(imageType, ids, settings)
+            IntegrationProvider.FANART_TV -> fanartTvRejectionReason(imageType, ids, mediaKind, settings)
             else -> null
         }
     }
@@ -139,6 +141,7 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
         when (providerId) {
             IntegrationProvider.RPDB -> rpdbDescriptor
             IntegrationProvider.TOP_POSTERS -> topPostersDescriptor
+            IntegrationProvider.FANART_TV -> fanartTvDescriptor
             else -> null
         }
 
@@ -171,6 +174,32 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
             return "missing_supported_provider_id"
         }
         return null
+    }
+
+    private fun fanartTvRejectionReason(
+        imageType: ArtworkType,
+        ids: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        settings: ArtworkProviderSettings
+    ): String? {
+        val available = com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability
+            .from(com.nexio.tv.BuildConfig.FANARTTV_API_KEY)
+        if (available !is com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability.Available) {
+            return "fanart_tv_not_configured"
+        }
+        if (imageType !in fanartTvDescriptor.supportedArtworkTypes) {
+            return "unsupported_artwork_type_for_provider"
+        }
+        if (mediaKind == MetadataMediaKind.ANIME) {
+            return "anime_unsupported_for_fanart_tv"
+        }
+        return when (mediaKind) {
+            MetadataMediaKind.MOVIE ->
+                if (ids.tmdb.isNullOrBlank()) "missing_supported_provider_id" else null
+            MetadataMediaKind.SERIES ->
+                if (ids.tvdb.isNullOrBlank()) "missing_supported_provider_id" else null
+            else -> "missing_supported_provider_id"
+        }
     }
 
     private fun TopPostersEntitlementSnapshot?.thumbnailRejectionReason(): String? {

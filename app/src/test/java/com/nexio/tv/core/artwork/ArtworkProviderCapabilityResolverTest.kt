@@ -9,6 +9,7 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -333,5 +334,108 @@ class ArtworkProviderCapabilityResolverTest {
     private fun assertRejected(reason: String, capability: ArtworkProviderCapability) {
         assertFalse(capability.supported)
         assertEquals(reason, capability.reason)
+    }
+
+    @Test
+    fun `FANART_TV + ANIME rejected with anime_unsupported_for_fanart_tv`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val reason = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.POSTER,
+            ids = ProviderIds(tmdb = "550", tvdb = "1"),
+            mediaKind = MetadataMediaKind.ANIME,
+            settings = settings
+        ).reason
+        assertEquals("anime_unsupported_for_fanart_tv", reason)
+    }
+
+    @Test
+    fun `FANART_TV + MOVIE without TMDB rejected`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val reason = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.POSTER,
+            ids = ProviderIds(imdb = "tt0137523"),
+            mediaKind = MetadataMediaKind.MOVIE,
+            settings = settings
+        ).reason
+        assertEquals("missing_supported_provider_id", reason)
+    }
+
+    @Test
+    fun `FANART_TV + SERIES without TVDB rejected`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val reason = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.POSTER,
+            ids = ProviderIds(tmdb = "1396"),
+            mediaKind = MetadataMediaKind.SERIES,
+            settings = settings
+        ).reason
+        assertEquals("missing_supported_provider_id", reason)
+    }
+
+    @Test
+    fun `FANART_TV + MOVIE with TMDB + non-anime supported`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val capable = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.POSTER,
+            ids = ProviderIds(tmdb = "550"),
+            mediaKind = MetadataMediaKind.MOVIE,
+            settings = settings
+        )
+        assertTrue(capable.supported)
+        assertNull(capable.reason)
+    }
+
+    @Test
+    fun `FANART_TV + SERIES with TVDB + non-anime supported`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                logoProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val capable = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.LOGO,
+            ids = ProviderIds(tvdb = "81189"),
+            mediaKind = MetadataMediaKind.SERIES,
+            settings = settings
+        )
+        assertTrue(capable.supported)
+    }
+
+    @Test
+    fun `FANART_TV + THUMBNAIL rejected as unsupported_artwork_type_for_provider`() {
+        val settings = ArtworkProviderSettings(
+            selection = ArtworkProviderSelectionSettings(
+                thumbnailProvider = ArtworkProviderChoiceKey.FANART_TV
+            )
+        )
+        val reason = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+            imageType = ArtworkType.THUMBNAIL,
+            ids = ProviderIds(tvdb = "81189"),
+            mediaKind = MetadataMediaKind.SERIES,
+            settings = settings
+        ).reason
+        assertEquals("unsupported_artwork_type_for_provider", reason)
     }
 }
