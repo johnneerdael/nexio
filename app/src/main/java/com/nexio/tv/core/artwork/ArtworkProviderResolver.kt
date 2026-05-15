@@ -1,6 +1,7 @@
 package com.nexio.tv.core.artwork
 
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
@@ -30,13 +31,18 @@ class ArtworkProviderResolver @Inject constructor(
         val explicit = settings.selection.providerFor(artworkType.toSettingsKey())
         var capabilitySupported = true
         var fellThroughTo: String? = null
+        val mediaKind = if (isAnime) {
+            MetadataMediaKind.ANIME
+        } else {
+            contentType.toMetadataMediaKind()
+        }
         val chosen: ArtworkProviderId = if (explicit != ArtworkProviderChoiceKey.DEFAULT) {
             val provider = explicit.toRuntimeProviderId()
             val capable = capabilityResolver.evaluate(
                 provider = provider,
                 imageType = artworkType,
                 ids = availableIds,
-                mediaKind = contentType.toMetadataMediaKind(),
+                mediaKind = mediaKind,
                 settings = settings
             )
             capabilitySupported = capable.supported
