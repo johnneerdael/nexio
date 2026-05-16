@@ -2,6 +2,8 @@
 
 Date: 2026-05-12
 
+> **Retrospective amendment 2026-05-16:** The serialization library was changed from kotlinx-serialization to **Moshi** during implementation — the project's Retrofit pipeline uses `MoshiConverterFactory` and does not have `retrofit2-kotlinx-serialization-converter` on the classpath. The DTO annotations are `@JsonClass(generateAdapter = true)` + `@Json(name = "...")`. The Components table below has been updated; the cached-body decode in `FanartTvIntegrationProvider.documentCodec` streams via `okio.Buffer` + Moshi's `fromJson(BufferedSource)` to honor CLAUDE.md rule #3. The shape class was also renamed `FanartTvLookupShape → FanartTvIntegrationProvider` to satisfy the integration-runtime audit's adapter-file naming convention.
+
 > **Supersedes** `docs/superpowers/specs/2026-05-09-fanarttv-artwork-intermediate-design.md`. The 2026-05-09 spec assumed Fanart.tv would auto-inject under Default mode (an INTERMEDIATE routing rank). The Nexio artwork architecture has since refactored away from router-rank candidate selection toward a per-type `ArtworkProviderResolver` that picks one provider per type given (settings, content type, isAnime, ids). The architecture also added a "durable non-downgrade" surface layer (`preferredArtworkProviders` + `preferredAwareSlot`) and an automatic `ArtworkSettingsInvalidator`. This spec rebuilds against the current architecture and reflects the user's revised decision: Fanart.tv is a peer-selectable provider in settings, not an auto-injected intermediate.
 
 ## Purpose
@@ -124,8 +126,8 @@ All new files under two packages, mirroring existing patterns.
 | `core/artwork/fanarttv/FanartTvImagePicker.kt` | Pure function. `(FanartTvDocument, FanartTvCallId.Type, ArtworkType) → URL?`. Highest-`likes`; `lang=en` for poster/logo; any lang for backdrop; deterministic tie-break by ascending id. THUMBNAIL → null. |
 | `core/artwork/fanarttv/FanartTvCandidateGenerator.kt` | Augments `MetadataArtworkDecisionResolver`. For each requested type, checks user selection + capability + Fanart availability; if all pass, calls `FanartTvLookup.fetch(...)` and emits a `RemoteUrl` `ArtworkCandidate(provider=FANART_TV, sourceRole=PREMIUM)` for each non-null picker output. Single-flight + 14d JSON cache provided by `IntegrationRuntime`; the generator is stateless. |
 | `core/artwork/fanarttv/FanartTvApiShapes.kt` | `const LOOKUP = "fanarttv.lookup"`. |
-| `core/artwork/fanarttv/dto/FanartTvDocument.kt` | `@Serializable` DTO with the six consumed image arrays. |
-| `core/artwork/fanarttv/dto/FanartTvImage.kt` | `@Serializable` single-image DTO (id, url, lang, likes). |
+| `core/artwork/fanarttv/dto/FanartTvDocument.kt` | Moshi DTO (`@JsonClass(generateAdapter = true)` + `@Json(name = "...")`) with the six consumed image arrays. |
+| `core/artwork/fanarttv/dto/FanartTvImage.kt` | Moshi single-image DTO (id, url, lang, likes). |
 | `core/artwork/fanarttv/FanartTvLookup.kt` | Interface + `FanartTvLookupResult` sealed (`Success(doc) / NotFound / AuthFailed / Transient`). |
 | `data/integration/fanarttv/FanartTvApi.kt` | Retrofit interface: `GET /v3.2/movies/{tmdbId}` and `GET /v3.2/tv/{tvdbId}` with `?api_key=`. |
 | `data/integration/fanarttv/FanartTvApiModule.kt` | Hilt module: provides `FanartTvApi` (Retrofit + base URL `https://webservice.fanart.tv/`); binds `FanartTvLookup` to `RuntimeFanartTvLookup`; provides `FanartTvCandidateGenerator`. |
