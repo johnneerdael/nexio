@@ -330,6 +330,14 @@ class SubtitleTranslationServiceProviderTest {
 
             assertEquals(mapOf("Le mystère est levé." to "Het mysterie is opgelost."), result.getOrThrow())
             assertEquals(2, server.requestCount)
+            server.takeRequest()
+            val retryBody = JSONObject(server.takeRequest().body.readUtf8())
+            val retrySystemPrompt = retryBody
+                .getJSONArray("messages")
+                .getJSONObject(0)
+                .getString("content")
+            assertTrue(retrySystemPrompt.contains("Previous output copied"))
+            assertTrue(retrySystemPrompt.contains("Do not return the source-language text unchanged"))
         } finally {
             server.shutdown()
         }

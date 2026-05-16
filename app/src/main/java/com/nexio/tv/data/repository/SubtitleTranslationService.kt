@@ -711,7 +711,12 @@ class SubtitleTranslationService @Inject constructor(
                         targetLanguageName = targetLanguageName,
                         sourceLanguageName = sourceLanguageName,
                         settings = settings,
-                        chunkConfig = chunkConfig
+                        chunkConfig = chunkConfig,
+                        systemPromptOverride = buildUnchangedRetrySystemPrompt(
+                            targetLanguageCode = targetLanguageCode,
+                            targetLanguageName = targetLanguageName,
+                            sourceLanguageName = sourceLanguageName
+                        )
                     )
                 }.getOrElse { emptyMap() }
                 retryResult.forEach { (id, text) ->
@@ -860,7 +865,8 @@ class SubtitleTranslationService @Inject constructor(
         sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig,
-        onRateLimited: () -> Unit = {}
+        onRateLimited: () -> Unit = {},
+        systemPromptOverride: String? = null
     ): Map<Int, String> {
         return runCatching {
             requestChunkTranslation(
@@ -869,7 +875,8 @@ class SubtitleTranslationService @Inject constructor(
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
-                onRateLimited = onRateLimited
+                onRateLimited = onRateLimited,
+                systemPromptOverride = systemPromptOverride
             )
         }.getOrElse { error ->
             if (error is SubtitleTranslationProviderException) {
@@ -886,7 +893,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
                 chunkConfig = chunkConfig,
-                onRateLimited = onRateLimited
+                onRateLimited = onRateLimited,
+                systemPromptOverride = systemPromptOverride
             ) + requestChunkTranslationAdaptive(
                 blocks = blocks.drop(midpoint),
                 targetLanguageCode = targetLanguageCode,
@@ -894,7 +902,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
                 chunkConfig = chunkConfig,
-                onRateLimited = onRateLimited
+                onRateLimited = onRateLimited,
+                systemPromptOverride = systemPromptOverride
             )
         }
     }
@@ -905,7 +914,8 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName: String,
         sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
-        onRateLimited: () -> Unit = {}
+        onRateLimited: () -> Unit = {},
+        systemPromptOverride: String? = null
     ): Map<Int, String> {
         if (settings.provider == SubtitleTranslationProvider.DASHSCOPE) {
             val responseText = executeTranslationRequest(
@@ -920,7 +930,8 @@ class SubtitleTranslationService @Inject constructor(
                 markerPayload = buildDashScopeMarkerPayload(blocks),
                 settings = settings,
                 includeSchema = false,
-                onRateLimited = onRateLimited
+                onRateLimited = onRateLimited,
+                systemPromptOverride = systemPromptOverride
             ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
             return parseDashScopeMarkerResponse(responseText, blocks)
@@ -940,7 +951,8 @@ class SubtitleTranslationService @Inject constructor(
             markerPayload = null,
             settings = settings,
             includeSchema = true,
-            onRateLimited = onRateLimited
+            onRateLimited = onRateLimited,
+            systemPromptOverride = systemPromptOverride
         )
             ?: executeTranslationRequest(
                 promptPayload = promptPayload,
@@ -950,7 +962,8 @@ class SubtitleTranslationService @Inject constructor(
                 markerPayload = null,
                 settings = settings,
                 includeSchema = false,
-                onRateLimited = onRateLimited
+                onRateLimited = onRateLimited,
+                systemPromptOverride = systemPromptOverride
             )
             ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
@@ -1022,6 +1035,17 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName = targetLanguageName,
         sourceLanguageName = sourceLanguageName
     )
+
+    private fun buildUnchangedRetrySystemPrompt(
+        targetLanguageCode: String,
+        targetLanguageName: String,
+        sourceLanguageName: String
+    ): String {
+        return buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName, sourceLanguageName) +
+            " Previous output copied one or more source texts unchanged. This retry is only for those failed items. " +
+            "Translate every text into $targetLanguageName. Do not return the source-language text unchanged. " +
+            "Keep proper names, numbers, and acronyms unchanged only inside an otherwise translated subtitle."
+    }
 
     private fun buildDashScopeMarkerPayload(
         blocks: List<TranslatableTimedTextBlock>
