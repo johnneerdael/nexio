@@ -27,6 +27,7 @@ fun defaultIntegrationPolicyRegistry(): IntegrationPolicyRegistry =
             IntegrationProvider.ARM to IntegrationProviderPolicy(),
             IntegrationProvider.RPDB to IntegrationProviderPolicy(),
             IntegrationProvider.TOP_POSTERS to IntegrationProviderPolicy(),
+            IntegrationProvider.FANART_TV to IntegrationProviderPolicy(),
             IntegrationProvider.REAL_DEBRID to IntegrationProviderPolicy(),
             IntegrationProvider.PREMIUMIZE to IntegrationProviderPolicy(),
             IntegrationProvider.TORBOX to IntegrationProviderPolicy(),
