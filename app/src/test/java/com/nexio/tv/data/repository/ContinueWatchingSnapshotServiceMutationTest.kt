@@ -846,6 +846,60 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
         }
 
+    @Test
+    fun `buildRawSnapshot drops unknown-air-date next-up from main feed and scheduled reemit`() =
+        runTest {
+            val service = buildService()
+            val resumeWithoutAirDate = resume(
+                contentId = "resume-series",
+                videoId = "resume-series:1:1",
+                season = 1,
+                episode = 1,
+                lastWatched = 50_000L
+            )
+            val unknownNextUp = nextUp(
+                contentId = "unknown-air-date",
+                firstAiredMs = 0L,
+                firstAired = null,
+                episode = 2
+            ).copy(activityAtMs = 60_000L)
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(resumeWithoutAirDate),
+                nextUpEntries = listOf(unknownNextUp),
+                traktUpNextEntries = listOf(unknownNextUp)
+            )
+
+            assertEquals(listOf(resumeWithoutAirDate), snapshot.resumeItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.scheduledReemit)
+        }
+
+    @Test
+    fun `buildRawSnapshot schedules concrete future next-up instead of rendering it`() =
+        runTest {
+            val service = buildService()
+            val futureAiredMs = System.currentTimeMillis() + 86_400_000L
+            val futureNextUp = nextUp(
+                contentId = "future-air-date",
+                firstAiredMs = futureAiredMs,
+                episode = 2
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(futureNextUp),
+                traktUpNextEntries = listOf(futureNextUp)
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+            assertEquals(listOf(futureNextUp, futureNextUp), snapshot.scheduledReemit)
+        }
+
     // ── Inline harness ─────────────────────────────────────────────────────────
     // Tests 1-4 use an inline harness that mirrors the helper implementations
     // exactly, without any dependency on Dispatchers.IO or the service's init pipeline.

@@ -1002,19 +1002,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
-        val nextUpMainCandidates = splitNextUpCandidatesForContinueWatching(
+        val nextUpCandidateSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
             nextUpRef = ::nextUpRefForEntry,
             nowMs = nowMs
-        ).mainFeedItems
+        )
+        val nextUpMainCandidates = nextUpCandidateSelection.mainFeedItems
         val nextUpItems = nextUpMainCandidates.filter { entry ->
-            AirDateGate.isAired(
-                availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
-                firstAiredMs = entry.firstAiredMs,
-                tmdbAirDate = entry.firstAired,
-                nowMs = nowMs
-            )
+            ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
         val normalizedTraktUpNextItems = traktUpNextEntries
             .asSequence()
@@ -1032,12 +1028,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             nowMs = nowMs
         ).syntheticRailItems
         val traktUpNextItems = syntheticRailCandidates.filter { entry ->
-            AirDateGate.isAired(
-                availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
-                firstAiredMs = entry.firstAiredMs,
-                tmdbAirDate = entry.firstAired,
-                nowMs = nowMs
-            )
+            ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
 
         // Resume items carry no air-date data; running them through AirDateGate keeps all
@@ -1049,21 +1040,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
 
         val scheduledReemit = buildList {
-            addAll(nextUpMainCandidates.filter { entry ->
-                !AirDateGate.isAired(
-                    availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
-                    firstAiredMs = entry.firstAiredMs,
-                    tmdbAirDate = entry.firstAired,
-                    nowMs = nowMs
-                )
+            addAll(nextUpCandidateSelection.syntheticRailItems.filter { entry ->
+                val triggerMs = ContinueWatchingCanonicalization.pendingTriggerMs(entry)
+                triggerMs != null && triggerMs > nowMs
             })
             addAll(syntheticRailCandidates.filter { entry ->
-                !AirDateGate.isAired(
-                    availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
-                    firstAiredMs = entry.firstAiredMs,
-                    tmdbAirDate = entry.firstAired,
-                    nowMs = nowMs
-                )
+                val triggerMs = ContinueWatchingCanonicalization.pendingTriggerMs(entry)
+                triggerMs != null && triggerMs > nowMs
             })
         }
 
