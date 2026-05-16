@@ -2229,7 +2229,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
-    fun `reloadPersistedSnapshotForActiveProfile drops persisted remote playback resumes`() = runTest {
+    fun `reloadPersistedSnapshotForActiveProfile keeps persisted remote playback resumes`() = runTest {
         val scheduler = RecordingAirScheduler()
         val nowMs = System.currentTimeMillis()
         val localResume = resume(
@@ -2247,23 +2247,42 @@ class ContinueWatchingSnapshotServiceMutationTest {
             progressPercent = 30.2367f,
             source = WatchProgress.SOURCE_TRAKT_PLAYBACK
         ).copy(name = "Mayor of Kingstown")
+        val remoteMovieResume = resume(
+            contentId = "tt40898187",
+            videoId = "tt40898187",
+            lastWatched = nowMs - 500L,
+            progressPercent = 72.0997f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(name = "The Roast of Kevin Hart")
+        val remoteRecord = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = remoteResume.contentId,
+            contentId = remoteResume.videoId,
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = 0L,
+            durationMs = 0L,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(1, 2),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = remoteResume.lastWatched
+        )
+        val remoteMovieRecord = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = remoteMovieResume.contentId,
+            contentId = remoteMovieResume.videoId,
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = 0L,
+            durationMs = 0L,
+            episodeContext = null,
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = remoteMovieResume.lastWatched
+        )
         val persisted = ContinueWatchingSnapshot(
-            resumeItems = listOf(remoteResume, localResume),
-            records = listOf(
-                ContinueWatchingRecord(
-                    profileId = 1,
-                    parentId = remoteResume.contentId,
-                    contentId = remoteResume.videoId,
-                    provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
-                    routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
-                    positionMs = 0L,
-                    durationMs = 0L,
-                    episodeContext = ContinueWatchingRecord.EpisodeContext(1, 2),
-                    clickTimeDisplayMetadata = null,
-                    source = ContinueWatchingRecord.Source.REMOTE,
-                    updatedAt = remoteResume.lastWatched
-                )
-            ),
+            resumeItems = listOf(remoteResume, remoteMovieResume, localResume),
+            records = listOf(remoteRecord, remoteMovieRecord),
             updatedAtMs = nowMs - 60_000L
         )
         var writtenSnapshot: ContinueWatchingSnapshot? = null
@@ -2274,17 +2293,25 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 Unit
             }
         }
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } returns Unit
+        }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
-            snapshotStore = snapshotStore
+            snapshotStore = snapshotStore,
+            trackingProgressService = trackingProgressService
         )
 
         service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
 
-        assertEquals(listOf(localResume), rawSnapshot(service).resumeItems)
-        assertEquals(emptyList<ContinueWatchingRecord>(), rawSnapshot(service).records)
-        assertEquals(listOf(localResume), writtenSnapshot?.resumeItems)
-        assertEquals(emptyList<ContinueWatchingRecord>(), writtenSnapshot?.records)
+        assertEquals(setOf(remoteResume, remoteMovieResume, localResume), rawSnapshot(service).resumeItems.toSet())
+        assertEquals(listOf(remoteRecord, remoteMovieRecord), rawSnapshot(service).records)
+        assertEquals(setOf(remoteResume, remoteMovieResume, localResume), writtenSnapshot?.resumeItems?.toSet())
+        assertEquals(listOf(remoteRecord, remoteMovieRecord), writtenSnapshot?.records)
+        coVerify(timeout = 1_000L, exactly = 1) { trackingProgressService.refreshNow() }
     }
 
     @Test

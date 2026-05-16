@@ -386,6 +386,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val liveProfilesReady = mutableSetOf<Int>()
     private val profilesAwaitingRemoteReset = mutableSetOf<Int>()
     private val profilesThatObservedRemoteReset = mutableSetOf<Int>()
+    private val persistedTvPlaybackRefreshLock = Any()
+    private var lastPersistedTvPlaybackRefreshMs = 0L
 
     init {
         synchronized(liveProfileGateLock) {
@@ -561,6 +563,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
             snapshotState.value = owned
             lastRefreshRequestMs = 0L
             handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
+            if (hasRemoteTvPlaybackResume(normalized)) {
+                requestTrackingRefreshAfterPersistedTvPlaybackRestore()
+            }
         } finally {
             persistedSnapshotReady.value = true
         }
@@ -1739,33 +1744,64 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun sanitizePersistedSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
         val sanitized = sanitizeSnapshot(snapshot)
-        val resumeItems = sanitized.resumeItems.filterNot(::isPersistedRemotePlaybackResume)
-        if (
-            resumeItems.size == sanitized.resumeItems.size &&
-            sanitized.nextUpItems.isEmpty() &&
-            sanitized.traktUpNextItems.isEmpty()
-        ) {
+        if (sanitized.nextUpItems.isEmpty() && sanitized.traktUpNextItems.isEmpty()) {
             return sanitized
         }
         val activeItemKeys = buildSet {
-            resumeItems.forEach { progress ->
+            sanitized.resumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
         }
         return sanitized.copy(
-            resumeItems = resumeItems,
             nextUpItems = emptyList(),
             traktUpNextItems = emptyList(),
-            records = emptyList(),
             displayMetadataByItemKey = sanitized.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = sanitized.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys }
         )
     }
 
-    private fun isPersistedRemotePlaybackResume(progress: WatchProgress): Boolean =
-        progress.source == WatchProgress.SOURCE_TRAKT_PLAYBACK ||
-            progress.source == WatchProgress.SOURCE_SIMKL_PLAYBACK ||
-            progress.source == WatchProgress.SOURCE_MDBLIST_PLAYBACK
+    private fun hasRemoteTvPlaybackResume(snapshot: ContinueWatchingSnapshot): Boolean {
+        val resumeItems = snapshot.resumeItems
+        for (i in resumeItems.indices) {
+            val progress = resumeItems[i]
+            if (
+                isRemotePlaybackSource(progress.source) &&
+                progress.season != null &&
+                progress.episode != null
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun isRemotePlaybackSource(source: String): Boolean =
+        source == WatchProgress.SOURCE_TRAKT_PLAYBACK ||
+            source == WatchProgress.SOURCE_SIMKL_PLAYBACK ||
+            source == WatchProgress.SOURCE_MDBLIST_PLAYBACK
+
+    private fun requestTrackingRefreshAfterPersistedTvPlaybackRestore() {
+        val now = System.currentTimeMillis()
+        val shouldRefresh = synchronized(persistedTvPlaybackRefreshLock) {
+            if (now - lastPersistedTvPlaybackRefreshMs < minRefreshIntervalMs) {
+                false
+            } else {
+                lastPersistedTvPlaybackRefreshMs = now
+                true
+            }
+        }
+        if (!shouldRefresh) return
+        scope.launch {
+            runCatching { trackingProgressService.refreshNow() }
+                .onFailure { error ->
+                    Log.w(
+                        "ContinueWatching",
+                        "Failed to refresh tracking progress after persisted TV playback restore",
+                        error
+                    )
+                }
+        }
+    }
 
     internal suspend fun upgradeStaleRouteSnapshots(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
         val facade = metadataRouterFacade ?: return snapshot
