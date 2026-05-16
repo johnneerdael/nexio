@@ -113,6 +113,48 @@ class ContinueWatchingCanonicalizationTest {
         )
     }
 
+    @Test
+    fun `provider-first typed tvdb id uses numeric payload`() {
+        val keys = ContinueWatchingCanonicalization.lookupKeysForRawContentId("tvdb:series:393268")
+
+        assertTrue(keys.contains("tvdb:393268"))
+        assertFalse(keys.contains("tvdb:series"))
+    }
+
+    @Test
+    fun `typed trakt ids do not emit overlapping bare aliases`() {
+        val showKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId("trakt:show:42")
+        val movieKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId("trakt:movie:42")
+
+        assertFalse(showKeys.contains("trakt:42"))
+        assertFalse(movieKeys.contains("trakt:42"))
+        assertTrue(showKeys.intersect(movieKeys).isEmpty())
+    }
+
+    @Test
+    fun `completed tmdb movie anchor does not suppress same numeric series candidate`() {
+        val anchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(
+            listOf(
+                watchProgress(
+                    contentId = "tmdb:movie:550",
+                    season = null,
+                    episode = null,
+                    lastWatched = 50_000L
+                )
+            )
+        )
+
+        assertFalse(
+            ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId("tmdb:tv:550"),
+                season = 1,
+                episode = 1,
+                updatedAtMs = 40_000L,
+                anchors = anchors
+            )
+        )
+    }
+
     private fun nextUpEntry(
         firstAired: String? = null,
         firstAiredMs: Long = 0L,

@@ -88,35 +88,24 @@ object ContinueWatchingCanonicalization {
         }
 
         val parentRaw = stripEpisodeSuffix(raw) ?: raw
-        val splitParts = parentRaw.split(':')
-        val parts = ArrayList<String>(splitParts.size)
-        for (i in splitParts.indices) {
-            parts += splitParts[i].trim()
-        }
-        if (parts.isEmpty()) return emptySet()
+        val parts = splitProviderIdParts(parentRaw)
+        val parsed = parseProviderId(parts) ?: return emptySet()
 
         val keys = linkedSetOf<String>()
-        val first = parts[0]
-        if (first in mediaTypePrefixes && parts.size >= 3) {
-            val mediaType = normalizeMediaType(first)
-            val provider = parts[1]
-            val value = providerValue(provider = provider, parts = parts, startIndex = 2)
-            addProviderLookupKeys(keys, provider, value, mediaType)
-            return keys
-        }
-
-        val provider = first
-        val value = providerValue(provider = provider, parts = parts, startIndex = 1)
-        addProviderLookupKeys(keys, provider, value, mediaType = null)
+        addProviderLookupKeys(keys, parsed)
         return keys
     }
 
     private fun addTraktLookupKeys(progress: WatchProgress, keys: MutableSet<String>) {
-        val mediaType = normalizeMediaType(progress.contentType.lowercase())
-        val traktId = progress.traktShowId ?: progress.traktMovieId
-        if (traktId != null && traktId > 0) {
-            keys += "$mediaType:trakt:$traktId"
-            keys += "trakt:$traktId"
+        val traktShowId = progress.traktShowId
+        if (traktShowId != null && traktShowId > 0) {
+            keys += "series:trakt:$traktShowId"
+            keys += "trakt:show:$traktShowId"
+        }
+        val traktMovieId = progress.traktMovieId
+        if (traktMovieId != null && traktMovieId > 0) {
+            keys += "movie:trakt:$traktMovieId"
+            keys += "trakt:movie:$traktMovieId"
         }
     }
 
@@ -152,27 +141,67 @@ object ContinueWatchingCanonicalization {
 
     private fun addProviderLookupKeys(
         keys: MutableSet<String>,
-        provider: String,
-        value: String?,
-        mediaType: String?
+        parsed: ParsedProviderId
     ) {
-        if (provider !in providerPrefixes || value.isNullOrBlank()) return
-        val normalizedValue = when (provider) {
-            "imdb" -> value.toCanonicalImdbTitleIdOrNull() ?: return
-            else -> value
+        val normalizedValue = when (parsed.provider) {
+            "imdb" -> parsed.value.toCanonicalImdbTitleIdOrNull() ?: return
+            else -> parsed.value
         }
-        if (mediaType != null) keys += "$mediaType:$provider:$normalizedValue"
-        keys += "$provider:$normalizedValue"
-        if (provider == "imdb") keys += normalizedValue
+        if (parsed.mediaType != null) keys += "${parsed.mediaType}:${parsed.provider}:$normalizedValue"
+        if (parsed.isTyped && parsed.provider in typeScopedProviderPrefixes) {
+            if (parsed.providerMediaType != null) {
+                keys += "${parsed.provider}:${parsed.providerMediaType}:$normalizedValue"
+            }
+        } else {
+            keys += "${parsed.provider}:$normalizedValue"
+        }
+        if (parsed.provider == "imdb") keys += normalizedValue
     }
 
-    private fun providerValue(provider: String, parts: List<String>, startIndex: Int): String? {
-        if (provider !in providerPrefixes) return null
-        val firstValue = parts.getOrNull(startIndex)?.takeIf { it.isNotBlank() } ?: return null
-        if (provider == "tmdb" && firstValue in mediaTypePrefixes) {
-            return parts.getOrNull(startIndex + 1)?.takeIf { it.isNotBlank() }
+    private fun splitProviderIdParts(value: String): List<String> {
+        val splitParts = value.split(':')
+        val parts = ArrayList<String>(splitParts.size)
+        for (i in splitParts.indices) {
+            parts += splitParts[i].trim()
         }
-        return firstValue
+        return parts
+    }
+
+    private fun parseProviderId(parts: List<String>): ParsedProviderId? {
+        if (parts.isEmpty()) return null
+        val first = parts[0].takeIf { it.isNotBlank() } ?: return null
+        if (first in mediaTypePrefixes && parts.size >= 3) {
+            val provider = parts[1].takeIf { it in providerPrefixes } ?: return null
+            val value = parts[2].takeIf { it.isNotBlank() } ?: return null
+            return ParsedProviderId(
+                provider = provider,
+                value = value,
+                mediaType = normalizeMediaType(first),
+                providerMediaType = null,
+                isTyped = true
+            )
+        }
+
+        val provider = first.takeIf { it in providerPrefixes } ?: return null
+        val second = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
+        if (second in mediaTypePrefixes && parts.size >= 3) {
+            val value = parts[2].takeIf { it.isNotBlank() } ?: return null
+            return ParsedProviderId(
+                provider = provider,
+                value = value,
+                mediaType = normalizeMediaType(second),
+                providerMediaType = second,
+                isTyped = true
+            )
+        }
+
+        return ParsedProviderId(
+            provider = provider,
+            value = second,
+            mediaType = null,
+            providerMediaType = null,
+            isTyped = false
+        )
     }
 
     private fun normalizeMediaType(value: String): String =
@@ -209,5 +238,14 @@ object ContinueWatchingCanonicalization {
         "anilist",
         "anidb"
     )
+    private val typeScopedProviderPrefixes = setOf("tmdb", "trakt")
     private val imdbTitleIdRegex = Regex("^tt\\d+$")
+
+    private data class ParsedProviderId(
+        val provider: String,
+        val value: String,
+        val mediaType: String?,
+        val providerMediaType: String?,
+        val isTyped: Boolean
+    )
 }
