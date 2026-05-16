@@ -640,11 +640,16 @@ class SubtitleTranslationService @Inject constructor(
         }
 
         val merged = mutableMapOf<Int, String>()
-
-        batches.forEachIndexed { batchIndex, batch ->
+        val blockById = mutableMapOf<Int, TranslatableTimedTextBlock>()
+        for (batchIndex in batches.indices) {
+            val batch = batches[batchIndex]
             val response = batchResponses[batchIndex]
-            batch.coreItems.forEach { block ->
-                response[block.blockId]?.takeIf { it.isNotBlank() }?.let { text ->
+            for (blockIndex in batch.coreItems.indices) {
+                val block = batch.coreItems[blockIndex]
+                blockById[block.blockId] = block
+                response[block.blockId]
+                    ?.takeIf { isUsableTranslatedText(sourceText = block.text, translatedText = it) }
+                    ?.let { text ->
                     merged[block.blockId] = text
                 }
             }
@@ -654,15 +659,27 @@ class SubtitleTranslationService @Inject constructor(
             .flatMap { batch -> batch.coreItems.asSequence().map { it.blockId } }
             .toSet()
         val missingAfterPrimary = allCoreIds.asSequence().filter { it !in merged }.toList()
+        val unchangedAfterPrimary = allCoreIds.count { id ->
+            val block = blockById[id] ?: return@count false
+            val responseText = batchResponses.asSequence()
+                .mapNotNull { response -> response[id] }
+                .firstOrNull()
+                ?: return@count false
+            isUnchangedTranslation(sourceText = block.text, translatedText = responseText)
+        }
 
         if (missingAfterPrimary.isNotEmpty()) {
-            batches.forEachIndexed { batchIndex, batch ->
+            for (batchIndex in batches.indices) {
+                val batch = batches[batchIndex]
                 val response = batchResponses[batchIndex]
                 val overlapItems = batch.items.take(batch.leadOverlap) +
                     batch.items.drop(batch.leadOverlap + batch.coreCount)
-                overlapItems.forEach { block ->
+                for (blockIndex in overlapItems.indices) {
+                    val block = overlapItems[blockIndex]
                     if (block.blockId in allCoreIds && block.blockId !in merged) {
-                        response[block.blockId]?.takeIf { it.isNotBlank() }?.let { text ->
+                        response[block.blockId]
+                            ?.takeIf { isUsableTranslatedText(sourceText = block.text, translatedText = it) }
+                            ?.let { text ->
                             merged[block.blockId] = text
                         }
                     }
@@ -674,6 +691,7 @@ class SubtitleTranslationService @Inject constructor(
         diagnosticsLogger.log(
             "translate_chunks batches=${batches.size} " +
                 "core_cues=${allCoreIds.size} " +
+                "unchanged_after_primary=$unchangedAfterPrimary " +
                 "missing_after_primary=${missingAfterPrimary.size} " +
                 "missing_after_overlap=${missingAfterOverlap.size}"
         )
@@ -697,7 +715,11 @@ class SubtitleTranslationService @Inject constructor(
                     )
                 }.getOrElse { emptyMap() }
                 retryResult.forEach { (id, text) ->
-                    if (text.isNotBlank() && id in allCoreIds) {
+                    val block = blockById[id]
+                    if (block != null &&
+                        id in allCoreIds &&
+                        isUsableTranslatedText(sourceText = block.text, translatedText = text)
+                    ) {
                         merged[id] = text
                     }
                 }
@@ -1630,6 +1652,26 @@ class SubtitleTranslationService @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun isUsableTranslatedText(sourceText: String, translatedText: String): Boolean {
+        return translatedText.isNotBlank() &&
+            !isUnchangedTranslation(sourceText = sourceText, translatedText = translatedText)
+    }
+
+    private fun isUnchangedTranslation(sourceText: String, translatedText: String): Boolean {
+        val normalizedSource = normalizeTranslatedTextForComparison(sourceText)
+        if (normalizedSource.length < 3 || !normalizedSource.any(Char::isLetter)) {
+            return false
+        }
+        return normalizedSource == normalizeTranslatedTextForComparison(translatedText)
+    }
+
+    private fun normalizeTranslatedTextForComparison(value: String): String {
+        return value
+            .trim()
+            .replace(Regex("""\s+"""), " ")
+            .lowercase(Locale.ROOT)
     }
 
     private fun parseDashScopeMarkerResponse(

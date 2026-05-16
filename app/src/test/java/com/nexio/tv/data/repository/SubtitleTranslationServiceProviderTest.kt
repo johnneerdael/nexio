@@ -266,6 +266,76 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
+    fun unchangedCueTranslationsAreRetriedAndNotCachedAsSuccess() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":0,\"text\":\"Le mystère est levé.\"}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":0,\"text\":\"Het mysterie is opgelost.\"}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+
+            val result = service.translateCueTexts(
+                texts = listOf("Le mystère est levé."),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "fr",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                ),
+                chunkConfig = SubtitleTranslationChunkConfig(
+                    maxEntries = 10,
+                    maxChars = 10_000,
+                    minSplitEntries = 1,
+                    maxParallelRequests = 1
+                )
+            )
+
+            assertEquals(mapOf("Le mystère est levé." to "Het mysterie is opgelost."), result.getOrThrow())
+            assertEquals(2, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun rateLimitProviderErrorRetriesWithBackoffBeforeSucceeding() = runTest {
         val server = MockWebServer()
         server.enqueue(
