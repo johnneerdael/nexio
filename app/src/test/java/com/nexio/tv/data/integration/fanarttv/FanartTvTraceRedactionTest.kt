@@ -8,7 +8,7 @@ class FanartTvTraceRedactionTest {
     @Test
     fun `every traceable artifact for a fanarttv lookup excludes the api key`() {
         val rawKey = "07882f4309da827df559bb85b63793f9"
-        val spec = FanartTvLookupShape.specFor(
+        val spec = FanartTvIntegrationProvider.specFor(
             callId = FanartTvCallId(FanartTvCallId.Type.MOVIE, "550"),
             apiKey = rawKey
         )

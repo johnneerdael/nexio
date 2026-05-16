@@ -9,7 +9,7 @@ import org.junit.Test
 class FanartTvLookupShapeTest {
     @Test
     fun `redacted url for trace contains no api_key value`() {
-        val spec = FanartTvLookupShape.specFor(
+        val spec = FanartTvIntegrationProvider.specFor(
             callId = FanartTvCallId(FanartTvCallId.Type.MOVIE, "550"),
             apiKey = "07882f4309da827df559bb85b63793f9"
         )
@@ -24,7 +24,7 @@ class FanartTvLookupShapeTest {
 
     @Test
     fun `cache policy is CacheFirst with 14d ttl`() {
-        val spec = FanartTvLookupShape.specFor(
+        val spec = FanartTvIntegrationProvider.specFor(
             callId = FanartTvCallId(FanartTvCallId.Type.MOVIE, "550"),
             apiKey = "k"
         )
