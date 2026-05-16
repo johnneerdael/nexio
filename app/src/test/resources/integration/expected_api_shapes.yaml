@@ -1587,3 +1587,16 @@ custom_imdb.transport.execute:
     - USER_VISIBLE
   expectedRuntimePolicy:
     default: ObserveOnly
+
+fanarttv.lookup:
+  provider: FANART_TV
+  headerPolicy: fanarttv-api-key-v1
+  method: GET
+  path: "/v3.2/{type}/{id}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    api_key: present

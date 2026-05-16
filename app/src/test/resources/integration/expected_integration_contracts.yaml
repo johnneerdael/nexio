@@ -347,6 +347,14 @@ headerPolicies:
     forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
     responseHeaders: [Retry-After]
     userAgentPolicy: nexio-default-user-agent
+  fanarttv-api-key-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: query.api_key
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
 cacheContracts:
   primary-identity-alias-v1:
     cachePolicy: CacheFirst
