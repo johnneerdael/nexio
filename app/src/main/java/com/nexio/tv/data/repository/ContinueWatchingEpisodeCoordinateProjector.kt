@@ -21,16 +21,31 @@ object ContinueWatchingEpisodeCoordinateProjector {
     ): ProjectedContinueWatchingEpisode? {
         if (contentType.trim().equals("anime", ignoreCase = true)) return null
 
+        val exactCoordinate = requestedSeason to requestedEpisode
         val normalizedRequestedTitle = normalizeTitle(requestedTitle)
         if (normalizedRequestedTitle != null) {
+            val titleMatches = mutableListOf<Pair<Pair<Int, Int>, TvEpisodeMetadata>>()
             for ((coordinate, metadata) in episodes) {
                 if (normalizeTitle(metadata.title) == normalizedRequestedTitle) {
-                    return metadata.toProjectedEpisode(coordinate)
+                    titleMatches += coordinate to metadata
                 }
+            }
+
+            val selectedMatch = titleMatches.firstOrNull { (coordinate, _) ->
+                coordinate == exactCoordinate
+            } ?: titleMatches
+                .sortedWith(
+                    compareBy<Pair<Pair<Int, Int>, TvEpisodeMetadata>> { (coordinate, _) -> coordinate.first }
+                        .thenBy { (coordinate, _) -> coordinate.second }
+                )
+                .firstOrNull()
+
+            if (selectedMatch != null) {
+                val (coordinate, metadata) = selectedMatch
+                return metadata.toProjectedEpisode(coordinate)
             }
         }
 
-        val exactCoordinate = requestedSeason to requestedEpisode
         return episodes[exactCoordinate]?.toProjectedEpisode(exactCoordinate)
     }
 

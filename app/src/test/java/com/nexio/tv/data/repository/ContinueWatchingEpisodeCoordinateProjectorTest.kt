@@ -65,6 +65,75 @@ class ContinueWatchingEpisodeCoordinateProjectorTest {
         assertNull(projected)
     }
 
+    @Test
+    fun `duplicate title matches choose lowest season and episode independent of insertion order`() {
+        val lowCoordinate = (1 to 5) to episode(season = 1, episode = 5, title = "Shared Title", airDate = "2025-01-05")
+        val highCoordinate = (2 to 3) to episode(season = 2, episode = 3, title = "Shared Title", airDate = "2025-02-03")
+
+        val lowFirst = mapOf(lowCoordinate, highCoordinate)
+        val highFirst = mapOf(highCoordinate, lowCoordinate)
+
+        val lowFirstProjected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 9,
+            requestedEpisode = 9,
+            requestedTitle = "Shared Title",
+            episodes = lowFirst
+        )
+
+        val highFirstProjected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 9,
+            requestedEpisode = 9,
+            requestedTitle = "Shared Title",
+            episodes = highFirst
+        )
+
+        assertEquals(1, lowFirstProjected?.season)
+        assertEquals(5, lowFirstProjected?.episode)
+        assertEquals(1, highFirstProjected?.season)
+        assertEquals(5, highFirstProjected?.episode)
+    }
+
+    @Test
+    fun `requested coordinate wins when its title matches duplicate title`() {
+        val episodes = mapOf(
+            (1 to 1) to episode(season = 1, episode = 1, title = "Shared Title", airDate = "2025-01-01"),
+            (3 to 4) to episode(season = 3, episode = 4, title = "Shared Title", airDate = "2025-03-04")
+        )
+
+        val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 3,
+            requestedEpisode = 4,
+            requestedTitle = "Shared Title",
+            episodes = episodes
+        )
+
+        assertEquals(3, projected?.season)
+        assertEquals(4, projected?.episode)
+        assertEquals("2025-03-04", projected?.firstAired)
+    }
+
+    @Test
+    fun `normalizes punctuation and case when matching episode title`() {
+        val episodes = mapOf(
+            (2 to 8) to episode(season = 2, episode = 8, title = "The: Multiverse", airDate = "2026-04-05")
+        )
+
+        val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 9,
+            requestedEpisode = 9,
+            requestedTitle = "the multiverse!",
+            episodes = episodes
+        )
+
+        assertEquals(2, projected?.season)
+        assertEquals(8, projected?.episode)
+        assertEquals("The: Multiverse", projected?.episodeTitle)
+    }
+
     private fun episode(
         season: Int,
         episode: Int,
