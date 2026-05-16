@@ -2229,6 +2229,48 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `reloadPersistedSnapshotForActiveProfile drops persisted remote playback resumes`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        val nowMs = System.currentTimeMillis()
+        val localResume = resume(
+            contentId = "local-movie",
+            videoId = "local-movie",
+            lastWatched = nowMs - 2_000L,
+            source = WatchProgress.SOURCE_LOCAL
+        )
+        val remoteResume = resume(
+            contentId = "tvdb:386630",
+            videoId = "tvdb:386630:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = nowMs - 1_000L,
+            progressPercent = 30.2367f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(name = "Mayor of Kingstown")
+        val persisted = ContinueWatchingSnapshot(
+            resumeItems = listOf(remoteResume, localResume),
+            updatedAtMs = nowMs - 60_000L
+        )
+        var writtenSnapshot: ContinueWatchingSnapshot? = null
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns persisted
+            every { write(any(), any()) } answers {
+                writtenSnapshot = firstArg()
+                Unit
+            }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            snapshotStore = snapshotStore
+        )
+
+        service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+
+        assertEquals(listOf(localResume), rawSnapshot(service).resumeItems)
+        assertEquals(listOf(localResume), writtenSnapshot?.resumeItems)
+    }
+
+    @Test
     fun `rescheduleAirTimeAlarmFromSnapshot refreshes overdue provider-ms scheduled reemit without exact instant`() = runTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0

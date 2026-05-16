@@ -1739,21 +1739,32 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun sanitizePersistedSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
         val sanitized = sanitizeSnapshot(snapshot)
-        if (sanitized.nextUpItems.isEmpty() && sanitized.traktUpNextItems.isEmpty()) {
+        val resumeItems = sanitized.resumeItems.filterNot(::isPersistedRemotePlaybackResume)
+        if (
+            resumeItems.size == sanitized.resumeItems.size &&
+            sanitized.nextUpItems.isEmpty() &&
+            sanitized.traktUpNextItems.isEmpty()
+        ) {
             return sanitized
         }
         val activeItemKeys = buildSet {
-            sanitized.resumeItems.forEach { progress ->
+            resumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
         }
         return sanitized.copy(
+            resumeItems = resumeItems,
             nextUpItems = emptyList(),
             traktUpNextItems = emptyList(),
             displayMetadataByItemKey = sanitized.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = sanitized.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys }
         )
     }
+
+    private fun isPersistedRemotePlaybackResume(progress: WatchProgress): Boolean =
+        progress.source == WatchProgress.SOURCE_TRAKT_PLAYBACK ||
+            progress.source == WatchProgress.SOURCE_SIMKL_PLAYBACK ||
+            progress.source == WatchProgress.SOURCE_MDBLIST_PLAYBACK
 
     internal suspend fun upgradeStaleRouteSnapshots(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
         val facade = metadataRouterFacade ?: return snapshot
