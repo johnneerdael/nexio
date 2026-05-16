@@ -53,7 +53,7 @@ class ContinueWatchingCanonicalizationTest {
                 anchors = anchors
             )
         )
-        assertTrue(
+        assertFalse(
             ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
                 lookupKeys = setOf("tvdb:430780"),
                 season = 1,
@@ -68,6 +68,28 @@ class ContinueWatchingCanonicalizationTest {
                 season = 1,
                 episode = 8,
                 updatedAtMs = 60_000L,
+                anchors = anchors
+            )
+        )
+    }
+
+    @Test
+    fun `coordinate-less stale row is suppressed by watched anchor timestamp`() {
+        val anchors = listOf(
+            ContinueWatchingWatchedAnchor(
+                lookupKeys = setOf("tvdb:430780", "series:tvdb:430780"),
+                season = 1,
+                episode = 7,
+                lastWatchedMs = 50_000L
+            )
+        )
+
+        assertTrue(
+            ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                lookupKeys = setOf("tvdb:430780"),
+                season = null,
+                episode = null,
+                updatedAtMs = 50_000L,
                 anchors = anchors
             )
         )

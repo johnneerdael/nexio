@@ -345,6 +345,44 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `retained later next up row is not suppressed only because it is older than completed anchor`() {
+        val service = buildService()
+        val laterNightAgentNextUp = TrackingNextUpEntry(
+            contentId = "tvdb:407281",
+            name = "The Night Agent",
+            season = 1,
+            episode = 10,
+            episodeTitle = null,
+            videoId = "tvdb:407281:1:10",
+            firstAired = null,
+            firstAiredMs = 1L,
+            activityAtMs = 100_000L
+        )
+        val completedNightAgent = resume(
+            contentId = "tvdb:series:407281",
+            videoId = "tvdb:series:407281:s1e9",
+            season = 1,
+            episode = 9,
+            lastWatched = 200_000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        )
+        val previous = ContinueWatchingSnapshot(
+            nextUpItems = listOf(laterNightAgentNextUp),
+            updatedAtMs = 100_000L
+        )
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = listOf(completedNightAgent)
+        )
+
+        assertEquals(listOf(laterNightAgentNextUp), retained.nextUpItems)
+    }
+
+    @Test
     fun `retained records are suppressed by completed watched alias anchors`() {
         val service = buildService()
         val staleRecord = canonicalRecord(
@@ -934,7 +972,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
-            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(listOf(providerNextUp), snapshot.nextUpItems)
         }
 
     @Test
@@ -1146,7 +1184,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot suppresses stale provider next-up that projects after completion anchor`() =
+    fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             coEvery {
@@ -1192,7 +1230,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktUpNextEntries = emptyList()
             )
 
-            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            val projected = snapshot.nextUpItems.single()
+            assertEquals(14, projected.season)
+            assertEquals(1, projected.episode)
+            assertEquals("tvdb:303904:14:1", projected.videoId)
         }
 
     @Test
