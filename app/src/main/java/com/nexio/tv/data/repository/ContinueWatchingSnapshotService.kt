@@ -1004,10 +1004,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
     ): ContinueWatchingSnapshot {
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(allProgress)
+        val watchedAnchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
+            .filterNot { progress ->
+                ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                    lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId(progress.contentId),
+                    season = progress.season,
+                    episode = progress.episode,
+                    updatedAtMs = progress.lastWatched,
+                    anchors = watchedAnchors
+                )
+            }
         val projectionCache = TvdbEpisodeProjectionCache()
         val localNextUpEntries = deriveLocalNextUpEntries(allProgress, projectionCache)
-        val combinedNextUpEntries = nextUpEntries + localNextUpEntries
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
         // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
@@ -1023,11 +1032,23 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
         }
         val records = ContinueWatchingMerger.merge(resolvedRecords)
-        val normalizedNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
-            entries = combinedNextUpEntries,
+        val normalizedProviderNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
+            entries = nextUpEntries,
             completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors,
             projectionCache = projectionCache
         )
+        val normalizedLocalNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
+            entries = localNextUpEntries,
+            completionAnchors = completionAnchors,
+            watchedAnchors = emptyList(),
+            projectionCache = projectionCache
+        )
+        val normalizedNextUpItems = (normalizedProviderNextUpItems + normalizedLocalNextUpItems)
+            .asSequence()
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
+            .toList()
         val nextUpCandidateSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
@@ -1041,6 +1062,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val normalizedTraktUpNextItems = normalizeFilterProjectDedupeNextUpEntries(
             entries = traktUpNextEntries,
             completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors,
             projectionCache = projectionCache
         )
         val syntheticRailCandidates = splitNextUpCandidatesForContinueWatching(
@@ -1126,6 +1148,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private suspend fun normalizeFilterProjectDedupeNextUpEntries(
         entries: List<TrackingNextUpEntry>,
         completionAnchors: Map<String, ContinueWatchingCompletionAnchor>,
+        watchedAnchors: List<ContinueWatchingWatchedAnchor>,
         projectionCache: TvdbEpisodeProjectionCache
     ): List<TrackingNextUpEntry> {
         val normalizedEntries = entries
@@ -1142,6 +1165,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .asSequence()
             .filterNot { entry ->
                 isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
+            }
+            .filterNot { entry ->
+                ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                    lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId(entry.contentId),
+                    season = entry.season,
+                    episode = entry.episode,
+                    updatedAtMs = entry.activityAtMs,
+                    anchors = watchedAnchors
+                )
             }
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
@@ -1292,25 +1324,30 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
 
         val completionAnchors = completionAnchorsByContent(completedProgress)
+        val watchedAnchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(completedProgress)
         val retainedResumeItems = retainMissingResumeItems(
             candidate = candidate.resumeItems,
             previous = previous.resumeItems,
-            completionAnchors = completionAnchors
+            completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors
         )
         val retainedNextUpItems = retainMissingNextUpItems(
             candidate = candidate.nextUpItems,
             previous = previous.nextUpItems,
-            completionAnchors = completionAnchors
+            completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors
         )
         val retainedTraktUpNextItems = retainMissingNextUpItems(
             candidate = candidate.traktUpNextItems,
             previous = previous.traktUpNextItems,
-            completionAnchors = completionAnchors
+            completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors
         )
         val retainedRecords = retainMissingRecords(
             candidate = candidate.records,
             previous = previous.records,
-            completionAnchors = completionAnchors
+            completionAnchors = completionAnchors,
+            watchedAnchors = watchedAnchors
         )
 
         if (
@@ -1335,7 +1372,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private fun retainMissingResumeItems(
         candidate: List<WatchProgress>,
         previous: List<WatchProgress>,
-        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>
+        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>,
+        watchedAnchors: List<ContinueWatchingWatchedAnchor>
     ): List<WatchProgress> {
         if (previous.isEmpty()) return candidate
         val byKey = LinkedHashMap<String, WatchProgress>(candidate.size + previous.size)
@@ -1347,6 +1385,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val key = resumeRetentionKey(progress)
             if (key in byKey) return@forEach
             if (isSuppressedByCompletionAnchor(progress, completionAnchors[progress.contentId])) return@forEach
+            if (
+                ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                    lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId(progress.contentId),
+                    season = progress.season,
+                    episode = progress.episode,
+                    updatedAtMs = progress.lastWatched,
+                    anchors = watchedAnchors
+                )
+            ) {
+                return@forEach
+            }
             byKey[key] = progress
             retainedAny = true
         }
@@ -1357,7 +1406,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private fun retainMissingNextUpItems(
         candidate: List<TrackingNextUpEntry>,
         previous: List<TrackingNextUpEntry>,
-        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>
+        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>,
+        watchedAnchors: List<ContinueWatchingWatchedAnchor>
     ): List<TrackingNextUpEntry> {
         if (previous.isEmpty()) return candidate
         val byKey = LinkedHashMap<String, TrackingNextUpEntry>(candidate.size + previous.size)
@@ -1369,6 +1419,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val key = nextUpRetentionKey(entry)
             if (key in byKey) return@forEach
             if (isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])) return@forEach
+            if (
+                ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                    lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId(entry.contentId),
+                    season = entry.season,
+                    episode = entry.episode,
+                    updatedAtMs = entry.activityAtMs,
+                    anchors = watchedAnchors
+                )
+            ) {
+                return@forEach
+            }
             byKey[key] = entry
             retainedAny = true
         }
@@ -1379,7 +1440,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private fun retainMissingRecords(
         candidate: List<ContinueWatchingRecord>,
         previous: List<ContinueWatchingRecord>,
-        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>
+        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>,
+        watchedAnchors: List<ContinueWatchingWatchedAnchor>
     ): List<ContinueWatchingRecord> {
         if (previous.isEmpty()) return candidate
         val byKey = LinkedHashMap<String, ContinueWatchingRecord>(candidate.size + previous.size)
@@ -1391,6 +1453,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val key = recordRetentionKey(record)
             if (key in byKey) return@forEach
             if (record.isSuppressedByCompletionAnchor(completionAnchorForRecord(record, completionAnchors))) {
+                return@forEach
+            }
+            if (
+                ContinueWatchingCanonicalization.isSuppressedByWatchedAnchors(
+                    lookupKeys = completionAnchorLookupKeysForRecord(record).toSet(),
+                    season = record.episodeContext?.season,
+                    episode = record.episodeContext?.number,
+                    updatedAtMs = record.updatedAt,
+                    anchors = watchedAnchors
+                )
+            ) {
                 return@forEach
             }
             byKey[key] = record

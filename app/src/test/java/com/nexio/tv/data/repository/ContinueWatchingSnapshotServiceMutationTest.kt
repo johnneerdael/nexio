@@ -306,6 +306,86 @@ class ContinueWatchingSnapshotServiceMutationTest {
         assertTrue("completed local episode must suppress stale retained record", retained.records.isEmpty())
     }
 
+    @Test
+    fun `retained next up rows are suppressed by completed watched alias anchors`() {
+        val service = buildService()
+        val staleNightAgentNextUp = TrackingNextUpEntry(
+            contentId = "tvdb:407281",
+            name = "The Night Agent",
+            season = 1,
+            episode = 9,
+            episodeTitle = null,
+            videoId = "tvdb:407281:1:9",
+            firstAired = null,
+            firstAiredMs = 1L,
+            activityAtMs = 100_000L
+        )
+        val completedNightAgent = resume(
+            contentId = "tvdb:series:407281",
+            videoId = "tvdb:series:407281:s1e9",
+            season = 1,
+            episode = 9,
+            lastWatched = 200_000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        )
+        val previous = ContinueWatchingSnapshot(
+            nextUpItems = listOf(staleNightAgentNextUp),
+            updatedAtMs = 100_000L
+        )
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = listOf(completedNightAgent)
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), retained.nextUpItems)
+    }
+
+    @Test
+    fun `retained records are suppressed by completed watched alias anchors`() {
+        val service = buildService()
+        val staleRecord = canonicalRecord(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = resume(
+                    contentId = "tvdb:407281",
+                    videoId = "tvdb:407281:1:9",
+                    season = 1,
+                    episode = 9,
+                    lastWatched = 100_000L,
+                    progressPercent = 62f,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                languageTag = "en"
+            )
+        )
+        val completedNightAgent = resume(
+            contentId = "tvdb:series:407281",
+            videoId = "tvdb:series:407281:s1e9",
+            season = 1,
+            episode = 9,
+            lastWatched = 200_000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        )
+        val previous = ContinueWatchingSnapshot(
+            records = listOf(staleRecord),
+            updatedAtMs = 100_000L
+        )
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = listOf(completedNightAgent)
+        )
+
+        assertEquals(emptyList<ContinueWatchingRecord>(), retained.records)
+    }
+
     private fun roastResolvedDisplayItem(): ResolvedDisplayItem = ResolvedDisplayItem(
         itemKey = "movie:tmdb:1658982",
         contentId = "tmdb:1658982",
@@ -505,6 +585,22 @@ class ContinueWatchingSnapshotServiceMutationTest {
             nextUpEntries = nextUpEntries,
             traktUpNextEntries = traktUpNextEntries
         )
+    }
+
+    private fun invokeRetainStableRowsFromPreviousSnapshot(
+        service: ContinueWatchingSnapshotService,
+        candidate: ContinueWatchingSnapshot,
+        previous: ContinueWatchingSnapshot,
+        completedProgress: List<WatchProgress>
+    ): ContinueWatchingSnapshot {
+        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
+            "retainStableRowsFromPreviousSnapshot",
+            ContinueWatchingSnapshot::class.java,
+            ContinueWatchingSnapshot::class.java,
+            List::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(service, candidate, previous, completedProgress) as ContinueWatchingSnapshot
     }
 
     private fun invokeSanitizeSnapshot(
@@ -838,7 +934,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
-            assertEquals(listOf(providerNextUp), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         }
 
     @Test
@@ -869,6 +965,84 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+        }
+
+    @Test
+    fun `raw snapshot suppresses fresh alias rows at completed coordinate`() =
+        runTest {
+            val service = buildService()
+            val completedParadise = resume(
+                contentId = "tvdb:454565",
+                videoId = "tvdb:454565:2:7",
+                season = 2,
+                episode = 7,
+                lastWatched = 200_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            )
+            val staleResumeAlias = resume(
+                contentId = "series:tvdb:454565",
+                videoId = "series:tvdb:454565:s2e7",
+                season = 2,
+                episode = 7,
+                lastWatched = 100_000L,
+                progressPercent = 45f,
+                source = WatchProgress.SOURCE_LOCAL
+            )
+            val staleNextUpAlias = nextUp(
+                contentId = "series:tvdb:454565",
+                firstAiredMs = 1L,
+                episode = 7
+            ).copy(
+                season = 2,
+                videoId = "series:tvdb:454565:s2e7",
+                activityAtMs = 100_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(staleResumeAlias, completedParadise),
+                nextUpEntries = listOf(staleNextUpAlias),
+                traktUpNextEntries = listOf(staleNextUpAlias)
+            )
+
+            assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+            assertEquals(emptyList<ContinueWatchingRecord>(), snapshot.records)
+        }
+
+    @Test
+    fun `raw snapshot suppresses provider-media alias next up from watched anchor`() =
+        runTest {
+            val service = buildService()
+            val completedAlias = resume(
+                contentId = "tvdb:series:454565",
+                videoId = "tvdb:series:454565:s2e7",
+                season = 2,
+                episode = 7,
+                lastWatched = 200_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            )
+            val staleNextUp = nextUp(
+                contentId = "tvdb:454565",
+                firstAiredMs = 1L,
+                episode = 7
+            ).copy(
+                season = 2,
+                videoId = "tvdb:454565:2:7",
+                activityAtMs = 100_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(completedAlias),
+                nextUpEntries = listOf(staleNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         }
 
     @Test
@@ -972,7 +1146,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
+    fun `buildRawSnapshot suppresses stale provider next-up that projects after completion anchor`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             coEvery {
@@ -1018,10 +1192,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktUpNextEntries = emptyList()
             )
 
-            val projected = snapshot.nextUpItems.single()
-            assertEquals(14, projected.season)
-            assertEquals(1, projected.episode)
-            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         }
 
     @Test
