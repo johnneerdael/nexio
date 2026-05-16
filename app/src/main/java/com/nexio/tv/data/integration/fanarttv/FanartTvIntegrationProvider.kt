@@ -63,10 +63,18 @@ class FanartTvIntegrationProvider @Inject constructor(
                 override val mimeType: String = "application/json"
                 override fun encode(value: FanartTvDocument): ByteArray =
                     adapter.toJson(value).toByteArray(Charsets.UTF_8)
-                override fun decode(bytes: ByteArray): FanartTvDocument =
-                    requireNotNull(adapter.fromJson(bytes.toString(Charsets.UTF_8))) {
+
+                // CLAUDE.md rule #3: never materialize cached bodies as String
+                // before parse — String holds a UTF-16 char[] (~2x the bytes) and
+                // gets pinned by adapter.fromJson(String) for the parse duration.
+                // okio.Buffer.write(bytes) wraps the byte array without copying and
+                // adapter.fromJson(BufferedSource) streams tokens directly from it.
+                override fun decode(bytes: ByteArray): FanartTvDocument {
+                    val source = okio.Buffer().apply { write(bytes) }
+                    return requireNotNull(adapter.fromJson(source)) {
                         "FanartTvDocument codec: null decoded from cache bytes"
                     }
+                }
             }
         }
 
