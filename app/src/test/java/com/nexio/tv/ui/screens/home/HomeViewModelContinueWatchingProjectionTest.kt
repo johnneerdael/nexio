@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.data.repository.ContinueWatchingSnapshot
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -211,5 +213,34 @@ class HomeViewModelContinueWatchingProjectionTest {
         assertEquals(2, result.size)
         assertEquals("kitsu:1", result[0].contentId())
         assertEquals("kitsu:2", result[1].contentId())
+    }
+
+    @Test
+    fun `snapshot next up renders canonical TVDB season episode coordinates`() {
+        val snapshot = ContinueWatchingSnapshot(
+            nextUpItems = listOf(
+                TrackingNextUpEntry(
+                    contentId = "tvdb:303904",
+                    contentType = "series",
+                    name = "Australian Survivor",
+                    season = 14,
+                    episode = 1,
+                    episodeTitle = "The Multiverse",
+                    videoId = "tvdb:303904:14:1",
+                    firstAired = "2026-02-16",
+                    firstAiredMs = 1L,
+                    activityAtMs = 2_000L
+                )
+            )
+        )
+
+        val result = buildContinueWatchingItemsForSnapshot(snapshot, nowMs = 3_000L)
+        val item = result.single() as ContinueWatchingItem.NextUp
+
+        assertEquals("tvdb:303904", item.info.contentId)
+        assertEquals(14, item.info.season)
+        assertEquals(1, item.info.episode)
+        assertEquals("The Multiverse", item.info.episodeTitle)
+        assertEquals("tvdb:303904:14:1", item.info.videoId)
     }
 }
