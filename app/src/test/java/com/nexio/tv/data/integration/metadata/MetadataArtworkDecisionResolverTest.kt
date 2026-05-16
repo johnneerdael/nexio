@@ -13,12 +13,15 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGenerator
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.data.remote.api.TvdbArtworkRecord
 import com.nexio.tv.domain.model.ArtworkProviderSettings
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -131,13 +134,17 @@ class MetadataArtworkDecisionResolverTest {
         cache: ArtworkDecisionCache,
         remoteSourceStore: ArtworkRemoteSourceStore,
         settings: ArtworkProviderSettings = ArtworkProviderSettings()
-    ): MetadataArtworkDecisionResolver =
-        MetadataArtworkDecisionResolver(
+    ): MetadataArtworkDecisionResolver {
+        val noOpGenerator = mockk<FanartTvCandidateGenerator>()
+        coEvery { noOpGenerator.generate(any(), any(), any(), any(), any(), any()) } returns emptyList()
+        return MetadataArtworkDecisionResolver(
             artworkRouter = ArtworkRouter(remoteSourceStore = remoteSourceStore),
             artworkDecisionCache = cache,
             remoteSourceStore = remoteSourceStore,
-            settingsSource = FakeArtworkProviderSettingsSource(settings)
+            settingsSource = FakeArtworkProviderSettingsSource(settings),
+            fanartGenerator = noOpGenerator
         )
+    }
 
     private class FakeArtworkProviderSettingsSource(
         settings: ArtworkProviderSettings

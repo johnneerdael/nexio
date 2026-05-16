@@ -14,11 +14,13 @@ import com.nexio.tv.core.artwork.ArtworkRouter
 import com.nexio.tv.core.artwork.ArtworkSource
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGenerator
 import com.nexio.tv.core.artwork.toPersistedCandidate
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,7 +30,8 @@ class MetadataArtworkDecisionResolver @Inject constructor(
     private val artworkRouter: ArtworkRouter,
     private val artworkDecisionCache: ArtworkDecisionCache,
     private val remoteSourceStore: ArtworkRemoteSourceStore,
-    private val settingsSource: ArtworkProviderSettingsSource
+    private val settingsSource: ArtworkProviderSettingsSource,
+    private val fanartGenerator: FanartTvCandidateGenerator
 ) {
     suspend fun resolveFields(
         candidates: List<ArtworkCandidate>
@@ -36,8 +39,9 @@ class MetadataArtworkDecisionResolver @Inject constructor(
         if (candidates.isEmpty()) return emptyMap()
 
         val settings = settingsSource.settings.first()
+        val withFanart = augmentWithFanart(candidates, settings)
         val policy = ArtworkRoutingPolicy(settings = settings)
-        return candidates
+        return withFanart
             .groupBy { candidate -> candidate.imageType }
             .mapNotNull { (imageType, imageCandidates) ->
                 val resolvedField = imageType.toResolvedField() ?: return@mapNotNull null
@@ -100,6 +104,38 @@ class MetadataArtworkDecisionResolver @Inject constructor(
                 )
             }
             .toMap()
+    }
+
+    private suspend fun augmentWithFanart(
+        candidates: List<ArtworkCandidate>,
+        settings: ArtworkProviderSettings
+    ): List<ArtworkCandidate> {
+        // CLAUDE.md rule #4: don't iterate a Map via forEach inside a suspend fun —
+        // Map.forEach's EntryIterator gets pinned in the continuation across
+        // fanartGenerator.generate(...)'s suspension. Materialize the entries as
+        // an indexed list and iterate with an indexed for loop.
+        val ownerEntries = candidates.groupBy { it.ownerKey }.entries.toList()
+        val additions = mutableListOf<ArtworkCandidate>()
+        for (i in ownerEntries.indices) {
+            val entry = ownerEntries[i]
+            val ownerKey = entry.key
+            val perOwnerCandidates = entry.value
+            val sample = perOwnerCandidates.first()
+            val requestedTypes = perOwnerCandidates
+                .map { it.imageType }
+                .filter { it != ArtworkType.THUMBNAIL }
+                .toSet()
+            if (requestedTypes.isEmpty()) continue
+            additions += fanartGenerator.generate(
+                ownerKey = ownerKey,
+                canonicalContentId = sample.canonicalContentId,
+                mediaKind = sample.mediaKind,
+                providerIds = sample.providerIds,
+                requestedTypes = requestedTypes,
+                settings = settings
+            )
+        }
+        return candidates + additions
     }
 
     private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int) =
