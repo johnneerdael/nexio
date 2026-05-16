@@ -5,7 +5,14 @@ fun ArtworkCandidate.toPersistedCandidate(
     remoteSourceStore: ArtworkRemoteSourceStore = NoopArtworkRemoteSourceStore
 ): PersistedArtworkCandidate {
     val candidateSource = source
-    if (candidateSource is ArtworkSource.RemoteUrl && sourceRole != ArtworkSourceRole.PREMIUM) {
+    if (candidateSource is ArtworkSource.RemoteUrl) {
+        // Register the URL->hash mapping unconditionally for RemoteUrl candidates.
+        // FileBackedArtworkRemoteSourceStore.put drops URLs that contain embedded
+        // credentials (api.ratingposterdb.com, api.top-posters.com) via
+        // isPremiumProviderRawUrl(), so the previous sourceRole != PREMIUM guard
+        // here was redundant — and it blocked clean PREMIUM URLs from providers
+        // like Fanart.tv from ever reaching the renderer, causing assetKey->URL
+        // lookups to fail at paint time and the rejected primary URL to surface.
         remoteSourceStore.put(candidateSource.normalizedUrlHash, candidateSource.rawUrl)
     }
 
