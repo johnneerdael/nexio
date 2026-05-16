@@ -2,11 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Retrospective amendment 2026-05-16:** During implementation, four planning assumptions needed correction. Each is noted inline at the affected task. (1) The serialization library is **Moshi**, not kotlinx-serialization — the project's Retrofit pipeline uses `MoshiConverterFactory` and does not have `retrofit2-kotlinx-serialization-converter` on the classpath. (2) The Hilt module ended up as an `abstract class` with `@Binds` (the `FanartTvLookup → FanartTvIntegrationProvider` binding collapses the planned separate `RuntimeFanartTvLookup` adapter; the shape itself implements the interface). (3) The shape class was renamed `FanartTvLookupShape → FanartTvIntegrationProvider` to satisfy the integration-runtime audit's `*IntegrationProvider.kt` adapter detection. (4) The `documentCodec.decode` streams via `okio.Buffer` + Moshi `fromJson(BufferedSource)` to honor CLAUDE.md rule #3 (avoid materializing the cached body as a `String` before parse).
+
 **Goal:** Add Fanart.tv as a 4th `ArtworkProviderChoiceKey` peer to `DEFAULT`, `RPDB`, `TOP_POSTERS`. Selectable per type for poster/logo/backdrop. Anime always falls through to `ContentTypeDefaults`. Non-anime + Fanart can't deliver → empty slot, enforced by the existing surface non-downgrade machinery.
 
 **Architecture:** New `FanartTvCandidateGenerator` augments `MetadataArtworkDecisionResolver`. Generator emits `ArtworkCandidate(provider=FANART_TV, sourceRole=PREMIUM)` when user selected FANART_TV for the type AND capability supports. The existing `ArtworkRouter.isActiveSupportedPremium(...)` picks user-selected PREMIUM candidates over PRIMARY — no router rank change. JSON body cached for 14d in `integration_cache` via `IntegrationRuntime` `CacheFirst`. `ResolvedDisplaySurfaceRepository.preferredAwareSlot` enforces empty-slot when Fanart can't deliver and selection is FANART_TV.
 
-**Tech Stack:** Kotlin · Hilt · Coroutines · Retrofit2 + kotlinx-serialization · JUnit4 · MockK.
+**Tech Stack:** Kotlin · Hilt · Coroutines · Retrofit2 + Moshi (`MoshiConverterFactory`) · okio · JUnit4 · MockK.
 
 **Spec:** `docs/superpowers/specs/2026-05-12-fanarttv-peer-selectable-provider-design.md`.
 
@@ -28,8 +30,8 @@ core/artwork/fanarttv/
   FanartTvCandidateGenerator.kt     # gates → lookup → pick → emit PREMIUM candidates
   FanartTvApiShapes.kt              # const LOOKUP = "fanarttv.lookup"
   FanartTvLookup.kt                 # interface + FanartTvLookupResult sealed
-  dto/FanartTvDocument.kt           # @Serializable, six consumed image arrays
-  dto/FanartTvImage.kt              # @Serializable, single image entry
+  dto/FanartTvDocument.kt           # Moshi @JsonClass+@Json, six consumed image arrays
+  dto/FanartTvImage.kt              # Moshi @JsonClass+@Json, single image entry
 
 data/integration/fanarttv/
   FanartTvApi.kt                    # Retrofit
@@ -186,20 +188,22 @@ git commit -m "test(fanarttv): add fight-club and breaking-bad fixtures from API
 - Create: `app/src/main/java/com/nexio/tv/core/artwork/fanarttv/dto/FanartTvImage.kt`
 - Create: `app/src/main/java/com/nexio/tv/core/artwork/fanarttv/dto/FanartTvDocument.kt`
 
+> **Amendment 2026-05-16:** Use **Moshi** annotations, not kotlinx-serialization. The project ships only `MoshiConverterFactory` (`retrofit2-kotlinx-serialization-converter` is not on the classpath). Add `id("com.google.devtools.ksp")` + `ksp("com.squareup.moshi:moshi-kotlin-codegen:...")` if not already present — most Moshi-using modules in this codebase already are.
+
 - [ ] **Step 1: Write `FanartTvImage.kt`**
 
 ```kotlin
 package com.nexio.tv.core.artwork.fanarttv.dto
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class FanartTvImage(
-    @SerialName("id") val id: String? = null,
-    @SerialName("url") val url: String? = null,
-    @SerialName("lang") val lang: String? = null,
-    @SerialName("likes") val likes: String? = null
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "lang") val lang: String? = null,
+    @Json(name = "likes") val likes: String? = null
 )
 ```
 
@@ -208,27 +212,27 @@ data class FanartTvImage(
 ```kotlin
 package com.nexio.tv.core.artwork.fanarttv.dto
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class FanartTvDocument(
-    @SerialName("name") val name: String? = null,
-    @SerialName("tmdb_id") val tmdbId: String? = null,
-    @SerialName("thetvdb_id") val tvdbId: String? = null,
-    @SerialName("imdb_id") val imdbId: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "tmdb_id") val tmdbId: String? = null,
+    @Json(name = "thetvdb_id") val tvdbId: String? = null,
+    @Json(name = "imdb_id") val imdbId: String? = null,
 
-    @SerialName("hdmovielogo") val hdMovieLogo: List<FanartTvImage>? = null,
-    @SerialName("moviebackground") val movieBackground: List<FanartTvImage>? = null,
-    @SerialName("movieposter") val moviePoster: List<FanartTvImage>? = null,
+    @Json(name = "hdmovielogo") val hdMovieLogo: List<FanartTvImage>? = null,
+    @Json(name = "moviebackground") val movieBackground: List<FanartTvImage>? = null,
+    @Json(name = "movieposter") val moviePoster: List<FanartTvImage>? = null,
 
-    @SerialName("hdtvlogo") val hdTvLogo: List<FanartTvImage>? = null,
-    @SerialName("showbackground") val showBackground: List<FanartTvImage>? = null,
-    @SerialName("tvposter") val tvPoster: List<FanartTvImage>? = null
+    @Json(name = "hdtvlogo") val hdTvLogo: List<FanartTvImage>? = null,
+    @Json(name = "showbackground") val showBackground: List<FanartTvImage>? = null,
+    @Json(name = "tvposter") val tvPoster: List<FanartTvImage>? = null
 )
 ```
 
-The Json instance must be configured with `ignoreUnknownKeys = true` so unmodeled image arrays are discarded. Configured on `FanartTvApiModule`'s Json provider in Task 4.2.
+Moshi tolerates unknown JSON keys by default — the unmodeled image arrays (clearart, clearlogo, characterart, etc.) are silently discarded without any `ignoreUnknownKeys` configuration.
 
 - [ ] **Step 3: Build**
 
@@ -699,9 +703,10 @@ git commit -m "feat(fanarttv): add image picker with highest-likes + lang gating
         val text = checkNotNull(this::class.java.getResource("/fixtures/fanarttv/$name")) {
             "Fixture $name not found on test classpath"
         }.readText()
-        return kotlinx.serialization.json.Json {
-            ignoreUnknownKeys = true
-        }.decodeFromString(FanartTvDocument.serializer(), text)
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        return checkNotNull(moshi.adapter(FanartTvDocument::class.java).fromJson(text)) {
+            "Failed to decode fixture $name"
+        }
     }
 ```
 
@@ -776,11 +781,13 @@ git commit -m "feat(fanarttv): declare LOOKUP shape constant and FanartTvLookup 
 **Files:**
 - Create: `app/src/main/java/com/nexio/tv/data/integration/fanarttv/FanartTvApiModule.kt`
 
-- [ ] **Step 1: Inspect an existing analogous module to copy the canonical Retrofit/Hilt pattern**
+> **Amendment 2026-05-16:** Use **Moshi** (`MoshiConverterFactory`), not `asConverterFactory(Json)`. The project does not have `retrofit2-kotlinx-serialization-converter` on the classpath; all Retrofit instances in the codebase use Moshi. The `@Binds` target is `FanartTvIntegrationProvider` (T4.4 collapsed the planned separate `RuntimeFanartTvLookup` into the shape itself — the shape implements `FanartTvLookup` directly).
 
-Run: `grep -rn "@Provides\|baseUrl\|kotlinxSerializationConverter\|asConverterFactory\|ConverterFactory" app/src/main/java/com/nexio/tv/data/integration/tmdb/ | head -20`
+- [ ] **Step 1: Inspect an existing analogous Moshi-backed Retrofit module to copy the canonical pattern**
 
-Note the project's exact OkHttp+Retrofit+Json factory pattern. Mirror it.
+Run: `grep -rn "@Provides\|baseUrl\|MoshiConverterFactory\|ConverterFactory" app/src/main/java/com/nexio/tv/data/integration/tmdb/ | head -20`
+
+Note the project's exact OkHttp + Retrofit + Moshi factory pattern (qualifier on `OkHttpClient`, shared `Moshi`, `@Named` qualifier on the per-provider `Retrofit`). Mirror it.
 
 - [ ] **Step 2: Write the module**
 
@@ -788,17 +795,17 @@ Note the project's exact OkHttp+Retrofit+Json factory pattern. Mirror it.
 package com.nexio.tv.data.integration.fanarttv
 
 import com.nexio.tv.core.artwork.fanarttv.FanartTvLookup
+import com.squareup.moshi.Moshi
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Named
 import javax.inject.Singleton
-import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.converter.moshi.MoshiConverterFactory
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -806,27 +813,26 @@ abstract class FanartTvApiModule {
 
     @Binds
     @Singleton
-    abstract fun bindFanartTvLookup(impl: RuntimeFanartTvLookup): FanartTvLookup
+    abstract fun bindFanartTvLookup(impl: FanartTvIntegrationProvider): FanartTvLookup
 
     companion object {
         @Provides
         @Singleton
-        fun provideFanartTvJson(): Json = Json { ignoreUnknownKeys = true }
+        @Named("fanartTv")
+        fun provideFanartTvRetrofit(
+            okHttpClient: OkHttpClient,
+            moshi: Moshi
+        ): Retrofit = Retrofit.Builder()
+            .baseUrl("https://webservice.fanart.tv/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
 
         @Provides
         @Singleton
         fun provideFanartTvApi(
-            okHttpClient: OkHttpClient,
-            json: Json
-        ): FanartTvApi {
-            val contentType = "application/json".toMediaType()
-            return Retrofit.Builder()
-                .baseUrl("https://webservice.fanart.tv/")
-                .client(okHttpClient)
-                .addConverterFactory(json.asConverterFactory(contentType))
-                .build()
-                .create(FanartTvApi::class.java)
-        }
+            @Named("fanartTv") retrofit: Retrofit
+        ): FanartTvApi = retrofit.create(FanartTvApi::class.java)
     }
 }
 ```
@@ -919,7 +925,18 @@ Build the shape class using the `IntegrationCallSpec` builder pattern from Step 
 
 If `IntegrationCallSpec` does not directly expose `redactedUrlForTrace` / `cachePolicy` properties, adjust the test assertions to mirror whatever the existing poster-shape redaction tests assert on. The behavioral goal — raw key never appears in trace, ttl is 14d — must be verified.
 
-**CLAUDE.md rule #3 verification (before committing this task):** confirm the runtime's cached-body read path streams via `JsonReader` / `Json.decodeFromStream` rather than materializing the body as a `String` first. The Fanart.tv response is 35–50 KB for typical titles. If the runtime decodes via `gson.fromJson(String, ...)` or `Json.decodeFromString(String, ...)` after reading the cached blob, that's the banned `StringReader.str`-pinning anti-pattern. Run `grep -rn "fromJson\|decodeFromString\|asString" app/src/main/java/com/nexio/tv/core/integration/ app/src/main/java/com/nexio/tv/data/integration/IntegrationCache* 2>/dev/null | head -20` and confirm the cached-body path uses an `InputStream` / `BufferedReader` source. If it does NOT, this is a pre-existing rule-3 issue affecting all providers — flag it in the PR description as an out-of-scope finding rather than silently introducing a per-Fanart workaround.
+**CLAUDE.md rule #3 verification (before committing this task):** the `documentCodec.decode` MUST stream the cached body via `okio.Buffer().write(bytes)` + Moshi's `fromJson(BufferedSource)`. DO NOT write `adapter.fromJson(bytes.toString(Charsets.UTF_8))` — that materializes a UTF-16 String of the body and pins it for the parse (Fanart.tv responses are 35–50 KB, so the String alone is 70–100 KB plus the existing ByteArray). Reference pattern:
+
+```kotlin
+override fun decode(bytes: ByteArray): FanartTvDocument {
+    val source = okio.Buffer().apply { write(bytes) }
+    return requireNotNull(adapter.fromJson(source)) {
+        "FanartTvDocument codec: null decoded from cache bytes"
+    }
+}
+```
+
+**Note (amendment 2026-05-16):** the wider concern — `IntegrationCodec.decode(bytes: ByteArray): T` interface + `gsonCodec`'s identical `bytes.toString(Charsets.UTF_8)` pattern affecting ~25 other providers — is documented in the PR description as a recommended cross-provider follow-up that would refactor the codec interface to a streaming source.
 
 - [ ] **Step 5: Run — passes**
 
