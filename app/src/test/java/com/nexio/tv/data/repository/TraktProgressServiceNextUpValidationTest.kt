@@ -32,6 +32,17 @@ class TraktProgressServiceNextUpValidationTest {
     }
 
     @Test
+    fun `next episode coordinate is not publishable when later season is watched`() {
+        val publishable = TraktProgressService.isPublishableNextEpisodeCoordinate(
+            season = 1,
+            episode = 10,
+            watchedEpisodes = setOf(2 to 1)
+        )
+
+        assertFalse(publishable)
+    }
+
+    @Test
     fun `next episode coordinate is publishable when after watched episode`() {
         val publishable = TraktProgressService.isPublishableNextEpisodeCoordinate(
             season = 2,
