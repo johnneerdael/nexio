@@ -1,9 +1,44 @@
 package com.nexio.tv.data.repository
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TraktProgressServiceNextUpValidationTest {
+
+    @Test
+    fun `next episode coordinate is not publishable when same episode is watched`() {
+        val publishable = TraktProgressService.isPublishableNextEpisodeCoordinate(
+            season = 2,
+            episode = 7,
+            watchedEpisodes = setOf(2 to 7)
+        )
+
+        assertFalse(publishable)
+    }
+
+    @Test
+    fun `next episode coordinate is not publishable when later episode is watched`() {
+        val publishable = TraktProgressService.isPublishableNextEpisodeCoordinate(
+            season = 2,
+            episode = 6,
+            watchedEpisodes = setOf(2 to 7)
+        )
+
+        assertFalse(publishable)
+    }
+
+    @Test
+    fun `next episode coordinate is publishable when after watched episode`() {
+        val publishable = TraktProgressService.isPublishableNextEpisodeCoordinate(
+            season = 2,
+            episode = 8,
+            watchedEpisodes = setOf(2 to 7)
+        )
+
+        assertTrue(publishable)
+    }
 
     @Test
     fun `selects visible candidates within validation budget`() {

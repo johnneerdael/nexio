@@ -122,6 +122,16 @@ class TraktProgressService @Inject constructor(
 
     companion object {
         private const val TAG = "TraktProgressSvc"
+
+        internal fun isPublishableNextEpisodeCoordinate(
+            season: Int,
+            episode: Int,
+            watchedEpisodes: Set<Pair<Int, Int>>
+        ): Boolean {
+            return watchedEpisodes.none { (watchedSeason, watchedEpisode) ->
+                season < watchedSeason || (season == watchedSeason && episode <= watchedEpisode)
+            }
+        }
     }
 
     private fun trace(message: String) {
@@ -1843,6 +1853,24 @@ class TraktProgressService @Inject constructor(
                 ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val season = nextEpisode.season ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val episode = nextEpisode.number ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            val watchedEpisodes = buildSet {
+                val seasons = progress.seasons.orEmpty()
+                for (seasonIndex in seasons.indices) {
+                    val seasonProgress = seasons[seasonIndex]
+                    val watchedSeason = seasonProgress.number ?: continue
+                    val episodes = seasonProgress.episodes.orEmpty()
+                    for (episodeIndex in episodes.indices) {
+                        val episodeProgress = episodes[episodeIndex]
+                        if (episodeProgress.completed != true) continue
+                        val watchedEpisode = episodeProgress.number ?: continue
+                        add(watchedSeason to watchedEpisode)
+                    }
+                }
+            }
+            if (!isPublishableNextEpisodeCoordinate(season, episode, watchedEpisodes)) {
+                trace("next-up validation suppressed watched-or-stale episode: show=${candidate.contentId} s${season}e$episode")
+                return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            }
             val canonicalId = normalizeContentId(toTraktIds(parseContentIds(candidate.contentId)), kind = MediaKind.SHOW)
             if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(candidate.contentId, season)) ||
                 hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(canonicalId, season))
