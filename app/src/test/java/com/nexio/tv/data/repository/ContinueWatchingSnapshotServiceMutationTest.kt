@@ -494,6 +494,18 @@ class ContinueWatchingSnapshotServiceMutationTest {
         )
     }
 
+    private fun invokeSanitizeSnapshot(
+        service: ContinueWatchingSnapshotService,
+        snapshot: ContinueWatchingSnapshot
+    ): ContinueWatchingSnapshot {
+        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
+            "sanitizeSnapshot",
+            ContinueWatchingSnapshot::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(service, snapshot) as ContinueWatchingSnapshot
+    }
+
     @Test
     fun `canonical snapshot records merge Citadel local TVDB and remote IMDb rows and preserve unresolved rows`() =
         runTest {
@@ -899,6 +911,52 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
             assertEquals(listOf(futureNextUp, futureNextUp), snapshot.scheduledReemit)
         }
+
+    @Test
+    fun `sanitizeSnapshot removes persisted unknown-air-date next-up without scheduling it`() {
+        val service = buildService()
+        val unknownNextUp = nextUp(
+            contentId = "persisted-unknown-air-date",
+            firstAiredMs = 0L,
+            firstAired = null,
+            episode = 2
+        ).copy(activityAtMs = 60_000L)
+
+        val snapshot = invokeSanitizeSnapshot(
+            service = service,
+            snapshot = ContinueWatchingSnapshot(
+                nextUpItems = listOf(unknownNextUp),
+                traktUpNextItems = listOf(unknownNextUp)
+            )
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.scheduledReemit)
+    }
+
+    @Test
+    fun `sanitizeSnapshot withholds persisted concrete future next-up and schedules reemit`() {
+        val service = buildService()
+        val futureNextUp = nextUp(
+            contentId = "persisted-future-air-date",
+            firstAiredMs = System.currentTimeMillis() + 86_400_000L,
+            episode = 2
+        )
+
+        val snapshot = invokeSanitizeSnapshot(
+            service = service,
+            snapshot = ContinueWatchingSnapshot(
+                nextUpItems = listOf(futureNextUp),
+                traktUpNextItems = listOf(futureNextUp),
+                scheduledReemit = listOf(futureNextUp)
+            )
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+        assertEquals(listOf(futureNextUp), snapshot.scheduledReemit)
+    }
 
     // ── Inline harness ─────────────────────────────────────────────────────────
     // Tests 1-4 use an inline harness that mirrors the helper implementations

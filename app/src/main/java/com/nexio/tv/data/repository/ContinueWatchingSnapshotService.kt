@@ -1453,6 +1453,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private fun sanitizeSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
+        val nowMs = System.currentTimeMillis()
         val resumeItems = snapshot.resumeItems
             .mapNotNull(::normalizeResumeItem)
             .sortedByDescending { it.lastWatched }
@@ -1465,39 +1466,58 @@ class ContinueWatchingSnapshotService @Inject constructor(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = nextUpItems,
             nextUpRef = ::nextUpRefForEntry,
-            nowMs = System.currentTimeMillis()
-        ).mainFeedItems
+            nowMs = nowMs
+        )
+        val sanitizedNextUpItems = mainFeedNextUpItems.mainFeedItems.filter { entry ->
+            ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
+        }
         val traktUpNextItems = snapshot.traktUpNextItems
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }
             .distinctBy { it.contentId }
-        val sanitizedTraktUpNextItems = splitNextUpCandidatesForContinueWatching(
+        val traktUpNextSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = traktUpNextItems,
             nextUpRef = ::nextUpRefForEntry,
-            nowMs = System.currentTimeMillis()
-        ).syntheticRailItems
+            nowMs = nowMs
+        )
+        val sanitizedTraktUpNextItems = traktUpNextSelection.syntheticRailItems.filter { entry ->
+            ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
+        }
+        val scheduledReemitByKey = LinkedHashMap<String, TrackingNextUpEntry>()
+        fun addScheduledReemit(entry: TrackingNextUpEntry) {
+            val contentId = entry.contentId.trim()
+            if (contentId.isBlank()) return
+            scheduledReemitByKey.putIfAbsent("${contentId}|${entry.season}|${entry.episode}", entry)
+        }
+        snapshot.scheduledReemit.forEach(::addScheduledReemit)
+        (mainFeedNextUpItems.syntheticRailItems + traktUpNextSelection.syntheticRailItems)
+            .filter { entry ->
+                val triggerMs = ContinueWatchingCanonicalization.pendingTriggerMs(entry)
+                triggerMs != null && triggerMs > nowMs
+            }
+            .forEach(::addScheduledReemit)
         val activeItemKeys = buildSet {
             resumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
-            mainFeedNextUpItems.forEach { entry ->
+            sanitizedNextUpItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
             sanitizedTraktUpNextItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
         }
-        val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else System.currentTimeMillis()
+        val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else nowMs
         return ContinueWatchingSnapshot(
             resumeItems = resumeItems,
-            nextUpItems = mainFeedNextUpItems,
+            nextUpItems = sanitizedNextUpItems,
             traktUpNextItems = sanitizedTraktUpNextItems,
             records = snapshot.records,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = snapshot.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs,
-            scheduledReemit = snapshot.scheduledReemit
+            scheduledReemit = scheduledReemitByKey.values.toList()
         )
     }
 
