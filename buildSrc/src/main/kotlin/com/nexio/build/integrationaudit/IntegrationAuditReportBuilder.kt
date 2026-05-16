@@ -394,6 +394,7 @@ fun providerDefaultHeaderPolicy(provider: String, apiShapeId: String?): String? 
         "MDBLIST" -> "mdblist-api-key-v1"
         "OMDB" -> "omdb-query-api-key-v1"
         "CUSTOM_IMDB" -> "custom-imdb-json-v1"
+        "FANART_TV" -> "fanarttv-api-key-v1"
         "REAL_DEBRID" -> "real_debrid-json-token-v1"
         "PREMIUMIZE" -> "premiumize-json-token-v1"
         "TORBOX" -> when (apiShapeId) {
