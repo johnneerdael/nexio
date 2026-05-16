@@ -972,6 +972,59 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 1,
+                        title = "The Multiverse",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val completedAnchor = resume(
+                contentId = "tvdb:303904",
+                videoId = "tvdb:303904:13:1",
+                season = 13,
+                episode = 1,
+                lastWatched = 10_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            ).copy(contentType = "movie")
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1",
+                activityAtMs = 9_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(completedAnchor),
+                nextUpEntries = listOf(providerCoordinate),
+                traktUpNextEntries = emptyList()
+            )
+
+            val projected = snapshot.nextUpItems.single()
+            assertEquals(14, projected.season)
+            assertEquals(1, projected.episode)
+            assertEquals("tvdb:303904:14:1", projected.videoId)
+        }
+
+    @Test
     fun `buildRawSnapshot projects Trakt up-next rows to TVDB coordinates`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
@@ -1060,6 +1113,56 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(1, snapshot.nextUpItems.size)
             assertEquals(1, snapshot.traktUpNextItems.size)
             coVerify(exactly = 1) {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            }
+        }
+
+    @Test
+    fun `buildRawSnapshot reuses local next-up episode map during projection`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (13 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 13,
+                        episodeNumber = 1,
+                        title = "Completed",
+                        airDate = "2026-02-01"
+                    ),
+                    (13 to 2) to TvEpisodeMetadata(
+                        seasonNumber = 13,
+                        episodeNumber = 2,
+                        title = "Next",
+                        airDate = "2026-02-08"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val completedLocalProgress = resume(
+                contentId = "tvdb:303904",
+                videoId = "tvdb:303904:13:1",
+                season = 13,
+                episode = 1,
+                lastWatched = 10_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_LOCAL
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(completedLocalProgress),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            val localNextUp = snapshot.nextUpItems.single()
+            assertEquals(13, localNextUp.season)
+            assertEquals(2, localNextUp.episode)
+            coVerify(exactly = 2) {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             }
         }

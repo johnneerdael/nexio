@@ -1131,9 +1131,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val normalizedEntries = entries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
-            .filterNot { entry ->
-                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
-            }
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
@@ -1143,6 +1140,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
         return projectedEntries
             .asSequence()
+            .filterNot { entry ->
+                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
+            }
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
