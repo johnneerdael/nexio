@@ -1221,6 +1221,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         projectionCache: TvdbEpisodeProjectionCache
     ): TrackingNextUpEntry? {
         return try {
+            val canonicalContentId = canonicalTvdbContentId(facade, entry)
             val episodes = projectionCache.getOrFetch(
                 contentType = entry.contentType,
                 contentId = entry.contentId,
@@ -1246,14 +1247,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 requestedSeason = entry.season,
                 requestedEpisode = entry.episode,
                 requestedTitle = entry.episodeTitle,
+                requestedFirstAired = entry.firstAired,
                 episodes = episodes
             ) ?: return null
 
+            val projectedContentId = canonicalContentId ?: entry.contentId
             entry.copy(
+                contentId = projectedContentId,
                 season = projected.season,
                 episode = projected.episode,
                 episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
-                videoId = "${entry.contentId}:${projected.season}:${projected.episode}",
+                videoId = "$projectedContentId:${projected.season}:${projected.episode}",
                 firstAired = projected.firstAired ?: entry.firstAired,
                 firstAiredMs = projected.firstAired
                     ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
@@ -1269,6 +1273,29 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
             null
         }
+    }
+
+    private suspend fun canonicalTvdbContentId(
+        facade: MetadataRouterFacade,
+        entry: TrackingNextUpEntry
+    ): String? {
+        return runCatching {
+            val route = facade.routeRequest(
+                MetadataRequest(
+                    contentId = entry.contentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                    seasonNumber = entry.season,
+                    depth = MetadataDepth.SEASON
+                )
+            )
+            if (route.provider != MetadataPrimaryProvider.TVDB) return@runCatching null
+            val tvdbTarget = route.targetIds[MetadataPrimaryProvider.TVDB]
+                ?.substringAfter("tvdb:", missingDelimiterValue = route.targetIds[MetadataPrimaryProvider.TVDB].orEmpty())
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            tvdbTarget?.let { "tvdb:$it" }
+        }.getOrNull()
     }
 
     private fun shouldPreferCompletedSeed(

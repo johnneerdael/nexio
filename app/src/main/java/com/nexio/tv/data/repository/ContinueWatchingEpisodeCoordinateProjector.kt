@@ -17,6 +17,7 @@ object ContinueWatchingEpisodeCoordinateProjector {
         requestedSeason: Int,
         requestedEpisode: Int,
         requestedTitle: String?,
+        requestedFirstAired: String? = null,
         episodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
     ): ProjectedContinueWatchingEpisode? {
         if (contentType.trim().equals("anime", ignoreCase = true)) return null
@@ -46,7 +47,39 @@ object ContinueWatchingEpisodeCoordinateProjector {
             }
         }
 
+        val normalizedRequestedAirDate = normalizeAirDate(requestedFirstAired)
+        if (normalizedRequestedAirDate != null) {
+            val airDateMatches = mutableListOf<Pair<Pair<Int, Int>, TvEpisodeMetadata>>()
+            for ((coordinate, metadata) in episodes) {
+                if (normalizeAirDate(metadata.airDate) == normalizedRequestedAirDate) {
+                    airDateMatches += coordinate to metadata
+                }
+            }
+
+            val selectedMatch = airDateMatches.firstOrNull { (coordinate, _) ->
+                coordinate.second == requestedEpisode
+            } ?: airDateMatches
+                .sortedWith(
+                    compareBy<Pair<Pair<Int, Int>, TvEpisodeMetadata>> { (coordinate, _) -> coordinate.first }
+                        .thenBy { (coordinate, _) -> coordinate.second }
+                )
+                .firstOrNull()
+
+            if (selectedMatch != null) {
+                val (coordinate, metadata) = selectedMatch
+                return metadata.toProjectedEpisode(coordinate)
+            }
+        }
+
         return episodes[exactCoordinate]?.toProjectedEpisode(exactCoordinate)
+    }
+
+    private fun normalizeAirDate(value: String?): String? {
+        return value
+            ?.trim()
+            ?.takeIf { it.length >= 10 }
+            ?.take(10)
+            ?.takeIf { DATE_PREFIX.matches(it) }
     }
 
     private fun normalizeTitle(title: String?): String? {
@@ -72,4 +105,5 @@ object ContinueWatchingEpisodeCoordinateProjector {
 
     private val NON_TITLE_TOKEN = Regex("[^a-z0-9]+")
     private val WHITESPACE = Regex("\\s+")
+    private val DATE_PREFIX = Regex("\\d{4}-\\d{2}-\\d{2}")
 }

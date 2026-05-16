@@ -185,6 +185,7 @@ data class TvdbSearchResult(
     @Json(name = "type") val type: String? = null,
     @Json(name = "year") val year: String? = null,
     @Json(name = "first_air_time") val firstAirTime: String? = null,
+    @Json(name = "aliases") val aliases: List<String>? = emptyList(),
     @Json(name = "remote_ids") val remoteIds: List<TvdbRemoteId>? = emptyList()
 )
 

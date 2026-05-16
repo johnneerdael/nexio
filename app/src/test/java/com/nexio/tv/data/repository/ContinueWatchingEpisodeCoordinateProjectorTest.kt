@@ -69,6 +69,28 @@ class ContinueWatchingEpisodeCoordinateProjectorTest {
     }
 
     @Test
+    fun `matches provider coordinate to tvdb coordinate by first air date when title is absent`() {
+        val episodes = mapOf(
+            (12 to 20) to episode(season = 12, episode = 20, title = "Wrong Era", airDate = "2024-05-02"),
+            (14 to 20) to episode(season = 14, episode = 20, title = "Reward Challenge", airDate = "2026-05-12")
+        )
+
+        val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 12,
+            requestedEpisode = 20,
+            requestedTitle = null,
+            requestedFirstAired = "2026-05-12T10:00:00.000Z",
+            episodes = episodes
+        )
+
+        assertEquals(14, projected?.season)
+        assertEquals(20, projected?.episode)
+        assertEquals("Reward Challenge", projected?.episodeTitle)
+        assertEquals("2026-05-12", projected?.firstAired)
+    }
+
+    @Test
     fun `does not force anime through tvdb projection`() {
         val episodes = mapOf(
             (14 to 1) to episode(season = 14, episode = 1, title = "The Multiverse", airDate = "2026-02-03")

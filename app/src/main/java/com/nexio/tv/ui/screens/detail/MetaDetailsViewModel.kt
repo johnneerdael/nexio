@@ -32,6 +32,7 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.repository.ContinueWatchingEpisodeCoordinateProjector
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.DetailRatingDisplayContext
@@ -1870,11 +1871,17 @@ class MetaDetailsViewModel @Inject constructor(
                 "targetVideos=${targetMeta.videos.size}"
         )
         if (episodeMap.isEmpty()) return targetMeta
+        val projectedVideoResult = projectDetailVideosToCanonicalCoordinates(
+            videos = targetMeta.videos,
+            contentType = tmdbContentType,
+            episodeMap = episodeMap
+        )
+        val targetVideos = projectedVideoResult.videos
 
         // When the meta arrived with no pre-existing episode structure (e.g. from the canonical
         // router path which returns videos=emptyList()), build video stubs from the episode map
         // so that the enrichment results (runtimes, thumbnails, etc.) are not silently discarded.
-        if (targetMeta.videos.isEmpty()) {
+        if (targetVideos.isEmpty()) {
             Log.i(
                 TAG,
                 "detail.episode_enrichment_building_video_stubs metaId=${targetMeta.id} " +
@@ -1889,14 +1896,14 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        val existingKeys = targetMeta.videos
+        val existingKeys = targetVideos
             .mapNotNull { video ->
                 val season = video.season ?: return@mapNotNull null
                 val episode = video.episode ?: return@mapNotNull null
                 season to episode
             }
             .toSet()
-        val hydratedVideos = targetMeta.videos.map { video ->
+        val hydratedVideos = targetVideos.map { video ->
                 val season = video.season
                 val episode = video.episode
                 val key = if (season != null && episode != null) season to episode else null
@@ -1917,11 +1924,15 @@ class MetaDetailsViewModel @Inject constructor(
                     tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
                 )
             }
-        val missingVideos = buildKitsuEpisodeVideos(
-            seriesId = targetMeta.id,
-            episodeLabel = context.getString(R.string.episodes_episode),
-            episodeMap = episodeMap.filterKeys { it !in existingKeys }
-        )
+        val missingVideos = if (projectedVideoResult.changed) {
+            emptyList()
+        } else {
+            buildKitsuEpisodeVideos(
+                seriesId = targetMeta.id,
+                episodeLabel = context.getString(R.string.episodes_episode),
+                episodeMap = episodeMap.filterKeys { it !in existingKeys }
+            )
+        }
         val mergedVideos = (hydratedVideos + missingVideos)
             .sortedWith(compareBy<Video>({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }, { it.title }))
 
@@ -1929,6 +1940,52 @@ class MetaDetailsViewModel @Inject constructor(
             videos = mergedVideos
         )
     }
+
+    private fun projectDetailVideosToCanonicalCoordinates(
+        videos: List<Video>,
+        contentType: ContentType,
+        episodeMap: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): DetailEpisodeProjectionResult {
+        if (videos.isEmpty() || episodeMap.isEmpty()) return DetailEpisodeProjectionResult(videos, changed = false)
+        if (contentType != ContentType.SERIES && contentType != ContentType.TV) {
+            return DetailEpisodeProjectionResult(videos, changed = false)
+        }
+
+        var changed = false
+        val projectedVideos = videos.map { video ->
+            val season = video.season
+            val episode = video.episode
+            if (season == null || episode == null) return@map video
+            val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+                contentType = contentType.toApiString(),
+                requestedSeason = season,
+                requestedEpisode = episode,
+                requestedTitle = video.title,
+                requestedFirstAired = video.released,
+                episodes = episodeMap
+            ) ?: return@map video
+            if (projected.season == season && projected.episode == episode) return@map video
+            changed = true
+            video.copy(
+                id = "${targetCanonicalVideoId(video.id)}:${projected.season}:${projected.episode}",
+                season = projected.season,
+                episode = projected.episode,
+                title = projected.episodeTitle ?: video.title,
+                released = projected.firstAired ?: video.released
+            )
+        }
+        return DetailEpisodeProjectionResult(projectedVideos, changed)
+    }
+
+    private fun targetCanonicalVideoId(videoId: String): String {
+        return videoId.substringBeforeLast(':', missingDelimiterValue = videoId)
+            .substringBeforeLast(':', missingDelimiterValue = videoId)
+    }
+
+    private data class DetailEpisodeProjectionResult(
+        val videos: List<Video>,
+        val changed: Boolean
+    )
 
     private fun shouldSupplementTvdbDetailWithTmdb(
         tvEnrichment: TvMetadataEnrichment?,

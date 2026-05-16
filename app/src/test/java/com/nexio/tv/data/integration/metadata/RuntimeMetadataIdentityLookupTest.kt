@@ -1,10 +1,13 @@
 package com.nexio.tv.data.integration.metadata
 
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbRemoteIdSearchResponse
 import com.nexio.tv.data.remote.api.TvdbRemoteIdSearchResult
+import com.nexio.tv.data.remote.api.TvdbSearchResponse
+import com.nexio.tv.data.remote.api.TvdbSearchResult
 import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import io.mockk.coEvery
@@ -53,6 +56,7 @@ class RuntimeMetadataIdentityLookupTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>()
         val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)
         coEvery { tmdbProvider.findTvdbIdByTmdbTvId(1399) } returns 121361
+        coEvery { tvdbProvider.fetchSeriesExtended(121361, meta = null, short = false) } returns TvdbSeriesExtendedRecord(id = 121361)
         val lookup = RuntimeMetadataIdentityLookup(
             tmdbProvider = tmdbProvider,
             tvdbProvider = tvdbProvider
@@ -62,6 +66,7 @@ class RuntimeMetadataIdentityLookupTest {
 
         assertEquals("121361", result)
         coVerify(exactly = 1) { tmdbProvider.findTvdbIdByTmdbTvId(1399) }
+        coVerify(exactly = 1) { tvdbProvider.fetchSeriesExtended(121361, meta = null, short = false) }
         coVerify(exactly = 0) { tmdbProvider.findImdbIdByTmdbId(any(), any()) }
         coVerify(exactly = 0) { tvdbProvider.searchByRemoteId(any()) }
     }
@@ -71,6 +76,7 @@ class RuntimeMetadataIdentityLookupTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>()
         val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)
         coEvery { tmdbProvider.findTvdbIdByTmdbTvId(1399) } returns 121361
+        coEvery { tvdbProvider.fetchSeriesExtended(121361, meta = null, short = false) } returns TvdbSeriesExtendedRecord(id = 121361)
         val lookup = RuntimeMetadataIdentityLookup(
             tmdbProvider = tmdbProvider,
             tvdbProvider = tvdbProvider
@@ -80,8 +86,64 @@ class RuntimeMetadataIdentityLookupTest {
 
         assertEquals("121361", result)
         coVerify(exactly = 1) { tmdbProvider.findTvdbIdByTmdbTvId(1399) }
+        coVerify(exactly = 1) { tvdbProvider.fetchSeriesExtended(121361, meta = null, short = false) }
         coVerify(exactly = 0) { tmdbProvider.findImdbIdByTmdbId(any(), any()) }
         coVerify(exactly = 0) { tvdbProvider.searchByRemoteId(any()) }
+    }
+
+    @Test
+    fun `tmdbTvToTvdb falls back to TVDB exact alias when TMDB child tvdb id is not canonical`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>()
+        val tvdbProvider = mockk<TvdbIntegrationProvider>()
+        coEvery { tmdbProvider.findTvdbIdByTmdbTvId(308014) } returns 477676
+        coEvery { tvdbProvider.fetchSeriesExtended(477676, meta = null, short = false) } returns null
+        coEvery {
+            tmdbProvider.fetchTvCore(308014, "en-US", null)
+        } returns tmdbIdentityEnrichment("Berlin and the Lady with an Ermine")
+        coEvery { tvdbProvider.searchSeriesByQuery("Berlin and the Lady with an Ermine") } returns TvdbSearchResponse(
+            data = listOf(
+                TvdbSearchResult(
+                    tvdbId = "413033",
+                    name = "Berlín",
+                    aliases = listOf("Money Heist - Berlin", "Berlin and the Lady with an Ermine"),
+                    remoteIds = listOf(TvdbRemoteId(id = "146176", sourceName = "TheMovieDB.com"))
+                )
+            )
+        )
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.tmdbTvToTvdb("308014")
+
+        assertEquals("413033", result)
+        coVerify(exactly = 1) { tmdbProvider.findTvdbIdByTmdbTvId(308014) }
+        coVerify(exactly = 1) { tvdbProvider.fetchSeriesExtended(477676, meta = null, short = false) }
+        coVerify(exactly = 1) { tmdbProvider.fetchTvCore(308014, "en-US", null) }
+        coVerify(exactly = 1) { tvdbProvider.searchSeriesByQuery("Berlin and the Lady with an Ermine") }
+    }
+
+    @Test
+    fun `tmdbTvToTvdb discards non canonical direct TVDB id when alias search misses`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>()
+        val tvdbProvider = mockk<TvdbIntegrationProvider>()
+        coEvery { tmdbProvider.findTvdbIdByTmdbTvId(308014) } returns 477676
+        coEvery { tvdbProvider.fetchSeriesExtended(477676, meta = null, short = false) } returns null
+        coEvery {
+            tmdbProvider.fetchTvCore(308014, "en-US", null)
+        } returns tmdbIdentityEnrichment("Berlin and the Lady with an Ermine")
+        coEvery { tvdbProvider.searchSeriesByQuery("Berlin and the Lady with an Ermine") } returns TvdbSearchResponse(
+            data = listOf(TvdbSearchResult(tvdbId = "999999", name = "Different Berlin"))
+        )
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.tmdbTvToTvdb("308014")
+
+        assertNull(result)
     }
 
     @Test
@@ -246,4 +308,29 @@ class RuntimeMetadataIdentityLookupTest {
         coVerify(exactly = 0) { tmdbProvider.findImdbIdByTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbProvider.findTmdbIdByImdbId(any(), any()) }
     }
+
+    private fun tmdbIdentityEnrichment(title: String): TmdbEnrichment =
+        TmdbEnrichment(
+            localizedTitle = title,
+            description = null,
+            genres = emptyList(),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = emptyList(),
+            releaseInfo = null,
+            rating = null,
+            runtimeMinutes = null,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            countries = null,
+            language = null,
+            collectionId = null,
+            collectionName = null
+        )
 }

@@ -731,6 +731,17 @@ class TvdbIntegrationProvider @Inject constructor(
         }
     }
 
+    suspend fun searchSeriesByQuery(query: String): TvdbSearchResponse? {
+        val normalizedQuery = query.trim().takeIf { it.isNotEmpty() } ?: return null
+        return callAuthenticated(TvdbApiShapes.SEARCH, "tvdb.search_series.query", IntegrationWorkClass.USER_VISIBLE) { authorization ->
+            tvdbApi.search(
+                authorization = authorization,
+                query = normalizedQuery,
+                type = "series"
+            )
+        }
+    }
+
     suspend fun fetchPersonExtended(peopleId: Int): TvdbPersonExtendedRecord? {
         return callAuthenticated(TvdbApiShapes.PERSON_EXTENDED, "tvdb.fetch_person_extended", IntegrationWorkClass.USER_VISIBLE) { authorization ->
             tvdbApi.getPersonExtended(authorization, peopleId)

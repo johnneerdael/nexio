@@ -6,6 +6,7 @@ import com.nexio.tv.core.tvdb.TvdbRemoteIdSource
 import com.nexio.tv.core.tvdb.normalizeTvdbRemoteIdSource
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
+import com.nexio.tv.data.remote.api.TvdbSearchResult
 import javax.inject.Inject
 
 class RuntimeMetadataIdentityLookup @Inject constructor(
@@ -24,7 +25,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
         tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "tv")
 
     override suspend fun tmdbTvToTvdb(tmdbId: String): String? =
-        tmdbProvider.findTvdbIdByTmdbTvId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null)?.toString()
+        resolveTmdbTvToTvdb(tmdbId)
 
     override suspend fun imdbToTvdbSeries(imdbId: String): String? {
         val normalizedImdbId = imdbId.trim().takeIf { it.isNotEmpty() } ?: return null
@@ -43,8 +44,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
             ?.takeIf { it.isNotBlank() }
 
     override suspend fun tmdbToTvdb(tmdbId: String): String? {
-        tmdbProvider.findTvdbIdByTmdbTvId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null)
-            ?.let { tvdbId -> return tvdbId.toString() }
+        resolveTmdbTvToTvdb(tmdbId)?.let { tvdbId -> return tvdbId }
         val imdbId = tmdbTvToImdb(tmdbId)?.takeIf { it.isNotBlank() } ?: return null
         return imdbToTvdbSeries(imdbId)
     }
@@ -56,4 +56,53 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
         val imdbId = tvdbSeriesToImdb(tvdbId)?.takeIf { it.isNotBlank() } ?: return null
         return imdbToTmdbMovie(imdbId)
     }
+
+    private suspend fun resolveTmdbTvToTvdb(tmdbId: String): String? {
+        val tmdbInt = MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null
+        val directTvdbId = tmdbProvider.findTvdbIdByTmdbTvId(tmdbInt)
+        if (directTvdbId != null && tvdbProvider.fetchSeriesExtended(directTvdbId) != null) {
+            return directTvdbId.toString()
+        }
+
+        return findCanonicalTvdbSeriesByTmdbTitle(tmdbInt)
+    }
+
+    private suspend fun findCanonicalTvdbSeriesByTmdbTitle(tmdbId: Int): String? {
+        val title = tmdbProvider.fetchTvCore(
+            tvId = tmdbId,
+            normalizedLanguage = "en-US",
+            activePosterProvider = null
+        )?.localizedTitle?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+
+        return tvdbProvider.searchSeriesByQuery(title)
+            ?.data
+            .orEmpty()
+            .firstNotNullOfOrNull { result ->
+                result.canonicalTvdbIdIfExactAlias(title)
+            }
+    }
+
+    private fun TvdbSearchResult.canonicalTvdbIdIfExactAlias(sourceTitle: String): String? {
+        val normalizedTitle = sourceTitle.normalizedIdentityTitle()
+        if (normalizedTitle.isEmpty()) return null
+        val exactNameMatch = name.normalizedIdentityTitle() == normalizedTitle ||
+            this.title.normalizedIdentityTitle() == normalizedTitle
+        val exactAliasMatch = aliases.orEmpty().any { alias ->
+            alias.normalizedIdentityTitle() == normalizedTitle
+        }
+        if (!exactNameMatch && !exactAliasMatch) return null
+        val rawId = id?.trim()
+        return tvdbId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: rawId?.substringAfter("series-", missingDelimiterValue = rawId)
+                ?.takeIf { it.all(Char::isDigit) }
+    }
+
+    private fun String?.normalizedIdentityTitle(): String =
+        this
+            ?.trim()
+            ?.lowercase()
+            ?.replace(Regex("[^\\p{L}\\p{Nd}]+"), " ")
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            .orEmpty()
 }
