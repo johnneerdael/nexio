@@ -9,6 +9,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGenerator
 import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
@@ -126,13 +127,17 @@ class TvdbMetadataProviderAdapterArtworkTest {
     private fun resolver(
         cache: ArtworkDecisionCache,
         remoteSourceStore: ArtworkRemoteSourceStore
-    ): MetadataArtworkDecisionResolver =
-        MetadataArtworkDecisionResolver(
+    ): MetadataArtworkDecisionResolver {
+        val noOpGenerator = mockk<FanartTvCandidateGenerator>()
+        coEvery { noOpGenerator.generate(any(), any(), any(), any(), any(), any()) } returns emptyList()
+        return MetadataArtworkDecisionResolver(
             artworkRouter = ArtworkRouter(remoteSourceStore = remoteSourceStore),
             artworkDecisionCache = cache,
             remoteSourceStore = remoteSourceStore,
-            settingsSource = FakeArtworkProviderSettingsSource()
+            settingsSource = FakeArtworkProviderSettingsSource(),
+            fanartGenerator = noOpGenerator
         )
+    }
 
     private class FakeArtworkProviderSettingsSource : ArtworkProviderSettingsSource {
         override val settings: Flow<ArtworkProviderSettings> =
