@@ -1198,17 +1198,23 @@ class TraktProgressService @Inject constructor(
             getHiddenProgressSnapshot(forceRefresh = true)
         }
 
-        val progressSnapshot = if (activityChanged) {
+        val baseProgressSnapshot = if (activityChanged) {
             fetchAllProgressSnapshot(force = force)
         } else {
             remoteProgress.value
         }
+        val watchedShows = getWatchedShowsSnapshot(forceRefresh = activityChanged || force)
+        val progressSnapshot = mergeWatchedShowAnchors(
+            progress = baseProgressSnapshot,
+            watchedShows = watchedShows
+        )
         if (activityChanged) {
             remoteProgress.value = progressSnapshot
             reconcileOptimistic(progressSnapshot)
+        } else if (progressSnapshot != remoteProgress.value) {
+            remoteProgress.value = progressSnapshot
         }
 
-        val watchedShows = getWatchedShowsSnapshot(forceRefresh = activityChanged || force)
         val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
         val allNextUpSnapshot = deriveNextUpFromWatchedShows(
             watchedShows = watchedShows,
@@ -1463,6 +1469,10 @@ class TraktProgressService @Inject constructor(
         getWatchedShowsSnapshot(forceRefresh = false)
 
     @VisibleForTesting
+    internal suspend fun testOnlyWatchedShowProgressAnchors(): List<WatchProgress> =
+        watchedShowProgressAnchors(getWatchedShowsSnapshot(forceRefresh = false))
+
+    @VisibleForTesting
     internal suspend fun testOnlyDeriveNextUp(): List<NextUpEntry> {
         val watchedShows = getWatchedShowsSnapshot(forceRefresh = false)
         val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
@@ -1543,6 +1553,50 @@ class TraktProgressService @Inject constructor(
             traktShowId = ids.trakt,
             watchedEpisodes = watchedEpisodes
         )
+    }
+
+    private fun mergeWatchedShowAnchors(
+        progress: List<WatchProgress>,
+        watchedShows: Map<String, WatchedShowIndexEntry>
+    ): List<WatchProgress> {
+        if (watchedShows.isEmpty()) return progress
+        val mergedByKey = linkedMapOf<String, WatchProgress>()
+        for (i in progress.indices) {
+            val row = progress[i]
+            mergedByKey[progressKey(row)] = row
+        }
+        val anchors = watchedShowProgressAnchors(watchedShows)
+        for (i in anchors.indices) {
+            val anchor = anchors[i]
+            mergedByKey[progressKey(anchor)] = anchor
+        }
+        return mergedByKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private fun watchedShowProgressAnchors(
+        watchedShows: Map<String, WatchedShowIndexEntry>
+    ): List<WatchProgress> {
+        if (watchedShows.isEmpty()) return emptyList()
+        val anchors = ArrayList<WatchProgress>(watchedShows.size)
+        val seen = HashSet<String>(watchedShows.size)
+        val entries = watchedShows.values.toList()
+        for (i in entries.indices) {
+            val entry = entries[i]
+            if (!seen.add(entry.canonicalContentId)) continue
+            val latestCoordinate = entry.watchedEpisodes.maxWithOrNull(
+                compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second }
+            ) ?: continue
+            val season = latestCoordinate.first
+            val episode = latestCoordinate.second
+            anchors += synthesizeWatchedProgress(
+                contentId = entry.canonicalContentId,
+                season = season,
+                episode = episode,
+                lastWatchedAtMs = entry.lastWatchedAtMs,
+                traktShowId = entry.traktShowId
+            ).copy(name = entry.name)
+        }
+        return anchors
     }
 
     private fun resolveAnimeCanonicalIfApplicable(ids: TraktIdsDto): String? {

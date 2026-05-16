@@ -1222,6 +1222,37 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot suppresses older resume when watched show anchor is newer coordinate`() = runTest {
+        val service = buildService()
+        val oldResume = resume(
+            contentId = "tvdb:386630",
+            videoId = "tvdb:386630:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = 1763758537000L,
+            progressPercent = 30.2367f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(name = "Mayor of Kingstown")
+        val watchedAnchor = resume(
+            contentId = "tvdb:386630",
+            videoId = "tvdb:386630:4:10",
+            season = 4,
+            episode = 10,
+            lastWatched = 1772894400000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        ).copy(name = "Mayor of Kingstown")
+
+        val snapshot = service.buildRawSnapshotForTest(
+            allProgress = listOf(oldResume, watchedAnchor),
+            nextUpEntries = emptyList(),
+            traktUpNextEntries = emptyList()
+        )
+
+        assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
+    }
+
+    @Test
     fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)

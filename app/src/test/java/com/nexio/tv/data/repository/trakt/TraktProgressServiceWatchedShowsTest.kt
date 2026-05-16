@@ -70,6 +70,22 @@ class TraktProgressServiceWatchedShowsTest {
     }
 
     @Test
+    fun watchedShowProgressAnchors_publish_latest_completed_coordinate_for_continue_watching_suppression() = runBlocking {
+        val fixture = readFixture("trakt/sync_watched_shows_full.json")
+        coEvery { traktIntegrationProvider.getWatchedShows() } returns
+            IntegrationCallResult.Success(moshi.parseList<TraktWatchedShowItemDto>(fixture))
+
+        val anchors = service.testOnlyWatchedShowProgressAnchors()
+
+        val breakingBad = anchors.single { it.contentId == "tvdb:81189" }
+        assertEquals("Breaking Bad", breakingBad.name)
+        assertEquals(2, breakingBad.season)
+        assertEquals(2, breakingBad.episode)
+        assertEquals(100f, breakingBad.progressPercent)
+        assertEquals(true, breakingBad.isCompleted())
+    }
+
+    @Test
     fun reset_at_excludes_older_episodes() = runBlocking {
         val fixture = readFixture("trakt/sync_watched_shows_full.json")
         coEvery { traktIntegrationProvider.getWatchedShows() } returns
