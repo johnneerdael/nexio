@@ -289,6 +289,35 @@ private data class LiveContinueWatchingSnapshotEmission(
     val completedProgress: List<WatchProgress> = emptyList()
 )
 
+private class TvdbEpisodeProjectionCache {
+    private val episodeMaps = mutableMapOf<String, Map<Pair<Int, Int>, TvEpisodeMetadata>>()
+
+    suspend fun getOrFetch(
+        contentType: String,
+        contentId: String,
+        fallbackContentId: String,
+        fetch: suspend () -> Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val key = keyFor(contentType, contentId, fallbackContentId)
+        if (episodeMaps.containsKey(key)) return episodeMaps.getValue(key)
+        return fetch().also { episodeMaps[key] = it }
+    }
+
+    private fun keyFor(
+        contentType: String,
+        contentId: String,
+        fallbackContentId: String
+    ): String {
+        val normalizedType = contentType.trim().lowercase().ifBlank { "series" }
+        val normalizedContentId = contentId.trim().ifBlank {
+            fallbackContentId
+                .trim()
+                .substringBeforeLast(":", fallbackContentId.trim())
+        }
+        return "$normalizedType|$normalizedContentId"
+    }
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContinueWatchingSnapshotService @Inject constructor(
@@ -976,8 +1005,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
-        val localNextUpEntries = deriveLocalNextUpEntries(allProgress)
-        val combinedNextUpEntries = projectNextUpEntriesToCanonicalCoordinates(nextUpEntries + localNextUpEntries)
+        val projectionCache = TvdbEpisodeProjectionCache()
+        val localNextUpEntries = deriveLocalNextUpEntries(allProgress, projectionCache)
+        val combinedNextUpEntries = nextUpEntries + localNextUpEntries
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
         // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
@@ -993,15 +1023,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
         }
         val records = ContinueWatchingMerger.merge(resolvedRecords)
-        val normalizedNextUpItems = combinedNextUpEntries
-            .asSequence()
-            .mapNotNull(::normalizeNextUpEntry)
-            .filterNot { entry ->
-                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
-            }
-            .sortedByDescending { it.activityAtMs }
-            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
-            .toList()
+        val normalizedNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
+            entries = combinedNextUpEntries,
+            completionAnchors = completionAnchors,
+            projectionCache = projectionCache
+        )
         val nextUpCandidateSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
@@ -1012,16 +1038,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nextUpItems = nextUpMainCandidates.filter { entry ->
             ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
-        val projectedTraktUpNextEntries = projectNextUpEntriesToCanonicalCoordinates(traktUpNextEntries)
-        val normalizedTraktUpNextItems = projectedTraktUpNextEntries
-            .asSequence()
-            .mapNotNull(::normalizeNextUpEntry)
-            .filterNot { entry ->
-                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
-            }
-            .sortedByDescending { it.activityAtMs }
-            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
-            .toList()
+        val normalizedTraktUpNextItems = normalizeFilterProjectDedupeNextUpEntries(
+            entries = traktUpNextEntries,
+            completionAnchors = completionAnchors,
+            projectionCache = projectionCache
+        )
         val syntheticRailCandidates = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedTraktUpNextItems,
@@ -1062,7 +1083,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private suspend fun deriveLocalNextUpEntries(
-        allProgress: List<WatchProgress>
+        allProgress: List<WatchProgress>,
+        projectionCache: TvdbEpisodeProjectionCache
     ): List<TrackingNextUpEntry> {
         val facade = metadataRouterFacade ?: return emptyList()
         val latestCompletedByContent = linkedMapOf<String, WatchProgress>()
@@ -1091,7 +1113,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val entries = ArrayList<TrackingNextUpEntry>(seeds.size)
         for (i in seeds.indices) {
             val seed = seeds[i]
-            val episodeMap = fetchLocalNextUpEpisodeMap(facade, seed)
+            val episodeMap = fetchLocalNextUpEpisodeMap(facade, seed, projectionCache)
             val entry = deriveLocalNextUpEntry(seed, episodeMap) ?: continue
             entries += entry
         }
@@ -1101,8 +1123,34 @@ class ContinueWatchingSnapshotService @Inject constructor(
         ).enrich(entries)
     }
 
+    private suspend fun normalizeFilterProjectDedupeNextUpEntries(
+        entries: List<TrackingNextUpEntry>,
+        completionAnchors: Map<String, ContinueWatchingCompletionAnchor>,
+        projectionCache: TvdbEpisodeProjectionCache
+    ): List<TrackingNextUpEntry> {
+        val normalizedEntries = entries
+            .asSequence()
+            .mapNotNull(::normalizeNextUpEntry)
+            .filterNot { entry ->
+                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
+            }
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
+            .toList()
+        val projectedEntries = projectNextUpEntriesToCanonicalCoordinates(
+            entries = normalizedEntries,
+            projectionCache = projectionCache
+        )
+        return projectedEntries
+            .asSequence()
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
+            .toList()
+    }
+
     private suspend fun projectNextUpEntriesToCanonicalCoordinates(
-        entries: List<TrackingNextUpEntry>
+        entries: List<TrackingNextUpEntry>,
+        projectionCache: TvdbEpisodeProjectionCache
     ): List<TrackingNextUpEntry> {
         val facade = metadataRouterFacade ?: return entries
         if (entries.isEmpty()) return entries
@@ -1115,7 +1163,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 projectedEntries += entry
                 continue
             }
-            val projected = projectNextUpEntryToCanonicalCoordinate(facade, entry)
+            val projected = projectNextUpEntryToCanonicalCoordinate(facade, entry, projectionCache)
             if (projected != null) {
                 projectedEntries += projected
                 changed = true
@@ -1128,23 +1176,30 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun projectNextUpEntryToCanonicalCoordinate(
         facade: MetadataRouterFacade,
-        entry: TrackingNextUpEntry
+        entry: TrackingNextUpEntry,
+        projectionCache: TvdbEpisodeProjectionCache
     ): TrackingNextUpEntry? {
         return try {
-            val episodes = facade.fetchTvEpisodeEnrichment(
-                metadataRequest = MetadataRequest(
-                    contentId = entry.contentId,
-                    contentType = ContentType.SERIES,
-                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
-                    depth = MetadataDepth.SEASON
-                ),
-                tvRequest = TvMetadataRequest(
-                    contentId = entry.contentId,
-                    fallbackContentId = entry.videoId,
-                    contentType = ContentType.SERIES,
-                    seasonNumbers = emptyList()
-                )
-            ).value.orEmpty()
+            val episodes = projectionCache.getOrFetch(
+                contentType = entry.contentType,
+                contentId = entry.contentId,
+                fallbackContentId = entry.videoId
+            ) {
+                facade.fetchTvEpisodeEnrichment(
+                    metadataRequest = MetadataRequest(
+                        contentId = entry.contentId,
+                        contentType = ContentType.SERIES,
+                        sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = entry.contentId,
+                        fallbackContentId = entry.videoId,
+                        contentType = ContentType.SERIES,
+                        seasonNumbers = emptyList()
+                    )
+                ).value.orEmpty()
+            }
             val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
                 contentType = entry.contentType,
                 requestedSeason = entry.season,
@@ -1188,24 +1243,31 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun fetchLocalNextUpEpisodeMap(
         facade: MetadataRouterFacade,
-        seed: WatchProgress
+        seed: WatchProgress,
+        projectionCache: TvdbEpisodeProjectionCache
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
         val contentType = ContentType.fromString(seed.contentType)
         return try {
-            facade.fetchTvEpisodeEnrichment(
-                metadataRequest = MetadataRequest(
-                    contentId = seed.contentId,
-                    contentType = contentType,
-                    sourceContext = MetadataSourceContext(itemType = seed.contentType),
-                    depth = MetadataDepth.SEASON
-                ),
-                tvRequest = TvMetadataRequest(
-                    contentId = seed.contentId,
-                    fallbackContentId = seed.videoId,
-                    contentType = contentType,
-                    seasonNumbers = emptyList()
-                )
-            ).value.orEmpty()
+            projectionCache.getOrFetch(
+                contentType = seed.contentType,
+                contentId = seed.contentId,
+                fallbackContentId = seed.videoId
+            ) {
+                facade.fetchTvEpisodeEnrichment(
+                    metadataRequest = MetadataRequest(
+                        contentId = seed.contentId,
+                        contentType = contentType,
+                        sourceContext = MetadataSourceContext(itemType = seed.contentType),
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = seed.contentId,
+                        fallbackContentId = seed.videoId,
+                        contentType = contentType,
+                        seasonNumbers = emptyList()
+                    )
+                ).value.orEmpty()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

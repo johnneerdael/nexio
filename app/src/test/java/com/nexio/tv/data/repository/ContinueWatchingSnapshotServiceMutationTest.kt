@@ -28,6 +28,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -40,6 +41,7 @@ import javax.inject.Inject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -967,6 +969,208 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("tvdb:303904:14:1", projected.videoId)
             assertEquals("2026-02-17", projected.firstAired)
             assertEquals(AirDateGate.pendingTriggerMs(0L, null, "2026-02-17"), projected.firstAiredMs)
+        }
+
+    @Test
+    fun `buildRawSnapshot projects Trakt up-next rows to TVDB coordinates`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (3 to 4) to TvEpisodeMetadata(
+                        seasonNumber = 3,
+                        episodeNumber = 4,
+                        title = "The Canonical One",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 2,
+                episode = 4,
+                episodeTitle = "The Canonical One",
+                videoId = "tvdb:303904:2:4"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = listOf(providerCoordinate)
+            )
+
+            val projected = snapshot.traktUpNextItems.single()
+            assertEquals(3, projected.season)
+            assertEquals(4, projected.episode)
+            assertEquals("The Canonical One", projected.episodeTitle)
+            assertEquals("tvdb:303904:3:4", projected.videoId)
+        }
+
+    @Test
+    fun `buildRawSnapshot shares TVDB episode enrichment across duplicate next-up rows`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 1,
+                        title = "The Multiverse",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1",
+                activityAtMs = 10_000L
+            )
+            val duplicateProviderCoordinate = providerCoordinate.copy(
+                videoId = "tvdb:303904:13:1:duplicate",
+                activityAtMs = 9_000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(providerCoordinate, duplicateProviderCoordinate),
+                traktUpNextEntries = listOf(providerCoordinate)
+            )
+
+            assertEquals(1, snapshot.nextUpItems.size)
+            assertEquals(1, snapshot.traktUpNextItems.size)
+            coVerify(exactly = 1) {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            }
+        }
+
+    @Test
+    fun `buildRawSnapshot keeps original next-up row when TVDB projection fails`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } throws IllegalStateException("tvdb unavailable")
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(providerCoordinate),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(listOf(providerCoordinate), snapshot.nextUpItems)
+        }
+
+    @Test
+    fun `buildRawSnapshot rethrows cancellation from TVDB projection`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } throws CancellationException("cancelled")
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1"
+            )
+
+            try {
+                invokeBuildRawSnapshot(
+                    service = service,
+                    allProgress = emptyList(),
+                    nextUpEntries = listOf(providerCoordinate),
+                    traktUpNextEntries = emptyList()
+                )
+                fail("Expected CancellationException")
+            } catch (_: CancellationException) {
+                // Expected: cancellation must not be swallowed by projection fallback.
+            }
+        }
+
+    @Test
+    fun `buildRawSnapshot withholds projected future TVDB air date and schedules reemit`() =
+        runTest {
+            val tomorrow = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                .plusDays(1)
+                .toString()
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 1,
+                        title = "Tomorrow",
+                        airDate = tomorrow
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "Tomorrow",
+                videoId = "tvdb:303904:13:1"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(providerCoordinate),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            val scheduled = snapshot.scheduledReemit.single()
+            assertEquals(14, scheduled.season)
+            assertEquals(1, scheduled.episode)
+            assertEquals(tomorrow, scheduled.firstAired)
+            assertEquals("tvdb:303904:14:1", scheduled.videoId)
         }
 
     @Test
