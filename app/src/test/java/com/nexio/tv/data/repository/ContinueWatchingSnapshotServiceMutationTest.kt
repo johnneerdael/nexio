@@ -8,6 +8,10 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
@@ -21,6 +25,7 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -85,7 +90,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
      * at its initial empty value until we seed it via the mutation helpers.
      */
     private fun buildService(
-        continueWatchingIdentityResolver: ContinueWatchingIdentityResolver = canonicalResolver()
+        continueWatchingIdentityResolver: ContinueWatchingIdentityResolver = canonicalResolver(),
+        metadataRouterFacade: MetadataRouterFacade? = null
     ): ContinueWatchingSnapshotService {
         val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
             every { state } returns flowOf(EffectiveTrackingProviderState())
@@ -113,9 +119,14 @@ class ContinueWatchingSnapshotServiceMutationTest {
             traktSettingsDataStore = traktSettingsDataStore,
             metadataDiskCacheStore = metadataDiskCacheStore,
             snapshotStore = snapshotStore,
-            continueWatchingIdentityResolver = continueWatchingIdentityResolver
+            continueWatchingIdentityResolver = continueWatchingIdentityResolver,
+            metadataRouterFacade = metadataRouterFacade
         )
     }
+
+    private fun buildServiceWithMetadataFacade(
+        facade: MetadataRouterFacade
+    ): ContinueWatchingSnapshotService = buildService(metadataRouterFacade = facade)
 
     private fun canonicalResolver(
         resolver: suspend (RawContinueWatchingInput) -> ContinueWatchingRecord = { input ->
@@ -910,6 +921,96 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
             assertEquals(listOf(futureNextUp, futureNextUp), snapshot.scheduledReemit)
+        }
+
+    @Test
+    fun `buildRawSnapshot projects non-anime next-up rows to TVDB coordinates`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 1,
+                        title = "The Multiverse",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val providerCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(providerCoordinate),
+                traktUpNextEntries = emptyList()
+            )
+
+            val projected = snapshot.nextUpItems.single()
+            assertEquals(14, projected.season)
+            assertEquals(1, projected.episode)
+            assertEquals("The Multiverse", projected.episodeTitle)
+            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals("2026-02-17", projected.firstAired)
+            assertEquals(AirDateGate.pendingTriggerMs(0L, null, "2026-02-17"), projected.firstAiredMs)
+        }
+
+    @Test
+    fun `buildRawSnapshot does not project anime next-up rows`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 1,
+                        title = "The Multiverse",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val animeNextUp = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                contentType = "anime",
+                season = 13,
+                episode = 1,
+                episodeTitle = "The Multiverse",
+                videoId = "tvdb:303904:13:1"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(animeNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(listOf(animeNextUp), snapshot.nextUpItems)
+            coVerify(exactly = 0) {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            }
         }
 
     @Test

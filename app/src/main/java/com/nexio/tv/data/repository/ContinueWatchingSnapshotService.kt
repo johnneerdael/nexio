@@ -977,7 +977,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
         val localNextUpEntries = deriveLocalNextUpEntries(allProgress)
-        val combinedNextUpEntries = nextUpEntries + localNextUpEntries
+        val combinedNextUpEntries = projectNextUpEntriesToCanonicalCoordinates(nextUpEntries + localNextUpEntries)
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
         // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
@@ -1012,7 +1012,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nextUpItems = nextUpMainCandidates.filter { entry ->
             ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
-        val normalizedTraktUpNextItems = traktUpNextEntries
+        val projectedTraktUpNextEntries = projectNextUpEntriesToCanonicalCoordinates(traktUpNextEntries)
+        val normalizedTraktUpNextItems = projectedTraktUpNextEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
             .filterNot { entry ->
@@ -1098,6 +1099,80 @@ class ContinueWatchingSnapshotService @Inject constructor(
             metadataRouterFacade = facade,
             availabilityCalculator = TvdbAirAvailabilityCalculator()
         ).enrich(entries)
+    }
+
+    private suspend fun projectNextUpEntriesToCanonicalCoordinates(
+        entries: List<TrackingNextUpEntry>
+    ): List<TrackingNextUpEntry> {
+        val facade = metadataRouterFacade ?: return entries
+        if (entries.isEmpty()) return entries
+
+        val projectedEntries = ArrayList<TrackingNextUpEntry>(entries.size)
+        var changed = false
+        for (i in entries.indices) {
+            val entry = entries[i]
+            if (entry.contentType.trim().equals("anime", ignoreCase = true)) {
+                projectedEntries += entry
+                continue
+            }
+            val projected = projectNextUpEntryToCanonicalCoordinate(facade, entry)
+            if (projected != null) {
+                projectedEntries += projected
+                changed = true
+            } else {
+                projectedEntries += entry
+            }
+        }
+        return if (changed) projectedEntries else entries
+    }
+
+    private suspend fun projectNextUpEntryToCanonicalCoordinate(
+        facade: MetadataRouterFacade,
+        entry: TrackingNextUpEntry
+    ): TrackingNextUpEntry? {
+        return try {
+            val episodes = facade.fetchTvEpisodeEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = entry.contentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = entry.contentId,
+                    fallbackContentId = entry.videoId,
+                    contentType = ContentType.SERIES,
+                    seasonNumbers = emptyList()
+                )
+            ).value.orEmpty()
+            val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+                contentType = entry.contentType,
+                requestedSeason = entry.season,
+                requestedEpisode = entry.episode,
+                requestedTitle = entry.episodeTitle,
+                episodes = episodes
+            ) ?: return null
+
+            entry.copy(
+                season = projected.season,
+                episode = projected.episode,
+                episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
+                videoId = "${entry.contentId}:${projected.season}:${projected.episode}",
+                firstAired = projected.firstAired ?: entry.firstAired,
+                firstAiredMs = projected.firstAired
+                    ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
+                    ?: entry.firstAiredMs
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(
+                "ContinueWatching",
+                "next-up coordinate projection failed for ${entry.contentId} s${entry.season}e${entry.episode}: ${e.message}",
+                e
+            )
+            null
+        }
     }
 
     private fun shouldPreferCompletedSeed(
