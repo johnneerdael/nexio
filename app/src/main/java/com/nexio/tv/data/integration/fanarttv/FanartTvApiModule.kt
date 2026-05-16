@@ -25,7 +25,7 @@ abstract class FanartTvApiModule {
 
     @Binds
     @Singleton
-    abstract fun bindFanartTvLookup(impl: FanartTvLookupShape): FanartTvLookup
+    abstract fun bindFanartTvLookup(impl: FanartTvIntegrationProvider): FanartTvLookup
 
     companion object {
         @Provides
