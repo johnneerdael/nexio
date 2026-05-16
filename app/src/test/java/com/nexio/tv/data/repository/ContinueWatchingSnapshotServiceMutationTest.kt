@@ -1184,6 +1184,44 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `sanitizeSnapshot collapses provider and local next-up for same show title`() =
+        runTest {
+            val service = buildService()
+            val providerNextUp = nextUp(
+                contentId = "tvdb:411364",
+                firstAiredMs = 2_000L,
+                episode = 11
+            ).copy(
+                name = "Shrinking",
+                season = 3,
+                videoId = "tvdb:411364:3:11",
+                activityAtMs = 20_000L
+            )
+            val localNextUp = nextUp(
+                contentId = "tt15677150",
+                firstAiredMs = 1_000L,
+                episode = 8
+            ).copy(
+                name = "Shrinking",
+                season = 3,
+                videoId = "tt15677150:3:8",
+                activityAtMs = 10_000L
+            )
+
+            val snapshot = invokeSanitizeSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    nextUpItems = listOf(providerNextUp, localNextUp)
+                )
+            )
+
+            val item = snapshot.nextUpItems.single()
+            assertEquals("tvdb:411364", item.contentId)
+            assertEquals(3, item.season)
+            assertEquals(11, item.episode)
+        }
+
+    @Test
     fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)

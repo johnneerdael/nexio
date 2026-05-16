@@ -69,10 +69,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val REFRESH_FAILURE_RETRY_MS = 15 * 60_000L
+private val NEXT_UP_SERIES_TITLE_TOKEN = Regex("[^a-z0-9]+")
+private val NEXT_UP_SERIES_WHITESPACE = Regex("\\s+")
 
 private object NoopContinueWatchingAirScheduler : ContinueWatchingAirScheduler {
     override fun scheduleSoonest(triggerAtMs: Long?) = Unit
@@ -1049,6 +1052,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
+            .dedupeNextUpBySeriesIdentity()
         val nextUpCandidateSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
@@ -1672,6 +1676,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }
             .distinctBy { it.contentId }
+            .dedupeNextUpBySeriesIdentity()
         val mainFeedNextUpItems = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = nextUpItems,
@@ -1685,6 +1690,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }
             .distinctBy { it.contentId }
+            .dedupeNextUpBySeriesIdentity()
         val traktUpNextSelection = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = traktUpNextItems,
@@ -1798,6 +1804,38 @@ class ContinueWatchingSnapshotService @Inject constructor(
         } catch (_: Throwable) {
             null
         }
+    }
+
+    private fun List<TrackingNextUpEntry>.dedupeNextUpBySeriesIdentity(): List<TrackingNextUpEntry> {
+        if (size <= 1) return this
+        val seen = linkedSetOf<String>()
+        val out = ArrayList<TrackingNextUpEntry>(size)
+        for (i in indices) {
+            val entry = this[i]
+            val key = nextUpSeriesIdentityKey(entry)
+            if (seen.add(key)) out += entry
+        }
+        return out
+    }
+
+    private fun nextUpSeriesIdentityKey(entry: TrackingNextUpEntry): String {
+        val normalizedTitle = entry.name
+            .trim()
+            .lowercase(Locale.ROOT)
+            .replace(NEXT_UP_SERIES_TITLE_TOKEN, " ")
+            .trim()
+            .replace(NEXT_UP_SERIES_WHITESPACE, " ")
+
+        if (normalizedTitle.isNotBlank()) {
+            return "${entry.contentType.trim().lowercase(Locale.ROOT)}:$normalizedTitle"
+        }
+
+        val lookupKeys = ContinueWatchingCanonicalization.lookupKeysForRawContentId(entry.contentId)
+        if (lookupKeys.isNotEmpty()) {
+            return lookupKeys.sorted().joinToString(separator = "|")
+        }
+
+        return entry.contentId.trim().lowercase(Locale.ROOT)
     }
 
     private suspend fun persistRawSnapshot(

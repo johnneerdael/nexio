@@ -63,8 +63,8 @@ object ContinueWatchingEpisodeCoordinateProjector {
         fallbackCoordinate: Pair<Int, Int>
     ): ProjectedContinueWatchingEpisode {
         return ProjectedContinueWatchingEpisode(
-            season = seasonNumber ?: fallbackCoordinate.first,
-            episode = episodeNumber ?: fallbackCoordinate.second,
+            season = fallbackCoordinate.first,
+            episode = fallbackCoordinate.second,
             episodeTitle = title,
             firstAired = airDate
         )

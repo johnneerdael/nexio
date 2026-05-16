@@ -219,7 +219,8 @@ class TraktProgressService @Inject constructor(
 
     private data class DerivedNextUpCandidate(
         val entry: NextUpEntry,
-        val weakDerivation: Boolean
+        val weakDerivation: Boolean,
+        val watchedEpisodes: Set<Pair<Int, Int>>
     )
 
     internal data class CachedNextUpValidation(
@@ -1744,7 +1745,8 @@ class TraktProgressService @Inject constructor(
                         traktShowId = showInfo.traktShowId,
                         traktEpisodeId = null
                     ),
-                    weakDerivation = true
+                    weakDerivation = true,
+                    watchedEpisodes = showInfo.watchedEpisodes
                 )
             }
             .toList()
@@ -1801,7 +1803,11 @@ class TraktProgressService @Inject constructor(
                     async {
                         val key = canonicalLookupKey(candidate.entry.contentId)
                         val result = nextUpValidationSemaphore.withPermit {
-                            validateNextUpCandidate(candidate.entry, hiddenProgress)
+                            validateNextUpCandidate(
+                                candidate.entry,
+                                hiddenProgress,
+                                candidate.watchedEpisodes
+                            )
                         }
                         val ttl = if (
                             result is TraktNextUpValidationResult.CurrentAiredNextEpisode ||
@@ -1852,7 +1858,8 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun validateNextUpCandidate(
         candidate: NextUpEntry,
-        hiddenProgress: HiddenProgressSnapshot
+        hiddenProgress: HiddenProgressSnapshot,
+        watchedEpisodesFromSync: Set<Pair<Int, Int>> = emptySet()
     ): TraktNextUpValidationResult {
         return try {
             // Trakt's /shows/{id}/... endpoints accept trakt-numeric-id, trakt-slug, or IMDB
@@ -1874,7 +1881,7 @@ class TraktProgressService @Inject constructor(
             val season = nextEpisode.season ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val episode = nextEpisode.number ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val watchedEpisodes = watchedEpisodeCoordinatesFromProgressSeasons(progress.seasons)
-            if (!isPublishableNextEpisodeCoordinate(season, episode, watchedEpisodes)) {
+            if (!isPublishableNextEpisodeCoordinate(season, episode, watchedEpisodes + watchedEpisodesFromSync)) {
                 trace("next-up validation suppressed watched-or-stale episode: show=${candidate.contentId} s${season}e$episode")
                 return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             }

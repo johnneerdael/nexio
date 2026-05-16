@@ -29,6 +29,26 @@ class ContinueWatchingEpisodeCoordinateProjectorTest {
     }
 
     @Test
+    fun `uses tvdb map coordinate even when metadata carries provider numbering`() {
+        val episodes = mapOf(
+            (14 to 1) to episode(season = 13, episode = 1, title = "The Multiverse", airDate = "2026-02-03")
+        )
+
+        val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 13,
+            requestedEpisode = 1,
+            requestedTitle = "The Multiverse",
+            episodes = episodes
+        )
+
+        assertEquals(14, projected?.season)
+        assertEquals(1, projected?.episode)
+        assertEquals("The Multiverse", projected?.episodeTitle)
+        assertEquals("2026-02-03", projected?.firstAired)
+    }
+
+    @Test
     fun `keeps exact coordinate when title is blank and tvdb coordinate exists`() {
         val episodes = mapOf(
             (2 to 7) to episode(season = 2, episode = 7, title = "The Seventh", airDate = "2026-03-04")
