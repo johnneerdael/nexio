@@ -1756,6 +1756,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             resumeItems = resumeItems,
             nextUpItems = emptyList(),
             traktUpNextItems = emptyList(),
+            records = emptyList(),
             displayMetadataByItemKey = sanitized.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = sanitized.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys }
         )

@@ -2249,6 +2249,21 @@ class ContinueWatchingSnapshotServiceMutationTest {
         ).copy(name = "Mayor of Kingstown")
         val persisted = ContinueWatchingSnapshot(
             resumeItems = listOf(remoteResume, localResume),
+            records = listOf(
+                ContinueWatchingRecord(
+                    profileId = 1,
+                    parentId = remoteResume.contentId,
+                    contentId = remoteResume.videoId,
+                    provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+                    routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+                    positionMs = 0L,
+                    durationMs = 0L,
+                    episodeContext = ContinueWatchingRecord.EpisodeContext(1, 2),
+                    clickTimeDisplayMetadata = null,
+                    source = ContinueWatchingRecord.Source.REMOTE,
+                    updatedAt = remoteResume.lastWatched
+                )
+            ),
             updatedAtMs = nowMs - 60_000L
         )
         var writtenSnapshot: ContinueWatchingSnapshot? = null
@@ -2267,7 +2282,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
         service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
 
         assertEquals(listOf(localResume), rawSnapshot(service).resumeItems)
+        assertEquals(emptyList<ContinueWatchingRecord>(), rawSnapshot(service).records)
         assertEquals(listOf(localResume), writtenSnapshot?.resumeItems)
+        assertEquals(emptyList<ContinueWatchingRecord>(), writtenSnapshot?.records)
     }
 
     @Test
