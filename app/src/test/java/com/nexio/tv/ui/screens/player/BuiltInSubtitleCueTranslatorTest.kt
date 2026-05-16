@@ -191,6 +191,59 @@ class BuiltInSubtitleCueTranslatorTest {
         }
     }
 
+    @Test
+    fun largePrefetchRequestsPublishTranslatedCueGroupsProgressively() = runTest {
+        val service = mockk<SubtitleTranslationService>(relaxed = true)
+        val requestedSizes = mutableListOf<Int>()
+        coEvery {
+            service.translateCueTexts(
+                texts = any(),
+                targetLanguageCode = any(),
+                sourceLanguageCode = any(),
+                settings = any()
+            )
+        } answers {
+            @Suppress("UNCHECKED_CAST")
+            val texts = arg<List<String>>(0)
+            requestedSizes += texts.size
+            Result.success(texts.associateWith { it.uppercase() })
+        }
+
+        val translator = BuiltInSubtitleCueTranslator(
+            scope = this,
+            translationService = service,
+            isEnabledProvider = { true },
+            settingsProvider = {
+                SubtitleTranslationSettings(
+                    enabled = true,
+                    apiKey = "test-key",
+                    model = "test-model"
+                )
+            },
+            targetLanguageProvider = { "nl" },
+            onTranslatingChanged = {},
+            onTranslationError = {},
+            dispatchDebounceMs = 0L,
+            maxBatchCueGroups = 20
+        )
+
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
+            .setCodecs(MimeTypes.TEXT_VTT)
+            .setLanguage("en")
+            .build()
+        val callback = ProgressiveRecordingCallback()
+        val cueGroups = List(45) { i -> cueGroup("text$i", i * 1_000L) }
+
+        translator.translate(format, cueGroups, callback)
+        advanceUntilIdle()
+
+        assertEquals(listOf(5, 10, 20, 10), requestedSizes)
+        assertEquals(listOf(5, 10, 20, 10), callback.successSizes())
+        assertEquals("TEXT0", callback.successes.first().first().cues.first().text.toString())
+        assertEquals("TEXT44", callback.successes.last().last().cues.first().text.toString())
+    }
+
     private fun cueGroup(text: String, presentationTimeUs: Long): CueGroup {
         val cue = Cue.Builder().setText(text).build()
         return CueGroup(ImmutableList.of(cue), presentationTimeUs)
@@ -215,5 +268,20 @@ class BuiltInSubtitleCueTranslatorTest {
             assertTrue("callback never fired", latch.await(2, TimeUnit.SECONDS))
             return success?.firstOrNull()?.cues?.firstOrNull()?.text?.toString()
         }
+    }
+
+    private class ProgressiveRecordingCallback : CueGroupSubtitleTranslator.TranslationCallback {
+        val successes = mutableListOf<List<CueGroup>>()
+        val failures = mutableListOf<Exception>()
+
+        override fun onSuccess(translatedCueGroups: List<CueGroup>) {
+            successes += translatedCueGroups
+        }
+
+        override fun onFailure(exception: Exception) {
+            failures += exception
+        }
+
+        fun successSizes(): List<Int> = successes.map { it.size }
     }
 }
