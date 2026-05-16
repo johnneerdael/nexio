@@ -1486,16 +1486,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         val scheduledReemitByKey = LinkedHashMap<String, TrackingNextUpEntry>()
         fun addScheduledReemit(entry: TrackingNextUpEntry) {
-            val contentId = entry.contentId.trim()
-            if (contentId.isBlank()) return
-            scheduledReemitByKey.putIfAbsent("${contentId}|${entry.season}|${entry.episode}", entry)
+            val normalized = normalizeNextUpEntry(entry) ?: return
+            val triggerMs = ContinueWatchingCanonicalization.pendingTriggerMs(normalized)
+            if (triggerMs == null || triggerMs <= nowMs) return
+            scheduledReemitByKey.putIfAbsent(
+                "${normalized.contentId}|${normalized.season}|${normalized.episode}",
+                normalized
+            )
         }
         snapshot.scheduledReemit.forEach(::addScheduledReemit)
         (mainFeedNextUpItems.syntheticRailItems + traktUpNextSelection.syntheticRailItems)
-            .filter { entry ->
-                val triggerMs = ContinueWatchingCanonicalization.pendingTriggerMs(entry)
-                triggerMs != null && triggerMs > nowMs
-            }
             .forEach(::addScheduledReemit)
         val activeItemKeys = buildSet {
             resumeItems.forEach { progress ->

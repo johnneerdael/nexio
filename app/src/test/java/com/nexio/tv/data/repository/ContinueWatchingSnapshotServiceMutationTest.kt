@@ -949,13 +949,52 @@ class ContinueWatchingSnapshotServiceMutationTest {
             snapshot = ContinueWatchingSnapshot(
                 nextUpItems = listOf(futureNextUp),
                 traktUpNextItems = listOf(futureNextUp),
-                scheduledReemit = listOf(futureNextUp)
+                scheduledReemit = emptyList()
             )
         )
 
         assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
         assertEquals(listOf(futureNextUp), snapshot.scheduledReemit)
+    }
+
+    @Test
+    fun `sanitizeSnapshot removes persisted unknown-air-date scheduled reemit`() {
+        val service = buildService()
+        val unknownScheduled = nextUp(
+            contentId = "persisted-unknown-scheduled",
+            firstAiredMs = 0L,
+            firstAired = null,
+            episode = 2
+        ).copy(activityAtMs = 60_000L)
+
+        val snapshot = invokeSanitizeSnapshot(
+            service = service,
+            snapshot = ContinueWatchingSnapshot(
+                scheduledReemit = listOf(unknownScheduled)
+            )
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.scheduledReemit)
+    }
+
+    @Test
+    fun `sanitizeSnapshot removes persisted due scheduled reemit`() {
+        val service = buildService()
+        val dueScheduled = nextUp(
+            contentId = "persisted-due-scheduled",
+            firstAiredMs = System.currentTimeMillis() - 86_400_000L,
+            episode = 2
+        )
+
+        val snapshot = invokeSanitizeSnapshot(
+            service = service,
+            snapshot = ContinueWatchingSnapshot(
+                scheduledReemit = listOf(dueScheduled)
+            )
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.scheduledReemit)
     }
 
     // ── Inline harness ─────────────────────────────────────────────────────────
@@ -1420,7 +1459,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
-    fun `reloadPersistedSnapshotForActiveProfile refreshes overdue exact scheduled reemit from persisted load`() = runTest {
+    fun `reloadPersistedSnapshotForActiveProfile drops overdue exact scheduled reemit from persisted load`() = runTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0
         val nowMs = System.currentTimeMillis()
@@ -1451,9 +1490,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
         service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
 
-        awaitCondition { refreshCount >= 1 }
+        assertEquals(0, refreshCount)
         assertTrue(rawSnapshot(service).nextUpItems.isEmpty())
-        assertEquals(listOf(overdue), rawSnapshot(service).scheduledReemit)
+        assertEquals(emptyList<TrackingNextUpEntry>(), rawSnapshot(service).scheduledReemit)
     }
 
     @Test
