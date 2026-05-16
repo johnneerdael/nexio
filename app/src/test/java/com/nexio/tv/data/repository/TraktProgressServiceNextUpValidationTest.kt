@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.remote.dto.trakt.TraktShowEpisodeProgressDto
+import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +40,82 @@ class TraktProgressServiceNextUpValidationTest {
         )
 
         assertTrue(publishable)
+    }
+
+    @Test
+    fun `watched coordinate extraction includes completed true episodes`() {
+        val watchedEpisodes = TraktProgressService.watchedEpisodeCoordinatesFromProgressSeasons(
+            listOf(
+                TraktShowSeasonProgressDto(
+                    number = 1,
+                    episodes = listOf(
+                        TraktShowEpisodeProgressDto(number = 1, completed = true),
+                        TraktShowEpisodeProgressDto(number = 2, completed = true)
+                    )
+                ),
+                TraktShowSeasonProgressDto(
+                    number = 2,
+                    episodes = listOf(
+                        TraktShowEpisodeProgressDto(number = 1, completed = true)
+                    )
+                )
+            )
+        )
+
+        assertEquals(setOf(1 to 1, 1 to 2, 2 to 1), watchedEpisodes)
+    }
+
+    @Test
+    fun `watched coordinate extraction excludes completed false or null episodes`() {
+        val watchedEpisodes = TraktProgressService.watchedEpisodeCoordinatesFromProgressSeasons(
+            listOf(
+                TraktShowSeasonProgressDto(
+                    number = 1,
+                    episodes = listOf(
+                        TraktShowEpisodeProgressDto(number = 1, completed = true),
+                        TraktShowEpisodeProgressDto(number = 2, completed = false),
+                        TraktShowEpisodeProgressDto(number = 3, completed = null)
+                    )
+                )
+            )
+        )
+
+        assertEquals(setOf(1 to 1), watchedEpisodes)
+    }
+
+    @Test
+    fun `watched coordinate extraction ignores null season or episode numbers`() {
+        val watchedEpisodes = TraktProgressService.watchedEpisodeCoordinatesFromProgressSeasons(
+            listOf(
+                TraktShowSeasonProgressDto(
+                    number = null,
+                    episodes = listOf(
+                        TraktShowEpisodeProgressDto(number = 1, completed = true)
+                    )
+                ),
+                TraktShowSeasonProgressDto(
+                    number = 1,
+                    episodes = listOf(
+                        TraktShowEpisodeProgressDto(number = null, completed = true),
+                        TraktShowEpisodeProgressDto(number = 2, completed = true)
+                    )
+                )
+            )
+        )
+
+        assertEquals(setOf(1 to 2), watchedEpisodes)
+    }
+
+    @Test
+    fun `watched coordinate extraction returns empty set for empty or null seasons`() {
+        assertEquals(
+            emptySet<Pair<Int, Int>>(),
+            TraktProgressService.watchedEpisodeCoordinatesFromProgressSeasons(emptyList())
+        )
+        assertEquals(
+            emptySet<Pair<Int, Int>>(),
+            TraktProgressService.watchedEpisodeCoordinatesFromProgressSeasons(null)
+        )
     }
 
     @Test
