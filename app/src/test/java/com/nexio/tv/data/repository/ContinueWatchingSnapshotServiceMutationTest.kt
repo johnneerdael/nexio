@@ -2154,6 +2154,50 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `reloadPersistedSnapshotForActiveProfile drops persisted aired next-up rows`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        val nowMs = System.currentTimeMillis()
+        val staleNextUp = nextUp(
+            contentId = "tvdb:430780",
+            firstAiredMs = nowMs - 60_000L,
+            tvdbAvailabilityInstantMs = nowMs - 60_000L,
+            episode = 7
+        )
+        val resume = resume(
+            contentId = "movie-resume",
+            videoId = "movie-resume",
+            lastWatched = nowMs - 5_000L
+        )
+        val persisted = ContinueWatchingSnapshot(
+            resumeItems = listOf(resume),
+            nextUpItems = listOf(staleNextUp),
+            traktUpNextItems = listOf(staleNextUp.copy(contentId = "tt27444205")),
+            updatedAtMs = nowMs - 60_000L
+        )
+        var writtenSnapshot: ContinueWatchingSnapshot? = null
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns persisted
+            every { write(any(), any()) } answers {
+                writtenSnapshot = firstArg()
+                Unit
+            }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            snapshotStore = snapshotStore
+        )
+
+        service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+
+        val restored = rawSnapshot(service)
+        assertEquals(listOf(resume), restored.resumeItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), restored.nextUpItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), restored.traktUpNextItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), writtenSnapshot?.nextUpItems)
+        assertEquals(emptyList<TrackingNextUpEntry>(), writtenSnapshot?.traktUpNextItems)
+    }
+
+    @Test
     fun `rescheduleAirTimeAlarmFromSnapshot refreshes overdue provider-ms scheduled reemit without exact instant`() = runTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0

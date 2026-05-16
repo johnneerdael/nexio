@@ -548,8 +548,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 }
                 return
             }
-            val normalized = upgradeStaleRouteSnapshots(sanitizeSnapshot(persisted))
-            if (normalized.metadataSnapshotsByItemKey != persisted.metadataSnapshotsByItemKey) {
+            val normalized = upgradeStaleRouteSnapshots(sanitizePersistedSnapshot(persisted))
+            if (normalized != persisted) {
                 snapshotStore.write(normalized, profileId = profileId)
                 emitWrite(
                     profileId = profileId,
@@ -1734,6 +1734,24 @@ class ContinueWatchingSnapshotService @Inject constructor(
             metadataSnapshotsByItemKey = snapshot.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs,
             scheduledReemit = scheduledReemitByKey.values.toList()
+        )
+    }
+
+    private fun sanitizePersistedSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
+        val sanitized = sanitizeSnapshot(snapshot)
+        if (sanitized.nextUpItems.isEmpty() && sanitized.traktUpNextItems.isEmpty()) {
+            return sanitized
+        }
+        val activeItemKeys = buildSet {
+            sanitized.resumeItems.forEach { progress ->
+                add(homeDisplayItemKey(progress.contentType, progress.contentId))
+            }
+        }
+        return sanitized.copy(
+            nextUpItems = emptyList(),
+            traktUpNextItems = emptyList(),
+            displayMetadataByItemKey = sanitized.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
+            metadataSnapshotsByItemKey = sanitized.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys }
         )
     }
 
