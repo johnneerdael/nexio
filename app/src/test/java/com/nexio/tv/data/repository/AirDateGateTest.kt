@@ -124,6 +124,54 @@ class AirDateGateTest {
         )
     }
 
+    @Test
+    fun `strict aired returns false when all air date inputs are unknown`() {
+        assertFalse(
+            AirDateGate.isStrictlyAired(
+                availabilityInstantMs = null,
+                firstAiredMs = 0L,
+                tmdbAirDate = null,
+                nowMs = 1_778_927_561_063L
+            )
+        )
+    }
+
+    @Test
+    fun `strict aired accepts past tvdb availability instant`() {
+        assertTrue(
+            AirDateGate.isStrictlyAired(
+                availabilityInstantMs = 1_734_946_800_000L,
+                firstAiredMs = 0L,
+                tmdbAirDate = null,
+                nowMs = 1_778_927_561_063L
+            )
+        )
+    }
+
+    @Test
+    fun `strict aired rejects future first aired timestamp`() {
+        assertFalse(
+            AirDateGate.isStrictlyAired(
+                availabilityInstantMs = null,
+                firstAiredMs = 1_800_000_000_000L,
+                tmdbAirDate = null,
+                nowMs = 1_778_927_561_063L
+            )
+        )
+    }
+
+    @Test
+    fun `pending trigger stays null when no concrete date exists`() {
+        assertEquals(
+            null,
+            AirDateGate.pendingTriggerMs(
+                firstAiredMs = 0L,
+                availabilityInstantMs = null,
+                tmdbAirDate = null
+            )
+        )
+    }
+
     // ── soonestPendingMs ───────────────────────────────────────────────────────
 
     @Test

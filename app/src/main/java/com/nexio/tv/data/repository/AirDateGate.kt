@@ -33,6 +33,29 @@ internal object AirDateGate {
         return true
     }
 
+    fun isStrictlyAired(
+        availabilityInstantMs: Long?,
+        firstAiredMs: Long,
+        tmdbAirDate: String?,
+        nowMs: Long
+    ): Boolean {
+        val triggerMs = pendingTriggerMs(
+            firstAiredMs = firstAiredMs,
+            availabilityInstantMs = availabilityInstantMs,
+            tmdbAirDate = tmdbAirDate
+        ) ?: return false
+        return triggerMs <= nowMs
+    }
+
+    fun isStrictlyAired(firstAiredMs: Long, tmdbAirDate: String?, nowMs: Long): Boolean {
+        val triggerMs = pendingTriggerMs(
+            firstAiredMs = firstAiredMs,
+            availabilityInstantMs = null,
+            tmdbAirDate = tmdbAirDate
+        ) ?: return false
+        return triggerMs <= nowMs
+    }
+
     fun pendingTriggerMs(
         firstAiredMs: Long,
         availabilityInstantMs: Long?,
