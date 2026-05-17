@@ -13,7 +13,7 @@ class StreamFetchIdentityResolverTest {
     private val resolver = StreamFetchIdentityResolver()
 
     @Test
-    fun `default stremio non anime tvdb series uses tvdb episode stream id`() = runTest {
+    fun `default stremio non anime tvdb series prefers show imdb episode stream id`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TVDB,
             canonicalId = "393268",
@@ -28,8 +28,8 @@ class StreamFetchIdentityResolverTest {
             StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1")
         )
 
-        assertEquals("tvdb:393268:2:1", result?.videoId)
-        assertEquals(StreamIdScheme.TVDB_EPISODE, result?.idScheme)
+        assertEquals("tt9794044:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.IMDB_EPISODE, result?.idScheme)
     }
 
     @Test

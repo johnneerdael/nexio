@@ -178,6 +178,58 @@ class HomeViewModelTvdbProviderRoutingTest {
         assertEquals("Nederlandse titel", result.displayMetadata?.title)
     }
 
+    @Test
+    fun `continue watching enrichment preserves resolved imdb sidecar`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val profileBoundary = mockk<ProfileBoundary>()
+        every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
+        every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
+        )
+        every { viewModel.profileBoundary } returns profileBoundary
+        every { profileBoundary.currentLanguageTag() } returns "nl"
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 413033,
+                localizedTitle = "Berlijn",
+                description = "Nederlandse omschrijving",
+                genres = listOf("Drama"),
+                backdrop = "tvdb-backdrop",
+                logo = "tvdb-logo",
+                releaseInfo = "2026",
+                rating = 7.1,
+                runtimeMinutes = 52,
+                language = "nl"
+            )
+        )
+
+        val result = viewModel.enrichContinueWatchingItemWithProvider(
+            item = ContinueWatchingItem.InProgress(
+                progress = WatchProgress(
+                    contentId = "tvdb:413033",
+                    contentType = "series",
+                    name = "Berlín",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "tvdb:413033:2:2",
+                    season = 2,
+                    episode = 2,
+                    episodeTitle = "Episode 2",
+                    position = 1_000L,
+                    duration = 3_000L,
+                    lastWatched = 42L
+                ),
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt16288804")
+            )
+        ) as ContinueWatchingItem.InProgress
+
+        assertEquals("tt16288804", result.displayMetadata?.imdbId)
+    }
+
     private fun seriesPreview(): MetaPreview {
         return MetaPreview(
             id = "tt0944947",

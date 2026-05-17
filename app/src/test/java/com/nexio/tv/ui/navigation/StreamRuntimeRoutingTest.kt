@@ -158,7 +158,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
         assertEquals("tvdb:393268", args.getValue("contentId"))
         assertEquals("1234000", args.getValue("resumePositionMs"))
         assertEquals("2468000", args.getValue("resumeDurationMs"))
@@ -189,7 +189,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
         assertEquals("tvdb:393268", args.getValue("contentId"))
         assertEquals("1234000", args.getValue("resumePositionMs"))
         assertEquals("2468000", args.getValue("resumeDurationMs"))
@@ -220,7 +220,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -249,12 +249,41 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
     @Test
-    fun `continue watching route prefers tvdb episode coordinate before episode imdb projection`() {
+    fun `continue watching route keeps persisted imdb stream id when display metadata has non show imdb`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:413033",
+                    videoId = "tvdb:413033:2:2",
+                    contentType = "series",
+                    season = 2,
+                    episode = 2,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt16288804:2:2",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt42178219")
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:413033:2:2", args.getValue("videoId"))
+        assertEquals("tt16288804:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt16288804", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching route corrects stale persisted imdb stream id from resolved show override`() {
         val route = buildContinueWatchingStreamRoute(
             item = ContinueWatchingItem.InProgress(
                 progress = watchProgress(
@@ -270,15 +299,16 @@ class StreamRuntimeRoutingTest {
                     source = WatchProgress.SOURCE_TRAKT_PLAYBACK
                 ),
                 streamFetchVideoId = "tt42178219:2:2",
-                displayMetadata = HomeDisplayMetadata(imdbId = "tt16288804")
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt42178219")
             ),
-            deterministicAutoplayEnabled = true
+            deterministicAutoplayEnabled = true,
+            resolvedImdbHint = "tt16288804"
         )
 
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:413033:2:2", args.getValue("videoId"))
-        assertEquals("tvdb:413033:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt16288804:2:2", args.getValue("streamVideoId"))
         assertEquals("tt16288804", args.getValue("imdbId"))
     }
 
@@ -307,7 +337,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
-        assertEquals("tvdb:463433:1:9", args.getValue("streamVideoId"))
+        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
         assertEquals("tt12345678", args.getValue("imdbId"))
     }
 
@@ -348,7 +378,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tt9794044", enriched.displayMetadata().imdbId)
-        assertEquals("tvdb:393268:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:2", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -420,7 +450,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
+        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -448,7 +478,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
-        assertEquals("tvdb:463433:1:9", args.getValue("streamVideoId"))
+        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
         assertEquals("tt12345678", args.getValue("imdbId"))
     }
 

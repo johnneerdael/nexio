@@ -255,7 +255,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `resolved display surface corrects TVDB series sidecar imdb while preserving TVDB stream identity`() =
+    fun `resolved display surface corrects TVDB series sidecar and uses it for stream identity`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             coEvery {
@@ -303,9 +303,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val record = hydrated.records.single()
             assertEquals("tt16288804", record.displayIdentity?.providerIds?.imdb)
             assertEquals("tt16288804", record.idBundle.imdb)
-            assertEquals("tvdb:413033", record.streamFetchIdentity?.contentId)
-            assertEquals("tvdb:413033:2:2", record.streamFetchIdentity?.videoId)
-            assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
+            assertEquals("tt16288804", record.streamFetchIdentity?.contentId)
+            assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
         }
 
     @Test

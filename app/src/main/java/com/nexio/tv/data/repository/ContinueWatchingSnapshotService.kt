@@ -2731,6 +2731,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
         resumeVideoId: String
     ): StreamFetchIdentity? {
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
+            val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
+            if (imdbId != null) {
+                return StreamFetchIdentity(
+                    contentId = imdbId,
+                    videoId = "$imdbId:$season:$episode",
+                    idScheme = StreamIdScheme.IMDB_EPISODE,
+                    confidence = IdentityConfidence.HIGH,
+                    trace = listOf(
+                        "resolved home surface hydrated continue watching TVDB series IMDb episode stream id",
+                        "source mediaKind=$mediaKind canonical=${canonicalIdentity.canonicalProvider}:${canonicalIdentity.canonicalId} resumeVideoId=$resumeVideoId"
+                    )
+                )
+            }
             val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() }
                 ?: canonicalIdentity.canonicalId?.trim()?.takeIf {
                     canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotEmpty()

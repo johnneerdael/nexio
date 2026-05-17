@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -756,7 +757,14 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 overlay = if (existingSlots != null) previewSlots else null,
                 existing = null,
                 profile = null,
-            ).toHomeDisplayMetadata()
+            ).toHomeDisplayMetadata().let { reduced ->
+                val currentImdb = existing?.imdbId?.trim()?.takeIf { it.isNotEmpty() }
+                if (currentImdb != null && currentImdb != reduced.imdbId) {
+                    reduced.copy(imdbId = currentImdb)
+                } else {
+                    reduced
+                }
+            }
         }
 
         when (item) {
@@ -850,7 +858,10 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 language = null,
                 posterProviderTag = displayMetadata.posterProviderTag,
                 artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
-                firstPaintStableIds = providerIdsFromContinueWatchingContentId(progress.contentId)
+                firstPaintStableIds = providerIdsForContinueWatchingProviderPreview(
+                    contentId = progress.contentId,
+                    displayMetadata = displayMetadata
+                )
             )
         }
 
@@ -874,9 +885,27 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 language = null,
                 posterProviderTag = displayMetadata.posterProviderTag,
                 artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
-                firstPaintStableIds = providerIdsFromContinueWatchingContentId(info.contentId)
+                firstPaintStableIds = providerIdsForContinueWatchingProviderPreview(
+                    contentId = info.contentId,
+                    displayMetadata = displayMetadata
+                )
             )
         }
+    }
+}
+
+private fun providerIdsForContinueWatchingProviderPreview(
+    contentId: String,
+    displayMetadata: HomeDisplayMetadata
+): ProviderIds {
+    val ids = providerIdsFromContinueWatchingContentId(contentId)
+    val displayImdb = displayMetadata.imdbId
+        ?.trim()
+        ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+    return if (displayImdb != null && ids.imdb.isNullOrBlank()) {
+        ids.copy(imdb = displayImdb)
+    } else {
+        ids
     }
 }
 

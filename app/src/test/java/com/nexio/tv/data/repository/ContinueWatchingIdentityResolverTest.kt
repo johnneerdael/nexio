@@ -69,8 +69,8 @@ class ContinueWatchingIdentityResolverTest {
         assertEquals("profile:1:series:tvdb:393268:s2e1", local.canonicalKey?.stableKey())
         assertEquals(local.canonicalKey?.stableKey(), remote.canonicalKey?.stableKey())
         assertEquals(local.identityKey(), remote.identityKey())
-        assertEquals("tvdb:393268:2:1", local.streamFetchIdentity?.videoId)
-        assertEquals("tvdb:393268:2:1", remote.streamFetchIdentity?.videoId)
+        assertEquals("tt9794044:2:1", local.streamFetchIdentity?.videoId)
+        assertEquals("tt9794044:2:1", remote.streamFetchIdentity?.videoId)
         assertEquals("tt9794044", local.displayIdentity?.providerIds?.imdb)
         assertEquals("393268", local.displayIdentity?.providerIds?.tvdb)
         assertEquals(ContinueWatchingRecord.Source.REMOTE, remote.source)
@@ -278,7 +278,7 @@ class ContinueWatchingIdentityResolverTest {
 
         assertEquals("tt16288804", record.displayIdentity?.providerIds?.imdb)
         assertEquals("tt16288804", record.idBundle.imdb)
-        assertEquals("tvdb:413033:2:2", record.streamFetchIdentity?.videoId)
+        assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
     }
 
     @Test

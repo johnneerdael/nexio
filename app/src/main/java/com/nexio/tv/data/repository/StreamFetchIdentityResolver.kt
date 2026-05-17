@@ -13,9 +13,9 @@ data class StreamSourceContext(
 )
 
 /**
- * Phase 0 stream policy: non-anime TVDB series fetch by the authoritative TVDB
- * episode coordinate when one is available. Anime and non-TVDB series fall back
- * to IMDb episode ids.
+ * Phase 0 stream policy: prefer the TV show IMDb sidecar when one is available
+ * and append the authoritative season/episode coordinate. Non-anime TVDB series
+ * fall back to the TVDB episode coordinate when no show IMDb id is resolvable.
  */
 @Singleton
 class StreamFetchIdentityResolver @Inject constructor() {
@@ -28,6 +28,21 @@ class StreamFetchIdentityResolver @Inject constructor() {
     ): StreamFetchIdentity? {
         require(season > 0) { "season must be positive" }
         require(episode > 0) { "episode must be positive" }
+
+        val imdbId = knownIds.imdb?.takeIf { it.isStrictImdbTitleId() }
+        if (imdbId != null) {
+            val videoId = "$imdbId:$season:$episode"
+            return StreamFetchIdentity(
+                contentId = imdbId,
+                videoId = videoId,
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf(
+                    "phase0 default Stremio stream shape resolved series stream id from TV show IMDb sidecar",
+                    sourceContext.traceDescription(canonicalIdentity)
+                )
+            )
+        }
 
         if (sourceContext.mediaKind == MetadataMediaKind.SERIES) {
             val tvdbId = knownIds.tvdb?.takeIf { it.isNotBlank() }
@@ -42,25 +57,13 @@ class StreamFetchIdentityResolver @Inject constructor() {
                     idScheme = StreamIdScheme.TVDB_EPISODE,
                     confidence = IdentityConfidence.HIGH,
                     trace = listOf(
-                        "phase0 default Stremio stream shape resolved non-anime series stream id from TVDB episode coordinate",
+                        "phase0 default Stremio stream shape fell back to non-anime TVDB episode coordinate",
                         sourceContext.traceDescription(canonicalIdentity)
                     )
                 )
             }
         }
-
-        val imdbId = knownIds.imdb?.takeIf { it.isStrictImdbTitleId() } ?: return null
-        val videoId = "$imdbId:$season:$episode"
-        return StreamFetchIdentity(
-            contentId = imdbId,
-            videoId = videoId,
-            idScheme = StreamIdScheme.IMDB_EPISODE,
-            confidence = IdentityConfidence.HIGH,
-            trace = listOf(
-                "phase0 default Stremio stream shape resolved series stream id from IMDb parent id",
-                sourceContext.traceDescription(canonicalIdentity)
-            )
-        )
+        return null
     }
 
     suspend fun resolveForMovie(
