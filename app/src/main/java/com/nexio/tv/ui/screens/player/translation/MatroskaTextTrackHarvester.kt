@@ -48,8 +48,9 @@ internal class TimelinePublishingMatroskaTextTrackSink(
             sample.timeUs
         )
         timelineStore.putSourceCue(sessionKey, cueGroup)
-        timelineStore.registerMiss(sessionKey, cueGroup)
-        sampleCount += 1
+        if (timelineStore.registerMiss(sessionKey, cueGroup) != null) {
+            sampleCount += 1
+        }
     }
 }
 
