@@ -254,6 +254,35 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching route prefers tvdb episode coordinate before episode imdb projection`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:413033",
+                    videoId = "tvdb:413033:2:2",
+                    contentType = "series",
+                    season = 2,
+                    episode = 2,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt42178219:2:2",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt16288804")
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:413033:2:2", args.getValue("videoId"))
+        assertEquals("tvdb:413033:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt16288804", args.getValue("imdbId"))
+    }
+
+    @Test
     fun `continue watching route derives episode stream fetch id from resolved imdb override`() {
         val route = buildContinueWatchingStreamRoute(
             item = ContinueWatchingItem.InProgress(

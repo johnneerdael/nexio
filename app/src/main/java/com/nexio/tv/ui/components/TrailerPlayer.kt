@@ -327,6 +327,7 @@ fun TrailerPlayer(
         isBuffering = isBuffering
     )
     val releaseCalled = remember(trailerPlayer) { AtomicBoolean(false) }
+    val displayModeBlockActive = remember(trailerPlayer) { AtomicBoolean(false) }
 
     fun buildTrailerMediaSourceFactory(
         videoUrl: String,
@@ -426,7 +427,9 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
         if (shouldPrepareTrailerPlayback(lifecycleState, isPlaying, trailerUrl)) {
-            FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
+            if (displayModeBlockActive.compareAndSet(false, true)) {
+                FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+            }
             hasRenderedFirstFrame = false
             prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl)
             player.prepare()
@@ -435,6 +438,9 @@ fun TrailerPlayer(
             hasRenderedFirstFrame = false
             player.stop()
             player.clearMediaItems()
+            if (displayModeBlockActive.compareAndSet(true, false)) {
+                FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+            }
         }
     }
 
@@ -502,7 +508,9 @@ fun TrailerPlayer(
                             trailerUrl = currentTrailerUrl
                         )
                     ) {
-                        FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
+                        if (displayModeBlockActive.compareAndSet(false, true)) {
+                            FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+                        }
                         if (player.currentMediaItem == null) {
                             prepareTrailerMediaSource(
                                 player,
@@ -520,12 +528,18 @@ fun TrailerPlayer(
                     player.pause()
                     player.stop()
                     player.clearMediaItems()
+                    if (displayModeBlockActive.compareAndSet(true, false)) {
+                        FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                    }
                 }
                 Lifecycle.Event.ON_DESTROY -> {
                     if (releaseCalled.compareAndSet(false, true)) {
                         runCatching { player.stop() }
                         runCatching { player.clearMediaItems() }
                         runCatching { player.release() }
+                        if (displayModeBlockActive.compareAndSet(true, false)) {
+                            FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                        }
                     }
                 }
                 else -> Unit
@@ -541,6 +555,9 @@ fun TrailerPlayer(
                 runCatching { player.stop() }
                 runCatching { player.clearMediaItems() }
                 runCatching { player.release() }
+                if (displayModeBlockActive.compareAndSet(true, false)) {
+                    FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                }
             }
         }
     }
@@ -594,4 +611,3 @@ fun TrailerPlayer(
         }
     }
 }
-
