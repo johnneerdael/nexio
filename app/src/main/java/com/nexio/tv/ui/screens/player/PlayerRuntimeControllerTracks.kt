@@ -180,6 +180,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                             name = format.label ?: format.language ?: "Subtitle ${subtitleTracks.size + 1}",
                             language = format.language,
                             trackId = format.id,
+                            codec = format.codecs,
                             isForced = hasForcedFlag || nameHintForced || isSongsAndSigns,
                             isSelected = isSelected,
                             mimeType = format.sampleMimeType

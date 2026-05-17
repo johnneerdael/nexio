@@ -41,8 +41,7 @@ internal data class TranslationTimelineStats(
     }
 }
 
-internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
-    private val maxCueRecords = maxCueRecords.coerceAtLeast(1)
+internal class TranslatedSubtitleTimelineStore {
     private val lock = Any()
     private val sourceCues = LinkedHashMap<RecordKey, TranslationTimelineSourceCue>()
     private val translatedCueGroups = LinkedHashMap<RecordKey, CueGroup>()
@@ -98,7 +97,6 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
                 val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
                 translatedCueGroups[recordKey] = translatedCueGroup
                 pendingBackfill.remove(recordKey)
-                trimToMaxRecords(translatedCueGroups)
                 sourceCue.cueKey
             }
         }
@@ -131,7 +129,6 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
             val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
             if (translatedCueGroups.containsKey(recordKey)) return@synchronized sourceCue
             pendingBackfill.putIfAbsent(recordKey, sourceCue)
-            trimToMaxRecords(pendingBackfill)
             sourceCue
         }
     }
@@ -171,7 +168,6 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         if (activeSessionKey != sessionKey) return null
         val sourceCue = sourceCueFor(sessionKey, sourceCueGroup) ?: return null
         sourceCues[RecordKey(sessionKey, sourceCue.cueKey)] = sourceCue
-        trimToMaxRecords(sourceCues)
         return sourceCue
     }
 
@@ -193,15 +189,6 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
             .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
             .joinToString(separator = "\n")
             .takeIf(String::isNotBlank)
-    }
-
-    private fun <T> trimToMaxRecords(records: LinkedHashMap<RecordKey, T>) {
-        while (records.size > maxCueRecords) {
-            val iterator = records.entries.iterator()
-            if (!iterator.hasNext()) return
-            iterator.next()
-            iterator.remove()
-        }
     }
 
     private data class RecordKey(

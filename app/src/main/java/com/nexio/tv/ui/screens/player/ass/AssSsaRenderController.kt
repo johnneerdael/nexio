@@ -325,6 +325,8 @@ internal class AssSsaRenderController(
 
     private fun renderCurrentFrame() {
         synchronized(stateLock) {
+            if (released || !renderingEnabled) return
+
             val overlay = overlayView ?: return
             if (!ensureNativeInitialized(replayEvents = true)) {
                 clearOverlay()

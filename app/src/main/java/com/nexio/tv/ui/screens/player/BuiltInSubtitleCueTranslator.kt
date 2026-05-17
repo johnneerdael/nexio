@@ -73,6 +73,9 @@ internal class BuiltInSubtitleCueTranslator(
         val session = timelineSessionProvider() ?: return null
         val cueKey = store.cueKeyFor(sourceCueGroup)
         val translated = store.lookupCueGroup(session, sourceCueGroup)
+        if (translated == null && cueKey != null) {
+            store.registerMiss(session, sourceCueGroup)
+        }
         EmbeddedSubtitleHarvestDiagnostics.rendererLookup(
             session = session,
             cueKey = cueKey,

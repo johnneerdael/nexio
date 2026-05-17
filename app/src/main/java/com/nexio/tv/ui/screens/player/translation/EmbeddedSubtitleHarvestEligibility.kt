@@ -39,6 +39,9 @@ internal object EmbeddedSubtitleHarvestEligibility {
         }
 
         val codec = track.codec?.trim()?.lowercase(Locale.ROOT)
-        return codec == "subrip" || codec == "srt"
+        return codec == MimeTypes.APPLICATION_SUBRIP ||
+            codec == "application/x-subrip" ||
+            codec == "subrip" ||
+            codec == "srt"
     }
 }

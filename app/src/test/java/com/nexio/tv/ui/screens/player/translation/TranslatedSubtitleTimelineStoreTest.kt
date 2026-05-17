@@ -207,6 +207,35 @@ class TranslatedSubtitleTimelineStoreTest {
         assertEquals(sourceCue?.cueKey, store.cueKeyFor(source))
     }
 
+    @Test
+    fun storesMoreThanPreviousFiveThousandCueLimit() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+
+        store.beginSession(session)
+        for (index in 0 until 5_200) {
+            store.registerMiss(
+                session,
+                cueGroup(
+                    text = "subtitle line $index",
+                    presentationTimeUs = index * 1_000L
+                )
+            )
+        }
+
+        val stats = store.stats(session)
+        assertEquals(5_200, stats.sourceCueCount)
+        assertEquals(5_200, stats.pendingBackfillCount)
+        assertEquals(
+            "subtitle line 0",
+            store.pendingBackfill(session).first().sourceText
+        )
+        assertEquals(
+            "subtitle line 5199",
+            store.pendingBackfill(session).last().sourceText
+        )
+    }
+
     private fun session(
         streamKey: String = "stream",
         trackKey: String = "track",

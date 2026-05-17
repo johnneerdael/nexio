@@ -95,6 +95,18 @@ class EmbeddedSubtitleHarvestEligibilityTest {
         assertTrue(EmbeddedSubtitleHarvestEligibility.isSubRip(track(codec = "srt")))
     }
 
+    @Test
+    fun media3CueTrackWithSubRipCodecIsSubRip() {
+        assertTrue(
+            EmbeddedSubtitleHarvestEligibility.isSubRip(
+                track(
+                    mimeType = MimeTypes.APPLICATION_MEDIA3_CUES,
+                    codec = MimeTypes.APPLICATION_SUBRIP
+                )
+            )
+        )
+    }
+
     private fun track(
         mimeType: String? = null,
         codec: String? = null
