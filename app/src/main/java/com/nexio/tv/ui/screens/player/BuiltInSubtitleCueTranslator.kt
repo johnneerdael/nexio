@@ -7,6 +7,8 @@ import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.nexio.tv.data.repository.DEFAULT_TRANSLATION_RAMP_UP_SCHEDULE
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import com.nexio.tv.ui.screens.player.translation.TranslatedSubtitleTimelineStore
+import com.nexio.tv.ui.screens.player.translation.TranslationTimelineSessionKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,7 +35,9 @@ internal class BuiltInSubtitleCueTranslator(
     private val providerFailureCooldownMs: Long = BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS,
     private val dispatchDebounceMs: Long = BUILT_IN_SUBTITLE_DISPATCH_DEBOUNCE_MS,
     private val maxBatchCueGroups: Int = BUILT_IN_SUBTITLE_DISPATCH_MAX_BATCH_CUE_GROUPS,
-    private val nowMs: () -> Long = { System.currentTimeMillis() }
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val timelineStoreProvider: () -> TranslatedSubtitleTimelineStore? = { null },
+    private val timelineSessionProvider: () -> TranslationTimelineSessionKey? = { null }
 ) : CueGroupSubtitleTranslator {
 
     private val activeRequestCount = AtomicInteger(0)
@@ -60,6 +64,18 @@ internal class BuiltInSubtitleCueTranslator(
     }
 
     override fun getPrefetchDurationUs(): Long = BUILT_IN_SUBTITLE_PREFETCH_DURATION_US
+
+    override fun getTranslatedCueGroup(format: Format, sourceCueGroup: CueGroup): CueGroup? {
+        val store = timelineStoreProvider() ?: return null
+        val session = timelineSessionProvider() ?: return null
+        return store.lookupCueGroup(session, sourceCueGroup)
+    }
+
+    override fun onCueGroupRenderedWithoutTranslation(format: Format, sourceCueGroup: CueGroup) {
+        val store = timelineStoreProvider() ?: return
+        val session = timelineSessionProvider() ?: return
+        store.registerMiss(session, sourceCueGroup)
+    }
 
     override fun translate(
         format: Format,

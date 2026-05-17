@@ -8,6 +8,8 @@ import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.google.common.collect.ImmutableList
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import com.nexio.tv.ui.screens.player.translation.TranslatedSubtitleTimelineStore
+import com.nexio.tv.ui.screens.player.translation.TranslationTimelineSessionKey
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -27,7 +29,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class BuiltInSubtitleCueTranslatorTest {
-    private fun translator(): BuiltInSubtitleCueTranslator {
+    private fun translator(
+        timelineStoreProvider: () -> TranslatedSubtitleTimelineStore? = { null },
+        timelineSessionProvider: () -> TranslationTimelineSessionKey? = { null }
+    ): BuiltInSubtitleCueTranslator {
         return BuiltInSubtitleCueTranslator(
             scope = TestScope(StandardTestDispatcher()),
             translationService = mockk<SubtitleTranslationService>(relaxed = true),
@@ -41,7 +46,9 @@ class BuiltInSubtitleCueTranslatorTest {
             },
             targetLanguageProvider = { "nl" },
             onTranslatingChanged = {},
-            onTranslationError = {}
+            onTranslationError = {},
+            timelineStoreProvider = timelineStoreProvider,
+            timelineSessionProvider = timelineSessionProvider
         )
     }
 
@@ -64,6 +71,42 @@ class BuiltInSubtitleCueTranslatorTest {
             .build()
 
         assertNotNull(translator().getConfigurationToken(format))
+    }
+
+    @Test
+    fun getTranslatedCueGroupReturnsTimelineHit() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = timelineSession()
+        val source = cueGroup("bonjour", 1_000L)
+
+        store.beginSession(session)
+        store.putTranslatedCueGroup(
+            sessionKey = session,
+            sourceCueGroup = source,
+            translatedCueGroup = cueGroup("hallo", 1_000L)
+        )
+
+        val translated = translator(
+            timelineStoreProvider = { store },
+            timelineSessionProvider = { session }
+        ).getTranslatedCueGroup(format(), source)
+
+        assertEquals("hallo", translated?.cues?.firstOrNull()?.text?.toString())
+    }
+
+    @Test
+    fun renderedMissIsRegisteredForBackfill() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = timelineSession()
+
+        store.beginSession(session)
+
+        translator(
+            timelineStoreProvider = { store },
+            timelineSessionProvider = { session }
+        ).onCueGroupRenderedWithoutTranslation(format(), cueGroup("bonjour", 1_000L))
+
+        assertEquals(1, store.pendingBackfill(session).size)
     }
 
     @Test
@@ -247,6 +290,23 @@ class BuiltInSubtitleCueTranslatorTest {
     private fun cueGroup(text: String, presentationTimeUs: Long): CueGroup {
         val cue = Cue.Builder().setText(text).build()
         return CueGroup(ImmutableList.of(cue), presentationTimeUs)
+    }
+
+    private fun format(): Format {
+        return Format.Builder()
+            .setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
+            .setCodecs(MimeTypes.TEXT_VTT)
+            .setLanguage("en")
+            .build()
+    }
+
+    private fun timelineSession(): TranslationTimelineSessionKey {
+        return TranslationTimelineSessionKey(
+            streamKey = "stream",
+            trackKey = "track",
+            targetLanguage = "nl",
+            settingsKey = "settings"
+        )
     }
 
     private class RecordingCallback : CueGroupSubtitleTranslator.TranslationCallback {
