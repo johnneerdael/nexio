@@ -81,7 +81,9 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
     ) {
         synchronized(lock) {
             val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized
-            translatedCueGroups[RecordKey(sessionKey, sourceCue.cueKey)] = translatedCueGroup
+            val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
+            translatedCueGroups[recordKey] = translatedCueGroup
+            pendingBackfill.remove(recordKey)
             trimToMaxRecords(translatedCueGroups)
         }
     }
@@ -109,7 +111,6 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         sourceCueGroup: CueGroup
     ): TranslationTimelineSourceCue? {
         return synchronized(lock) {
-            missCount += 1
             val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized null
             pendingBackfill.putIfAbsent(RecordKey(sessionKey, sourceCue.cueKey), sourceCue)
             trimToMaxRecords(pendingBackfill)

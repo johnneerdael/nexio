@@ -65,7 +65,56 @@ class TranslatedSubtitleTimelineStoreTest {
                 translatedCueCount = 0,
                 pendingBackfillCount = 1,
                 hitCount = 0,
-                missCount = 2
+                missCount = 0
+            ),
+            store.stats(session)
+        )
+    }
+
+    @Test
+    fun lookupThenRegisterMissCountsAsOneMiss() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val source = cueGroup("bonjour", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        assertNull(store.lookupCueGroup(session, source))
+        store.registerMiss(session, source)
+
+        assertEquals(
+            TranslationTimelineStats(
+                sourceCueCount = 1,
+                translatedCueCount = 0,
+                pendingBackfillCount = 1,
+                hitCount = 0,
+                missCount = 1
+            ),
+            store.stats(session)
+        )
+    }
+
+    @Test
+    fun putTranslatedCueGroupRemovesPendingBackfill() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val source = cueGroup("bonjour", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        store.registerMiss(session, source)
+        store.putTranslatedCueGroup(
+            sessionKey = session,
+            sourceCueGroup = source,
+            translatedCueGroup = cueGroup("hallo", presentationTimeUs = 1_000L)
+        )
+
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
+        assertEquals(
+            TranslationTimelineStats(
+                sourceCueCount = 1,
+                translatedCueCount = 1,
+                pendingBackfillCount = 0,
+                hitCount = 0,
+                missCount = 0
             ),
             store.stats(session)
         )
