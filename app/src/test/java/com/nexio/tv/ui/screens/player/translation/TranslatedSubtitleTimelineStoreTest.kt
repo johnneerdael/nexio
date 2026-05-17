@@ -121,6 +121,34 @@ class TranslatedSubtitleTimelineStoreTest {
     }
 
     @Test
+    fun lateRegisterMissDoesNotRequeueTranslatedCue() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val source = cueGroup("bonjour", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        assertNull(store.lookupCueGroup(session, source))
+        store.putTranslatedCueGroup(
+            sessionKey = session,
+            sourceCueGroup = source,
+            translatedCueGroup = cueGroup("hallo", presentationTimeUs = 1_000L)
+        )
+        store.registerMiss(session, source)
+
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
+        assertEquals(
+            TranslationTimelineStats(
+                sourceCueCount = 1,
+                translatedCueCount = 1,
+                pendingBackfillCount = 0,
+                hitCount = 0,
+                missCount = 1
+            ),
+            store.stats(session)
+        )
+    }
+
+    @Test
     fun beginSessionClearsOldRecordsWhenSessionChanges() {
         val store = TranslatedSubtitleTimelineStore()
         val first = session(streamKey = "first")

@@ -112,7 +112,9 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
     ): TranslationTimelineSourceCue? {
         return synchronized(lock) {
             val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized null
-            pendingBackfill.putIfAbsent(RecordKey(sessionKey, sourceCue.cueKey), sourceCue)
+            val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
+            if (translatedCueGroups.containsKey(recordKey)) return@synchronized sourceCue
+            pendingBackfill.putIfAbsent(recordKey, sourceCue)
             trimToMaxRecords(pendingBackfill)
             sourceCue
         }
