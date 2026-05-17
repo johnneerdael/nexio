@@ -37,6 +37,8 @@ object FrameRateUtils {
     private var mainPlayerDisplayModeSessionActive: Boolean = false
     @Volatile
     private var blockDisplayModeChangesOutsideMainPlayer: Boolean = true
+    @Volatile
+    private var nonPlayerDisplayModeBlockedSessionCount: Int = 0
 
     data class DisplayModeSwitchResult(
         val appliedMode: Display.Mode
@@ -73,6 +75,9 @@ object FrameRateUtils {
 
     fun beginMainPlayerDisplayModeSession() {
         setBlockDisplayModeChangesOutsideMainPlayer(true)
+        synchronized(this) {
+            nonPlayerDisplayModeBlockedSessionCount = 0
+        }
         setMainPlayerDisplayModeSessionActive(true)
     }
 
@@ -83,6 +88,21 @@ object FrameRateUtils {
     fun blockDisplayModeChangesForNonPlayerPlayback() {
         setBlockDisplayModeChangesOutsideMainPlayer(true)
         setMainPlayerDisplayModeSessionActive(false)
+    }
+
+    fun beginNonPlayerDisplayModeBlockedSession() {
+        blockDisplayModeChangesForNonPlayerPlayback()
+        synchronized(this) {
+            nonPlayerDisplayModeBlockedSessionCount += 1
+        }
+    }
+
+    fun endNonPlayerDisplayModeBlockedSession() {
+        synchronized(this) {
+            nonPlayerDisplayModeBlockedSessionCount =
+                (nonPlayerDisplayModeBlockedSessionCount - 1).coerceAtLeast(0)
+        }
+        blockDisplayModeChangesForNonPlayerPlayback()
     }
 
     private fun canChangeDisplayModeForPlayback(): Boolean {
@@ -356,6 +376,10 @@ object FrameRateUtils {
             Log.d(TAG, "Skipping UI preferred refresh while main player session is active")
             return false
         }
+        if (nonPlayerDisplayModeBlockedSessionCount > 0) {
+            Log.d(TAG, "Skipping UI preferred refresh while non-player playback is active")
+            return false
+        }
         return try {
             val window = activity.window ?: return false
             val display = window.decorView.display ?: return false
@@ -618,6 +642,10 @@ object FrameRateUtils {
         return canChangeDisplayModeForPlayback()
     }
 
+    internal fun isNonPlayerDisplayModeBlockedSessionActiveForTests(): Boolean {
+        return nonPlayerDisplayModeBlockedSessionCount > 0
+    }
+
     internal fun parseProbeRationalForTests(value: String?): Float? = parseProbeRational(value)
 
     internal fun parseFfmpegStreamMetadataForTests(json: String?): FrameRateDetection? =
@@ -626,6 +654,9 @@ object FrameRateUtils {
     internal fun resetDisplayModeSessionStateForTests() {
         blockDisplayModeChangesOutsideMainPlayer = true
         mainPlayerDisplayModeSessionActive = false
+        synchronized(this) {
+            nonPlayerDisplayModeBlockedSessionCount = 0
+        }
         originalModeId = null
     }
 }

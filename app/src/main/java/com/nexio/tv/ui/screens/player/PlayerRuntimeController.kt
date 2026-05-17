@@ -93,6 +93,8 @@ class PlayerRuntimeController(
         internal const val TAG = "PlayerViewModel"
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
         internal const val FIRST_FRAME_TIMEOUT_MS = 12_000L
+        internal const val SEEK_FIRST_FRAME_TIMEOUT_MS = 5_000L
+        internal const val SEEK_PROGRESS_TIMEOUT_MS = 7_000L
         internal const val POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS = 8_000L
         internal const val POST_FIRST_FRAME_STUCK_POSITION_MS = 500L
         internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
@@ -241,6 +243,8 @@ class PlayerRuntimeController(
     internal var progressJob: Job? = null
     internal var vodTelemetryJob: Job? = null
     internal var firstFrameWatchdogJob: Job? = null
+    internal var seekFirstFrameWatchdogJob: Job? = null
+    internal var seekProgressWatchdogJob: Job? = null
     internal var postFirstFrameBufferingWatchdogJob: Job? = null
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
@@ -392,6 +396,8 @@ class PlayerRuntimeController(
     internal var currentVideoTrackIsLikelyVc1: Boolean = false
     internal var currentVideoTrackMimeType: String? = null
     internal var currentVideoTrackCodecs: String? = null
+    internal var currentAudioTrackMimeType: String? = null
+    internal var currentAudioTrackCodecs: String? = null
     internal var currentVideoTrackWidth: Int = 0
     internal var currentVideoTrackHeight: Int = 0
     internal var currentVideoTrackSelected: Boolean = false

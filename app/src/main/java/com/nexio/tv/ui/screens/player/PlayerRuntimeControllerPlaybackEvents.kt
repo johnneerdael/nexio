@@ -893,20 +893,14 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             scheduleHideControls()
         }
         PlayerEvent.OnRetry -> {
+            val currentPosition = _exoPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
             hasRenderedFirstFrame = false
             hasRetriedCurrentStreamAfter416 = false
             hasRetriedCurrentStreamAfterUnexpectedNpe = false
             hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
             resetNextEpisodeCardState(clearEpisode = false)
-            _uiState.update { state ->
-                state.copy(
-                    error = null,
-                    showLoadingOverlay = state.loadingOverlayEnabled,
-                    showSubtitleDelayOverlay = false
-                )
-            }
-            releasePlayer()
-            initializePlayer(currentStreamUrl, currentHeaders)
+            _uiState.update { it.copy(showSubtitleDelayOverlay = false) }
+            scheduleDeferredPlayerReinitialize(fromPositionMs = currentPosition)
         }
         PlayerEvent.OnLoadingTimedOut -> {
             releasePlayer()
@@ -1025,4 +1019,6 @@ private fun PlayerRuntimeController.beginSeekTelemetry(targetMs: Long) {
         pendingSeekTelemetryReadyAssumed = false
     }
     pendingSeekTelemetryAwaitingFirstFrame = true
+    maybeScheduleSeekFirstFrameWatchdog(requestTimeMs, targetMs)
+    maybeScheduleSeekProgressWatchdog(requestTimeMs, targetMs)
 }

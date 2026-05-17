@@ -39,4 +39,38 @@ class FrameRateUtilsSessionStateTest {
         assertFalse(FrameRateUtils.isMainPlayerDisplayModeSessionActiveForTests())
         assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
     }
+
+    @Test
+    fun `non player display mode blocked session remains active until all trailers end`() {
+        FrameRateUtils.resetDisplayModeSessionStateForTests()
+
+        FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+        FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+
+        assertTrue(FrameRateUtils.isNonPlayerDisplayModeBlockedSessionActiveForTests())
+        assertFalse(FrameRateUtils.isMainPlayerDisplayModeSessionActiveForTests())
+        assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
+
+        FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+
+        assertTrue(FrameRateUtils.isNonPlayerDisplayModeBlockedSessionActiveForTests())
+        assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
+
+        FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+
+        assertFalse(FrameRateUtils.isNonPlayerDisplayModeBlockedSessionActiveForTests())
+        assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
+    }
+
+    @Test
+    fun `main player session clears stale non player display mode block`() {
+        FrameRateUtils.resetDisplayModeSessionStateForTests()
+        FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+
+        FrameRateUtils.beginMainPlayerDisplayModeSession()
+
+        assertFalse(FrameRateUtils.isNonPlayerDisplayModeBlockedSessionActiveForTests())
+        assertTrue(FrameRateUtils.isMainPlayerDisplayModeSessionActiveForTests())
+        assertTrue(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
+    }
 }

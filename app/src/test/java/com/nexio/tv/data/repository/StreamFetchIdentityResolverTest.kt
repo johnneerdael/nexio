@@ -13,7 +13,7 @@ class StreamFetchIdentityResolverTest {
     private val resolver = StreamFetchIdentityResolver()
 
     @Test
-    fun `default stremio series uses imdb episode stream id`() = runTest {
+    fun `default stremio non anime tvdb series prefers show imdb episode stream id`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TVDB,
             canonicalId = "393268",
@@ -33,7 +33,7 @@ class StreamFetchIdentityResolverTest {
     }
 
     @Test
-    fun `stream identity is unresolved when no supported stream id exists`() = runTest {
+    fun `tvdb series stream identity does not require imdb`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TVDB,
             canonicalId = "393268",
@@ -48,7 +48,8 @@ class StreamFetchIdentityResolverTest {
             StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1")
         )
 
-        assertNull(result)
+        assertEquals("tvdb:393268:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.TVDB_EPISODE, result?.idScheme)
     }
 
     @Test

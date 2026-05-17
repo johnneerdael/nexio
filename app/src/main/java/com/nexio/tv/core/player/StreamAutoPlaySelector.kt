@@ -186,6 +186,7 @@ object StreamAutoPlaySelector {
         val expected = titleTokens(contentName)
         val candidate = titleTokens(parsedTitle)
         if (expected.isEmpty() || candidate.isEmpty()) return false
+        if (expected.size == 1 && candidate.size > 1) return true
         val expectedIsSubset = candidate.containsAll(expected)
         val candidateIsSubset = expected.containsAll(candidate)
         return !(expectedIsSubset || candidateIsSubset)

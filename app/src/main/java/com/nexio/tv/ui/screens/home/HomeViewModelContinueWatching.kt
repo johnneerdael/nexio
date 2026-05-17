@@ -20,6 +20,7 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.ResumeIdentity
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.data.repository.toSafeResumeIdentity
@@ -29,6 +30,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -222,7 +224,7 @@ internal fun buildContinueWatchingItemsForSnapshot(
 
     val timeline = buildMixedContinueWatchingTimeline(
         resumeItems = snapshot.records,
-        nextUpItems = snapshot.nextUpItems,
+        nextUpItems = visibleContinueWatchingNextUpItems(snapshot),
         resumeRef = ::resumeRefForContinueWatchingRecord,
         nextUpRef = ::canonicalNextUpRefForContinueWatching
     )
@@ -250,7 +252,7 @@ private fun buildRawContinueWatchingItemsForSnapshot(
 ): List<ContinueWatchingItem> {
     val timeline = buildMixedContinueWatchingTimeline(
         resumeItems = snapshot.resumeItems,
-        nextUpItems = snapshot.nextUpItems,
+        nextUpItems = visibleContinueWatchingNextUpItems(snapshot),
         resumeRef = ::resumeRefForContinueWatching,
         nextUpRef = ::nextUpRefForContinueWatching
     )
@@ -261,8 +263,24 @@ private fun buildRawContinueWatchingItemsForSnapshot(
         }
     }.filter { item ->
         item !is ContinueWatchingItem.NextUp || item.info.hasAired
+    }.dedupByCanonicalOrContentKey()
+}
+
+private fun visibleContinueWatchingNextUpItems(snapshot: ContinueWatchingSnapshot): List<TrackingNextUpEntry> {
+    if (snapshot.traktUpNextItems.isEmpty()) return snapshot.nextUpItems
+    val seen = linkedSetOf<String>()
+    return (snapshot.nextUpItems + snapshot.traktUpNextItems).filter { entry ->
+        seen.add(visibleNextUpEntryKey(entry))
     }
 }
+
+private fun visibleNextUpEntryKey(entry: TrackingNextUpEntry): String =
+    listOf(
+        entry.contentType.trim().lowercase(),
+        entry.contentId.trim().lowercase(),
+        entry.season.toString(),
+        entry.episode.toString()
+    ).joinToString("|")
 
 private fun List<ContinueWatchingItem>.dedupByCanonicalOrContentKey(): List<ContinueWatchingItem> {
     val seen = linkedSetOf<String>()
@@ -726,7 +744,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         // routing through the typed-slot rank machinery.
         val enrichedMetadata = run {
             val nowMs = System.currentTimeMillis()
-            val previewSlots = localizedPreview.toHomeDisplayMetadata().toResolvedFieldSlots(
+            val previewMetadata = localizedPreview.toHomeDisplayMetadata()
+            val previewSlots = previewMetadata.toResolvedFieldSlots(
                 nowMs = nowMs,
                 rank = DisplaySourceRank.STALE_RESOLVED,
             )
@@ -739,7 +758,18 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 overlay = if (existingSlots != null) previewSlots else null,
                 existing = null,
                 profile = null,
-            ).toHomeDisplayMetadata()
+            ).toHomeDisplayMetadata().let { reduced ->
+                val currentImdb = existing?.imdbId?.trim()?.takeIf { it.isNotEmpty() }
+                reduced.copy(
+                    originalLanguage = previewMetadata.originalLanguage ?: existing?.originalLanguage,
+                    imdbId = if (currentImdb != null && currentImdb != reduced.imdbId) {
+                        currentImdb
+                    } else {
+                        previewMetadata.imdbId ?: reduced.imdbId
+                    },
+                    tomatoesRating = previewMetadata.tomatoesRating ?: existing?.tomatoesRating
+                )
+            }
         }
 
         when (item) {
@@ -833,7 +863,10 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 language = null,
                 posterProviderTag = displayMetadata.posterProviderTag,
                 artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
-                firstPaintStableIds = providerIdsFromContinueWatchingContentId(progress.contentId)
+                firstPaintStableIds = providerIdsForContinueWatchingProviderPreview(
+                    contentId = progress.contentId,
+                    displayMetadata = displayMetadata
+                )
             )
         }
 
@@ -857,9 +890,27 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
                 language = null,
                 posterProviderTag = displayMetadata.posterProviderTag,
                 artwork = displayMetadata.toArtworkBundleFromDisplayFields(),
-                firstPaintStableIds = providerIdsFromContinueWatchingContentId(info.contentId)
+                firstPaintStableIds = providerIdsForContinueWatchingProviderPreview(
+                    contentId = info.contentId,
+                    displayMetadata = displayMetadata
+                )
             )
         }
+    }
+}
+
+private fun providerIdsForContinueWatchingProviderPreview(
+    contentId: String,
+    displayMetadata: HomeDisplayMetadata
+): ProviderIds {
+    val ids = providerIdsFromContinueWatchingContentId(contentId)
+    val displayImdb = displayMetadata.imdbId
+        ?.trim()
+        ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+    return if (displayImdb != null && ids.imdb.isNullOrBlank()) {
+        ids.copy(imdb = displayImdb)
+    } else {
+        ids
     }
 }
 

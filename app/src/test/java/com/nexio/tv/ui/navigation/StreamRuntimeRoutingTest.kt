@@ -254,6 +254,65 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching route keeps persisted imdb stream id when display metadata has non show imdb`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:413033",
+                    videoId = "tvdb:413033:2:2",
+                    contentType = "series",
+                    season = 2,
+                    episode = 2,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt16288804:2:2",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt42178219")
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:413033:2:2", args.getValue("videoId"))
+        assertEquals("tt16288804:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt16288804", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching route corrects stale persisted imdb stream id from resolved show override`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 2_468_000L,
+                    positionMs = 1_234_000L,
+                    progressPercent = 50.0f
+                ).copy(
+                    contentId = "tvdb:413033",
+                    videoId = "tvdb:413033:2:2",
+                    contentType = "series",
+                    season = 2,
+                    episode = 2,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ),
+                streamFetchVideoId = "tt42178219:2:2",
+                displayMetadata = HomeDisplayMetadata(imdbId = "tt42178219")
+            ),
+            deterministicAutoplayEnabled = true,
+            resolvedImdbHint = "tt16288804"
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tvdb:413033:2:2", args.getValue("videoId"))
+        assertEquals("tt16288804:2:2", args.getValue("streamVideoId"))
+        assertEquals("tt16288804", args.getValue("imdbId"))
+    }
+
+    @Test
     fun `continue watching route derives episode stream fetch id from resolved imdb override`() {
         val route = buildContinueWatchingStreamRoute(
             item = ContinueWatchingItem.InProgress(
@@ -321,6 +380,47 @@ class StreamRuntimeRoutingTest {
         assertEquals("tt9794044", enriched.displayMetadata().imdbId)
         assertEquals("tt9794044:2:2", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
+    }
+
+    @Test
+    fun `continue watching overlay sidecar supplies original language for tvdb item playback`() {
+        val item = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tvdb:393268",
+                contentType = "series",
+                name = "La casa de papel",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(runtime = "43"),
+                videoId = "tvdb:393268:2:2",
+                season = 2,
+                episode = 2,
+                episodeTitle = "Episode 2",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+        val enriched = mergeContinueWatchingOverlaySidecars(
+            items = listOf(item),
+            overlaysByItemKey = mapOf(
+                "series:tvdb:393268" to hydratedOverlay(
+                    itemKey = "series:tvdb:393268",
+                    imdbId = "tt6468322",
+                    title = "La casa de papel",
+                    originalLanguage = "spa"
+                )
+            )
+        ).single()
+
+        val route = buildContinueWatchingStreamRoute(
+            item = enriched,
+            deterministicAutoplayEnabled = true
+        )
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("spa", enriched.displayMetadata().originalLanguage)
+        assertEquals("spa", args.getValue("originalLanguage"))
     }
 
     @Test
@@ -726,7 +826,8 @@ class StreamRuntimeRoutingTest {
     private fun hydratedOverlay(
         itemKey: String,
         imdbId: String,
-        title: String
+        title: String,
+        originalLanguage: String? = null
     ): HydratedHomeOverlay {
         return HydratedHomeOverlay(
             overlayKey = "canonical:TVDB:393268:type:SERIES:lang:nl:policy:1",
@@ -739,6 +840,7 @@ class StreamRuntimeRoutingTest {
             fields = HomeDisplayMetadata(
                 title = title,
                 imdbId = imdbId,
+                originalLanguage = originalLanguage,
                 runtime = "43"
             ),
             fieldTrace = emptyList(),

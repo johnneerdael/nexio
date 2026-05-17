@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -8,6 +9,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.SidecarStableIds
 import com.nexio.tv.core.metadata.router.SourceStableIds
 import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
@@ -215,7 +217,7 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
-    fun `identity depth without supported stream ID preserves row with warning`() = runTest {
+    fun `identity depth with tvdb series id resolves tvdb stream identity without imdb`() = runTest {
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
         } returns citadelBundle(sidecars = SidecarStableIds())
@@ -231,10 +233,52 @@ class ContinueWatchingIdentityResolverTest {
             )
         )
 
-        assertEquals(IdentityConfidence.MEDIUM, record.identityConfidence)
-        assertNull(record.streamFetchIdentity)
-        assertEquals(listOf("stream fetch identity unresolved"), record.identityWarnings)
+        assertEquals(IdentityConfidence.HIGH, record.identityConfidence)
+        assertEquals("tvdb:393268:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        assertEquals(emptyList<String>(), record.identityWarnings)
         assertEquals("tvdb:393268", record.resumeIdentities.single().contentId)
+    }
+
+    @Test
+    fun `series identity bridge corrects episode imdb sidecar from tvdb series mapping`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns berlinBundle()
+        val resolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            stableIdBundleResolver = StableIdBundleResolver(
+                idMappingStore = InMemoryIdMappingStore(),
+                lookup = object : StableIdBundleResolver.Lookup {
+                    override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                    override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                    override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                    override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                    override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                    override suspend fun tvdbSeriesToImdb(tvdbId: String): String? =
+                        if (tvdbId == "413033") "tt16288804" else null
+                }
+            )
+        )
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tvdb:413033",
+                    videoId = "tvdb:413033:2:2",
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK,
+                    season = 2,
+                    episode = 2
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals("tt16288804", record.displayIdentity?.providerIds?.imdb)
+        assertEquals("tt16288804", record.idBundle.imdb)
+        assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
     }
 
     @Test
@@ -480,6 +524,28 @@ class ContinueWatchingIdentityResolverTest {
                 sourceItemId = "393268",
                 railId = null,
                 observedIds = ProviderIds(tvdb = "393268")
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1_700_000_000_000L
+        )
+
+    private fun berlinBundle(): StableIdBundle =
+        StableIdBundle(
+            itemKey = "series:tvdb:413033",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(
+                tvdbSeriesId = "413033"
+            ),
+            sidecars = SidecarStableIds(imdbId = "tt42178219"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TVDB,
+                sourceItemId = "413033",
+                railId = null,
+                observedIds = ProviderIds(
+                    imdb = "tt42178219",
+                    tmdb = "308014",
+                    tvdb = "413033"
+                )
             ),
             evidence = emptyList(),
             resolvedAtMs = 1_700_000_000_000L

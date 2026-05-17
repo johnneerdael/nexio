@@ -138,6 +138,7 @@ enum class ContinueWatchingSource {
 enum class StreamIdScheme {
     IMDB_MOVIE,
     IMDB_EPISODE,
+    TVDB_EPISODE,
     UNRESOLVED
 }
 

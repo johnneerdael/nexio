@@ -43,6 +43,16 @@ class StreamAutoPlaySelectorTitleGuardTest {
     }
 
     @Test
+    fun `title guard rejects multi word candidate that only contains one word requested title`() {
+        assertTrue(
+            StreamAutoPlaySelector.shouldRejectForContentTitle(
+                contentName = "Berlín",
+                parsedTitle = "Strike Witches Road to Berlin"
+            )
+        )
+    }
+
+    @Test
     fun `title guard filters only mismatched deterministic candidates`() {
         val guarded = StreamAutoPlaySelector.filterCandidatesByContentTitle(
             contentName = "One Piece",

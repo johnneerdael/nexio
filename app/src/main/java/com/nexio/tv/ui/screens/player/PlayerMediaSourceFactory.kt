@@ -781,7 +781,7 @@ internal class PlayerMediaSourceFactory(
             }
             else -> {
                 currentWarmAheadUpstreamFactory = null
-                okHttpFactory
+                baseDataSourceFactory
             }
         }
     }

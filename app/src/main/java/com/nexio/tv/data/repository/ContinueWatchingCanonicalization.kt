@@ -68,7 +68,8 @@ object ContinueWatchingCanonicalization {
         season: Int?,
         episode: Int?,
         updatedAtMs: Long,
-        anchors: List<ContinueWatchingWatchedAnchor>
+        anchors: List<ContinueWatchingWatchedAnchor>,
+        requireNewerCoordinate: Boolean = false
     ): Boolean {
         val normalizedLookupKeys = normalizeLookupKeys(lookupKeys)
         if (normalizedLookupKeys.isEmpty()) return false
@@ -76,7 +77,12 @@ object ContinueWatchingCanonicalization {
             val anchor = anchors[i]
             if (!hasLookupOverlap(normalizedLookupKeys, anchor.lookupKeys)) continue
             if (hasCoordinates(season, episode) && hasCoordinates(anchor.season, anchor.episode)) {
-                if (isSameOrEarlierCoordinate(season, episode, anchor)) return true
+                val suppress = if (requireNewerCoordinate) {
+                    isEarlierCoordinate(season, episode, anchor)
+                } else {
+                    isSameOrEarlierCoordinate(season, episode, anchor)
+                }
+                if (suppress) return true
                 continue
             }
             if (updatedAtMs <= anchor.lastWatchedMs) return true
@@ -143,6 +149,19 @@ object ContinueWatchingCanonicalization {
         val anchorEpisode = anchor.episode ?: return false
         return candidateSeason < anchorSeason ||
             (candidateSeason == anchorSeason && candidateEpisode <= anchorEpisode)
+    }
+
+    private fun isEarlierCoordinate(
+        season: Int?,
+        episode: Int?,
+        anchor: ContinueWatchingWatchedAnchor
+    ): Boolean {
+        val candidateSeason = season ?: return false
+        val candidateEpisode = episode ?: return false
+        val anchorSeason = anchor.season ?: return false
+        val anchorEpisode = anchor.episode ?: return false
+        return candidateSeason < anchorSeason ||
+            (candidateSeason == anchorSeason && candidateEpisode < anchorEpisode)
     }
 
     private fun addProviderLookupKeys(

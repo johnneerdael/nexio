@@ -1320,19 +1320,28 @@ internal fun buildContinueWatchingStreamRoute(
     return when (item) {
         is ContinueWatchingItem.InProgress -> {
             val displayMetadata = item.displayMetadata()
-            val imdbHint = continueWatchingImdbHint(
-                resolvedImdbHint ?: displayMetadata.imdbId,
+            val resolvedOverride = continueWatchingImdbHint(
+                resolvedImdbHint,
                 item.progress.contentId
             )
+            val imdbHint = resolvedOverride ?: continueWatchingImdbHint(
+                displayMetadata.imdbId,
+                item.progress.contentId
+            )
+            val streamVideoId = streamFetchVideoIdForCw(
+                persisted = item.streamFetchVideoId,
+                rawVideoId = item.progress.videoId,
+                contentId = item.progress.contentId,
+                imdbHint = imdbHint,
+                season = item.progress.season,
+                episode = item.progress.episode,
+                allowImdbOverride = resolvedOverride != null
+            )
+            val playbackImdbHint = streamVideoId?.parentImdbIdFromStreamVideoId() ?: imdbHint
             val displayTitle = displayMetadata.title ?: item.progress.name
             Screen.Stream.createRoute(
                 videoId = item.progress.videoId,
-                streamVideoId = streamFetchVideoIdForCw(
-                    persisted = item.streamFetchVideoId,
-                    imdbHint = imdbHint,
-                    season = item.progress.season,
-                    episode = item.progress.episode,
-                ),
+                streamVideoId = streamVideoId,
                 contentType = item.progress.contentType,
                 title = displayTitle,
                 poster = displayMetadata.displayPoster,
@@ -1347,7 +1356,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = displayTitle,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = displayMetadata.originalLanguage,
-                imdbId = imdbHint,
+                imdbId = playbackImdbHint,
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.progress.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1363,19 +1372,28 @@ internal fun buildContinueWatchingStreamRoute(
 
         is ContinueWatchingItem.NextUp -> {
             val displayMetadata = item.displayMetadata()
-            val imdbHint = continueWatchingImdbHint(
-                resolvedImdbHint ?: displayMetadata.imdbId,
+            val resolvedOverride = continueWatchingImdbHint(
+                resolvedImdbHint,
                 item.info.contentId
             )
+            val imdbHint = resolvedOverride ?: continueWatchingImdbHint(
+                displayMetadata.imdbId,
+                item.info.contentId
+            )
+            val streamVideoId = streamFetchVideoIdForCw(
+                persisted = item.info.streamFetchVideoId,
+                rawVideoId = item.info.videoId,
+                contentId = item.info.contentId,
+                imdbHint = imdbHint,
+                season = item.info.season,
+                episode = item.info.episode,
+                allowImdbOverride = resolvedOverride != null
+            )
+            val playbackImdbHint = streamVideoId?.parentImdbIdFromStreamVideoId() ?: imdbHint
             val displayTitle = displayMetadata.title ?: item.info.name
             Screen.Stream.createRoute(
                 videoId = item.info.videoId,
-                streamVideoId = streamFetchVideoIdForCw(
-                    persisted = item.info.streamFetchVideoId,
-                    imdbHint = imdbHint,
-                    season = item.info.season,
-                    episode = item.info.episode,
-                ),
+                streamVideoId = streamVideoId,
                 contentType = item.info.contentType,
                 title = displayTitle,
                 poster = displayMetadata.displayPoster,
@@ -1390,7 +1408,7 @@ internal fun buildContinueWatchingStreamRoute(
                 contentName = displayTitle,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = displayMetadata.originalLanguage,
-                imdbId = imdbHint,
+                imdbId = playbackImdbHint,
                 returnToDetailOnBack = deterministicAutoplayEnabled ||
                     item.info.contentType.equals("series", ignoreCase = true),
                 startFromBeginning = startFromBeginning,
@@ -1420,17 +1438,41 @@ internal fun buildContinueWatchingStreamRoute(
  */
 private fun streamFetchVideoIdForCw(
     persisted: String?,
+    rawVideoId: String?,
+    contentId: String?,
     imdbHint: String?,
     season: Int?,
     episode: Int?,
+    allowImdbOverride: Boolean,
 ): String? {
     val persistedValue = persisted?.trim()?.takeIf { it.isNotBlank() }
+    val imdb = imdbHint?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) }
+    val imdbDerived = imdb?.let { id ->
+        if (season != null && episode != null) "$id:$season:$episode" else id
+    }
+    val rawValue = rawVideoId?.trim()?.takeIf { it.isNotBlank() }
+    val contentValue = contentId?.trim().orEmpty()
     if (persistedValue != null && persistedValue.startsWith("tt", ignoreCase = true)) {
+        val persistedParent = persistedValue.substringBefore(":")
+        if (allowImdbOverride && imdbDerived != null && !persistedParent.equals(imdb, ignoreCase = true)) {
+            return imdbDerived
+        }
         return persistedValue
     }
-    val imdb = imdbHint?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) }
-    if (imdb == null) return persistedValue
-    return if (season != null && episode != null) "$imdb:$season:$episode" else imdb
+    if (imdbDerived != null) return imdbDerived
+    if (rawValue != null &&
+        contentValue.startsWith("tvdb:", ignoreCase = true) &&
+        rawValue.startsWith("tvdb:", ignoreCase = true)
+    ) {
+        return rawValue
+    }
+    return persistedValue
+}
+
+private fun String.parentImdbIdFromStreamVideoId(): String? {
+    return trim()
+        .substringBefore(":")
+        .takeIf { it.startsWith("tt", ignoreCase = true) }
 }
 
 /**
@@ -1482,19 +1524,28 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
     return when (item) {
         is ContinueWatchingItem.InProgress -> {
             val displayMetadata = item.displayMetadata()
-            val imdbHint = continueWatchingImdbHint(
-                resolvedImdbHint ?: displayMetadata.imdbId,
+            val resolvedOverride = continueWatchingImdbHint(
+                resolvedImdbHint,
                 item.progress.contentId
             )
+            val imdbHint = resolvedOverride ?: continueWatchingImdbHint(
+                displayMetadata.imdbId,
+                item.progress.contentId
+            )
+            val streamVideoId = streamFetchVideoIdForCw(
+                persisted = item.streamFetchVideoId,
+                rawVideoId = item.progress.videoId,
+                contentId = item.progress.contentId,
+                imdbHint = imdbHint,
+                season = item.progress.season,
+                episode = item.progress.episode,
+                allowImdbOverride = resolvedOverride != null
+            )
+            val playbackImdbHint = streamVideoId?.parentImdbIdFromStreamVideoId() ?: imdbHint
             val displayTitle = displayMetadata.title ?: item.progress.name
             buildManualSelectionStreamRoute(
                 videoId = item.progress.videoId,
-                streamVideoId = streamFetchVideoIdForCw(
-                    persisted = item.streamFetchVideoId,
-                    imdbHint = imdbHint,
-                    season = item.progress.season,
-                    episode = item.progress.episode,
-                ),
+                streamVideoId = streamVideoId,
                 contentType = item.progress.contentType,
                 title = displayTitle,
                 poster = displayMetadata.displayPoster,
@@ -1507,7 +1558,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
                 contentName = displayTitle,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = displayMetadata.originalLanguage,
-                imdbId = imdbHint,
+                imdbId = playbackImdbHint,
                 returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
                 resumePositionMs = item.progress.position,
                 resumeDurationMs = item.progress.duration,
@@ -1520,19 +1571,28 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
 
         is ContinueWatchingItem.NextUp -> {
             val displayMetadata = item.displayMetadata()
-            val imdbHint = continueWatchingImdbHint(
-                resolvedImdbHint ?: displayMetadata.imdbId,
+            val resolvedOverride = continueWatchingImdbHint(
+                resolvedImdbHint,
                 item.info.contentId
             )
+            val imdbHint = resolvedOverride ?: continueWatchingImdbHint(
+                displayMetadata.imdbId,
+                item.info.contentId
+            )
+            val streamVideoId = streamFetchVideoIdForCw(
+                persisted = item.info.streamFetchVideoId,
+                rawVideoId = item.info.videoId,
+                contentId = item.info.contentId,
+                imdbHint = imdbHint,
+                season = item.info.season,
+                episode = item.info.episode,
+                allowImdbOverride = resolvedOverride != null
+            )
+            val playbackImdbHint = streamVideoId?.parentImdbIdFromStreamVideoId() ?: imdbHint
             val displayTitle = displayMetadata.title ?: item.info.name
             buildManualSelectionStreamRoute(
                 videoId = item.info.videoId,
-                streamVideoId = streamFetchVideoIdForCw(
-                    persisted = item.info.streamFetchVideoId,
-                    imdbHint = imdbHint,
-                    season = item.info.season,
-                    episode = item.info.episode,
-                ),
+                streamVideoId = streamVideoId,
                 contentType = item.info.contentType,
                 title = displayTitle,
                 poster = displayMetadata.displayPoster,
@@ -1545,7 +1605,7 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
                 contentName = displayTitle,
                 runtime = continueWatchingRuntimeMinutes(item),
                 originalLanguage = displayMetadata.originalLanguage,
-                imdbId = imdbHint,
+                imdbId = playbackImdbHint,
                 returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
             )
         }

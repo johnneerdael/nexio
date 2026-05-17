@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,9 +13,9 @@ data class StreamSourceContext(
 )
 
 /**
- * Phase 0 stream policy: default Stremio-style addons fetch series streams by
- * IMDb episode id (`tt...:season:episode`). Addon-specific stream id support
- * belongs in a later AddonStreamIdPolicy, not in this P0 resolver.
+ * Phase 0 stream policy: prefer the TV show IMDb sidecar when one is available
+ * and append the authoritative season/episode coordinate. Non-anime TVDB series
+ * fall back to the TVDB episode coordinate when no show IMDb id is resolvable.
  */
 @Singleton
 class StreamFetchIdentityResolver @Inject constructor() {
@@ -28,18 +29,41 @@ class StreamFetchIdentityResolver @Inject constructor() {
         require(season > 0) { "season must be positive" }
         require(episode > 0) { "episode must be positive" }
 
-        val imdbId = knownIds.imdb?.takeIf { it.isStrictImdbTitleId() } ?: return null
-        val videoId = "$imdbId:$season:$episode"
-        return StreamFetchIdentity(
-            contentId = imdbId,
-            videoId = videoId,
-            idScheme = StreamIdScheme.IMDB_EPISODE,
-            confidence = IdentityConfidence.HIGH,
-            trace = listOf(
-                "phase0 default Stremio stream shape resolved series stream id from IMDb parent id",
-                sourceContext.traceDescription(canonicalIdentity)
+        val imdbId = knownIds.imdb?.takeIf { it.isStrictImdbTitleId() }
+        if (imdbId != null) {
+            val videoId = "$imdbId:$season:$episode"
+            return StreamFetchIdentity(
+                contentId = imdbId,
+                videoId = videoId,
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf(
+                    "phase0 default Stremio stream shape resolved series stream id from TV show IMDb sidecar",
+                    sourceContext.traceDescription(canonicalIdentity)
+                )
             )
-        )
+        }
+
+        if (sourceContext.mediaKind == MetadataMediaKind.SERIES) {
+            val tvdbId = knownIds.tvdb?.takeIf { it.isNotBlank() }
+                ?: canonicalIdentity.canonicalId?.takeIf {
+                    canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotBlank()
+                }
+            if (tvdbId != null) {
+                val videoId = "tvdb:$tvdbId:$season:$episode"
+                return StreamFetchIdentity(
+                    contentId = "tvdb:$tvdbId",
+                    videoId = videoId,
+                    idScheme = StreamIdScheme.TVDB_EPISODE,
+                    confidence = IdentityConfidence.HIGH,
+                    trace = listOf(
+                        "phase0 default Stremio stream shape fell back to non-anime TVDB episode coordinate",
+                        sourceContext.traceDescription(canonicalIdentity)
+                    )
+                )
+            }
+        }
+        return null
     }
 
     suspend fun resolveForMovie(

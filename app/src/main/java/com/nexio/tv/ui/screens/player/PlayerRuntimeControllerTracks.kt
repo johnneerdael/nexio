@@ -191,6 +191,8 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     }
 
     currentStreamHasVideoTrack = hasVideoTrack
+    currentAudioTrackMimeType = selectedAudioMimeType
+    currentAudioTrackCodecs = selectedAudioCodecs
     val effectiveVideoFormat = selectedVideoFormat ?: firstVideoFormat
     if (effectiveVideoFormat != null) {
         currentVideoTrackMimeType = effectiveVideoFormat.sampleMimeType

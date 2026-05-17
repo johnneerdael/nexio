@@ -611,61 +611,87 @@ class StreamScreenViewModel @Inject constructor(
                     }
                 }
 
-                streamRepository.getStreamsFromAllAddons(
-                    type = contentType,
-                    videoId = streamFetchVideoId,
-                    season = season,
-                    episode = episode,
-                    installedAddons = installedAddons,
-                    requestOrigin = "stream_screen",
-                    requestId = requestId
-                ).collect { result ->
-                    when (result) {
-                        is NetworkResult.Success -> {
-                            val version = queuedPresentationVersion.incrementAndGet()
-                            latestAddonStreamGroups = result.data
-                            organizeChannel.trySend(PendingOrganizeRequest(
-                                version = version,
-                                addonStreamGroups = result.data
-                            ))
+                suspend fun collectStreamsFor(fetchVideoId: String): Boolean {
+                    var sawVisibleStreams = false
+                    streamRepository.getStreamsFromAllAddons(
+                        type = contentType,
+                        videoId = fetchVideoId,
+                        season = season,
+                        episode = episode,
+                        installedAddons = installedAddons,
+                        requestOrigin = "stream_screen",
+                        requestId = requestId
+                    ).collect { result ->
+                        when (result) {
+                            is NetworkResult.Success -> {
+                                sawVisibleStreams = sawVisibleStreams || result.data.any { it.streams.isNotEmpty() }
+                                val version = queuedPresentationVersion.incrementAndGet()
+                                latestAddonStreamGroups = result.data
+                                organizeChannel.trySend(PendingOrganizeRequest(
+                                    version = version,
+                                    addonStreamGroups = result.data
+                                ))
+                            }
+                            is NetworkResult.Error -> {
+                                streamSearchCompletedWithError = true
+                                if (directAutoPlayFlowEnabledForSession) {
+                                    directAutoPlayFlowEnabledForSession = false
+                                }
+                                updateUiStateIfChanged {
+                                    it.copy(
+                                        isLoading = false,
+                                        showNoStreamsState = false,
+                                        error = if (deterministicAutoplay) null else result.message,
+                                        isDirectAutoPlayFlow = if (deterministicAutoplay) true else false,
+                                        showDirectAutoPlayOverlay = deterministicAutoplay,
+                                        directAutoPlayMessage = if (deterministicAutoplay) {
+                                            null
+                                        } else {
+                                            null
+                                        },
+                                        deterministicAutoplayFailureMessage = if (deterministicAutoplay) {
+                                            result.message
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                }
+                            }
+                            NetworkResult.Loading -> {
+                                updateUiStateIfChanged {
+                                    it.copy(
+                                        isLoading = true,
+                                        showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
+                                        showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
+                                            true
+                                        } else {
+                                            it.showDirectAutoPlayOverlay
+                                        }
+                                    )
+                                }
+                            }
                         }
-                        is NetworkResult.Error -> {
-                            streamSearchCompletedWithError = true
-                            if (directAutoPlayFlowEnabledForSession) {
-                                directAutoPlayFlowEnabledForSession = false
-                            }
-                            updateUiStateIfChanged {
-                                it.copy(
-                                    isLoading = false,
-                                    showNoStreamsState = false,
-                                    error = if (deterministicAutoplay) null else result.message,
-                                    isDirectAutoPlayFlow = if (deterministicAutoplay) true else false,
-                                    showDirectAutoPlayOverlay = deterministicAutoplay,
-                                    directAutoPlayMessage = if (deterministicAutoplay) {
-                                        null
-                                    } else {
-                                        null
-                                    },
-                                    deterministicAutoplayFailureMessage = if (deterministicAutoplay) {
-                                        result.message
-                                    } else {
-                                        null
-                                    }
-                                )
-                            }
-                        }
-                        NetworkResult.Loading -> {
-                            updateUiStateIfChanged {
-                                it.copy(
-                                    isLoading = true,
-                                    showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
-                                    showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
-                                        true
-                                    } else {
-                                        it.showDirectAutoPlayOverlay
-                                    }
-                                )
-                            }
+                    }
+                    return sawVisibleStreams
+                }
+
+                var sawVisibleStreams = collectStreamsFor(streamFetchVideoId)
+                if (!sawVisibleStreams && !streamSearchCompletedWithError) {
+                    val fallbackVideoIds = streamFetchFallbackVideoIds(
+                        streamFetchVideoId = streamFetchVideoId,
+                        videoId = videoId,
+                        imdbId = imdbId,
+                        season = season,
+                        episode = episode
+                    )
+                    for (i in fallbackVideoIds.indices) {
+                        val fallbackVideoId = fallbackVideoIds[i]
+                        if (!sawVisibleStreams) {
+                            Log.i(
+                                TAG,
+                                "Retrying stream fetch with fallback videoId=$fallbackVideoId after empty result for $streamFetchVideoId"
+                            )
+                            sawVisibleStreams = collectStreamsFor(fallbackVideoId)
                         }
                     }
                 }
@@ -762,7 +788,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun shouldAttemptEmbeddedMetaStreamLookup(): Boolean {
-        val metaId = contentId?.takeIf { it.isNotBlank() } ?: return false
+        val metaId = projectedAddonMetaId(
+            streamFetchVideoId = streamFetchVideoId,
+            contentId = contentId,
+            videoId = videoId
+        ) ?: return false
         if (contentType.isBlank()) return false
         if (contentType.equals("other", ignoreCase = true)) return true
 
@@ -889,7 +919,11 @@ class StreamScreenViewModel @Inject constructor(
     // See docs/superpowers/research/2026-05-01-rail-preview-first-gap-analysis.md
     // for context.
     private suspend fun getEmbeddedStreamsFromMeta(installedAddons: List<Addon>): AddonStreams? {
-        val metaId = contentId?.takeIf { it.isNotBlank() } ?: return null
+        val metaId = projectedAddonMetaId(
+            streamFetchVideoId = streamFetchVideoId,
+            contentId = contentId,
+            videoId = videoId
+        ) ?: return null
         val metaAddons = orderedMetaAddons(installedAddons)
         if (metaAddons.isEmpty()) return null
         for (addon in metaAddons) {
@@ -899,7 +933,13 @@ class StreamScreenViewModel @Inject constructor(
                 id = metaId
             ).first { it !is NetworkResult.Loading }
             val meta = (result as? NetworkResult.Success)?.data ?: continue
-            val video = meta.videos.firstOrNull { it.id == videoId } ?: continue
+            val video = meta.videos.firstOrNull {
+                matchesProjectedAddonMetaVideo(
+                    candidateVideoId = it.id,
+                    streamFetchVideoId = streamFetchVideoId,
+                    videoId = videoId
+                )
+            } ?: continue
             if (video.streams.isEmpty()) continue
 
             val streams = video.streams.map { stream ->
@@ -940,7 +980,11 @@ class StreamScreenViewModel @Inject constructor(
         val requiresMetadataLookup = genres.isNullOrBlank() || year.isNullOrBlank() || runtime == null
         if (!requiresMetadataLookup) return
 
-        val metaId = contentId ?: videoId.substringBefore(":")
+        val metaId = projectedAddonMetaId(
+            streamFetchVideoId = streamFetchVideoId,
+            contentId = contentId,
+            videoId = videoId
+        ) ?: return
         if (metaId.isBlank() || contentType.isBlank()) return
 
         viewModelScope.launch {
@@ -2153,6 +2197,60 @@ private fun normalizeLanguageMatchToken(value: String): String {
         .trim()
         .lowercase(Locale.US)
         .replace(Regex("[^a-z]"), "")
+}
+
+internal fun projectedAddonMetaId(
+    streamFetchVideoId: String,
+    contentId: String?,
+    videoId: String
+): String? {
+    val projectedParent = streamFetchVideoId
+        .trim()
+        .substringBefore(":")
+        .takeIf { it.isNotBlank() && it.startsWith("tt", ignoreCase = true) }
+    if (projectedParent != null) return projectedParent
+
+    return contentId?.trim()?.takeIf { it.isNotBlank() }
+        ?: videoId.trim().substringBefore(":").takeIf { it.isNotBlank() }
+}
+
+internal fun matchesProjectedAddonMetaVideo(
+    candidateVideoId: String?,
+    streamFetchVideoId: String,
+    videoId: String
+): Boolean {
+    val candidate = candidateVideoId?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    return candidate.equals(streamFetchVideoId, ignoreCase = true) ||
+        candidate.equals(videoId, ignoreCase = true)
+}
+
+internal fun streamFetchFallbackVideoIds(
+    streamFetchVideoId: String,
+    videoId: String,
+    imdbId: String?,
+    season: Int?,
+    episode: Int?
+): List<String> {
+    val active = streamFetchVideoId.trim()
+    val fallbacks = ArrayList<String>(2)
+    val imdb = imdbId
+        ?.trim()
+        ?.substringBefore(":")
+        ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+    if (imdb != null) {
+        val imdbVideoId = if (season != null && episode != null) "$imdb:$season:$episode" else imdb
+        if (!imdbVideoId.equals(active, ignoreCase = true)) {
+            fallbacks += imdbVideoId
+        }
+    }
+    val rawVideoId = videoId.trim().takeIf { it.isNotBlank() }
+    if (rawVideoId != null &&
+        !rawVideoId.equals(active, ignoreCase = true) &&
+        fallbacks.none { it.equals(rawVideoId, ignoreCase = true) }
+    ) {
+        fallbacks += rawVideoId
+    }
+    return fallbacks
 }
 
 

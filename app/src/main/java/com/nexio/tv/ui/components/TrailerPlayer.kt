@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.components
 
+import android.content.Context
+import android.media.MediaFormat
 import android.net.Uri
+import android.os.Handler
 import android.util.Log
 import android.view.LayoutInflater
 import com.nexio.tv.R
@@ -29,14 +32,20 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -58,6 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import java.util.ArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 
@@ -76,6 +86,70 @@ internal fun shouldUseChunkedTrailerDataSource(
         ?.let(::shouldUseYouTubeChunkedTransfer)
         ?: false
     return videoUsesChunking || audioUsesChunking
+}
+
+private class TrailerRenderersFactory(
+    context: Context
+) : DefaultRenderersFactory(context) {
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: Handler,
+        eventListener: VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<Renderer>
+    ) {
+        out.add(
+            TrailerMediaCodecVideoRenderer(
+                context = context,
+                mediaCodecSelector = MediaCodecSelector.PREFER_SOFTWARE,
+                allowedJoiningTimeMs = allowedVideoJoiningTimeMs,
+                enableDecoderFallback = enableDecoderFallback,
+                eventHandler = eventHandler,
+                eventListener = eventListener
+            )
+        )
+    }
+}
+
+private class TrailerMediaCodecVideoRenderer(
+    context: Context,
+    mediaCodecSelector: MediaCodecSelector,
+    allowedJoiningTimeMs: Long,
+    enableDecoderFallback: Boolean,
+    eventHandler: Handler,
+    eventListener: VideoRendererEventListener
+) : MediaCodecVideoRenderer(
+    context,
+    mediaCodecSelector,
+    allowedJoiningTimeMs,
+    enableDecoderFallback,
+    eventHandler,
+    eventListener,
+    DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY
+) {
+    override fun getMediaFormat(
+        format: Format,
+        codecMimeType: String,
+        codecMaxValues: CodecMaxValues,
+        codecOperatingRate: Float,
+        deviceNeedsNoPostProcessWorkaround: Boolean,
+        tunnelingAudioSessionId: Int
+    ): MediaFormat {
+        val trailerFormat = format.buildUpon()
+            .setFrameRate(Format.NO_VALUE.toFloat())
+            .build()
+        return super.getMediaFormat(
+            trailerFormat,
+            codecMimeType,
+            codecMaxValues,
+            codecOperatingRate,
+            deviceNeedsNoPostProcessWorkaround,
+            tunnelingAudioSessionId
+        )
+    }
 }
 
 internal fun bindTrailerPlayerView(
@@ -265,6 +339,7 @@ fun TrailerPlayer(
                 .build()
             ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
+                .setRenderersFactory(TrailerRenderersFactory(context))
                 .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                 .build()
                 .apply {
@@ -279,14 +354,15 @@ fun TrailerPlayer(
                     // (DefaultBandwidthMeter) starts conservatively (~700
                     // kbps) and ramps up over time — for a short trailer
                     // it never reaches a high variant before playback ends.
-                    // Force the highest available video variant up front;
-                    // the 2 MiB target buffer cap on the LoadControl above
-                    // bounds memory. Also disable text tracks because we
-                    // render subtitles via the app-controlled overlay
-                    // pipeline (TrailerSubtitleOverlay), not Media3's
-                    // TextRenderer.
+                    // Keep navigation previews on a UI-friendly 1080p/30
+                    // ceiling for software decoding. Full stream playback
+                    // keeps the normal hardware decoder/AFR path. Also disable
+                    // text tracks because we render subtitles via the
+                    // app-controlled overlay pipeline (TrailerSubtitleOverlay),
+                    // not Media3's TextRenderer.
                     trackSelectionParameters = trackSelectionParameters.buildUpon()
-                        .setForceHighestSupportedBitrate(true)
+                        .setMaxVideoSize(1920, 1080)
+                        .setMaxVideoFrameRate(30)
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                         .build()
                 }
@@ -327,6 +403,7 @@ fun TrailerPlayer(
         isBuffering = isBuffering
     )
     val releaseCalled = remember(trailerPlayer) { AtomicBoolean(false) }
+    val displayModeBlockActive = remember(trailerPlayer) { AtomicBoolean(false) }
 
     fun buildTrailerMediaSourceFactory(
         videoUrl: String,
@@ -426,7 +503,9 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
         if (shouldPrepareTrailerPlayback(lifecycleState, isPlaying, trailerUrl)) {
-            FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
+            if (displayModeBlockActive.compareAndSet(false, true)) {
+                FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+            }
             hasRenderedFirstFrame = false
             prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl)
             player.prepare()
@@ -435,6 +514,9 @@ fun TrailerPlayer(
             hasRenderedFirstFrame = false
             player.stop()
             player.clearMediaItems()
+            if (displayModeBlockActive.compareAndSet(true, false)) {
+                FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+            }
         }
     }
 
@@ -502,7 +584,9 @@ fun TrailerPlayer(
                             trailerUrl = currentTrailerUrl
                         )
                     ) {
-                        FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
+                        if (displayModeBlockActive.compareAndSet(false, true)) {
+                            FrameRateUtils.beginNonPlayerDisplayModeBlockedSession()
+                        }
                         if (player.currentMediaItem == null) {
                             prepareTrailerMediaSource(
                                 player,
@@ -520,12 +604,18 @@ fun TrailerPlayer(
                     player.pause()
                     player.stop()
                     player.clearMediaItems()
+                    if (displayModeBlockActive.compareAndSet(true, false)) {
+                        FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                    }
                 }
                 Lifecycle.Event.ON_DESTROY -> {
                     if (releaseCalled.compareAndSet(false, true)) {
                         runCatching { player.stop() }
                         runCatching { player.clearMediaItems() }
                         runCatching { player.release() }
+                        if (displayModeBlockActive.compareAndSet(true, false)) {
+                            FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                        }
                     }
                 }
                 else -> Unit
@@ -541,6 +631,9 @@ fun TrailerPlayer(
                 runCatching { player.stop() }
                 runCatching { player.clearMediaItems() }
                 runCatching { player.release() }
+                if (displayModeBlockActive.compareAndSet(true, false)) {
+                    FrameRateUtils.endNonPlayerDisplayModeBlockedSession()
+                }
             }
         }
     }
@@ -594,4 +687,3 @@ fun TrailerPlayer(
         }
     }
 }
-
