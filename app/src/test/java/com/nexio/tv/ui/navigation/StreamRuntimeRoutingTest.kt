@@ -383,6 +383,47 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching overlay sidecar supplies original language for tvdb item playback`() {
+        val item = ContinueWatchingItem.NextUp(
+            info = NextUpInfo(
+                contentId = "tvdb:393268",
+                contentType = "series",
+                name = "La casa de papel",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(runtime = "43"),
+                videoId = "tvdb:393268:2:2",
+                season = 2,
+                episode = 2,
+                episodeTitle = "Episode 2",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+        val enriched = mergeContinueWatchingOverlaySidecars(
+            items = listOf(item),
+            overlaysByItemKey = mapOf(
+                "series:tvdb:393268" to hydratedOverlay(
+                    itemKey = "series:tvdb:393268",
+                    imdbId = "tt6468322",
+                    title = "La casa de papel",
+                    originalLanguage = "spa"
+                )
+            )
+        ).single()
+
+        val route = buildContinueWatchingStreamRoute(
+            item = enriched,
+            deterministicAutoplayEnabled = true
+        )
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("spa", enriched.displayMetadata().originalLanguage)
+        assertEquals("spa", args.getValue("originalLanguage"))
+    }
+
+    @Test
     fun `continue watching tv identity request seeds tvdb provider id from content id`() {
         val request = continueWatchingIdentityMetadataRequest(
             ContinueWatchingItem.InProgress(
@@ -785,7 +826,8 @@ class StreamRuntimeRoutingTest {
     private fun hydratedOverlay(
         itemKey: String,
         imdbId: String,
-        title: String
+        title: String,
+        originalLanguage: String? = null
     ): HydratedHomeOverlay {
         return HydratedHomeOverlay(
             overlayKey = "canonical:TVDB:393268:type:SERIES:lang:nl:policy:1",
@@ -798,6 +840,7 @@ class StreamRuntimeRoutingTest {
             fields = HomeDisplayMetadata(
                 title = title,
                 imdbId = imdbId,
+                originalLanguage = originalLanguage,
                 runtime = "43"
             ),
             fieldTrace = emptyList(),

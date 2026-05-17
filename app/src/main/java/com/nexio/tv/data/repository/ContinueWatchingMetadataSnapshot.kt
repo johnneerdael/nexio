@@ -82,7 +82,11 @@ data class ContinueWatchingMetadataSnapshot(
                 existing = existingInput,
                 profile = null,
             )
-            return merged.toHomeDisplayMetadata()
+            return merged.toHomeDisplayMetadata().copy(
+                originalLanguage = canonical?.originalLanguage ?: persistedFallback?.originalLanguage,
+                imdbId = persistedFallback?.imdbId ?: canonical?.imdbId,
+                tomatoesRating = canonical?.tomatoesRating ?: persistedFallback?.tomatoesRating
+            )
         }
     }
 }

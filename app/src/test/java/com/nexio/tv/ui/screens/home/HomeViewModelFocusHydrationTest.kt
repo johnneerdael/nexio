@@ -707,6 +707,75 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `visible home hydration refreshes series overlay missing original language`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val visible = railPreviewMetaPreview().copy(
+            id = "tvdb:413033",
+            type = ContentType.SERIES,
+            rawType = "series"
+        )
+        val itemKey = homeDisplayItemKey(visible.apiType, visible.id)
+        val staleOverlay = overlay(
+            itemKey = itemKey,
+            fields = HomeDisplayMetadata(
+                title = "Berlín",
+                imdbId = "tt16288804",
+                originalLanguage = null
+            )
+        )
+        val refreshedOverlay = overlay(
+            itemKey = itemKey,
+            fields = HomeDisplayMetadata(
+                title = "Berlín",
+                imdbId = "tt16288804",
+                originalLanguage = "spa"
+            )
+        )
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Boolean>()
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = visible,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = capture(callbacks)
+            )
+        } coAnswers {
+            callbacks.last().invoke(refreshedOverlay)
+            refreshedOverlay
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+        viewModel.homeProfileGeneration = 7L
+        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(itemKey to staleOverlay)
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible),
+            expectedGeneration = 7L
+        )
+        advanceUntilIdle()
+
+        assertEquals("spa", viewModel.hydratedHomeOverlaysByItemKey.value.getValue(itemKey).fields.originalLanguage)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = visible,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+    }
+
+    @Test
     fun `overlay scope invalidation clears observer state and schedules catalog recompute`() = runTest(testDispatcher) {
         val viewModel = buildTestHomeViewModel(metadataRouterFacade = mockk(relaxed = true))
         val observerJob = Job()

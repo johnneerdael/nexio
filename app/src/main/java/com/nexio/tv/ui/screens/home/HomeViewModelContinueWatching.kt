@@ -744,7 +744,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         // routing through the typed-slot rank machinery.
         val enrichedMetadata = run {
             val nowMs = System.currentTimeMillis()
-            val previewSlots = localizedPreview.toHomeDisplayMetadata().toResolvedFieldSlots(
+            val previewMetadata = localizedPreview.toHomeDisplayMetadata()
+            val previewSlots = previewMetadata.toResolvedFieldSlots(
                 nowMs = nowMs,
                 rank = DisplaySourceRank.STALE_RESOLVED,
             )
@@ -759,11 +760,15 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 profile = null,
             ).toHomeDisplayMetadata().let { reduced ->
                 val currentImdb = existing?.imdbId?.trim()?.takeIf { it.isNotEmpty() }
-                if (currentImdb != null && currentImdb != reduced.imdbId) {
-                    reduced.copy(imdbId = currentImdb)
-                } else {
-                    reduced
-                }
+                reduced.copy(
+                    originalLanguage = previewMetadata.originalLanguage ?: existing?.originalLanguage,
+                    imdbId = if (currentImdb != null && currentImdb != reduced.imdbId) {
+                        currentImdb
+                    } else {
+                        previewMetadata.imdbId ?: reduced.imdbId
+                    },
+                    tomatoesRating = previewMetadata.tomatoesRating ?: existing?.tomatoesRating
+                )
             }
         }
 

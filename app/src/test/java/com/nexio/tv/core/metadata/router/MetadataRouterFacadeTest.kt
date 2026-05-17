@@ -107,6 +107,25 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
+    fun `metadata facade carries canonical original language into display metadata`() = runTest {
+        val adapter = OriginalLanguageMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).resolveRequest(
+            MetadataRequest(
+                contentId = "tvdb:413033",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(title = "Berlín")
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("spa", result.resolvedDocument.originalLanguage)
+        assertEquals("spa", result.displayMetadata.originalLanguage)
+    }
+
+    @Test
     fun `metadata facade carries typed preview artwork into resolved display metadata`() = runTest {
         val posterRef = artworkRef("previewPosterDecision", "previewPosterAsset", ArtworkType.POSTER)
         val result = facade(RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)).resolveRequest(
@@ -837,6 +856,24 @@ class MetadataRouterFacadeTest {
                         ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY),
                         ResolvedField.GENRES to FieldValue(listOf("Canonical Genre"), FieldOwner.PRIMARY),
                         ResolvedField.RELEASE_DATE to FieldValue("1999-10-15", FieldOwner.PRIMARY)
+                    )
+                )
+            )
+    }
+
+    private class OriginalLanguageMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = route.provider,
+                    fields = mapOf(
+                        ResolvedField.TITLE to FieldValue("Berlín", FieldOwner.PRIMARY),
+                        ResolvedField.ORIGINAL_LANGUAGE to FieldValue("spa", FieldOwner.PRIMARY)
                     )
                 )
             )

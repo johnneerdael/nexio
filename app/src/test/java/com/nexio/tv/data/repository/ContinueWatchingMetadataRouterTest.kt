@@ -79,7 +79,9 @@ class ContinueWatchingMetadataRouterTest {
     fun `offline render merges canonical then click-time then persisted fallback`() {
         val canonical = HomeDisplayMetadata(
             title = "Canonical Title",
-            description = "Canonical Description"
+            description = "Canonical Description",
+            originalLanguage = "spa",
+            imdbId = "tt6468322"
         )
         val clickTime = HomeDisplayMetadata(
             title = "Click Title",
@@ -107,6 +109,30 @@ class ContinueWatchingMetadataRouterTest {
         assertEquals("click-poster", rendered.poster)
         assertEquals("click-backdrop", rendered.backdrop)
         assertEquals("42m", rendered.runtime)
+        assertEquals("spa", rendered.originalLanguage)
+        assertEquals("tt6468322", rendered.imdbId)
+    }
+
+    @Test
+    fun `offline render keeps corrected tv show imdb sidecar over canonical episode imdb`() {
+        val canonical = HomeDisplayMetadata(
+            title = "Berlín",
+            originalLanguage = "spa",
+            imdbId = "tt42178219"
+        )
+        val persistedFallback = HomeDisplayMetadata(
+            title = "Berlín",
+            imdbId = "tt16288804"
+        )
+
+        val rendered = ContinueWatchingMetadataSnapshot.renderDisplayMetadata(
+            canonical = canonical,
+            clickTimeSlots = null,
+            persistedFallback = persistedFallback
+        )
+
+        assertEquals("spa", rendered.originalLanguage)
+        assertEquals("tt16288804", rendered.imdbId)
     }
 
     @Test

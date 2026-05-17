@@ -623,7 +623,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             return
         }
         val itemKey = homeDisplayItemKey(item.apiType, item.id)
-        if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) continue
+        if (hydratedHomeOverlaysByItemKey.value[itemKey]?.satisfiesVisibleHydrationFor(item, languageTag) == true) continue
         if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) continue
         try {
             if (
@@ -635,7 +635,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             ) {
                 return
             }
-            if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) continue
+            if (hydratedHomeOverlaysByItemKey.value[itemKey]?.satisfiesVisibleHydrationFor(item, languageTag) == true) continue
             homeHydrationCoordinator.hydrate(
                 item = item,
                 trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
@@ -657,6 +657,18 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             visibleHomeHydrationInFlightItemKeys.remove(itemKey)
         }
     }
+}
+
+private fun HydratedHomeOverlay.satisfiesVisibleHydrationFor(
+    item: MetaPreview,
+    languageTag: String
+): Boolean {
+    if (this.languageTag != languageTag) return false
+    val seriesLike = item.type == ContentType.SERIES ||
+        item.apiType.equals("series", ignoreCase = true) ||
+        item.apiType.equals("tv", ignoreCase = true)
+    if (seriesLike && fields.originalLanguage.isNullOrBlank()) return false
+    return true
 }
 
 internal fun composeHydratedHomeOverlaySnapshot(

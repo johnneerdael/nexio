@@ -1213,6 +1213,7 @@ class MetadataRouterFacade(
             runtime = runtimeMinutes?.toString() ?: fallback.runtime,
             imdbRating = (rating as? Number)?.toFloat() ?: fallback.imdbRating,
             ratingSource = resolvedRatingSource(fallback),
+            originalLanguage = originalLanguage ?: fallback.originalLanguage,
             imdbId = remoteIds["imdb"]?.firstOrNull()?.takeIf { it.isNotBlank() }
                 ?: fallback.imdbId,
             poster = poster ?: fallback.poster,
