@@ -79,10 +79,10 @@ internal class MatroskaTextTrackHarvester {
         val dataSource = dataSourceFactory.createDataSource()
         val uri = Uri.parse(request.streamUrl)
         var inputPosition = 0L
-        var input = openInput(dataSource, uri, inputPosition)
         val positionHolder = PositionHolder()
 
         try {
+            var input = openInput(dataSource, uri, inputPosition)
             var readResult = Extractor.RESULT_CONTINUE
             while (readResult != Extractor.RESULT_END_OF_INPUT) {
                 ensureActive()
@@ -106,7 +106,16 @@ internal class MatroskaTextTrackHarvester {
         uri: Uri,
         position: Long
     ): DefaultExtractorInput {
-        val length = dataSource.open(DataSpec(uri, position, C.LENGTH_UNSET.toLong()))
+        val remainingLength = dataSource.open(DataSpec(uri, position, C.LENGTH_UNSET.toLong()))
+        val length = matroskaExtractorInputLength(
+            position = position,
+            remainingLength = remainingLength
+        )
         return DefaultExtractorInput(dataSource, position, length)
     }
+}
+
+internal fun matroskaExtractorInputLength(position: Long, remainingLength: Long): Long {
+    if (remainingLength == C.LENGTH_UNSET.toLong()) return C.LENGTH_UNSET.toLong()
+    return position + remainingLength
 }
