@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player.translation
 
+import androidx.media3.common.text.CueGroup
 import com.nexio.tv.data.repository.DEFAULT_TRANSLATION_RAMP_UP_SCHEDULE
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
@@ -34,6 +35,9 @@ internal class SubtitleTimelineTranslationPipeline(
             ).onSuccess { translatedTexts ->
                 for (cueIndex in batch.indices) {
                     val sourceCue = batch[cueIndex]
+                    if (!sourceCue.cueGroup.hasCompleteTranslations(translatedTexts)) {
+                        continue
+                    }
                     val translatedCueGroup = TranslatedSubtitleTimelineStore.translateCueGroupTexts(
                         cueGroup = sourceCue.cueGroup,
                         translatedTexts = translatedTexts
@@ -73,8 +77,37 @@ internal class SubtitleTimelineTranslationPipeline(
         val seen = LinkedHashSet<String>()
         val sourceTexts = mutableListOf<String>()
         for (index in indices) {
-            val sourceText = this[index].sourceText.trim()
-            if (sourceText.isNotBlank() && seen.add(sourceText)) {
+            val cueTexts = this[index].cueGroup.sourceTexts()
+            for (textIndex in cueTexts.indices) {
+                val sourceText = cueTexts[textIndex]
+                if (seen.add(sourceText)) {
+                    sourceTexts += sourceText
+                }
+            }
+        }
+        return sourceTexts
+    }
+
+    private fun CueGroup.hasCompleteTranslations(translatedTexts: Map<String, String>): Boolean {
+        val sourceTexts = sourceTexts()
+        if (sourceTexts.isEmpty()) return false
+        for (index in sourceTexts.indices) {
+            val translated = translatedTexts[sourceTexts[index]]
+            if (translated.isNullOrBlank()) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun CueGroup.sourceTexts(): List<String> {
+        val sourceTexts = mutableListOf<String>()
+        for (index in cues.indices) {
+            val sourceText = cues[index].text
+                ?.toString()
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+            if (sourceText != null) {
                 sourceTexts += sourceText
             }
         }

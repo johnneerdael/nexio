@@ -112,6 +112,73 @@ class SubtitleTimelineTranslationPipelineTest {
     }
 
     @Test
+    fun partialSuccessMapLeavesUntranslatedCuePending() = runTest {
+        val service = mockk<SubtitleTranslationService>(relaxed = true)
+        val settings = settings()
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val source = cueGroup(listOf("bonjour", "monde"), 1_000L)
+
+        coEvery {
+            service.translateCueTexts(
+                texts = listOf("bonjour", "monde"),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "fr",
+                settings = settings
+            )
+        } returns Result.success(mapOf("bonjour" to "hallo"))
+
+        store.beginSession(session)
+        store.registerMiss(session, source)
+
+        SubtitleTimelineTranslationPipeline(service).translatePending(
+            session = session,
+            store = store,
+            sourceLanguageCode = "fr",
+            targetLanguageCode = "nl",
+            settings = settings
+        )
+
+        assertEquals("bonjour\nmonde", store.pendingBackfill(session).single().sourceText)
+        assertNull(store.lookupCueGroup(session, source))
+    }
+
+    @Test
+    fun partialBatchStoresCompleteCueAndLeavesMissingCuePending() = runTest {
+        val service = mockk<SubtitleTranslationService>(relaxed = true)
+        val settings = settings()
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val translatedSource = cueGroup("bonjour", 1_000L)
+        val missingSource = cueGroup("monde", 2_000L)
+
+        coEvery {
+            service.translateCueTexts(
+                texts = listOf("bonjour", "monde"),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "fr",
+                settings = settings
+            )
+        } returns Result.success(mapOf("bonjour" to "hallo"))
+
+        store.beginSession(session)
+        store.registerMiss(session, translatedSource)
+        store.registerMiss(session, missingSource)
+
+        SubtitleTimelineTranslationPipeline(service).translatePending(
+            session = session,
+            store = store,
+            sourceLanguageCode = "fr",
+            targetLanguageCode = "nl",
+            settings = settings
+        )
+
+        assertEquals("hallo", store.lookupCueGroup(session, translatedSource)?.singleCueText())
+        assertNull(store.lookupCueGroup(session, missingSource))
+        assertEquals(listOf("monde"), store.pendingBackfill(session).map { it.sourceText })
+    }
+
+    @Test
     fun batchingCapsMaxBatchSize() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         val capturedBatches = mutableListOf<List<String>>()
@@ -176,6 +243,10 @@ class SubtitleTimelineTranslationPipelineTest {
 
     private fun cueGroup(text: String, presentationTimeUs: Long): CueGroup {
         return CueGroup(listOf(Cue.Builder().setText(text).build()), presentationTimeUs)
+    }
+
+    private fun cueGroup(texts: List<String>, presentationTimeUs: Long): CueGroup {
+        return CueGroup(texts.map { text -> Cue.Builder().setText(text).build() }, presentationTimeUs)
     }
 
     private fun CueGroup.singleCueText(): String? {
