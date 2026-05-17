@@ -67,7 +67,9 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
     @Test
     fun changedTargetStartsNewSessionAndCancelsPreviousJobs() = runTest {
         val harvestJobs = mutableListOf<Job>()
+        val diagnostics = RecordingHarvestDiagnostics()
         val coordinator = coordinator(
+            diagnostics = diagnostics,
             startHarvest = { _, _ ->
                 Job().also(harvestJobs::add)
             }
@@ -83,10 +85,12 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         assertFalse(harvestJobs.last().isCancelled)
         assertEquals("nl", firstKey?.targetLanguage)
         assertEquals("de", secondKey?.targetLanguage)
+        assertEquals(listOf("session_changed"), diagnostics.cancelReasons)
     }
 
     private fun TestScope.coordinator(
         timelineStore: TranslatedSubtitleTimelineStore = TranslatedSubtitleTimelineStore(),
+        diagnostics: EmbeddedSubtitleHarvestDiagnosticsLogger = EmbeddedSubtitleHarvestDiagnostics,
         startHarvest: (
             TranslationTimelineSessionKey,
             EmbeddedSubtitleHarvestState
@@ -99,6 +103,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         return EmbeddedSubtitleHarvestCoordinator(
             scope = this,
             timelineStore = timelineStore,
+            diagnostics = diagnostics,
             startHarvest = startHarvest,
             startTranslateLoop = startTranslateLoop
         )
@@ -135,5 +140,21 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
             isSelected = true,
             mimeType = MimeTypes.APPLICATION_SUBRIP
         )
+    }
+
+    private class RecordingHarvestDiagnostics : EmbeddedSubtitleHarvestDiagnosticsLogger {
+        val cancelReasons = mutableListOf<String>()
+
+        override fun sessionStarted(
+            session: TranslationTimelineSessionKey,
+            streamUrl: String,
+            track: TrackInfo?
+        ) = Unit
+
+        override fun sessionCancelled(session: TranslationTimelineSessionKey?, reason: String) {
+            cancelReasons += reason
+        }
+
+        override fun unsupported(reason: String) = Unit
     }
 }

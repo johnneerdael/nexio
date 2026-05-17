@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 internal data class MatroskaTextTrackHarvestRequest(
     val streamUrl: String,
     val headers: Map<String, String>,
-    val selectedInternalSubtitleIndex: Int,
+    val selectedSupportedSubRipOrdinal: Int,
     val sourceLanguage: String?,
     val sessionKey: TranslationTimelineSessionKey,
     val timelineStore: TranslatedSubtitleTimelineStore,
@@ -78,7 +78,7 @@ internal class MatroskaTextTrackHarvester {
                 delegate = request.extractorOutput,
                 sink = sink,
                 selectedSupportedTrackOrdinalProvider = {
-                    request.selectedInternalSubtitleIndex
+                    request.selectedSupportedSubRipOrdinal
                 }
             )
         )

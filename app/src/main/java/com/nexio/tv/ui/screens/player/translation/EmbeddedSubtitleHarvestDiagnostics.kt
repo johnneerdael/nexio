@@ -5,13 +5,25 @@ import com.nexio.tv.ui.screens.player.TrackInfo
 import java.net.URI
 import java.util.Locale
 
-internal object EmbeddedSubtitleHarvestDiagnostics {
+internal interface EmbeddedSubtitleHarvestDiagnosticsLogger {
+    fun sessionStarted(
+        session: TranslationTimelineSessionKey,
+        streamUrl: String,
+        track: TrackInfo?
+    )
+
+    fun sessionCancelled(session: TranslationTimelineSessionKey?, reason: String)
+
+    fun unsupported(reason: String)
+}
+
+internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiagnosticsLogger {
     const val PREFIX = "EMBEDDED_SUB_TIMELINE"
     private const val TAG = "Nexio.Player"
     private const val TIMELINE_MODE = "embedded_mkv_timeline"
     private const val RENDERER_FALLBACK_MODE = "renderer_prefetch_fallback"
 
-    fun sessionStarted(
+    override fun sessionStarted(
         session: TranslationTimelineSessionKey,
         streamUrl: String,
         track: TrackInfo?
@@ -31,7 +43,7 @@ internal object EmbeddedSubtitleHarvestDiagnostics {
             "trackName=${field(track?.name)}"
     }
 
-    fun sessionCancelled(session: TranslationTimelineSessionKey?, reason: String) {
+    override fun sessionCancelled(session: TranslationTimelineSessionKey?, reason: String) {
         log(sessionCancelledLine(session, reason))
     }
 
@@ -40,12 +52,21 @@ internal object EmbeddedSubtitleHarvestDiagnostics {
         return "$PREFIX event=session_cancelled$sessionField reason=${field(reason)}"
     }
 
-    fun unsupported(reason: String) {
+    override fun unsupported(reason: String) {
         log(unsupportedLine(reason))
     }
 
     fun unsupportedLine(reason: String): String {
         return "$PREFIX event=unsupported translationMode=$RENDERER_FALLBACK_MODE " +
+            "reason=${field(reason)}"
+    }
+
+    fun harvestFailed(session: TranslationTimelineSessionKey, reason: String) {
+        log(harvestFailedLine(session, reason))
+    }
+
+    fun harvestFailedLine(session: TranslationTimelineSessionKey, reason: String): String {
+        return "$PREFIX event=harvest_failed session=${field(session.streamKey)} " +
             "reason=${field(reason)}"
     }
 

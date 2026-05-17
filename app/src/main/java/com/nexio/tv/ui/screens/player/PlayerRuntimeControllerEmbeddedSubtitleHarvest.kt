@@ -7,11 +7,13 @@ import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
 import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestDiagnostics
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestEligibility
 import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestState
 import com.nexio.tv.ui.screens.player.translation.MatroskaTextTrackHarvestRequest
 import com.nexio.tv.ui.screens.player.translation.MatroskaTextTrackHarvester
 import com.nexio.tv.ui.screens.player.translation.SubtitleTimelineTranslationPipeline
 import com.nexio.tv.ui.screens.player.translation.TranslationTimelineSessionKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -28,6 +30,10 @@ internal fun PlayerRuntimeController.updateEmbeddedSubtitleHarvest() {
             filename = currentFilename,
             headers = currentHeaders,
             selectedTrack = selectedTrack,
+            selectedSupportedSubRipOrdinal = selectedSubRipOrdinalForHarvest(
+                subtitleTracks = state.subtitleTracks,
+                selectedTrack = selectedTrack
+            ),
             selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null,
             autoTranslateEnabled = state.aiSubtitlesEnabled,
             targetLanguage = state.subtitleStyle.preferredLanguage,
@@ -41,23 +47,33 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
     state: EmbeddedSubtitleHarvestState
 ): Job {
     return scope.launch {
-        val harvested = MatroskaTextTrackHarvester().harvest(
-            MatroskaTextTrackHarvestRequest(
-                streamUrl = state.streamUrl,
-                headers = state.headers,
-                selectedInternalSubtitleIndex = state.selectedTrack?.index ?: -1,
-                sourceLanguage = state.selectedTrack?.language,
-                sessionKey = sessionKey,
-                timelineStore = translatedSubtitleTimelineStore,
-                extractorOutput = HarvestDiscardingExtractorOutput()
+        try {
+            val harvested = MatroskaTextTrackHarvester().harvest(
+                MatroskaTextTrackHarvestRequest(
+                    streamUrl = state.streamUrl,
+                    headers = state.headers,
+                    selectedSupportedSubRipOrdinal = state.selectedSupportedSubRipOrdinal ?: -1,
+                    sourceLanguage = state.selectedTrack?.language,
+                    sessionKey = sessionKey,
+                    timelineStore = translatedSubtitleTimelineStore,
+                    extractorOutput = HarvestDiscardingExtractorOutput()
+                )
             )
-        )
-        EmbeddedSubtitleHarvestDiagnostics.progress(
-            session = sessionKey,
-            harvested = harvested,
-            stats = translatedSubtitleTimelineStore.stats(sessionKey),
-            fallbackOriginal = builtInSubtitleCueTranslator.timelineFallbackOriginalCount()
-        )
+            EmbeddedSubtitleHarvestDiagnostics.progress(
+                session = sessionKey,
+                harvested = harvested,
+                stats = translatedSubtitleTimelineStore.stats(sessionKey),
+                fallbackOriginal = builtInSubtitleCueTranslator.timelineFallbackOriginalCount()
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            EmbeddedSubtitleHarvestDiagnostics.harvestFailed(
+                session = sessionKey,
+                reason = error.message?.takeIf(String::isNotBlank)
+                    ?: error::class.java.simpleName
+            )
+        }
     }
 }
 
@@ -96,4 +112,23 @@ private class HarvestDiscardingExtractorOutput : ExtractorOutput {
     override fun track(id: Int, type: Int): TrackOutput = DummyTrackOutput()
     override fun endTracks() = Unit
     override fun seekMap(seekMap: SeekMap) = Unit
+}
+
+internal fun selectedSubRipOrdinalForHarvest(
+    subtitleTracks: List<TrackInfo>,
+    selectedTrack: TrackInfo?
+): Int? {
+    selectedTrack ?: return null
+    if (!EmbeddedSubtitleHarvestEligibility.isSubRip(selectedTrack)) return null
+
+    var supportedOrdinal = 0
+    for (index in subtitleTracks.indices) {
+        val track = subtitleTracks[index]
+        if (!EmbeddedSubtitleHarvestEligibility.isSubRip(track)) continue
+        if (track == selectedTrack || track.index == selectedTrack.index) {
+            return supportedOrdinal
+        }
+        supportedOrdinal += 1
+    }
+    return null
 }

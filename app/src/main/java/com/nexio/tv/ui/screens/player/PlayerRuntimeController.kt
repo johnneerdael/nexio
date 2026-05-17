@@ -209,9 +209,13 @@ class PlayerRuntimeController(
     val progressUiState: StateFlow<PlayerPlaybackProgressUiState> = _progressUiState.asStateFlow()
 
     internal val translatedSubtitleTimelineStore = TranslatedSubtitleTimelineStore()
+    internal val embeddedSubtitleTimelineFallbackOriginalCount = AtomicLong(0L)
     internal val embeddedSubtitleHarvestCoordinator = EmbeddedSubtitleHarvestCoordinator(
         scope = scope,
         timelineStore = translatedSubtitleTimelineStore,
+        onTimelineSessionReset = {
+            embeddedSubtitleTimelineFallbackOriginalCount.set(0L)
+        },
         startHarvest = { key, state ->
             startEmbeddedSubtitleHarvest(key, state)
         },
@@ -249,7 +253,8 @@ class PlayerRuntimeController(
             }
         },
         timelineStoreProvider = { translatedSubtitleTimelineStore },
-        timelineSessionProvider = { embeddedSubtitleHarvestCoordinator.activeSessionKey() }
+        timelineSessionProvider = { embeddedSubtitleHarvestCoordinator.activeSessionKey() },
+        timelineFallbackOriginalCounter = embeddedSubtitleTimelineFallbackOriginalCount
     )
 
     internal var _exoPlayer: ExoPlayer? = null

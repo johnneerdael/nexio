@@ -12,6 +12,7 @@ internal data class EmbeddedSubtitleHarvestState(
     val filename: String?,
     val headers: Map<String, String>,
     val selectedTrack: TrackInfo?,
+    val selectedSupportedSubRipOrdinal: Int? = null,
     val selectedAddonSubtitlePresent: Boolean,
     val autoTranslateEnabled: Boolean,
     val targetLanguage: String?,
@@ -21,6 +22,8 @@ internal data class EmbeddedSubtitleHarvestState(
 internal class EmbeddedSubtitleHarvestCoordinator(
     private val scope: CoroutineScope,
     private val timelineStore: TranslatedSubtitleTimelineStore,
+    private val diagnostics: EmbeddedSubtitleHarvestDiagnosticsLogger = EmbeddedSubtitleHarvestDiagnostics,
+    private val onTimelineSessionReset: () -> Unit = {},
     private val startHarvest: (
         TranslationTimelineSessionKey,
         EmbeddedSubtitleHarvestState
@@ -52,7 +55,7 @@ internal class EmbeddedSubtitleHarvestCoordinator(
         if (!isEligible) {
             val reason = state.unsupportedReason(targetLanguage)
             if (activeKey == null && lastUnsupportedReason != reason) {
-                EmbeddedSubtitleHarvestDiagnostics.unsupported(reason)
+                diagnostics.unsupported(reason)
             }
             lastUnsupportedReason = reason
             cancel(reason = reason)
@@ -62,11 +65,16 @@ internal class EmbeddedSubtitleHarvestCoordinator(
         val sessionKey = state.toSessionKey(targetLanguage)
         if (activeKey == sessionKey) return
 
-        cancelJobs()
+        if (activeKey != null) {
+            endActiveSession(reason = "session_changed")
+        } else {
+            cancelJobs()
+            onTimelineSessionReset()
+        }
         timelineStore.beginSession(sessionKey)
         activeKey = sessionKey
         lastUnsupportedReason = null
-        EmbeddedSubtitleHarvestDiagnostics.sessionStarted(
+        diagnostics.sessionStarted(
             session = sessionKey,
             streamUrl = state.streamUrl,
             track = state.selectedTrack
@@ -77,12 +85,17 @@ internal class EmbeddedSubtitleHarvestCoordinator(
 
     @Synchronized
     fun cancel(reason: String) {
+        endActiveSession(reason)
+    }
+
+    private fun endActiveSession(reason: String) {
         val cancelledKey = activeKey
         cancelJobs()
         timelineStore.clearActiveSession()
         activeKey = null
+        onTimelineSessionReset()
         if (cancelledKey != null) {
-            EmbeddedSubtitleHarvestDiagnostics.sessionCancelled(cancelledKey, reason)
+            diagnostics.sessionCancelled(cancelledKey, reason)
         }
     }
 

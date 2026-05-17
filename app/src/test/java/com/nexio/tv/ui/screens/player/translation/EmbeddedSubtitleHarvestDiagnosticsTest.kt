@@ -61,6 +61,20 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun harvestFailedProofLineIncludesSessionAndReason() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.harvestFailedLine(
+            session = session(),
+            reason = "network_failed"
+        )
+
+        assertEquals(
+            "EMBEDDED_SUB_TIMELINE event=harvest_failed " +
+                "session=stream-key reason=network_failed",
+            line
+        )
+    }
+
+    @Test
     fun cueProofLinesUseStoreCueKeyFields() {
         val store = TranslatedSubtitleTimelineStore()
         val cueGroup = cueGroup(" bonjour ", 42_000L)

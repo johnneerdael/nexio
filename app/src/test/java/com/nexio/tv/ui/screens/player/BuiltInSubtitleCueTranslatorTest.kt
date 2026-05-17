@@ -121,6 +121,23 @@ class BuiltInSubtitleCueTranslatorTest {
     }
 
     @Test
+    fun fallbackOriginalCountCanResetForNewTimelineSession() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = timelineSession()
+        val translator = translator(
+            timelineStoreProvider = { store },
+            timelineSessionProvider = { session }
+        )
+
+        store.beginSession(session)
+        translator.onCueGroupRenderedWithoutTranslation(format(), cueGroup("bonjour", 1_000L))
+
+        translator.resetTimelineFallbackOriginalCount()
+
+        assertEquals(0L, translator.timelineFallbackOriginalCount())
+    }
+
+    @Test
     fun translateCallsArrivingWithinDebounceWindowAreCoalescedIntoSingleProviderRequest() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         val capturedTexts = slot<List<String>>()

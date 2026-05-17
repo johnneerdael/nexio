@@ -39,11 +39,11 @@ internal class BuiltInSubtitleCueTranslator(
     private val maxBatchCueGroups: Int = BUILT_IN_SUBTITLE_DISPATCH_MAX_BATCH_CUE_GROUPS,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val timelineStoreProvider: () -> TranslatedSubtitleTimelineStore? = { null },
-    private val timelineSessionProvider: () -> TranslationTimelineSessionKey? = { null }
+    private val timelineSessionProvider: () -> TranslationTimelineSessionKey? = { null },
+    private val timelineFallbackOriginalCounter: AtomicLong = AtomicLong(0L)
 ) : CueGroupSubtitleTranslator {
 
     private val activeRequestCount = AtomicInteger(0)
-    private val fallbackOriginalCount = AtomicLong(0L)
     private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
 
     private val pendingLock = Any()
@@ -86,10 +86,14 @@ internal class BuiltInSubtitleCueTranslator(
         val session = timelineSessionProvider() ?: return
         if (store.cueKeyFor(sourceCueGroup) == null) return
         store.registerMiss(session, sourceCueGroup)
-        fallbackOriginalCount.incrementAndGet()
+        timelineFallbackOriginalCounter.incrementAndGet()
     }
 
-    fun timelineFallbackOriginalCount(): Long = fallbackOriginalCount.get()
+    fun timelineFallbackOriginalCount(): Long = timelineFallbackOriginalCounter.get()
+
+    fun resetTimelineFallbackOriginalCount() {
+        timelineFallbackOriginalCounter.set(0L)
+    }
 
     override fun translate(
         format: Format,
