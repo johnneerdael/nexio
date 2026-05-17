@@ -576,6 +576,112 @@ internal fun PlayerRuntimeController.cancelFirstFrameWatchdog() {
     firstFrameWatchdogJob = null
 }
 
+internal fun PlayerRuntimeController.cancelSeekFirstFrameWatchdog() {
+    seekFirstFrameWatchdogJob?.cancel()
+    seekFirstFrameWatchdogJob = null
+}
+
+internal fun PlayerRuntimeController.cancelSeekProgressWatchdog() {
+    seekProgressWatchdogJob?.cancel()
+    seekProgressWatchdogJob = null
+}
+
+internal fun PlayerRuntimeController.maybeScheduleSeekFirstFrameWatchdog(
+    requestTimeMs: Long,
+    targetMs: Long
+) {
+    if (!currentStreamHasVideoTrack) return
+    seekFirstFrameWatchdogJob?.cancel()
+    seekFirstFrameWatchdogJob = scope.launch {
+        delay(PlayerRuntimeController.SEEK_FIRST_FRAME_TIMEOUT_MS)
+
+        val livePlayer = _exoPlayer ?: return@launch
+        if (!pendingSeekTelemetryAwaitingFirstFrame) return@launch
+        if (pendingSeekTelemetryRequestedAtMs != requestTimeMs) return@launch
+        if (pendingSeekTelemetryTargetMs != targetMs) return@launch
+        if (userPausedManually || !livePlayer.playWhenReady) return@launch
+        if (livePlayer.playbackState == Player.STATE_IDLE ||
+            livePlayer.playbackState == Player.STATE_ENDED
+        ) {
+            return@launch
+        }
+
+        val currentPosition = livePlayer.currentPosition.coerceAtLeast(0L)
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "SEEK_FIRST_FRAME_TIMEOUT: no rendered frame after " +
+                "${PlayerRuntimeController.SEEK_FIRST_FRAME_TIMEOUT_MS}ms " +
+                "targetMs=${targetMs.coerceAtLeast(0L)} " +
+                "currentPositionMs=$currentPosition " +
+                "bufferedPositionMs=${livePlayer.bufferedPosition.coerceAtLeast(0L)} " +
+                "totalBufferedDurationMs=${livePlayer.totalBufferedDuration.coerceAtLeast(0L)} " +
+                "state=${livePlayer.playbackState} " +
+                "isPlaying=${livePlayer.isPlaying} " +
+                "mime=${currentVideoTrackMimeType ?: "unknown"} " +
+                "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
+                "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
+                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
+                "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
+                "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                "kodiSink=$isKodiCustomAudioSinkActiveForCurrentPlayback " +
+                "host=${Uri.parse(currentStreamUrl).host ?: "unknown"}"
+        )
+    }
+}
+
+internal fun PlayerRuntimeController.maybeScheduleSeekProgressWatchdog(
+    requestTimeMs: Long,
+    targetMs: Long
+) {
+    if (!currentStreamHasVideoTrack) return
+    seekProgressWatchdogJob?.cancel()
+    seekProgressWatchdogJob = scope.launch {
+        delay(PlayerRuntimeController.SEEK_PROGRESS_TIMEOUT_MS)
+
+        val livePlayer = _exoPlayer ?: return@launch
+        if (pendingSeekTelemetryRequestedAtMs != 0L &&
+            pendingSeekTelemetryRequestedAtMs != requestTimeMs
+        ) {
+            return@launch
+        }
+        if (userPausedManually || !livePlayer.playWhenReady) return@launch
+        if (livePlayer.playbackState == Player.STATE_IDLE ||
+            livePlayer.playbackState == Player.STATE_ENDED
+        ) {
+            return@launch
+        }
+
+        val currentPosition = livePlayer.currentPosition.coerceAtLeast(0L)
+        val expectedPosition = targetMs.coerceAtLeast(0L) +
+            PlayerRuntimeController.SEEK_PROGRESS_TIMEOUT_MS -
+            1_500L
+        if (currentPosition >= expectedPosition) return@launch
+
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "SEEK_PROGRESS_TIMEOUT: playback did not advance after seek " +
+                "delayMs=${PlayerRuntimeController.SEEK_PROGRESS_TIMEOUT_MS} " +
+                "targetMs=${targetMs.coerceAtLeast(0L)} " +
+                "currentPositionMs=$currentPosition " +
+                "expectedPositionMs=$expectedPosition " +
+                "bufferedPositionMs=${livePlayer.bufferedPosition.coerceAtLeast(0L)} " +
+                "totalBufferedDurationMs=${livePlayer.totalBufferedDuration.coerceAtLeast(0L)} " +
+                "state=${livePlayer.playbackState} " +
+                "isPlaying=${livePlayer.isPlaying} " +
+                "mime=${currentVideoTrackMimeType ?: "unknown"} " +
+                "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
+                "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
+                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
+                "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
+                "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                "kodiSink=$isKodiCustomAudioSinkActiveForCurrentPlayback " +
+                "host=${Uri.parse(currentStreamUrl).host ?: "unknown"}"
+        )
+    }
+}
+
 internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
     if (hasRenderedFirstFrame || !currentStreamHasVideoTrack) return
     val player = _exoPlayer ?: return

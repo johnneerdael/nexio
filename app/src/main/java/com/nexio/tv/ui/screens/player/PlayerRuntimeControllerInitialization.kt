@@ -98,6 +98,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
+private const val PLAYER_RELEASE_TIMEOUT_MS = 3_000L
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -747,6 +748,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                 .setRenderersFactory(renderersFactory)
                 .setLoadControl(loadControl)
+                .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)
+                .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                 .build()
                 .also { assController?.setPlayer(it) }
             activePlayerUsesAssSsaRenderer = useAssSsaPipeline
@@ -1009,6 +1012,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     }
                                     play()
                                 }
+                            } else if (!userPausedManually && hasRenderedFirstFrame) {
+                                if (!playWhenReady) {
+                                    playWhenReady = true
+                                }
+                                play()
                             }
                             tryApplyPendingResumeProgress(this@apply)
                             _uiState.value.pendingSeekPosition?.let { position ->
@@ -1110,6 +1118,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onRenderedFirstFrame() {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
+                        cancelSeekFirstFrameWatchdog()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
                             .coerceAtLeast(0L)
                         val conversionCalls = DoviBridge.getConversionCallCount()
@@ -1166,6 +1175,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
                         mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         hasRenderedFirstFrame = true
+                        if (!userPausedManually) {
+                            if (!playWhenReady) {
+                                playWhenReady = true
+                            }
+                            play()
+                        }
                         maybeSchedulePostFirstFrameBufferingWatchdog(
                             playbackSessionId = playbackSessionId,
                             kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled
@@ -1628,6 +1643,8 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
 
 internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     cancelFirstFrameWatchdog()
+    cancelSeekFirstFrameWatchdog()
+    cancelSeekProgressWatchdog()
     cancelPostFirstFrameBufferingWatchdog()
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
@@ -1657,6 +1674,8 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     currentVideoTrackIsLikelyVc1 = false
     currentVideoTrackMimeType = null
     currentVideoTrackCodecs = null
+    currentAudioTrackMimeType = null
+    currentAudioTrackCodecs = null
     currentVideoTrackWidth = 0
     currentVideoTrackHeight = 0
     currentVideoTrackSelected = false
