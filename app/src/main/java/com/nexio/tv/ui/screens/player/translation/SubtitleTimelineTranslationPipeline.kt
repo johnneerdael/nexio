@@ -42,10 +42,14 @@ internal class SubtitleTimelineTranslationPipeline(
                         cueGroup = sourceCue.cueGroup,
                         translatedTexts = translatedTexts
                     )
-                    store.putTranslatedCueGroup(
+                    val cueKey = store.putTranslatedCueGroup(
                         sessionKey = session,
                         sourceCueGroup = sourceCue.cueGroup,
                         translatedCueGroup = translatedCueGroup
+                    )
+                    EmbeddedSubtitleHarvestDiagnostics.cueTranslated(
+                        session = session,
+                        cueKey = cueKey
                     )
                 }
             }.onFailure {

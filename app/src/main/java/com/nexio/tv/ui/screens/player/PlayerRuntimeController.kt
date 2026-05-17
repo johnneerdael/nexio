@@ -213,19 +213,10 @@ class PlayerRuntimeController(
         scope = scope,
         timelineStore = translatedSubtitleTimelineStore,
         startHarvest = { key, state ->
-            scope.launch {
-                Log.d(
-                    TAG,
-                    "EMBEDDED_SUBTITLE_HARVEST placeholder session=$key " +
-                        "track=${state.selectedTrack?.trackId ?: state.selectedTrack?.index} " +
-                        "filename=${state.filename.orEmpty()}"
-                )
-            }
+            startEmbeddedSubtitleHarvest(key, state)
         },
-        startTranslateLoop = { key, _ ->
-            scope.launch {
-                Log.d(TAG, "EMBEDDED_SUBTITLE_HARVEST translate loop pending Task 9 session=$key")
-            }
+        startTranslateLoop = { key, state ->
+            startEmbeddedSubtitleTranslateLoop(key, state)
         }
     )
     internal val builtInSubtitleCueTranslator = BuiltInSubtitleCueTranslator(

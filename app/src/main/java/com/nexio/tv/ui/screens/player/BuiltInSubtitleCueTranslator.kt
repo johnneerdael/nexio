@@ -7,6 +7,7 @@ import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.nexio.tv.data.repository.DEFAULT_TRANSLATION_RAMP_UP_SCHEDULE
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestDiagnostics
 import com.nexio.tv.ui.screens.player.translation.TranslatedSubtitleTimelineStore
 import com.nexio.tv.ui.screens.player.translation.TranslationTimelineSessionKey
 import kotlinx.coroutines.CoroutineScope
@@ -15,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 // Long.MAX_VALUE / 2 — an effectively unbounded horizon that still leaves headroom for
@@ -41,6 +43,7 @@ internal class BuiltInSubtitleCueTranslator(
 ) : CueGroupSubtitleTranslator {
 
     private val activeRequestCount = AtomicInteger(0)
+    private val fallbackOriginalCount = AtomicLong(0L)
     private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
 
     private val pendingLock = Any()
@@ -68,14 +71,25 @@ internal class BuiltInSubtitleCueTranslator(
     override fun getTranslatedCueGroup(format: Format, sourceCueGroup: CueGroup): CueGroup? {
         val store = timelineStoreProvider() ?: return null
         val session = timelineSessionProvider() ?: return null
-        return store.lookupCueGroup(session, sourceCueGroup)
+        val cueKey = store.cueKeyFor(sourceCueGroup)
+        val translated = store.lookupCueGroup(session, sourceCueGroup)
+        EmbeddedSubtitleHarvestDiagnostics.rendererLookup(
+            session = session,
+            cueKey = cueKey,
+            hit = translated != null
+        )
+        return translated
     }
 
     override fun onCueGroupRenderedWithoutTranslation(format: Format, sourceCueGroup: CueGroup) {
         val store = timelineStoreProvider() ?: return
         val session = timelineSessionProvider() ?: return
+        if (store.cueKeyFor(sourceCueGroup) == null) return
         store.registerMiss(session, sourceCueGroup)
+        fallbackOriginalCount.incrementAndGet()
     }
+
+    fun timelineFallbackOriginalCount(): Long = fallbackOriginalCount.get()
 
     override fun translate(
         format: Format,

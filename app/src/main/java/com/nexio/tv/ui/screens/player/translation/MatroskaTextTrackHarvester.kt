@@ -21,6 +21,7 @@ internal data class MatroskaTextTrackHarvestRequest(
     val streamUrl: String,
     val headers: Map<String, String>,
     val selectedInternalSubtitleIndex: Int,
+    val sourceLanguage: String?,
     val sessionKey: TranslationTimelineSessionKey,
     val timelineStore: TranslatedSubtitleTimelineStore,
     val extractorOutput: ExtractorOutput
@@ -28,7 +29,8 @@ internal data class MatroskaTextTrackHarvestRequest(
 
 internal class TimelinePublishingMatroskaTextTrackSink(
     private val sessionKey: TranslationTimelineSessionKey,
-    private val timelineStore: TranslatedSubtitleTimelineStore
+    private val timelineStore: TranslatedSubtitleTimelineStore,
+    private val sourceLanguage: String? = null
 ) : MatroskaTextTrackSink {
     var sampleCount: Int = 0
         private set
@@ -48,8 +50,14 @@ internal class TimelinePublishingMatroskaTextTrackSink(
             sample.timeUs
         )
         timelineStore.putSourceCue(sessionKey, cueGroup)
-        if (timelineStore.registerMiss(sessionKey, cueGroup) != null) {
+        val sourceCue = timelineStore.registerMiss(sessionKey, cueGroup)
+        if (sourceCue != null) {
             sampleCount += 1
+            EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
+                session = sessionKey,
+                cueKey = sourceCue.cueKey,
+                sourceLanguage = sourceLanguage ?: sample.format.language
+            )
         }
     }
 }
@@ -58,7 +66,8 @@ internal class MatroskaTextTrackHarvester {
     suspend fun harvest(request: MatroskaTextTrackHarvestRequest): Int = withContext(Dispatchers.IO) {
         val sink = TimelinePublishingMatroskaTextTrackSink(
             sessionKey = request.sessionKey,
-            timelineStore = request.timelineStore
+            timelineStore = request.timelineStore,
+            sourceLanguage = request.sourceLanguage
         )
         val extractor = MatroskaExtractor(
             SubtitleParser.Factory.UNSUPPORTED,

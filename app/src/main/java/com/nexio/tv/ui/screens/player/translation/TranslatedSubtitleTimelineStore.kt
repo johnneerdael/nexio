@@ -89,13 +89,18 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         sessionKey: TranslationTimelineSessionKey,
         sourceCueGroup: CueGroup,
         translatedCueGroup: CueGroup
-    ) {
-        synchronized(lock) {
-            val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized
-            val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
-            translatedCueGroups[recordKey] = translatedCueGroup
-            pendingBackfill.remove(recordKey)
-            trimToMaxRecords(translatedCueGroups)
+    ): TranslationTimelineCueKey? {
+        return synchronized(lock) {
+            val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup)
+            if (sourceCue == null) {
+                null
+            } else {
+                val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
+                translatedCueGroups[recordKey] = translatedCueGroup
+                pendingBackfill.remove(recordKey)
+                trimToMaxRecords(translatedCueGroups)
+                sourceCue.cueKey
+            }
         }
     }
 
@@ -151,6 +156,14 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         }
     }
 
+    fun cueKeyFor(cueGroup: CueGroup): TranslationTimelineCueKey? {
+        val sourceText = sourceTextFor(cueGroup) ?: return null
+        return TranslationTimelineCueKey(
+            presentationTimeUs = cueGroup.presentationTimeUs,
+            sourceTextHash = shortSha256Hex(sourceText)
+        )
+    }
+
     private fun putSourceCueLocked(
         sessionKey: TranslationTimelineSessionKey,
         sourceCueGroup: CueGroup
@@ -166,20 +179,20 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         sessionKey: TranslationTimelineSessionKey,
         sourceCueGroup: CueGroup
     ): TranslationTimelineSourceCue? {
-        val sourceText = sourceCueGroup.cues
-            .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
-            .joinToString(separator = "\n")
-            .takeIf(String::isNotBlank)
-            ?: return null
+        val sourceText = sourceTextFor(sourceCueGroup) ?: return null
         return TranslationTimelineSourceCue(
             sessionKey = sessionKey,
-            cueKey = TranslationTimelineCueKey(
-                presentationTimeUs = sourceCueGroup.presentationTimeUs,
-                sourceTextHash = shortSha256Hex(sourceText)
-            ),
+            cueKey = cueKeyFor(sourceCueGroup) ?: return null,
             sourceText = sourceText,
             cueGroup = sourceCueGroup
         )
+    }
+
+    private fun sourceTextFor(cueGroup: CueGroup): String? {
+        return cueGroup.cues
+            .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
+            .joinToString(separator = "\n")
+            .takeIf(String::isNotBlank)
     }
 
     private fun <T> trimToMaxRecords(records: LinkedHashMap<RecordKey, T>) {

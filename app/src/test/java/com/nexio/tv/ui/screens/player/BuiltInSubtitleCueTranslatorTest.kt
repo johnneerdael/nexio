@@ -98,15 +98,26 @@ class BuiltInSubtitleCueTranslatorTest {
     fun renderedMissIsRegisteredForBackfill() {
         val store = TranslatedSubtitleTimelineStore()
         val session = timelineSession()
+        val translator = translator(
+            timelineStoreProvider = { store },
+            timelineSessionProvider = { session }
+        )
 
         store.beginSession(session)
 
-        translator(
-            timelineStoreProvider = { store },
-            timelineSessionProvider = { session }
-        ).onCueGroupRenderedWithoutTranslation(format(), cueGroup("bonjour", 1_000L))
+        translator.onCueGroupRenderedWithoutTranslation(format(), cueGroup("bonjour", 1_000L))
 
         assertEquals(1, store.pendingBackfill(session).size)
+        assertEquals(1L, translator.timelineFallbackOriginalCount())
+    }
+
+    @Test
+    fun renderedMissWithoutTimelineSessionDoesNotIncrementFallbackOriginal() {
+        val translator = translator()
+
+        translator.onCueGroupRenderedWithoutTranslation(format(), cueGroup("bonjour", 1_000L))
+
+        assertEquals(0L, translator.timelineFallbackOriginalCount())
     }
 
     @Test

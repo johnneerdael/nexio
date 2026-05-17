@@ -33,6 +33,7 @@ internal class EmbeddedSubtitleHarvestCoordinator(
     private var activeKey: TranslationTimelineSessionKey? = null
     private var harvestJob: Job? = null
     private var translateLoopJob: Job? = null
+    private var lastUnsupportedReason: String? = null
 
     @Synchronized
     fun update(state: EmbeddedSubtitleHarvestState) {
@@ -49,7 +50,12 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             targetLanguage.isNotBlank()
 
         if (!isEligible) {
-            cancel(reason = "ineligible")
+            val reason = state.unsupportedReason(targetLanguage)
+            if (activeKey == null && lastUnsupportedReason != reason) {
+                EmbeddedSubtitleHarvestDiagnostics.unsupported(reason)
+            }
+            lastUnsupportedReason = reason
+            cancel(reason = reason)
             return
         }
 
@@ -59,15 +65,25 @@ internal class EmbeddedSubtitleHarvestCoordinator(
         cancelJobs()
         timelineStore.beginSession(sessionKey)
         activeKey = sessionKey
+        lastUnsupportedReason = null
+        EmbeddedSubtitleHarvestDiagnostics.sessionStarted(
+            session = sessionKey,
+            streamUrl = state.streamUrl,
+            track = state.selectedTrack
+        )
         harvestJob = startHarvest(sessionKey, state)
         translateLoopJob = startTranslateLoop(sessionKey, state)
     }
 
     @Synchronized
     fun cancel(reason: String) {
+        val cancelledKey = activeKey
         cancelJobs()
         timelineStore.clearActiveSession()
         activeKey = null
+        if (cancelledKey != null) {
+            EmbeddedSubtitleHarvestDiagnostics.sessionCancelled(cancelledKey, reason)
+        }
     }
 
     @Synchronized
@@ -127,5 +143,20 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             .joinToString(separator = "") { byte ->
                 "%02x".format(Locale.US, byte.toInt() and 0xff)
             }
+    }
+
+    private fun EmbeddedSubtitleHarvestState.unsupportedReason(targetLanguage: String): String {
+        val track = selectedTrack
+        return when {
+            !autoTranslateEnabled -> "auto_translate_disabled"
+            !settings.enabled -> "translation_settings_disabled"
+            settings.apiKey.isBlank() -> "missing_api_key"
+            targetLanguage.isBlank() -> "missing_target_language"
+            selectedAddonSubtitlePresent -> "addon_subtitle_selected"
+            track == null -> "missing_track"
+            !EmbeddedSubtitleHarvestEligibility.isMatroska(streamUrl, filename) -> "not_mkv"
+            !EmbeddedSubtitleHarvestEligibility.isSubRip(track) -> "unsupported_track"
+            else -> "ineligible"
+        }
     }
 }

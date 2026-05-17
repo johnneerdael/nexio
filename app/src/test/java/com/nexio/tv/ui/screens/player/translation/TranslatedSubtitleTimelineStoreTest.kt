@@ -195,6 +195,18 @@ class TranslatedSubtitleTimelineStoreTest {
         assertEquals(sourceCue.position, translated.cues.single().position)
     }
 
+    @Test
+    fun cueKeyForMatchesLookupKeyForTrimmedCueText() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        val source = cueGroup(" bonjour ", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        val sourceCue = store.registerMiss(session, source)
+
+        assertEquals(sourceCue?.cueKey, store.cueKeyFor(source))
+    }
+
     private fun session(
         streamKey: String = "stream",
         trackKey: String = "track",
