@@ -243,4 +243,74 @@ class HomeViewModelContinueWatchingProjectionTest {
         assertEquals("The Multiverse", item.info.episodeTitle)
         assertEquals("tvdb:303904:14:1", item.info.videoId)
     }
+
+    @Test
+    fun `snapshot trakt up-next items render in continue watching row`() {
+        val snapshot = ContinueWatchingSnapshot(
+            nextUpItems = listOf(
+                TrackingNextUpEntry(
+                    contentId = "tvdb:79481",
+                    contentType = "series",
+                    name = "Death Note",
+                    season = 1,
+                    episode = 2,
+                    episodeTitle = "Confrontation",
+                    videoId = "tvdb:79481:1:2",
+                    firstAired = "2006-10-10",
+                    firstAiredMs = 1L,
+                    activityAtMs = 3_000L
+                )
+            ),
+            traktUpNextItems = listOf(
+                TrackingNextUpEntry(
+                    contentId = "tvdb:303904",
+                    contentType = "series",
+                    name = "Australian Survivor",
+                    season = 14,
+                    episode = 20,
+                    episodeTitle = "Maggots",
+                    videoId = "tvdb:303904:14:20",
+                    firstAired = "2026-04-06",
+                    firstAiredMs = 1L,
+                    activityAtMs = 2_000L
+                )
+            )
+        )
+
+        val result = buildContinueWatchingItemsForSnapshot(snapshot, nowMs = 3_000L)
+
+        assertEquals(2, result.size)
+        assertEquals("tvdb:79481", result[0].contentId())
+        assertEquals("tvdb:303904", result[1].contentId())
+        assertEquals(14, result[1].season())
+        assertEquals(20, result[1].episode())
+        assertEquals("Maggots", (result[1] as ContinueWatchingItem.NextUp).info.episodeTitle)
+    }
+
+    @Test
+    fun `snapshot trakt up-next duplicate does not replace main next-up item`() {
+        val mainNextUp = TrackingNextUpEntry(
+            contentId = "tvdb:303904",
+            contentType = "series",
+            name = "Australian Survivor",
+            season = 14,
+            episode = 20,
+            episodeTitle = "Maggots",
+            videoId = "tvdb:303904:14:20",
+            firstAired = "2026-04-06",
+            firstAiredMs = 1L,
+            activityAtMs = 3_000L
+        )
+        val snapshot = ContinueWatchingSnapshot(
+            nextUpItems = listOf(mainNextUp),
+            traktUpNextItems = listOf(mainNextUp.copy(activityAtMs = 2_000L))
+        )
+
+        val result = buildContinueWatchingItemsForSnapshot(snapshot, nowMs = 3_000L)
+
+        assertEquals(1, result.size)
+        assertEquals("tvdb:303904", result.single().contentId())
+        assertEquals(14, result.single().season())
+        assertEquals(20, result.single().episode())
+    }
 }

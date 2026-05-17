@@ -4,6 +4,7 @@ import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
 
 class ContinueWatchingEpisodeCoordinateProjectorTest {
 
@@ -88,6 +89,31 @@ class ContinueWatchingEpisodeCoordinateProjectorTest {
         assertEquals(20, projected?.episode)
         assertEquals("Reward Challenge", projected?.episodeTitle)
         assertEquals("2026-05-12", projected?.firstAired)
+    }
+
+    @Test
+    fun `activity date prefers current tvdb same episode over stale exact title match`() {
+        val episodes = mapOf(
+            (12 to 20) to episode(season = 12, episode = 20, title = "The Reaper Is Coming", airDate = "2025-03-31"),
+            (14 to 19) to episode(season = 14, episode = 19, title = "Sold the Dream", airDate = "2026-04-05"),
+            (14 to 20) to episode(season = 14, episode = 20, title = "Maggots", airDate = "2026-04-06"),
+            (14 to 21) to episode(season = 14, episode = 21, title = "Half and Half", airDate = "2026-04-07")
+        )
+
+        val projected = ContinueWatchingEpisodeCoordinateProjector.projectFromEpisodeMap(
+            contentType = "series",
+            requestedSeason = 12,
+            requestedEpisode = 20,
+            requestedTitle = "The Reaper Is Coming",
+            requestedFirstAired = "2025-03-31T10:00:00.000Z",
+            requestedActivityAtMs = Instant.parse("2026-04-18T21:32:00Z").toEpochMilli(),
+            episodes = episodes
+        )
+
+        assertEquals(14, projected?.season)
+        assertEquals(20, projected?.episode)
+        assertEquals("Maggots", projected?.episodeTitle)
+        assertEquals("2026-04-06", projected?.firstAired)
     }
 
     @Test

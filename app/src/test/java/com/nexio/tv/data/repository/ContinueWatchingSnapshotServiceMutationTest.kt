@@ -5,7 +5,11 @@ import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -14,6 +18,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
@@ -40,6 +45,7 @@ import kotlinx.coroutines.test.runTest
 import javax.inject.Inject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -102,6 +108,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { dismissedNextUpKeys } returns flowOf(emptySet())
         }
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -345,6 +352,50 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `retained imdb next up row is suppressed by completed watched anchor from display canonical artwork`() {
+        val service = buildService()
+        val staleShrinkingNextUp = TrackingNextUpEntry(
+            contentId = "tt15677150",
+            contentType = "series",
+            name = "Shrinking",
+            season = 3,
+            episode = 8,
+            episodeTitle = "Depression Diet",
+            videoId = "tt15677150:3:8",
+            firstAired = null,
+            firstAiredMs = 1L,
+            activityAtMs = 100_000L
+        )
+        val completedShrinking = resume(
+            contentId = "tvdb:411364",
+            videoId = "tvdb:411364:3:11",
+            season = 3,
+            episode = 11,
+            lastWatched = 200_000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        )
+        val previous = ContinueWatchingSnapshot(
+            nextUpItems = listOf(staleShrinkingNextUp),
+            displayMetadataByItemKey = mapOf(
+                "series:tt15677150" to HomeDisplayMetadata(
+                    backdrop = "nexio-artwork://decision/artwork-decision:backdrop:canonical:tvdb:411364:provider:TVDB:premium:false"
+                )
+            ),
+            updatedAtMs = 100_000L
+        )
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = listOf(completedShrinking)
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), retained.nextUpItems)
+    }
+
+    @Test
     fun `retained later next up row is not suppressed only because it is older than completed anchor`() {
         val service = buildService()
         val laterNightAgentNextUp = TrackingNextUpEntry(
@@ -501,6 +552,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { read(any()) } returns null
         },
         trackingProgressService: TrackingProgressService = mockk(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -1222,6 +1274,35 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `sanitizeSnapshot keeps main next-up when Trakt up-next has same show`() =
+        runTest {
+            val service = buildService()
+            val mainNextUp = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                episode = 20
+            ).copy(
+                name = "Australian Survivor",
+                season = 14,
+                episodeTitle = "Maggots",
+                videoId = "tvdb:303904:14:20",
+                activityAtMs = 1776547920000L
+            )
+            val traktNextUp = mainNextUp.copy(traktEpisodeId = 14085354)
+
+            val snapshot = invokeSanitizeSnapshot(
+                service = service,
+                snapshot = ContinueWatchingSnapshot(
+                    nextUpItems = listOf(mainNextUp),
+                    traktUpNextItems = listOf(traktNextUp)
+                )
+            )
+
+            assertEquals(listOf(mainNextUp), snapshot.nextUpItems)
+            assertEquals(listOf(traktNextUp), snapshot.traktUpNextItems)
+        }
+
+    @Test
     fun `buildRawSnapshot suppresses older resume when watched show anchor is newer coordinate`() = runTest {
         val service = buildService()
         val oldResume = resume(
@@ -1250,6 +1331,101 @@ class ContinueWatchingSnapshotServiceMutationTest {
         )
 
         assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
+    }
+
+    @Test
+    fun `buildRawSnapshot drops stale imdb next-up when artwork canonical show anchor is newer coordinate`() =
+        runTest {
+            val service = buildService()
+            val staleNextUp = nextUp(
+                contentId = "tt15677150",
+                firstAiredMs = 1778950000000L,
+                episode = 8
+            ).copy(
+                name = "Shrinking",
+                season = 3,
+                videoId = "tt15677150:3:8",
+                backdrop = "nexio-artwork://decision/artwork-decision:backdrop:canonical:tvdb:411364:provider:TVDB:premium:false"
+            )
+            val watchedAnchor = resume(
+                contentId = "tvdb:411364",
+                videoId = "tvdb:411364:3:11",
+                season = 3,
+                episode = 11,
+                lastWatched = 1778959000000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            ).copy(name = "Shrinking")
+
+            val snapshot = service.buildRawSnapshotForTest(
+                allProgress = listOf(watchedAnchor),
+                nextUpEntries = listOf(staleNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+        }
+
+    @Test
+    fun `buildRawSnapshot keeps remote playback resume when watched anchor is same coordinate`() = runTest {
+        val service = buildService()
+        val remotePlayback = resume(
+            contentId = "tvdb:79481",
+            videoId = "tvdb:79481:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = 1778959000000L,
+            progressPercent = 45f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(name = "Death Note")
+        val sameEpisodeWatchedAnchor = resume(
+            contentId = "tvdb:79481",
+            videoId = "tvdb:79481:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = 1778958000000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        ).copy(name = "Death Note")
+
+        val snapshot = service.buildRawSnapshotForTest(
+            allProgress = listOf(remotePlayback, sameEpisodeWatchedAnchor),
+            nextUpEntries = emptyList(),
+            traktUpNextEntries = emptyList()
+        )
+
+        assertEquals(listOf(remotePlayback), snapshot.resumeItems)
+    }
+
+    @Test
+    fun `buildRawSnapshot keeps remote playback resume when same episode completion is newer`() = runTest {
+        val service = buildService()
+        val remotePlayback = resume(
+            contentId = "tvdb:79481",
+            videoId = "tvdb:79481:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = 1778958000000L,
+            progressPercent = 45f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(name = "Death Note")
+        val sameEpisodeWatchedAnchor = resume(
+            contentId = "tvdb:79481",
+            videoId = "tvdb:79481:1:2",
+            season = 1,
+            episode = 2,
+            lastWatched = 1778959000000L,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        ).copy(name = "Death Note")
+
+        val snapshot = service.buildRawSnapshotForTest(
+            allProgress = listOf(remotePlayback, sameEpisodeWatchedAnchor),
+            nextUpEntries = emptyList(),
+            traktUpNextEntries = emptyList()
+        )
+
+        assertEquals(listOf(remotePlayback), snapshot.resumeItems)
     }
 
     @Test
@@ -1399,6 +1575,80 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot keeps main next-up when Trakt up-next has same show`() =
+        runTest {
+            val service = buildService()
+            val staleMainNextUp = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2025-03-31"
+            ).copy(
+                name = "Australian Survivor",
+                season = 12,
+                episode = 20,
+                episodeTitle = "The Reaper Is Coming",
+                videoId = "tvdb:303904:12:20",
+                activityAtMs = 1776547920000L
+            )
+            val correctedTraktUpNext = staleMainNextUp.copy(
+                season = 14,
+                episode = 20,
+                episodeTitle = "Maggots",
+                videoId = "tvdb:303904:14:20",
+                firstAired = "2026-04-06"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(staleMainNextUp),
+                traktUpNextEntries = listOf(correctedTraktUpNext)
+            )
+
+            assertEquals(listOf(staleMainNextUp), snapshot.nextUpItems)
+            assertEquals(listOf(correctedTraktUpNext), snapshot.traktUpNextItems)
+        }
+
+    @Test
+    fun `retained main next-up is kept when retained Trakt up-next has same show`() {
+        val service = buildService()
+        val staleMainNextUp = TrackingNextUpEntry(
+            contentId = "tvdb:303904",
+            contentType = "series",
+            name = "Australian Survivor",
+            season = 12,
+            episode = 20,
+            episodeTitle = "The Reaper Is Coming",
+            videoId = "tvdb:303904:12:20",
+            firstAired = "2025-03-31",
+            firstAiredMs = 1L,
+            activityAtMs = 1776547920000L
+        )
+        val correctedTraktUpNext = staleMainNextUp.copy(
+            season = 14,
+            episode = 20,
+            episodeTitle = "Maggots",
+            videoId = "tvdb:303904:14:20",
+            firstAired = "2026-04-06"
+        )
+        val previous = ContinueWatchingSnapshot(
+            nextUpItems = listOf(staleMainNextUp),
+            traktUpNextItems = listOf(correctedTraktUpNext),
+            updatedAtMs = 100_000L
+        )
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = emptyList()
+        )
+
+        assertEquals(listOf(staleMainNextUp), retained.nextUpItems)
+        assertEquals(listOf(correctedTraktUpNext), retained.traktUpNextItems)
+    }
+
+    @Test
     fun `buildRawSnapshot reuses local next-up episode map during projection`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
@@ -1475,6 +1725,62 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             assertEquals(listOf(providerCoordinate), snapshot.nextUpItems)
+        }
+
+    @Test
+    fun `buildRawSnapshot suppresses imdb next-up when route resolves watched TVDB show`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.routeRequest(any())
+            } returns MetadataRoute(
+                provider = MetadataPrimaryProvider.IMDB,
+                parentId = "tt15677150",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.IMDB to "tt15677150",
+                    MetadataPrimaryProvider.TVDB to "tvdb:411364"
+                ),
+                trace = emptyList()
+            )
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = emptyMap()
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val watchedAnchor = resume(
+                contentId = "tvdb:411364",
+                videoId = "tvdb:411364:3:11",
+                season = 3,
+                episode = 11,
+                lastWatched = 1778959000000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            ).copy(name = "Shrinking")
+            val staleNextUp = nextUp(
+                contentId = "tt15677150",
+                firstAiredMs = 1L,
+                episode = 8
+            ).copy(
+                name = "Shrinking",
+                season = 3,
+                videoId = "tt15677150:3:8",
+                activityAtMs = 1773247741000L
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(watchedAnchor),
+                nextUpEntries = listOf(staleNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         }
 
     @Test
@@ -1859,6 +2165,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             var refreshCount = 0
             val traktProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -1903,6 +2210,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 updatedAtMs = System.currentTimeMillis()
             )
             val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2118,6 +2426,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2166,6 +2475,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { read(any()) } returns persisted
         }
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2185,7 +2495,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
-    fun `reloadPersistedSnapshotForActiveProfile drops persisted aired next-up rows`() = runTest {
+    fun `reloadPersistedSnapshotForActiveProfile keeps persisted aired next-up rows`() = runTest {
         val scheduler = RecordingAirScheduler()
         val nowMs = System.currentTimeMillis()
         val staleNextUp = nextUp(
@@ -2222,10 +2532,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
         val restored = rawSnapshot(service)
         assertEquals(listOf(resume), restored.resumeItems)
-        assertEquals(emptyList<TrackingNextUpEntry>(), restored.nextUpItems)
-        assertEquals(emptyList<TrackingNextUpEntry>(), restored.traktUpNextItems)
-        assertEquals(emptyList<TrackingNextUpEntry>(), writtenSnapshot?.nextUpItems)
-        assertEquals(emptyList<TrackingNextUpEntry>(), writtenSnapshot?.traktUpNextItems)
+        assertEquals(listOf(staleNextUp), restored.nextUpItems)
+        assertEquals(listOf(staleNextUp.copy(contentId = "tt27444205")), restored.traktUpNextItems)
+        assertNull(writtenSnapshot)
     }
 
     @Test
@@ -2294,6 +2603,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             }
         }
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2319,6 +2629,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2353,6 +2664,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val scheduler = RecordingAirScheduler()
         var refreshCount = 0
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -2388,6 +2700,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val scheduler = RecordingAirScheduler()
         val failure = IllegalStateException("refresh failed")
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())

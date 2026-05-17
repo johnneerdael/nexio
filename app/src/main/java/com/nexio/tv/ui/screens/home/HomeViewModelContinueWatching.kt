@@ -20,6 +20,7 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.ResumeIdentity
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.data.repository.toSafeResumeIdentity
@@ -222,7 +223,7 @@ internal fun buildContinueWatchingItemsForSnapshot(
 
     val timeline = buildMixedContinueWatchingTimeline(
         resumeItems = snapshot.records,
-        nextUpItems = snapshot.nextUpItems,
+        nextUpItems = visibleContinueWatchingNextUpItems(snapshot),
         resumeRef = ::resumeRefForContinueWatchingRecord,
         nextUpRef = ::canonicalNextUpRefForContinueWatching
     )
@@ -250,7 +251,7 @@ private fun buildRawContinueWatchingItemsForSnapshot(
 ): List<ContinueWatchingItem> {
     val timeline = buildMixedContinueWatchingTimeline(
         resumeItems = snapshot.resumeItems,
-        nextUpItems = snapshot.nextUpItems,
+        nextUpItems = visibleContinueWatchingNextUpItems(snapshot),
         resumeRef = ::resumeRefForContinueWatching,
         nextUpRef = ::nextUpRefForContinueWatching
     )
@@ -261,8 +262,24 @@ private fun buildRawContinueWatchingItemsForSnapshot(
         }
     }.filter { item ->
         item !is ContinueWatchingItem.NextUp || item.info.hasAired
+    }.dedupByCanonicalOrContentKey()
+}
+
+private fun visibleContinueWatchingNextUpItems(snapshot: ContinueWatchingSnapshot): List<TrackingNextUpEntry> {
+    if (snapshot.traktUpNextItems.isEmpty()) return snapshot.nextUpItems
+    val seen = linkedSetOf<String>()
+    return (snapshot.nextUpItems + snapshot.traktUpNextItems).filter { entry ->
+        seen.add(visibleNextUpEntryKey(entry))
     }
 }
+
+private fun visibleNextUpEntryKey(entry: TrackingNextUpEntry): String =
+    listOf(
+        entry.contentType.trim().lowercase(),
+        entry.contentId.trim().lowercase(),
+        entry.season.toString(),
+        entry.episode.toString()
+    ).joinToString("|")
 
 private fun List<ContinueWatchingItem>.dedupByCanonicalOrContentKey(): List<ContinueWatchingItem> {
     val seen = linkedSetOf<String>()
