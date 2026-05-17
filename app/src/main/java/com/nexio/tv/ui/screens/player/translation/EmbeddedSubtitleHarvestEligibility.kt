@@ -23,9 +23,10 @@ internal object EmbeddedSubtitleHarvestEligibility {
         return sequenceOf(streamUrl, filename.orEmpty())
             .map { it.trim().lowercase(Locale.ROOT) }
             .any { value ->
-                value.endsWith(".mkv") ||
-                    value.endsWith(".mk3d") ||
-                    value.endsWith(".mka") ||
+                val path = value.substringBefore('?').substringBefore('#')
+                path.endsWith(".mkv") ||
+                    path.endsWith(".mk3d") ||
+                    path.endsWith(".mka") ||
                     value.contains(".mkv/") ||
                     value.contains(".mkv%")
             }

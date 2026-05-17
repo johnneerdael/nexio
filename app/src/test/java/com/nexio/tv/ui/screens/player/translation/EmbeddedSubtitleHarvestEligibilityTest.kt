@@ -71,6 +71,26 @@ class EmbeddedSubtitleHarvestEligibilityTest {
     }
 
     @Test
+    fun mkvUrlWithQuerySuffixIsMatroska() {
+        assertTrue(
+            EmbeddedSubtitleHarvestEligibility.isMatroska(
+                streamUrl = "https://cdn.example.test/movie.mkv?token=abc123",
+                filename = null
+            )
+        )
+    }
+
+    @Test
+    fun mkvUrlWithFragmentSuffixIsMatroska() {
+        assertTrue(
+            EmbeddedSubtitleHarvestEligibility.isMatroska(
+                streamUrl = "https://cdn.example.test/movie.mkv#fragment",
+                filename = null
+            )
+        )
+    }
+
+    @Test
     fun srtCodecIsSubRip() {
         assertTrue(EmbeddedSubtitleHarvestEligibility.isSubRip(track(codec = "srt")))
     }
