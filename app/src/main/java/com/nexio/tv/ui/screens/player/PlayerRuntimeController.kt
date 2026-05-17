@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import android.app.Activity
 import android.content.Context
 import android.media.audiofx.LoudnessEnhancer
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.C
 import androidx.media3.common.text.CueGroup
@@ -46,6 +47,8 @@ import androidx.media3.session.MediaSession
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestCoordinator
+import com.nexio.tv.ui.screens.player.translation.TranslatedSubtitleTimelineStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -205,6 +208,26 @@ class PlayerRuntimeController(
     internal val _progressUiState = MutableStateFlow(PlayerPlaybackProgressUiState())
     val progressUiState: StateFlow<PlayerPlaybackProgressUiState> = _progressUiState.asStateFlow()
 
+    internal val translatedSubtitleTimelineStore = TranslatedSubtitleTimelineStore()
+    internal val embeddedSubtitleHarvestCoordinator = EmbeddedSubtitleHarvestCoordinator(
+        scope = scope,
+        timelineStore = translatedSubtitleTimelineStore,
+        startHarvest = { key, state ->
+            scope.launch {
+                Log.d(
+                    TAG,
+                    "EMBEDDED_SUBTITLE_HARVEST placeholder session=$key " +
+                        "track=${state.selectedTrack?.trackId ?: state.selectedTrack?.index} " +
+                        "filename=${state.filename.orEmpty()}"
+                )
+            }
+        },
+        startTranslateLoop = { key, _ ->
+            scope.launch {
+                Log.d(TAG, "EMBEDDED_SUBTITLE_HARVEST translate loop pending Task 9 session=$key")
+            }
+        }
+    )
     internal val builtInSubtitleCueTranslator = BuiltInSubtitleCueTranslator(
         scope = scope,
         translationService = subtitleTranslationService,
@@ -233,7 +256,9 @@ class PlayerRuntimeController(
                     state.copy(aiSubtitleError = message)
                 }
             }
-        }
+        },
+        timelineStoreProvider = { translatedSubtitleTimelineStore },
+        timelineSessionProvider = { embeddedSubtitleHarvestCoordinator.activeSessionKey() }
     )
 
     internal var _exoPlayer: ExoPlayer? = null

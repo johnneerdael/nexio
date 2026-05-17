@@ -20,6 +20,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     cancelFirstFrameWatchdog()
     cancelPostFirstFrameBufferingWatchdog()
     deactivateAddonSubtitleOverlay()
+    embeddedSubtitleHarvestCoordinator.cancel(reason = "player_release")
 
     notifyAudioSessionUpdate(false)
 

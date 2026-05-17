@@ -65,6 +65,17 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         }
     }
 
+    fun clearActiveSession() {
+        synchronized(lock) {
+            sourceCues.clear()
+            translatedCueGroups.clear()
+            pendingBackfill.clear()
+            hitCount = 0L
+            missCount = 0L
+            activeSessionKey = null
+        }
+    }
+
     fun putSourceCue(
         sessionKey: TranslationTimelineSessionKey,
         sourceCueGroup: CueGroup

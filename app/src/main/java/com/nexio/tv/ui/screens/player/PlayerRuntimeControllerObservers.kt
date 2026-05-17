@@ -318,6 +318,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                 lastSubtitleSecondaryLanguage = settings.subtitleStyle.secondaryPreferredLanguage
                 tryAutoSelectPreferredSubtitleFromAvailableTracks()
             }
+            updateEmbeddedSubtitleHarvest()
 
             val wasEnabled = skipIntroEnabled
             skipIntroEnabled = settings.skipIntroEnabled
@@ -358,6 +359,7 @@ internal fun PlayerRuntimeController.observeSubtitleTranslationSettings() {
                 aiSubtitleTranslationJob?.cancel()
             }
             refreshBuiltInAiOverlayState()
+            updateEmbeddedSubtitleHarvest()
             if (configured) {
                 handleBuiltInCueGroupUpdate()
             }

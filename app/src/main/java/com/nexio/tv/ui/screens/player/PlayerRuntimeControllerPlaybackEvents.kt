@@ -727,6 +727,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 )
             }
             refreshBuiltInAiOverlayState()
+            updateEmbeddedSubtitleHarvest()
             if (_uiState.value.aiSubtitlesEnabled) {
                 handleBuiltInCueGroupUpdate()
             }
@@ -747,6 +748,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 ) 
             }
             refreshBuiltInAiOverlayState()
+            updateEmbeddedSubtitleHarvest()
         }
         is PlayerEvent.OnSelectAddonSubtitle -> {
             autoSubtitleSelected = true
@@ -758,6 +760,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 )
             }
             refreshBuiltInAiOverlayState()
+            updateEmbeddedSubtitleHarvest()
         }
         PlayerEvent.OnToggleAiSubtitles -> {
             toggleAiSubtitles()

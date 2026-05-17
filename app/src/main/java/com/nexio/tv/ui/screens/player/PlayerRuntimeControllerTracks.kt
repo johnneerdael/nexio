@@ -451,6 +451,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         cancelFirstFrameWatchdog()
     }
     tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    updateEmbeddedSubtitleHarvest()
     maybeAdjustAssSsaPipelineForTracks(tracks)
 }
 

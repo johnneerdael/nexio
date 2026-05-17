@@ -58,6 +58,7 @@ internal fun PlayerRuntimeController.clearAiTranslationStateSilently() {
         )
     }
     refreshBuiltInAiOverlayState()
+    updateEmbeddedSubtitleHarvest()
 }
 
 internal fun PlayerRuntimeController.enableAiSubtitles() {
@@ -100,6 +101,7 @@ internal fun PlayerRuntimeController.enableAiSubtitles() {
         )
     }
     refreshBuiltInAiOverlayState()
+    updateEmbeddedSubtitleHarvest()
 
     val selectedAddonSubtitle = _uiState.value.selectedAddonSubtitle
     if (selectedAddonSubtitle == null && _uiState.value.selectedSubtitleTrackIndex >= 0) {
@@ -128,6 +130,7 @@ internal fun PlayerRuntimeController.disableAiSubtitles() {
             translatedBuiltInCues = emptyList()
         )
     }
+    updateEmbeddedSubtitleHarvest()
     refreshBuiltInAiOverlayState()
 
     if (selectedAddonSubtitle != null) {
