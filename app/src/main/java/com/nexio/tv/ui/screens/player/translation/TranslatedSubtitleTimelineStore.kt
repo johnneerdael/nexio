@@ -41,11 +41,14 @@ internal data class TranslationTimelineStats(
     }
 }
 
-internal class TranslatedSubtitleTimelineStore {
+internal class TranslatedSubtitleTimelineStore(
+    private val nowMs: () -> Long = { System.currentTimeMillis() }
+) {
     private val lock = Any()
     private val sourceCues = LinkedHashMap<RecordKey, TranslationTimelineSourceCue>()
     private val translatedCueGroups = LinkedHashMap<RecordKey, CueGroup>()
     private val pendingBackfill = LinkedHashMap<RecordKey, TranslationTimelineSourceCue>()
+    private val deferredBackfillRetryAfterMs = LinkedHashMap<RecordKey, Long>()
 
     private var activeSessionKey: TranslationTimelineSessionKey? = null
     private var hitCount = 0L
@@ -57,6 +60,7 @@ internal class TranslatedSubtitleTimelineStore {
                 sourceCues.clear()
                 translatedCueGroups.clear()
                 pendingBackfill.clear()
+                deferredBackfillRetryAfterMs.clear()
                 hitCount = 0L
                 missCount = 0L
                 activeSessionKey = sessionKey
@@ -69,6 +73,7 @@ internal class TranslatedSubtitleTimelineStore {
             sourceCues.clear()
             translatedCueGroups.clear()
             pendingBackfill.clear()
+            deferredBackfillRetryAfterMs.clear()
             hitCount = 0L
             missCount = 0L
             activeSessionKey = null
@@ -97,6 +102,7 @@ internal class TranslatedSubtitleTimelineStore {
                 val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
                 translatedCueGroups[recordKey] = translatedCueGroup
                 pendingBackfill.remove(recordKey)
+                deferredBackfillRetryAfterMs.remove(recordKey)
                 sourceCue.cueKey
             }
         }
@@ -128,8 +134,30 @@ internal class TranslatedSubtitleTimelineStore {
             val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized null
             val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
             if (translatedCueGroups.containsKey(recordKey)) return@synchronized sourceCue
+            val retryAfterMs = deferredBackfillRetryAfterMs[recordKey]
+            if (retryAfterMs != null) {
+                if (retryAfterMs > nowMs()) {
+                    return@synchronized sourceCue
+                }
+                deferredBackfillRetryAfterMs.remove(recordKey)
+            }
             pendingBackfill.putIfAbsent(recordKey, sourceCue)
             sourceCue
+        }
+    }
+
+    fun deferPendingBackfill(
+        sessionKey: TranslationTimelineSessionKey,
+        sourceCueGroup: CueGroup,
+        retryAfterMs: Long
+    ): Boolean {
+        return synchronized(lock) {
+            val sourceCue = putSourceCueLocked(sessionKey, sourceCueGroup) ?: return@synchronized false
+            val recordKey = RecordKey(sessionKey, sourceCue.cueKey)
+            if (translatedCueGroups.containsKey(recordKey)) return@synchronized false
+            pendingBackfill.remove(recordKey)
+            deferredBackfillRetryAfterMs[recordKey] = retryAfterMs
+            true
         }
     }
 

@@ -149,6 +149,55 @@ class TranslatedSubtitleTimelineStoreTest {
     }
 
     @Test
+    fun deferredBackfillSuppressesImmediateRequeueUntilRetryTime() {
+        var nowMs = 1_000L
+        val store = TranslatedSubtitleTimelineStore(nowMs = { nowMs })
+        val session = session()
+        val source = cueGroup("bonjour", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        store.registerMiss(session, source)
+        store.deferPendingBackfill(
+            sessionKey = session,
+            sourceCueGroup = source,
+            retryAfterMs = nowMs + 60_000L
+        )
+        store.registerMiss(session, source)
+
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
+        assertEquals(
+            TranslationTimelineStats(
+                sourceCueCount = 1,
+                translatedCueCount = 0,
+                pendingBackfillCount = 0,
+                hitCount = 0,
+                missCount = 0
+            ),
+            store.stats(session)
+        )
+    }
+
+    @Test
+    fun deferredBackfillCanBeRequeuedAfterRetryTime() {
+        var nowMs = 1_000L
+        val store = TranslatedSubtitleTimelineStore(nowMs = { nowMs })
+        val session = session()
+        val source = cueGroup("bonjour", presentationTimeUs = 1_000L)
+
+        store.beginSession(session)
+        store.registerMiss(session, source)
+        store.deferPendingBackfill(
+            sessionKey = session,
+            sourceCueGroup = source,
+            retryAfterMs = nowMs + 60_000L
+        )
+        nowMs += 60_001L
+        store.registerMiss(session, source)
+
+        assertEquals("bonjour", store.pendingBackfill(session).single().sourceText)
+    }
+
+    @Test
     fun beginSessionClearsOldRecordsWhenSessionChanges() {
         val store = TranslatedSubtitleTimelineStore()
         val first = session(streamKey = "first")

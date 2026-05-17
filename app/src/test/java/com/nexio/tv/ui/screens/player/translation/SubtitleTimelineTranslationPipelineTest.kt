@@ -112,10 +112,11 @@ class SubtitleTimelineTranslationPipelineTest {
     }
 
     @Test
-    fun partialSuccessMapLeavesUntranslatedCuePending() = runTest {
+    fun partialSuccessMapDefersUntranslatedCueRetry() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         val settings = settings()
-        val store = TranslatedSubtitleTimelineStore()
+        var nowMs = 1_000L
+        val store = TranslatedSubtitleTimelineStore(nowMs = { nowMs })
         val session = session()
         val source = cueGroup(listOf("bonjour", "monde"), 1_000L)
 
@@ -131,7 +132,11 @@ class SubtitleTimelineTranslationPipelineTest {
         store.beginSession(session)
         store.registerMiss(session, source)
 
-        SubtitleTimelineTranslationPipeline(service).translatePending(
+        SubtitleTimelineTranslationPipeline(
+            translationService = service,
+            incompleteBackfillRetryDelayMs = 60_000L,
+            nowMs = { nowMs }
+        ).translatePending(
             session = session,
             store = store,
             sourceLanguageCode = "fr",
@@ -139,12 +144,18 @@ class SubtitleTimelineTranslationPipelineTest {
             settings = settings
         )
 
-        assertEquals("bonjour\nmonde", store.pendingBackfill(session).single().sourceText)
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
         assertNull(store.lookupCueGroup(session, source))
+        store.registerMiss(session, source)
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
+
+        nowMs = 61_001L
+        store.registerMiss(session, source)
+        assertEquals("bonjour\nmonde", store.pendingBackfill(session).single().sourceText)
     }
 
     @Test
-    fun partialBatchStoresCompleteCueAndLeavesMissingCuePending() = runTest {
+    fun partialBatchStoresCompleteCueAndDefersMissingCueRetry() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         val settings = settings()
         val store = TranslatedSubtitleTimelineStore()
@@ -175,7 +186,7 @@ class SubtitleTimelineTranslationPipelineTest {
 
         assertEquals("hallo", store.lookupCueGroup(session, translatedSource)?.singleCueText())
         assertNull(store.lookupCueGroup(session, missingSource))
-        assertEquals(listOf("monde"), store.pendingBackfill(session).map { it.sourceText })
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(session))
     }
 
     @Test

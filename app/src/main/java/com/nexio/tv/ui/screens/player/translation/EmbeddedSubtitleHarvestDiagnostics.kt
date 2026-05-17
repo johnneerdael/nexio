@@ -22,6 +22,9 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
     private const val TAG = "Nexio.Player"
     private const val TIMELINE_MODE = "embedded_mkv_timeline"
     private const val RENDERER_FALLBACK_MODE = "renderer_prefetch_fallback"
+    private const val RENDERER_LOOKUP_LOG_INTERVAL_MS = 10_000L
+    private const val MAX_RENDERER_LOOKUP_LOG_KEYS = 2_048
+    private val rendererLookupLastLogMs = LinkedHashMap<String, Long>()
 
     override fun sessionStarted(
         session: TranslationTimelineSessionKey,
@@ -117,6 +120,7 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         hit: Boolean
     ) {
         val key = cueKey ?: return
+        if (!shouldLogRendererLookup(session, key, hit)) return
         log(rendererLookupLine(session, key, hit))
     }
 
@@ -169,6 +173,40 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
 
     private fun log(line: String) {
         runCatching { Log.d(TAG, line) }
+    }
+
+    private fun shouldLogRendererLookup(
+        session: TranslationTimelineSessionKey,
+        cueKey: TranslationTimelineCueKey,
+        hit: Boolean
+    ): Boolean {
+        val nowMs = System.currentTimeMillis()
+        val lookupKey = buildString {
+            append(session.streamKey)
+            append('|')
+            append(session.trackKey)
+            append('|')
+            append(session.targetLanguage)
+            append('|')
+            append(cueKey.presentationTimeUs)
+            append('|')
+            append(cueKey.sourceTextHash)
+            append('|')
+            append(hit)
+        }
+        return synchronized(rendererLookupLastLogMs) {
+            val lastLogMs = rendererLookupLastLogMs[lookupKey]
+            if (lastLogMs != null && nowMs - lastLogMs < RENDERER_LOOKUP_LOG_INTERVAL_MS) {
+                false
+            } else {
+                rendererLookupLastLogMs[lookupKey] = nowMs
+                while (rendererLookupLastLogMs.size > MAX_RENDERER_LOOKUP_LOG_KEYS) {
+                    val firstKey = rendererLookupLastLogMs.keys.firstOrNull() ?: break
+                    rendererLookupLastLogMs.remove(firstKey)
+                }
+                true
+            }
+        }
     }
 
     private fun hostFor(streamUrl: String): String? {

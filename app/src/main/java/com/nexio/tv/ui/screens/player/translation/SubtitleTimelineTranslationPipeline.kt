@@ -7,7 +7,9 @@ import com.nexio.tv.domain.model.SubtitleTranslationSettings
 
 internal class SubtitleTimelineTranslationPipeline(
     private val translationService: SubtitleTranslationService,
-    maxBatchSize: Int = 60
+    maxBatchSize: Int = 60,
+    private val incompleteBackfillRetryDelayMs: Long = 60_000L,
+    private val nowMs: () -> Long = { System.currentTimeMillis() }
 ) {
     private val maxBatchSize = maxBatchSize.coerceAtLeast(1)
 
@@ -36,6 +38,11 @@ internal class SubtitleTimelineTranslationPipeline(
                 for (cueIndex in batch.indices) {
                     val sourceCue = batch[cueIndex]
                     if (!sourceCue.cueGroup.hasCompleteTranslations(translatedTexts)) {
+                        store.deferPendingBackfill(
+                            sessionKey = session,
+                            sourceCueGroup = sourceCue.cueGroup,
+                            retryAfterMs = nowMs() + incompleteBackfillRetryDelayMs
+                        )
                         continue
                     }
                     val translatedCueGroup = TranslatedSubtitleTimelineStore.translateCueGroupTexts(
