@@ -158,7 +158,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
         assertEquals("tvdb:393268", args.getValue("contentId"))
         assertEquals("1234000", args.getValue("resumePositionMs"))
         assertEquals("2468000", args.getValue("resumeDurationMs"))
@@ -189,7 +189,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
         assertEquals("tvdb:393268", args.getValue("contentId"))
         assertEquals("1234000", args.getValue("resumePositionMs"))
         assertEquals("2468000", args.getValue("resumeDurationMs"))
@@ -220,7 +220,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -249,7 +249,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -307,7 +307,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
-        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
+        assertEquals("tvdb:463433:1:9", args.getValue("streamVideoId"))
         assertEquals("tt12345678", args.getValue("imdbId"))
     }
 
@@ -348,7 +348,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tt9794044", enriched.displayMetadata().imdbId)
-        assertEquals("tt9794044:2:2", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:2", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -420,7 +420,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:393268:2:1", args.getValue("videoId"))
-        assertEquals("tt9794044:2:1", args.getValue("streamVideoId"))
+        assertEquals("tvdb:393268:2:1", args.getValue("streamVideoId"))
         assertEquals("tt9794044", args.getValue("imdbId"))
     }
 
@@ -448,7 +448,7 @@ class StreamRuntimeRoutingTest {
         val args = decodedStreamRouteArgs(route)
 
         assertEquals("tvdb:463433:1:9", args.getValue("videoId"))
-        assertEquals("tt12345678:1:9", args.getValue("streamVideoId"))
+        assertEquals("tvdb:463433:1:9", args.getValue("streamVideoId"))
         assertEquals("tt12345678", args.getValue("imdbId"))
     }
 

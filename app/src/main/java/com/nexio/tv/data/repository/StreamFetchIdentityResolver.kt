@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,9 +13,9 @@ data class StreamSourceContext(
 )
 
 /**
- * Phase 0 stream policy: default Stremio-style addons fetch series streams by
- * IMDb episode id (`tt...:season:episode`). Addon-specific stream id support
- * belongs in a later AddonStreamIdPolicy, not in this P0 resolver.
+ * Phase 0 stream policy: non-anime TVDB series fetch by the authoritative TVDB
+ * episode coordinate when one is available. Anime and non-TVDB series fall back
+ * to IMDb episode ids.
  */
 @Singleton
 class StreamFetchIdentityResolver @Inject constructor() {
@@ -27,6 +28,26 @@ class StreamFetchIdentityResolver @Inject constructor() {
     ): StreamFetchIdentity? {
         require(season > 0) { "season must be positive" }
         require(episode > 0) { "episode must be positive" }
+
+        if (sourceContext.mediaKind == MetadataMediaKind.SERIES) {
+            val tvdbId = knownIds.tvdb?.takeIf { it.isNotBlank() }
+                ?: canonicalIdentity.canonicalId?.takeIf {
+                    canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotBlank()
+                }
+            if (tvdbId != null) {
+                val videoId = "tvdb:$tvdbId:$season:$episode"
+                return StreamFetchIdentity(
+                    contentId = "tvdb:$tvdbId",
+                    videoId = videoId,
+                    idScheme = StreamIdScheme.TVDB_EPISODE,
+                    confidence = IdentityConfidence.HIGH,
+                    trace = listOf(
+                        "phase0 default Stremio stream shape resolved non-anime series stream id from TVDB episode coordinate",
+                        sourceContext.traceDescription(canonicalIdentity)
+                    )
+                )
+            }
+        }
 
         val imdbId = knownIds.imdb?.takeIf { it.isStrictImdbTitleId() } ?: return null
         val videoId = "$imdbId:$season:$episode"

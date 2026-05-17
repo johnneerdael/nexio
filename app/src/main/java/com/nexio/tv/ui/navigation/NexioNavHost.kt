@@ -1434,6 +1434,8 @@ private fun streamFetchVideoIdForCw(
     season: Int?,
     episode: Int?,
 ): String? {
+    val persistedValue = persisted?.trim()?.takeIf { it.isNotBlank() }
+    val imdb = imdbHint?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) }
     val rawValue = rawVideoId?.trim()?.takeIf { it.isNotBlank() }
     val contentValue = contentId?.trim().orEmpty()
     if (rawValue != null &&
@@ -1442,11 +1444,9 @@ private fun streamFetchVideoIdForCw(
     ) {
         return rawValue
     }
-    val persistedValue = persisted?.trim()?.takeIf { it.isNotBlank() }
     if (persistedValue != null && persistedValue.startsWith("tt", ignoreCase = true)) {
         return persistedValue
     }
-    val imdb = imdbHint?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) }
     if (imdb == null) return persistedValue
     return if (season != null && episode != null) "$imdb:$season:$episode" else imdb
 }

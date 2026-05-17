@@ -19,6 +19,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -669,7 +670,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     @VisibleForTesting
-    internal fun mergeResolvedDisplaySnapshot(
+    internal suspend fun mergeResolvedDisplaySnapshot(
         snapshot: ContinueWatchingSnapshot,
         profileId: Int,
         resolvedItems: List<ResolvedDisplayItem>
@@ -709,8 +710,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val resolved = target.aliases.firstNotNullOfOrNull { alias ->
                 resolvedByKey[alias] ?: resolvedByAlias[alias]
             } ?: continue
+            val baseProviderIds = target.progress
+                ?.let { progress -> resolved.stableIds.withProgressIds(progress, resolved.imdbId) }
+                ?: resolved.stableIds.withResolvedImdbId(resolved.imdbId)
+            val providerIds = correctedSeriesSidecarProviderIds(
+                mediaKind = resolved.mediaKind,
+                providerIds = baseProviderIds,
+                itemKey = target.itemKey
+            )
             val currentMetadata = metadataByKey[target.itemKey]
-            val mergedMetadata = currentMetadata.mergeResolvedDisplay(resolved)
+            val mergedMetadata = currentMetadata.mergeResolvedDisplay(
+                resolved = resolved,
+                sidecarImdbOverride = providerIds.imdb
+            )
             if (mergedMetadata.hasRenderableDisplayMetadata() && mergedMetadata != currentMetadata) {
                 metadataByKey[target.itemKey] = mergedMetadata
                 changed = true
@@ -720,6 +732,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     resolved = resolved,
                     profileId = profileId,
                     displayMetadata = mergedMetadata,
+                    providerIds = providerIds,
                     updatedAt = snapshot.updatedAtMs.takeIf { it > 0L } ?: System.currentTimeMillis()
                 )
                 val previous = recordsByIdentity[record.identityKey()]
@@ -2509,8 +2522,44 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
+    private suspend fun correctedSeriesSidecarProviderIds(
+        mediaKind: MetadataMediaKind,
+        providerIds: ProviderIds,
+        itemKey: String
+    ): ProviderIds {
+        if (mediaKind != MetadataMediaKind.SERIES) return providerIds
+        val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() } ?: return providerIds
+        val facade = metadataRouterFacade ?: return providerIds
+        val request = MetadataRequest(
+            contentId = "tvdb:$tvdbId",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(
+                itemType = "series",
+                previewStableIds = providerIds.copy(imdb = null),
+                previewSourceProvider = ProviderId.TVDB.name,
+                previewSourceItemId = "tvdb:$tvdbId"
+            ),
+            depth = MetadataDepth.IDENTITY
+        )
+        val bundle = runCatching {
+            facade.resolveStableIdBundle(
+                request = request,
+                trigger = StableIdResolutionTrigger.CONTINUE_WATCHING,
+                itemKey = itemKey
+            )
+        }.getOrNull() ?: return providerIds
+        val canonicalTvdbId = bundle.canonical.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() }
+        if (canonicalTvdbId != null && canonicalTvdbId != tvdbId) return providerIds
+        val seriesImdbId = bundle.sidecars.imdbId
+            ?.trim()
+            ?.takeIf { it.matches(Regex("^tt\\d+$")) }
+            ?: return providerIds
+        return providerIds.copy(imdb = seriesImdbId)
+    }
+
     private fun HomeDisplayMetadata?.mergeResolvedDisplay(
-        resolved: ResolvedDisplayItem
+        resolved: ResolvedDisplayItem,
+        sidecarImdbOverride: String? = null
     ): HomeDisplayMetadata {
         val current = this
         return HomeDisplayMetadata(
@@ -2524,7 +2573,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ratingSource = resolved.rating?.source ?: current?.ratingSource,
             tomatoesRating = resolved.display.tomatoesRating ?: current?.tomatoesRating,
             originalLanguage = current?.originalLanguage,
-            imdbId = resolved.imdbId ?: resolved.stableIds.imdb ?: current?.imdbId,
+            imdbId = sidecarImdbOverride ?: resolved.imdbId ?: resolved.stableIds.imdb ?: current?.imdbId,
             poster = resolved.artwork.poster.toLegacyArtworkString() ?: current?.poster,
             posterProviderTag = current?.posterProviderTag,
             backdrop = resolved.artwork.backdrop.toLegacyArtworkString() ?: current?.backdrop,
@@ -2537,9 +2586,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         resolved: ResolvedDisplayItem,
         profileId: Int,
         displayMetadata: HomeDisplayMetadata,
+        providerIds: ProviderIds,
         updatedAt: Long
     ): ContinueWatchingRecord {
-        val providerIds = resolved.stableIds.withProgressIds(this, resolved.imdbId)
         val canonicalProvider = resolved.canonicalProvider.toProviderId()
             ?: providerIds.bestCanonicalProvider()
         val canonicalId = resolved.canonicalId?.trim()?.takeIf { it.isNotEmpty() }
@@ -2623,12 +2672,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private fun ProviderIds.withProgressIds(
         progress: WatchProgress,
         resolvedImdbId: String?
-    ): ProviderIds = copy(
+    ): ProviderIds {
+        val base = withResolvedImdbId(resolvedImdbId)
+        return base.copy(
+            imdb = base.imdb
+                ?: progress.contentId.takeIf { it.startsWith("tt", ignoreCase = true) },
+            trakt = base.trakt
+                ?: progress.traktMovieId?.toString()
+                ?: progress.traktShowId?.toString()
+        )
+    }
+
+    private fun ProviderIds.withResolvedImdbId(resolvedImdbId: String?): ProviderIds = copy(
         imdb = imdb ?: resolvedImdbId?.trim()?.takeIf { it.isNotEmpty() }
-            ?: progress.contentId.takeIf { it.startsWith("tt", ignoreCase = true) },
-        trakt = trakt
-            ?: progress.traktMovieId?.toString()
-            ?: progress.traktShowId?.toString()
     )
 
     private fun ProviderIds.bestCanonicalProvider(): ProviderId? = when {
@@ -2674,6 +2730,24 @@ class ContinueWatchingSnapshotService @Inject constructor(
         canonicalIdentity: ContentIdentity,
         resumeVideoId: String
     ): StreamFetchIdentity? {
+        if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
+            val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() }
+                ?: canonicalIdentity.canonicalId?.trim()?.takeIf {
+                    canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotEmpty()
+                }
+            if (tvdbId != null) {
+                return StreamFetchIdentity(
+                    contentId = "tvdb:$tvdbId",
+                    videoId = "tvdb:$tvdbId:$season:$episode",
+                    idScheme = StreamIdScheme.TVDB_EPISODE,
+                    confidence = IdentityConfidence.HIGH,
+                    trace = listOf(
+                        "resolved home surface hydrated continue watching TVDB episode stream id",
+                        "source mediaKind=$mediaKind canonical=${canonicalIdentity.canonicalProvider}:${canonicalIdentity.canonicalId} resumeVideoId=$resumeVideoId"
+                    )
+                )
+            }
+        }
         val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) } ?: return null
         return if (mediaKind == MetadataMediaKind.MOVIE || season == null || episode == null) {
             StreamFetchIdentity(

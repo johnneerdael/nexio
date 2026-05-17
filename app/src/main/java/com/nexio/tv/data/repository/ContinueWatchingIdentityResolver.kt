@@ -263,6 +263,9 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 if (current.tvdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
                     passes += MetadataPrimaryProvider.TVDB
                 }
+                if (!current.imdb.isNullOrBlank() && !current.tvdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TVDB
+                }
             }
             else -> Unit
         }
@@ -270,6 +273,14 @@ class ContinueWatchingIdentityResolver @Inject constructor(
 
         var providerIds = current
         passes.distinct().forEach { route ->
+            val idsForLookup = when {
+                mediaKind == MetadataMediaKind.SERIES &&
+                    route == MetadataPrimaryProvider.TVDB &&
+                    !providerIds.imdb.isNullOrBlank() &&
+                    !providerIds.tvdb.isNullOrBlank() ->
+                    providerIds.copy(imdb = null)
+                else -> providerIds
+            }
             val sourceProvider = when (route) {
                 MetadataPrimaryProvider.TMDB -> ProviderId.TMDB
                 MetadataPrimaryProvider.TVDB -> ProviderId.TVDB
@@ -281,7 +292,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                         itemKey = "$contentType:$contentId",
                         itemType = ContentType.fromString(contentType),
                         routeProvider = route,
-                        knownIds = providerIds,
+                        knownIds = idsForLookup,
                         sourceProvider = sourceProvider,
                         sourceItemId = contentId,
                         railId = null,
@@ -290,7 +301,13 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 )
             }.getOrNull() ?: return@forEach
             providerIds = providerIds.copy(
-                imdb = providerIds.imdb ?: bundle.sidecars.imdbId,
+                imdb = correctedSeriesImdbId(
+                    current = providerIds,
+                    lookupIds = idsForLookup,
+                    bundle = bundle,
+                    route = route,
+                    mediaKind = mediaKind
+                ) ?: providerIds.imdb ?: bundle.sidecars.imdbId,
                 tmdb = providerIds.tmdb ?: bundle.canonical.tmdbMovieId,
                 tvdb = providerIds.tvdb ?: bundle.canonical.tvdbSeriesId,
                 kitsu = providerIds.kitsu ?: bundle.canonical.kitsuAnimeId,
@@ -314,6 +331,24 @@ class ContinueWatchingIdentityResolver @Inject constructor(
             canonicalId = strongerCanonicalId,
             providerIds = providerIds,
         )
+    }
+
+    private fun correctedSeriesImdbId(
+        current: ProviderIds,
+        lookupIds: ProviderIds,
+        bundle: StableIdBundle,
+        route: MetadataPrimaryProvider,
+        mediaKind: MetadataMediaKind,
+    ): String? {
+        if (mediaKind != MetadataMediaKind.SERIES || route != MetadataPrimaryProvider.TVDB) return null
+        val currentTvdb = current.tvdb?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (lookupIds.imdb != null) return null
+        val resolvedTvdb = bundle.canonical.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() }
+        if (resolvedTvdb != null && !resolvedTvdb.equals(currentTvdb, ignoreCase = true)) return null
+        return bundle.sidecars.imdbId
+            ?.trim()
+            ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+            ?.takeIf { !it.equals(current.imdb, ignoreCase = true) }
     }
 
     private fun StableIdBundle.toContentIdentity(): ContentIdentity {

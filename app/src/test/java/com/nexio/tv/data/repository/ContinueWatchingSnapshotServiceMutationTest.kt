@@ -10,6 +10,11 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
+import com.nexio.tv.core.metadata.router.SidecarStableIds
+import com.nexio.tv.core.metadata.router.SourceStableIds
+import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -210,43 +215,98 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
-    fun `resolved display surface hydrates imdb keyed movie snapshot with canonical record`() {
-        val service = buildService()
-        val progress = resume(
-            contentId = "tt40898187",
-            videoId = "tt40898187",
-            lastWatched = 1778611202000L,
-            progressPercent = 72.0997f,
-            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
-        ).copy(
-            duration = 0L,
-            traktMovieId = 1361127
-        )
-        val snapshot = ContinueWatchingSnapshot(
-            resumeItems = listOf(progress),
-            updatedAtMs = 1778611202000L
-        )
+    fun `resolved display surface hydrates imdb keyed movie snapshot with canonical record`() =
+        runTest {
+            val service = buildService()
+            val progress = resume(
+                contentId = "tt40898187",
+                videoId = "tt40898187",
+                lastWatched = 1778611202000L,
+                progressPercent = 72.0997f,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            ).copy(
+                duration = 0L,
+                traktMovieId = 1361127
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(progress),
+                updatedAtMs = 1778611202000L
+            )
 
-        val hydrated = service.mergeResolvedDisplaySnapshot(
-            snapshot = snapshot,
-            profileId = 1,
-            resolvedItems = listOf(roastResolvedDisplayItem())
-        )
+            val hydrated = service.mergeResolvedDisplaySnapshot(
+                snapshot = snapshot,
+                profileId = 1,
+                resolvedItems = listOf(roastResolvedDisplayItem())
+            )
 
-        val metadata = hydrated.displayMetadataByItemKey.getValue("movie:tt40898187")
-        assertEquals("The Roast of Kevin Hart", metadata.title)
-        assertEquals("tt40898187", metadata.imdbId)
-        assertEquals("172", metadata.runtime)
+            val metadata = hydrated.displayMetadataByItemKey.getValue("movie:tt40898187")
+            assertEquals("The Roast of Kevin Hart", metadata.title)
+            assertEquals("tt40898187", metadata.imdbId)
+            assertEquals("172", metadata.runtime)
 
-        val record = hydrated.records.single()
-        assertEquals("profile:1:movie:tmdb:1658982", record.identityKey())
-        assertEquals("1658982", record.idBundle.tmdb)
-        assertEquals("1361127", record.idBundle.trakt)
-        assertEquals("tt40898187", record.idBundle.imdb)
-        assertEquals("tt40898187", record.streamFetchIdentity?.contentId)
-        assertEquals("tt40898187", record.streamFetchIdentity?.videoId)
-        assertEquals(StreamIdScheme.IMDB_MOVIE, record.streamFetchIdentity?.idScheme)
-    }
+            val record = hydrated.records.single()
+            assertEquals("profile:1:movie:tmdb:1658982", record.identityKey())
+            assertEquals("1658982", record.idBundle.tmdb)
+            assertEquals("1361127", record.idBundle.trakt)
+            assertEquals("tt40898187", record.idBundle.imdb)
+            assertEquals("tt40898187", record.streamFetchIdentity?.contentId)
+            assertEquals("tt40898187", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.IMDB_MOVIE, record.streamFetchIdentity?.idScheme)
+        }
+
+    @Test
+    fun `resolved display surface corrects TVDB series sidecar imdb while preserving TVDB stream identity`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.resolveStableIdBundle(
+                    request = any(),
+                    trigger = StableIdResolutionTrigger.CONTINUE_WATCHING,
+                    itemKey = "series:tvdb:413033"
+                )
+            } returns StableIdBundle(
+                itemKey = "series:tvdb:413033",
+                itemType = ContentType.SERIES,
+                canonical = CanonicalStableIds(tvdbSeriesId = "413033"),
+                sidecars = SidecarStableIds(imdbId = "tt16288804"),
+                source = SourceStableIds(
+                    sourceProvider = ProviderId.TVDB,
+                    sourceItemId = "tvdb:413033",
+                    railId = null,
+                    observedIds = ProviderIds(tvdb = "413033")
+                ),
+                evidence = emptyList(),
+                resolvedAtMs = 1778611202000L
+            )
+            val service = buildServiceWithMetadataFacade(facade)
+            val progress = resume(
+                contentId = "tvdb:413033",
+                videoId = "tvdb:413033:2:2",
+                season = 2,
+                episode = 2,
+                lastWatched = 1778611202000L,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(progress),
+                updatedAtMs = 1778611202000L
+            )
+
+            val hydrated = service.mergeResolvedDisplaySnapshot(
+                snapshot = snapshot,
+                profileId = 1,
+                resolvedItems = listOf(berlinResolvedDisplayItem())
+            )
+
+            val metadata = hydrated.displayMetadataByItemKey.getValue("series:tvdb:413033")
+            assertEquals("tt16288804", metadata.imdbId)
+            val record = hydrated.records.single()
+            assertEquals("tt16288804", record.displayIdentity?.providerIds?.imdb)
+            assertEquals("tt16288804", record.idBundle.imdb)
+            assertEquals("tvdb:413033", record.streamFetchIdentity?.contentId)
+            assertEquals("tvdb:413033:2:2", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        }
 
     @Test
     fun `retained records are suppressed when completed progress uses raw provider id`() {
@@ -498,6 +558,37 @@ class ContinueWatchingSnapshotServiceMutationTest {
             overview = "Kevin Hart is in the hot seat.",
             genres = listOf("Comedy"),
             runtimeText = "172"
+        ),
+        artwork = ArtworkBundle(),
+        rating = null,
+        trailer = TrailerDisplayState(),
+        hydrationState = com.nexio.tv.domain.model.HydrationState.STALE_READY,
+        sourceTrace = emptyList(),
+        updatedAtMs = 1778611202000L
+    )
+
+    private fun berlinResolvedDisplayItem(): ResolvedDisplayItem = ResolvedDisplayItem(
+        itemKey = "series:tvdb:413033",
+        contentId = "tvdb:413033",
+        parentId = "tvdb:413033",
+        itemType = ContentType.SERIES,
+        mediaKind = MetadataMediaKind.SERIES,
+        canonicalProvider = "TVDB",
+        canonicalId = "413033",
+        imdbId = "tt42178219",
+        stableIds = ProviderIds(
+            imdb = "tt42178219",
+            tmdb = "308014",
+            tvdb = "413033"
+        ),
+        display = ResolvedDisplayFields(
+            title = "Berlin",
+            originalTitle = null,
+            year = 2026,
+            releaseDate = "2026-05-15",
+            overview = "Berlin plans another job.",
+            genres = listOf("Crime"),
+            runtimeText = "56"
         ),
         artwork = ArtworkBundle(),
         rating = null,
