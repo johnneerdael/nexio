@@ -22,17 +22,27 @@ class TranslatedSubtitleTimelineStoreTest {
             translatedCueGroup = cueGroup("hallo", presentationTimeUs = 1_000L)
         )
 
-        assertEquals("hallo", store.lookup(session, source)?.singleCueText())
-        assertNull(store.lookup(otherLanguageSession, source))
+        assertEquals("hallo", store.lookupCueGroup(session, source)?.singleCueText())
+        assertNull(store.lookupCueGroup(otherLanguageSession, source))
         assertEquals(
             TranslationTimelineStats(
                 sourceCueCount = 1,
                 translatedCueCount = 1,
                 pendingBackfillCount = 0,
                 hitCount = 1,
-                missCount = 1
+                missCount = 0
             ),
-            store.stats()
+            store.stats(session)
+        )
+        assertEquals(
+            TranslationTimelineStats(
+                sourceCueCount = 0,
+                translatedCueCount = 0,
+                pendingBackfillCount = 0,
+                hitCount = 0,
+                missCount = 0
+            ),
+            store.stats(otherLanguageSession)
         )
     }
 
@@ -46,7 +56,7 @@ class TranslatedSubtitleTimelineStoreTest {
         store.registerMiss(session, source)
         store.registerMiss(session, source)
 
-        val pendingBackfill = store.pendingBackfill()
+        val pendingBackfill = store.pendingBackfill(session)
         assertEquals(1, pendingBackfill.size)
         assertEquals("bonjour", pendingBackfill.single().sourceText)
         assertEquals(
@@ -57,7 +67,7 @@ class TranslatedSubtitleTimelineStoreTest {
                 hitCount = 0,
                 missCount = 2
             ),
-            store.stats()
+            store.stats(session)
         )
     }
 
@@ -76,16 +86,17 @@ class TranslatedSubtitleTimelineStoreTest {
         )
         store.beginSession(second)
 
-        assertNull(store.lookup(first, source))
+        assertNull(store.lookupCueGroup(first, source))
+        assertEquals(emptyList<TranslationTimelineSourceCue>(), store.pendingBackfill(first))
         assertEquals(
             TranslationTimelineStats(
                 sourceCueCount = 0,
                 translatedCueCount = 0,
                 pendingBackfillCount = 0,
                 hitCount = 0,
-                missCount = 1
+                missCount = 0
             ),
-            store.stats()
+            store.stats(first)
         )
     }
 

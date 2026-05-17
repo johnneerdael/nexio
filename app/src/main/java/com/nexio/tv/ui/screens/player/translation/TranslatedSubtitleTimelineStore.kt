@@ -29,7 +29,17 @@ internal data class TranslationTimelineStats(
     val pendingBackfillCount: Int,
     val hitCount: Long,
     val missCount: Long
-)
+) {
+    companion object {
+        val ZERO = TranslationTimelineStats(
+            sourceCueCount = 0,
+            translatedCueCount = 0,
+            pendingBackfillCount = 0,
+            hitCount = 0,
+            missCount = 0
+        )
+    }
+}
 
 internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
     private val maxCueRecords = maxCueRecords.coerceAtLeast(1)
@@ -76,14 +86,15 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         }
     }
 
-    fun lookup(
-        sessionKey: TranslationTimelineSessionKey,
+    fun lookupCueGroup(
+        session: TranslationTimelineSessionKey,
         sourceCueGroup: CueGroup
     ): CueGroup? {
         return synchronized(lock) {
-            val sourceCue = sourceCueFor(sessionKey, sourceCueGroup)
+            if (activeSessionKey != session) return@synchronized null
+            val sourceCue = sourceCueFor(session, sourceCueGroup)
             val translatedCueGroup = sourceCue
-                ?.let { translatedCueGroups[RecordKey(sessionKey, it.cueKey)] }
+                ?.let { translatedCueGroups[RecordKey(session, it.cueKey)] }
             if (translatedCueGroup == null) {
                 missCount += 1
             } else {
@@ -106,14 +117,16 @@ internal class TranslatedSubtitleTimelineStore(maxCueRecords: Int = 5_000) {
         }
     }
 
-    fun pendingBackfill(): List<TranslationTimelineSourceCue> {
+    fun pendingBackfill(session: TranslationTimelineSessionKey): List<TranslationTimelineSourceCue> {
         return synchronized(lock) {
+            if (activeSessionKey != session) return@synchronized emptyList()
             pendingBackfill.values.toList()
         }
     }
 
-    fun stats(): TranslationTimelineStats {
+    fun stats(session: TranslationTimelineSessionKey): TranslationTimelineStats {
         return synchronized(lock) {
+            if (activeSessionKey != session) return@synchronized TranslationTimelineStats.ZERO
             TranslationTimelineStats(
                 sourceCueCount = sourceCues.size,
                 translatedCueCount = translatedCueGroups.size,
