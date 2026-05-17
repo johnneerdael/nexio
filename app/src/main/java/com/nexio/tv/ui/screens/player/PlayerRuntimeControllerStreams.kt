@@ -441,6 +441,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
             sourceStreamsError = null
         )
     }
+    updateEmbeddedSubtitleHarvest()
     showStreamSourceIndicator(stream)
     resetNextEpisodeCardState(clearEpisode = false)
 
@@ -804,6 +805,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             nextEpisodeAutoPlayCountdownSec = null
         )
     }
+    updateEmbeddedSubtitleHarvest()
     showStreamSourceIndicator(stream)
     recomputeNextEpisode(resetVisibility = true)
 
