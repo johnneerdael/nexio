@@ -33,6 +33,7 @@ class MatroskaTextTrackOutputTest {
         output.sampleData(ParsableByteArray(sample), sample.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
         output.sampleMetadata(1_000L, C.BUFFER_FLAG_KEY_FRAME, sample.size, 0, null)
 
+        assertEquals(format, delegate.formats.single())
         assertEquals(7, sink.supportedTracks.single().trackId)
         assertEquals(0, sink.supportedTracks.single().supportedTrackOrdinal)
         assertEquals(format, sink.supportedTracks.single().format)
@@ -114,6 +115,8 @@ class MatroskaTextTrackOutputTest {
         output.sampleMetadata(3_000L, C.BUFFER_FLAG_KEY_FRAME, sample.size, 0, null)
 
         assertEquals(sample.size, bytesRead)
+        assertEquals(1, delegate.dataReaderSampleDataCalls)
+        assertEquals(0, delegate.parsableByteArraySampleDataCalls)
         assertArrayEquals(sample, delegate.forwardedSample)
         assertEquals("from reader", sink.samples.single().text)
     }
@@ -192,9 +195,16 @@ class MatroskaTextTrackOutputTest {
         private val forwardedSamples = ByteArrayOutputStream()
         val forwardedSample: ByteArray
             get() = forwardedSamples.toByteArray()
+        val formats = mutableListOf<Format>()
         val metadata = mutableListOf<Metadata>()
+        var dataReaderSampleDataCalls = 0
+            private set
+        var parsableByteArraySampleDataCalls = 0
+            private set
 
-        override fun format(format: Format) = Unit
+        override fun format(format: Format) {
+            formats += format
+        }
 
         override fun sampleData(
             input: DataReader,
@@ -202,6 +212,7 @@ class MatroskaTextTrackOutputTest {
             allowEndOfInput: Boolean,
             sampleDataPart: Int
         ): Int {
+            dataReaderSampleDataCalls += 1
             val buffer = ByteArray(length)
             val bytesRead = input.read(buffer, 0, length)
             if (bytesRead > 0) {
@@ -211,6 +222,7 @@ class MatroskaTextTrackOutputTest {
         }
 
         override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
+            parsableByteArraySampleDataCalls += 1
             forwardedSamples.write(data.data, data.position, length)
             data.skipBytes(length)
         }

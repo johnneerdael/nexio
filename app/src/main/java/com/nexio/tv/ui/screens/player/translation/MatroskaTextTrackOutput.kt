@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.player.translation
 
-import androidx.media3.common.C
 import androidx.media3.common.DataReader
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -9,7 +8,6 @@ import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
 import java.io.ByteArrayOutputStream
-import java.io.EOFException
 import java.util.Locale
 
 internal data class HarvestedMatroskaTextSample(
@@ -84,21 +82,12 @@ internal class MatroskaTextTrackOutput(
             return delegate.sampleData(input, length, allowEndOfInput, sampleDataPart)
         }
 
-        val buffer = ByteArray(length)
-        val bytesRead = input.read(buffer, 0, length)
-        if (bytesRead < 0) {
-            if (allowEndOfInput) return C.RESULT_END_OF_INPUT
-            throw EOFException()
-        }
-        if (bytesRead > 0) {
-            pendingData.write(buffer, 0, bytesRead)
-            delegate.sampleData(
-                ParsableByteArray(buffer.copyOf(bytesRead)),
-                bytesRead,
-                sampleDataPart
-            )
-        }
-        return bytesRead
+        return delegate.sampleData(
+            TeeDataReader(input, pendingData),
+            length,
+            allowEndOfInput,
+            sampleDataPart
+        )
     }
 
     override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
@@ -160,4 +149,17 @@ internal class OrdinalAllocator {
 private fun Format.isSubRipTextFormat(): Boolean {
     val mimeType = sampleMimeType?.trim()?.lowercase(Locale.ROOT)
     return mimeType == MimeTypes.APPLICATION_SUBRIP || mimeType == "application/x-subrip"
+}
+
+private class TeeDataReader(
+    private val delegate: DataReader,
+    private val copyTo: ByteArrayOutputStream
+) : DataReader {
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val bytesRead = delegate.read(buffer, offset, length)
+        if (bytesRead > 0) {
+            copyTo.write(buffer, offset, bytesRead)
+        }
+        return bytesRead
+    }
 }
