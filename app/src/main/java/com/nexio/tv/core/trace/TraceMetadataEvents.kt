@@ -254,6 +254,7 @@ class TraceMetadataEvents(
                     "status" to bundle.status.name,
                     "trigger" to trigger.name,
                     "tmdbMovieId" to bundle.canonical.tmdbMovieId,
+                    "tmdbTvId" to bundle.canonical.tmdbTvId,
                     "tvdbSeriesId" to bundle.canonical.tvdbSeriesId,
                     "kitsuAnimeId" to bundle.canonical.kitsuAnimeId,
                     "imdbId" to bundle.sidecars.imdbId,

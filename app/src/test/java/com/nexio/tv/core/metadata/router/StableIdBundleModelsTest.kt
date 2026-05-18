@@ -61,6 +61,38 @@ class StableIdBundleModelsTest {
     }
 
     @Test
+    fun `tmdb tv canonical id is native tmdb id and canonical ready`() {
+        val canonical = CanonicalStableIds(tmdbTvId = "71446")
+
+        assertEquals("71446", canonical.providerNativeIdFor(MetadataPrimaryProvider.TMDB))
+        assertTrue(canonical.hasCanonicalId())
+        assertEquals(
+            "71446",
+            CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446")
+                .providerNativeIdFor(MetadataPrimaryProvider.TMDB)
+        )
+    }
+
+    @Test
+    fun `status is canonical and rating ready when tmdb tv id and imdb are present`() {
+        val bundle = StableIdBundle(
+            itemKey = "series:tmdb:71446",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(tmdbTvId = "71446"),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+            source = ProviderIds(tmdb = "71446", imdb = "tt0903747").toSourceStableIds(
+                sourceProvider = ProviderId.TMDB,
+                sourceItemId = "tmdb:71446",
+                railId = "tmdb:popular"
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 10L
+        )
+
+        assertEquals(StableIdBundleStatus.CANONICAL_AND_RATING_READY, bundle.status)
+    }
+
+    @Test
     fun `blank canonical and sidecar ids are treated as absent`() {
         val bundle = StableIdBundle(
             itemKey = "series:trakt:show:1",

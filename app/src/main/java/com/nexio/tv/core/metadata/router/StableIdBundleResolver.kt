@@ -35,30 +35,53 @@ class StableIdBundleResolver @Inject constructor(
         val known = request.knownIds
 
         var tmdbMovieId: String? = null
+        var tmdbTvId: String? = null
         var tvdbSeriesId: String? = null
         var kitsuAnimeId: String? = null
         var imdbId: String? = known.imdb.presentImdbId()
 
         when (request.routeProvider) {
             MetadataPrimaryProvider.TMDB -> {
-                tmdbMovieId = known.tmdb.presentStableId()
-                    ?: imdbId?.let { imdb ->
-                        resolveViaStoreOrProvider(
-                            sourceId = parsed(AnimeIdScheme.IMDB, imdb),
-                            provider = MetadataPrimaryProvider.TMDB,
-                            operation = "imdbToTmdbMovie",
-                            target = "TMDB",
-                            evidence = evidence
-                        ) { lookup.imdbToTmdbMovie(imdb) }
+                when (request.itemType) {
+                    ContentType.MOVIE -> {
+                        tmdbMovieId = known.tmdb.presentStableId()
+                            ?: imdbId?.let { imdb ->
+                                resolveViaStoreOrProvider(
+                                    sourceId = parsed(AnimeIdScheme.IMDB, imdb),
+                                    provider = MetadataPrimaryProvider.TMDB,
+                                    operation = "imdbToTmdbMovie",
+                                    target = "TMDB",
+                                    evidence = evidence
+                                ) { lookup.imdbToTmdbMovie(imdb) }
+                            }
+                        if (imdbId == null && tmdbMovieId != null) {
+                            imdbId = resolveViaStoreOrProvider(
+                                sourceId = tmdbMovieSourceId(tmdbMovieId),
+                                provider = MetadataPrimaryProvider.IMDB,
+                                operation = "tmdbMovieToImdb",
+                                target = "IMDB",
+                                evidence = evidence
+                            ) { lookup.tmdbMovieToImdb(tmdbMovieId) }
+                        }
                     }
-                if (imdbId == null && tmdbMovieId != null) {
-                    imdbId = resolveViaStoreOrProvider(
-                        sourceId = tmdbMovieSourceId(tmdbMovieId),
-                        provider = MetadataPrimaryProvider.IMDB,
-                        operation = "tmdbMovieToImdb",
-                        target = "IMDB",
-                        evidence = evidence
-                    ) { lookup.tmdbMovieToImdb(tmdbMovieId) }
+
+                    ContentType.SERIES,
+                    ContentType.TV -> {
+                        tmdbTvId = known.tmdb.presentStableId()
+                        if (imdbId == null && tmdbTvId != null) {
+                            imdbId = resolveViaStoreOrProvider(
+                                sourceId = tmdbTvSourceId(tmdbTvId),
+                                provider = MetadataPrimaryProvider.IMDB,
+                                operation = "tmdbTvToImdb",
+                                target = "IMDB",
+                                evidence = evidence
+                            ) { lookup.tmdbTvToImdb(tmdbTvId) }
+                        }
+                    }
+
+                    ContentType.CHANNEL,
+                    ContentType.PERSON,
+                    ContentType.UNKNOWN -> Unit
                 }
             }
 
@@ -138,6 +161,7 @@ class StableIdBundleResolver @Inject constructor(
             itemType = request.itemType,
             canonical = CanonicalStableIds(
                 tmdbMovieId = tmdbMovieId.presentStableId(),
+                tmdbTvId = tmdbTvId.presentStableId(),
                 tvdbSeriesId = tvdbSeriesId.presentStableId(),
                 kitsuAnimeId = kitsuAnimeId.presentStableId()
             ),
