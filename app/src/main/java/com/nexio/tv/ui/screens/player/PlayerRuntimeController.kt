@@ -209,7 +209,7 @@ class PlayerRuntimeController(
     internal val builtInSubtitleCueTranslator = BuiltInSubtitleCueTranslator(
         scope = scope,
         translationService = subtitleTranslationService,
-        isEnabledProvider = { shouldUseBuiltInAiTranslation() },
+        isEnabledProvider = { shouldAllowBuiltInCueTranslation() },
         settingsProvider = { subtitleTranslationSettings },
         targetLanguageProvider = { _uiState.value.subtitleStyle.preferredLanguage },
         onTranslatingChanged = { isTranslating ->

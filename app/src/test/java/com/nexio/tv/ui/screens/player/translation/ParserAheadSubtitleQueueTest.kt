@@ -101,6 +101,28 @@ class ParserAheadSubtitleQueueTest {
         assertTrue(drained.isEmpty())
     }
 
+    @Test
+    fun `playback position provider failure does not escape parser enqueue`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val drained = mutableListOf<CueGroup>()
+        val diagnostics = RecordingDiagnostics()
+        val queue = ParserAheadSubtitleQueue(
+            scope = scope,
+            playbackPositionUsProvider = { error("wrong thread") },
+            diagnostics = diagnostics,
+            enqueueForTranslation = { _, cueGroup -> drained += cueGroup }
+        )
+
+        queue.enqueue(
+            Format.Builder().setLanguage("es").build(),
+            CuesWithTiming(listOf(Cue.Builder().setText("hola").build()), 1_000L, 2_000L)
+        )
+        scope.advanceUntilIdle()
+
+        assertEquals(1, drained.size)
+        assertEquals(0L, diagnostics.enqueuedEvents.single().playbackPositionUs)
+    }
+
     private class RecordingDiagnostics : ParserAheadSubtitleDiagnostics {
         val enqueuedEvents = mutableListOf<ParserAheadSubtitleDiagnostics.EnqueueEvent>()
         var duplicateDrops = 0

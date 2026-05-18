@@ -40,7 +40,8 @@ internal class BuiltInSubtitleCueTranslator(
     private val activeRequestCount = AtomicInteger(0)
     private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
     private val aheadCacheLock = Any()
-    private val aheadTranslatedCueGroupsByKey = LinkedHashMap<String, CueGroup>()
+    private val aheadTranslatedCueGroupsByTimedKey = LinkedHashMap<String, CueGroup>()
+    private val aheadTranslatedCueGroupsByTextKey = LinkedHashMap<String, CueGroup>()
     private val aheadPendingKeys = mutableSetOf<String>()
     private var aheadCacheConfigurationToken: String? = null
 
@@ -68,10 +69,17 @@ internal class BuiltInSubtitleCueTranslator(
 
     override fun getTranslatedCueGroup(format: Format, sourceCueGroup: CueGroup): CueGroup? {
         val configurationToken = getConfigurationToken(format) ?: return null
-        val key = aheadCueGroupKey(sourceCueGroup) ?: return null
+        val timedKey = aheadCueGroupTimedKey(sourceCueGroup)
+        val textKey = aheadCueGroupTextKey(sourceCueGroup)
         synchronized(aheadCacheLock) {
             ensureAheadCacheTokenLocked(configurationToken)
-            return aheadTranslatedCueGroupsByKey[key]
+            timedKey?.let { key ->
+                aheadTranslatedCueGroupsByTimedKey[key]?.let { return it.atPresentationTime(sourceCueGroup.presentationTimeUs) }
+            }
+            textKey?.let { key ->
+                aheadTranslatedCueGroupsByTextKey[key]?.let { return it.atPresentationTime(sourceCueGroup.presentationTimeUs) }
+            }
+            return null
         }
     }
 
@@ -85,19 +93,29 @@ internal class BuiltInSubtitleCueTranslator(
             callback(emptyList())
             return
         }
-        val key = aheadCueGroupKey(cueGroup)
-        if (key == null) {
+        val timedKey = aheadCueGroupTimedKey(cueGroup)
+        val textKey = aheadCueGroupTextKey(cueGroup)
+        val pendingKey = textKey ?: timedKey
+        if (pendingKey == null) {
             callback(emptyList())
             return
         }
 
         synchronized(aheadCacheLock) {
             ensureAheadCacheTokenLocked(configurationToken)
-            aheadTranslatedCueGroupsByKey[key]?.let { cached ->
-                callback(listOf(cached))
-                return
+            timedKey?.let { key ->
+                aheadTranslatedCueGroupsByTimedKey[key]?.let { cached ->
+                    callback(listOf(cached.atPresentationTime(cueGroup.presentationTimeUs)))
+                    return
+                }
             }
-            if (!aheadPendingKeys.add(key)) {
+            textKey?.let { key ->
+                aheadTranslatedCueGroupsByTextKey[key]?.let { cached ->
+                    callback(listOf(cached.atPresentationTime(cueGroup.presentationTimeUs)))
+                    return
+                }
+            }
+            if (!aheadPendingKeys.add(pendingKey)) {
                 return
             }
         }
@@ -112,9 +130,14 @@ internal class BuiltInSubtitleCueTranslator(
                         ?: translatedCueGroups.firstOrNull()
                     synchronized(aheadCacheLock) {
                         if (aheadCacheConfigurationToken == configurationToken) {
-                            aheadPendingKeys.remove(key)
+                            aheadPendingKeys.remove(pendingKey)
                             if (translatedCueGroup != null) {
-                                aheadTranslatedCueGroupsByKey[key] = translatedCueGroup
+                                timedKey?.let { key ->
+                                    aheadTranslatedCueGroupsByTimedKey[key] = translatedCueGroup
+                                }
+                                textKey?.let { key ->
+                                    aheadTranslatedCueGroupsByTextKey[key] = translatedCueGroup
+                                }
                                 trimAheadCacheLocked()
                             }
                         }
@@ -125,7 +148,7 @@ internal class BuiltInSubtitleCueTranslator(
                 override fun onFailure(exception: Exception) {
                     synchronized(aheadCacheLock) {
                         if (aheadCacheConfigurationToken == configurationToken) {
-                            aheadPendingKeys.remove(key)
+                            aheadPendingKeys.remove(pendingKey)
                         }
                     }
                     callback(emptyList())
@@ -363,27 +386,41 @@ internal class BuiltInSubtitleCueTranslator(
     private fun ensureAheadCacheTokenLocked(configurationToken: String) {
         if (aheadCacheConfigurationToken == configurationToken) return
         aheadCacheConfigurationToken = configurationToken
-        aheadTranslatedCueGroupsByKey.clear()
+        aheadTranslatedCueGroupsByTimedKey.clear()
+        aheadTranslatedCueGroupsByTextKey.clear()
         aheadPendingKeys.clear()
     }
 
     private fun trimAheadCacheLocked() {
-        while (aheadTranslatedCueGroupsByKey.size > BUILT_IN_SUBTITLE_AHEAD_CACHE_MAX_CUE_GROUPS) {
-            val iterator = aheadTranslatedCueGroupsByKey.entries.iterator()
+        trimLinkedMapLocked(aheadTranslatedCueGroupsByTimedKey)
+        trimLinkedMapLocked(aheadTranslatedCueGroupsByTextKey)
+    }
+
+    private fun trimLinkedMapLocked(map: LinkedHashMap<String, CueGroup>) {
+        while (map.size > BUILT_IN_SUBTITLE_AHEAD_CACHE_MAX_CUE_GROUPS) {
+            val iterator = map.entries.iterator()
             if (!iterator.hasNext()) return
             iterator.next()
             iterator.remove()
         }
     }
 
-    private fun aheadCueGroupKey(cueGroup: CueGroup): String? {
-        val text = cueGroup.cues
+    private fun aheadCueGroupTimedKey(cueGroup: CueGroup): String? {
+        val text = aheadCueGroupTextKey(cueGroup) ?: return null
+        return "${cueGroup.presentationTimeUs}|$text"
+    }
+
+    private fun aheadCueGroupTextKey(cueGroup: CueGroup): String? {
+        return cueGroup.cues
             .asSequence()
             .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
             .joinToString(separator = "\n")
             .takeIf(String::isNotBlank)
-            ?: return null
-        return "${cueGroup.presentationTimeUs}|$text"
+    }
+
+    private fun CueGroup.atPresentationTime(presentationTimeUs: Long): CueGroup {
+        if (this.presentationTimeUs == presentationTimeUs) return this
+        return CueGroup(cues, presentationTimeUs)
     }
 
     private fun builtInTranslationConfigurationToken(

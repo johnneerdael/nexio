@@ -60,7 +60,7 @@ internal class ParserAheadSubtitleQueue(
         diagnostics.onEnqueued(
             ParserAheadSubtitleDiagnostics.EnqueueEvent(
                 cueTimeUs = cues.startTimeUs,
-                playbackPositionUs = playbackPositionUsProvider(),
+                playbackPositionUs = safePlaybackPositionUs(),
                 queuedCount = queuedCount,
                 channelCapacity = maxQueuedCues.coerceAtLeast(1)
             )
@@ -82,6 +82,11 @@ internal class ParserAheadSubtitleQueue(
             iterator.next()
             iterator.remove()
         }
+    }
+
+    private fun safePlaybackPositionUs(): Long {
+        return runCatching { playbackPositionUsProvider().coerceAtLeast(0L) }
+            .getOrDefault(0L)
     }
 
     private fun CuesWithTiming.toCueGroup(): CueGroup? {

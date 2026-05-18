@@ -737,10 +737,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 ParserAheadSubtitleQueue(
                     scope = scope,
                     playbackPositionUsProvider = {
-                        (_exoPlayer?.currentPosition ?: 0L) * 1_000L
+                        progressUiState.value.currentPosition.coerceAtLeast(0L) * 1_000L
                     },
                     isEnabledProvider = { format ->
-                        builtInSubtitleCueTranslator.getConfigurationToken(format) != null
+                        shouldAllowParserAheadCueTranslation(format) &&
+                            builtInSubtitleCueTranslator.getConfigurationToken(format) != null
                     },
                     diagnostics = ParserAheadSubtitleDiagnostics.logcat(),
                     enqueueForTranslation = { format, cueGroup ->

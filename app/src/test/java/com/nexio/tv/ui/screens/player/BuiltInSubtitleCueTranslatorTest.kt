@@ -306,6 +306,62 @@ class BuiltInSubtitleCueTranslatorTest {
     }
 
     @Test
+    fun enqueueAheadCueCacheMatchesDisplayCueByTextWhenParserTimeIsRelative() = runTest {
+        val service = mockk<SubtitleTranslationService>(relaxed = true)
+        coEvery {
+            service.translateCueTexts(
+                texts = any(),
+                targetLanguageCode = any(),
+                sourceLanguageCode = any(),
+                settings = any()
+            )
+        } answers {
+            @Suppress("UNCHECKED_CAST")
+            val texts = arg<List<String>>(0)
+            Result.success(texts.associateWith { "translated-$it" })
+        }
+        val translator = BuiltInSubtitleCueTranslator(
+            scope = this,
+            translationService = service,
+            isEnabledProvider = { true },
+            settingsProvider = {
+                SubtitleTranslationSettings(
+                    enabled = true,
+                    apiKey = "test-key",
+                    model = "test-model"
+                )
+            },
+            targetLanguageProvider = { "nl" },
+            onTranslatingChanged = {},
+            onTranslationError = {},
+            dispatchDebounceMs = 0L,
+            maxBatchCueGroups = 20
+        )
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
+            .setCodecs(MimeTypes.TEXT_VTT)
+            .setLanguage("es")
+            .build()
+
+        translator.enqueueAheadCue(format, cueGroup("hola", 0L))
+        advanceUntilIdle()
+
+        val displayCueGroup = cueGroup("hola", 42_000L)
+        val translatedDisplayCueGroup = translator.getTranslatedCueGroup(format, displayCueGroup)
+
+        assertEquals(42_000L, translatedDisplayCueGroup?.presentationTimeUs)
+        assertEquals("translated-hola", translatedDisplayCueGroup?.cues?.single()?.text.toString())
+        coVerify(exactly = 1) {
+            service.translateCueTexts(
+                texts = listOf("hola"),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "es",
+                settings = any()
+            )
+        }
+    }
+
+    @Test
     fun enqueueAheadCueDoesNotDispatchDuplicateWhilePending() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         coEvery {

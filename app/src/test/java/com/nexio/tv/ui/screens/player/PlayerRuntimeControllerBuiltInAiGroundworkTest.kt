@@ -85,6 +85,73 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
     }
 
     @Test
+    fun `cue translation can start before selected track index is published`() {
+        assertEquals(
+            true,
+            shouldAllowBuiltInCueTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false
+            )
+        )
+        assertEquals(
+            false,
+            shouldAllowBuiltInCueTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = true
+            )
+        )
+    }
+
+    @Test
+    fun `parser ahead translation only accepts the selected embedded subtitle track`() {
+        val selectedTrack = TrackInfo(
+            index = 0,
+            name = "English",
+            language = "eng",
+            trackId = "3",
+            mimeType = MimeTypes.APPLICATION_SUBRIP
+        )
+
+        assertEquals(
+            true,
+            shouldAllowParserAheadCueTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrack = selectedTrack,
+                formatId = "3",
+                formatLanguage = "en",
+                formatMimeType = MimeTypes.APPLICATION_SUBRIP
+            )
+        )
+        assertEquals(
+            false,
+            shouldAllowParserAheadCueTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrack = selectedTrack,
+                formatId = "4",
+                formatLanguage = "it",
+                formatMimeType = MimeTypes.APPLICATION_SUBRIP
+            )
+        )
+    }
+
+    @Test
+    fun `parser ahead translation waits until a selected subtitle track exists`() {
+        assertEquals(
+            false,
+            shouldAllowParserAheadCueTranslationForState(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrack = null,
+                formatId = "3",
+                formatLanguage = "en",
+                formatMimeType = MimeTypes.APPLICATION_SUBRIP
+            )
+        )
+    }
+
+    @Test
     fun `built in translator configuration token changes when provider configuration changes`() {
         val format = Format.Builder()
             .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
