@@ -5,6 +5,7 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import com.nexio.tv.ui.screens.player.TrackInfo
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,7 +27,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
         assertTrue(line.startsWith("EMBEDDED_SUB_TIMELINE "))
         assertTrue(line.contains("event=session_started"))
         assertTrue(line.contains("session=stream-key"))
-        assertTrue(line.contains("translationMode=embedded_mkv_timeline"))
+        assertTrue(line.contains("translationMode=embedded_text_timeline"))
         assertTrue(line.contains("streamHost=real-debrid.example.test"))
         assertTrue(line.contains("trackIndex=3"))
         assertTrue(line.contains("trackId=sub-3"))
@@ -83,6 +84,8 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
         assertTrue(line.contains("trackIndex=3"))
         assertTrue(line.contains("mime=application/x-subrip"))
         assertTrue(line.contains("selectedTextOrdinal=1"))
+        assertFalse(line.contains("isMkv="))
+        assertFalse(line.contains("subRipOrdinal="))
     }
 
     @Test
@@ -130,6 +133,22 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun mkvHarvestCompletedLineIncludesContainerAndDuration() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.harvestCompletedLine(
+            session = session(),
+            container = EmbeddedSubtitleContainer.MATROSKA,
+            harvested = 75,
+            durationMs = 2_000L
+        )
+
+        assertEquals(
+            "EMBEDDED_SUB_TIMELINE event=harvest_completed " +
+                "session=stream-key container=mkv harvested=75 durationMs=2000",
+            line
+        )
+    }
+
+    @Test
     fun cueProofLinesUseStoreCueKeyFields() {
         val store = TranslatedSubtitleTimelineStore()
         val cueGroup = cueGroup(" bonjour ", 42_000L)
@@ -158,6 +177,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
 
         assertTrue(harvested.contains("event=cue_harvested"))
         assertTrue(harvested.contains("session=stream-key"))
+        assertTrue(harvested.contains("container=mp4"))
         assertTrue(harvested.contains("cueTimeUs=42000"))
         assertTrue(harvested.contains("cueHash=${cueKey?.sourceTextHash}"))
         assertTrue(harvested.contains("sourceLanguage=fr"))
@@ -167,7 +187,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
         assertTrue(translated.contains("cueHash=${cueKey?.sourceTextHash}"))
 
         assertTrue(lookupHit.contains("event=renderer_lookup_hit"))
-        assertTrue(lookupHit.contains("translationMode=embedded_mkv_timeline"))
+        assertTrue(lookupHit.contains("translationMode=embedded_text_timeline"))
         assertTrue(lookupHit.contains("cueHash=${cueKey?.sourceTextHash}"))
         assertTrue(lookupMiss.contains("event=renderer_lookup_miss"))
     }

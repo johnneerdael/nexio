@@ -33,7 +33,7 @@ internal interface EmbeddedSubtitleHarvestDiagnosticsLogger {
 internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiagnosticsLogger {
     const val PREFIX = "EMBEDDED_SUB_TIMELINE"
     private const val TAG = "Nexio.Player"
-    private const val TIMELINE_MODE = "embedded_mkv_timeline"
+    private const val TIMELINE_MODE = "embedded_text_timeline"
     private const val RENDERER_FALLBACK_MODE = "renderer_prefetch_fallback"
     private const val RENDERER_LOOKUP_LOG_INTERVAL_MS = 10_000L
     private const val MAX_RENDERER_LOOKUP_LOG_KEYS = 2_048
