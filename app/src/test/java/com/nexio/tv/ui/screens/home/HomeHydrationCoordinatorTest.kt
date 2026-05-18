@@ -895,7 +895,7 @@ class HomeHydrationCoordinatorTest {
         // Trakt Trending Show fixture with no first-paint artwork. The Trakt rail surfaced
         // ProviderIds for Trakt/TMDB/TVDB/IMDb. The TV artwork chain must produce:
         //   - route provider = TVDB
-        //   - canonical identity = TVDB:355567
+        //   - canonical identity = TMDB TV:76479 with TVDB kept as a sidecar alias
         //   - hydrated artwork = RPDB poster + TVDB backdrop + TVDB logo (representing
         //     the ArtworkRouter's per-type selection downstream of TVDB candidates +
         //     RPDB premium candidate)
@@ -1011,6 +1011,7 @@ class HomeHydrationCoordinatorTest {
             itemType = ContentType.SERIES,
             canonical = CanonicalStableIds(
                 tmdbMovieId = null,
+                tmdbTvId = "76479",
                 tvdbSeriesId = "355567",
                 kitsuAnimeId = null
             ),
@@ -1073,12 +1074,14 @@ class HomeHydrationCoordinatorTest {
         assertEquals("TRAKT", capturedRequest.sourceContext.previewSourceProvider)
         assertEquals(RailSource.BUILT_IN_TRAKT.name, capturedRequest.sourceContext.previewRailSource)
 
-        // Route provider = TVDB (proves series item type → TVDB even with a Trakt parent id).
-        // Canonical identity follows the TVDB route + bundle (not the Trakt parent id).
-        assertEquals(ProviderId.TVDB, overlaySlot.captured.canonicalProvider)
-        assertEquals("355567", overlaySlot.captured.canonicalId)
+        // Route provider remains TVDB for the artwork/metadata path, while the durable
+        // overlay identity uses canonical TMDB TV and retains TVDB as a sidecar.
+        assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
+        assertEquals("76479", overlaySlot.captured.canonicalId)
         assertEquals("tt1190634", overlaySlot.captured.imdbId)
         assertEquals(ContentType.SERIES, overlaySlot.captured.contentType)
+        assertEquals("76479", overlaySlot.captured.stableIdsSnapshot.tmdb)
+        assertEquals("355567", overlaySlot.captured.stableIdsSnapshot.tvdb)
 
         // Overlay fields preserve the per-type selected artwork: RPDB poster, TVDB backdrop, TVDB logo.
         val artwork = overlaySlot.captured.fields.artwork

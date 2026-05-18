@@ -241,6 +241,34 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
+    fun `series canonical identity prefers tmdb tv id while preserving tvdb sidecar`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle()
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tvdb:81189",
+                    videoId = "tvdb:81189:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals(ProviderId.TMDB, record.displayIdentity?.canonicalProvider)
+        assertEquals("71446", record.displayIdentity?.canonicalId)
+        assertEquals("71446", record.displayIdentity?.providerIds?.tmdb)
+        assertEquals("81189", record.displayIdentity?.providerIds?.tvdb)
+        assertEquals("profile:1:series:tmdb:71446:s2e1", record.canonicalKey?.stableKey())
+        assertEquals("series:tmdb:71446", record.parentId)
+        assertEquals("series:tmdb:71446:s2e1", record.contentId)
+        assertEquals("71446", record.idBundle.tmdb)
+        assertEquals("81189", record.idBundle.tvdb)
+    }
+
+    @Test
     fun `series identity bridge corrects episode imdb sidecar from tvdb series mapping`() = runTest {
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
@@ -546,6 +574,25 @@ class ContinueWatchingIdentityResolverTest {
                     tmdb = "308014",
                     tvdb = "413033"
                 )
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1_700_000_000_000L
+        )
+
+    private fun breakingBadBundle(): StableIdBundle =
+        StableIdBundle(
+            itemKey = "series:tmdb:71446",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(
+                tmdbTvId = "71446",
+                tvdbSeriesId = "81189"
+            ),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TVDB,
+                sourceItemId = "81189",
+                railId = null,
+                observedIds = ProviderIds(tvdb = "81189")
             ),
             evidence = emptyList(),
             resolvedAtMs = 1_700_000_000_000L

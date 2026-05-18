@@ -111,7 +111,7 @@ class CatalogItemCrossIdEnricher @Inject constructor(
         val current = preview.firstPaintStableIds
         val enrichedIds = current.copy(
             imdb = current.imdb ?: bundle.sidecars.imdbId,
-            tmdb = current.tmdb ?: bundle.canonical.tmdbMovieId,
+            tmdb = current.tmdb ?: bundle.canonical.tmdbTvId ?: bundle.canonical.tmdbMovieId,
             tvdb = current.tvdb ?: bundle.canonical.tvdbSeriesId,
             kitsu = current.kitsu ?: animeKitsuId ?: bundle.canonical.kitsuAnimeId
         )

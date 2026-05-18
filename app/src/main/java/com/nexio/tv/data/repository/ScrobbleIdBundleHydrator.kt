@@ -90,7 +90,7 @@ class ScrobbleIdBundleHydrator @Inject constructor(
 
     private fun StableIdBundle.toProviderIds(seed: ProviderIds): ProviderIds = ProviderIds(
         imdb = sidecars.imdbId ?: seed.imdb,
-        tmdb = canonical.tmdbMovieId ?: source.observedIds.tmdb ?: seed.tmdb,
+        tmdb = canonical.tmdbTvId ?: canonical.tmdbMovieId ?: source.observedIds.tmdb ?: seed.tmdb,
         tvdb = canonical.tvdbSeriesId ?: source.observedIds.tvdb ?: seed.tvdb,
         trakt = source.observedIds.trakt ?: seed.trakt,
         simkl = source.observedIds.simkl ?: seed.simkl,

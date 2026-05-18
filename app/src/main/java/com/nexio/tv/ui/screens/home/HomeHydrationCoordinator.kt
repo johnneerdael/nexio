@@ -109,7 +109,7 @@ class HomeHydrationCoordinator @Inject constructor(
             val stableIdsSnapshot = bundle?.let { b ->
                 ProviderIds(
                     imdb = b.sidecars.imdbId ?: item.firstPaintStableIds.imdb,
-                    tmdb = b.canonical.tmdbMovieId ?: item.firstPaintStableIds.tmdb,
+                    tmdb = b.canonical.tmdbTvId ?: b.canonical.tmdbMovieId ?: item.firstPaintStableIds.tmdb,
                     tvdb = b.canonical.tvdbSeriesId ?: item.firstPaintStableIds.tvdb,
                     kitsu = b.canonical.kitsuAnimeId ?: item.firstPaintStableIds.kitsu,
                     trakt = item.firstPaintStableIds.trakt,
@@ -402,10 +402,14 @@ class HomeHydrationCoordinator @Inject constructor(
         document: ResolvedMetadataDocument,
         bundle: StableIdBundle?
     ): CanonicalIdentity? {
+        val stableCanonical = bundle?.canonicalIdentity()
+        if (stableCanonical?.provider == ProviderId.KITSU || stableCanonical?.provider == ProviderId.TMDB) {
+            return stableCanonical
+        }
         val routedIdentity = route?.canonicalIdentity(bundle)
         return routedIdentity
             ?: document.canonicalIdentity()
-            ?: bundle?.canonicalIdentity()
+            ?: stableCanonical
     }
 
     private fun MetadataRoute.canonicalIdentity(bundle: StableIdBundle?): CanonicalIdentity? {
@@ -450,11 +454,29 @@ class HomeHydrationCoordinator @Inject constructor(
     }
 
     private fun StableIdBundle.canonicalIdentity(): CanonicalIdentity? =
-        when {
-            !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
-            !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
-            !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
-            else -> null
+        when (itemType) {
+            com.nexio.tv.domain.model.ContentType.SERIES,
+            com.nexio.tv.domain.model.ContentType.TV -> when {
+                !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
+                !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
+                !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
+                !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
+                else -> null
+            }
+            com.nexio.tv.domain.model.ContentType.MOVIE -> when {
+                !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
+                !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
+                !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
+                !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
+                else -> null
+            }
+            else -> when {
+                !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
+                !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
+                !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
+                !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
+                else -> null
+            }
         }
 
     private fun overlayAliases(
@@ -471,6 +493,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 ?: bundle?.sidecars?.imdbId,
             tmdb = firstPaintIds.tmdb
                 ?: observedIds?.tmdb
+                ?: bundle?.canonical?.tmdbTvId
                 ?: bundle?.canonical?.tmdbMovieId,
             tvdb = firstPaintIds.tvdb
                 ?: observedIds?.tvdb

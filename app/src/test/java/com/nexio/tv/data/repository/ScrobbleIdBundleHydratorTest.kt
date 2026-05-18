@@ -58,6 +58,20 @@ class ScrobbleIdBundleHydratorTest {
     }
 
     @Test
+    fun `hydrate maps series tmdb tv canonical id into provider ids tmdb`() = runTest {
+        coEvery { resolver.resolve(any()) } returns bundleWith(
+            canonical = CanonicalStableIds(tmdbTvId = "71446", tvdbSeriesId = "81189"),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+        )
+
+        val ids = hydrator.hydrate(rawContentId = "tvdb:81189", contentType = "series")
+
+        assertEquals("tt0903747", ids.imdb)
+        assertEquals("71446", ids.tmdb)
+        assertEquals("81189", ids.tvdb)
+    }
+
+    @Test
     fun `hydrate carries anime sidecars through`() = runTest {
         coEvery { resolver.resolve(any()) } returns bundleWith(
             canonical = CanonicalStableIds(kitsuAnimeId = "1"),
