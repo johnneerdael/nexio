@@ -131,6 +131,61 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     }
 
     @Test
+    fun `detail merges tmdb route id with tvdb only resolved identity for episode order`() = runTest(dispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val metadataDisplayRepository = mockDisplayRepository(
+            resolvedDocument(
+                canonicalProvider = ProviderId.TVDB,
+                canonicalId = "121361",
+                providerIds = ProviderIds(tvdb = "121361", imdb = "tt0944947")
+            )
+        )
+        val request = slot<TvMetadataRequest>()
+        val metadataRequest = slot<MetadataRequest>()
+        coEvery {
+            facade.fetchTvEpisodeEnrichment(capture(metadataRequest), capture(request))
+        } returns episodeDecision()
+        var resolvedTmdbTvId: String? = null
+        var resolvedProviderIds: ProviderIds? = null
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = seriesMeta(id = "tmdb:1399"),
+            itemId = "tmdb:1399",
+            itemType = "series",
+            metadataRouterFacade = facade,
+            metadataDisplayRepository = metadataDisplayRepository,
+            tmdbSettings = episodeSettings(),
+            tvEpisodeOrderResolver = object : TvEpisodeOrderResolver {
+                override suspend fun resolve(
+                    tmdbTvId: String?,
+                    providerIds: ProviderIds
+                ): TvEpisodeOrderResolution {
+                    resolvedTmdbTvId = tmdbTvId
+                    resolvedProviderIds = providerIds
+                    return TvEpisodeOrderResolution(
+                        provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                        tmdbTvId = "tmdb:tv:${tmdbTvId?.substringAfterLast(':') ?: "1399"}",
+                        tvdbSeriesId = providerIds.tvdb,
+                        reason = "test"
+                    )
+                }
+            }
+        )
+
+        advanceUntilIdle()
+
+        assertEquals("1399", resolvedTmdbTvId)
+        assertEquals("1399", resolvedProviderIds?.tmdb)
+        assertEquals("121361", resolvedProviderIds?.tvdb)
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
+        assertTrue(viewModel.uiState.value.tvEpisodeOrderToggleAvailable)
+        assertFalse(viewModel.uiState.value.tvEpisodeOrderTogglePending)
+        assertEquals("tvdb:121361", metadataRequest.captured.contentId)
+        assertEquals("tvdb:121361", request.captured.contentId)
+        assertEquals("tmdb:1399", request.captured.fallbackContentId)
+    }
+
+    @Test
     fun `detail leaves episode order toggle unavailable until hydrated tmdb tv id exists`() = runTest(dispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         val metadataDisplayRepository = mockDisplayRepository(

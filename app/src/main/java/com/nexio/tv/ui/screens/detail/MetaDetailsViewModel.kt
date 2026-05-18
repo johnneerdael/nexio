@@ -9,6 +9,7 @@ import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
@@ -1642,19 +1643,51 @@ class MetaDetailsViewModel @Inject constructor(
         detailDocument: ResolvedDetailDisplayDocument?,
         meta: Meta
     ): ProviderIds {
-        val resolvedIds = detailDocument?.identity?.providerIds
-        if (resolvedIds != null && (!resolvedIds.tmdb.isNullOrBlank() || !resolvedIds.tvdb.isNullOrBlank())) {
-            return resolvedIds
-        }
+        val resolvedIds = detailDocument?.identity?.providerIds ?: ProviderIds()
+        val sourceIds = providerIdsFromEpisodeOrderSourceHints(detailDocument, meta)
+        return resolvedIds.withMissingEpisodeOrderIds(sourceIds)
+    }
+
+    private fun providerIdsFromEpisodeOrderSourceHints(
+        detailDocument: ResolvedDetailDisplayDocument?,
+        meta: Meta
+    ): ProviderIds {
         val metaIds = parseContentIds(meta.id)
         val itemIds = parseContentIds(itemId)
+        val routeIds = detailDocument?.route?.targetIds.orEmpty()
+        val routeParentIds = parseContentIds(detailDocument?.route?.parentId)
         return ProviderIds(
-            imdb = metaIds.imdb ?: itemIds.imdb,
-            tmdb = (metaIds.tmdb ?: itemIds.tmdb)?.toString(),
-            tvdb = (metaIds.tvdb ?: itemIds.tvdb)?.toString(),
-            trakt = (metaIds.trakt ?: itemIds.trakt)?.toString()
+            imdb = routeIds.idFor(MetadataPrimaryProvider.IMDB) ?: metaIds.imdb ?: itemIds.imdb ?: routeParentIds.imdb,
+            tmdb = routeIds.idFor(MetadataPrimaryProvider.TMDB)
+                ?: (metaIds.tmdb ?: itemIds.tmdb ?: routeParentIds.tmdb)?.toString(),
+            tvdb = routeIds.idFor(MetadataPrimaryProvider.TVDB)
+                ?: (metaIds.tvdb ?: itemIds.tvdb ?: routeParentIds.tvdb)?.toString(),
+            trakt = routeIds.idFor(MetadataPrimaryProvider.TRAKT)
+                ?: (metaIds.trakt ?: itemIds.trakt ?: routeParentIds.trakt)?.toString(),
+            simkl = routeIds.idFor(MetadataPrimaryProvider.SIMKL),
+            kitsu = routeIds.idFor(MetadataPrimaryProvider.KITSU)
         )
     }
+
+    private fun Map<MetadataPrimaryProvider, String>.idFor(provider: MetadataPrimaryProvider): String? =
+        this[provider]?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun ProviderIds.withMissingEpisodeOrderIds(fallback: ProviderIds): ProviderIds =
+        copy(
+            imdb = imdb.presentOr(fallback.imdb),
+            tmdb = tmdb.presentOr(fallback.tmdb),
+            tvdb = tvdb.presentOr(fallback.tvdb),
+            trakt = trakt.presentOr(fallback.trakt),
+            simkl = simkl.presentOr(fallback.simkl),
+            kitsu = kitsu.presentOr(fallback.kitsu),
+            slug = slug.presentOr(fallback.slug),
+            mal = mal.presentOr(fallback.mal),
+            anilist = anilist.presentOr(fallback.anilist),
+            anidb = anidb.presentOr(fallback.anidb)
+        )
+
+    private fun String?.presentOr(fallback: String?): String? =
+        this?.trim()?.takeIf { it.isNotEmpty() } ?: fallback?.trim()?.takeIf { it.isNotEmpty() }
 
     private suspend fun resolveTvEpisodeOrder(
         providerIds: ProviderIds,
