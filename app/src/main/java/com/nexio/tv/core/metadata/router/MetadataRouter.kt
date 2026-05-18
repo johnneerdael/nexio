@@ -38,14 +38,7 @@ class MetadataRouter @Inject constructor(
             AnimeIdScheme.ANILIST,
             AnimeIdScheme.ANIDB -> animePrefixMapped(normalized, parsedId, trace)
             AnimeIdScheme.IMDB -> imdbMappedOrFallback(normalized, parsedId, trace)
-            AnimeIdScheme.TMDB -> providerNativeOrConflict(
-                normalized = normalized,
-                parsedId = parsedId,
-                nativeType = ContentType.MOVIE,
-                nativeProvider = MetadataPrimaryProvider.TMDB,
-                conflictFallbackProvider = MetadataPrimaryProvider.TVDB,
-                trace = trace
-            )
+            AnimeIdScheme.TMDB -> tmdbProviderNative(normalized, parsedId, trace)
             AnimeIdScheme.TVDB -> providerNativeOrConflict(
                 normalized = normalized,
                 parsedId = parsedId,
@@ -265,6 +258,30 @@ class MetadataRouter @Inject constructor(
         return fallbackByItemType(normalized, trace)
     }
 
+    private suspend fun tmdbProviderNative(
+        normalized: NormalizedMetadataRequest,
+        parsedId: ParsedMetadataId,
+        trace: MutableList<MetadataRouteTrace>
+    ): MetadataRoute {
+        val mediaKind = when (normalized.contentType) {
+            ContentType.SERIES,
+            ContentType.TV -> MetadataMediaKind.SERIES
+            else -> MetadataMediaKind.MOVIE
+        }
+        trace += MetadataRouteTrace(
+            MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            "Provider-native id ${parsedId.raw} routes to TMDB as $mediaKind for ${normalized.contentType}"
+        )
+        return route(
+            normalized = normalized,
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = mediaKind,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            targetId = normalized.parentId,
+            trace = trace
+        )
+    }
+
     private suspend fun providerNativeOrConflict(
         normalized: NormalizedMetadataRequest,
         parsedId: ParsedMetadataId,
@@ -321,10 +338,10 @@ class MetadataRouter @Inject constructor(
             }
             ContentType.SERIES,
             ContentType.TV -> {
-                trace += MetadataRouteTrace(MetadataDecisionReason.ITEM_TYPE_SERIES, "Series item type routes to TVDB for ${normalized.parentId}")
+                trace += MetadataRouteTrace(MetadataDecisionReason.ITEM_TYPE_SERIES, "Series item type routes to TMDB for ${normalized.parentId}")
                 route(
                     normalized = normalized,
-                    provider = MetadataPrimaryProvider.TVDB,
+                    provider = MetadataPrimaryProvider.TMDB,
                     mediaKind = MetadataMediaKind.SERIES,
                     reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
                     targetId = normalized.parentId,

@@ -8,47 +8,33 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Pins the routing contract that [MetadataRouterFacade.fetchTvEpisodeEnrichment] must NOT
- * default the episode-enrichment season to 1 when both:
- *   - [TvMetadataRequest.seasonNumbers] is empty, and
- *   - [MetadataRequest.seasonNumber] is null.
- *
- * Before the fix (line 648: `?: 1`), the captured route.seasonNumber was always 1.
- * After the fix it must be null.
- *
- * NOTE: This test only pins the routing contract — it captures the [MetadataRoute.seasonNumber]
- * field passed to [ProviderPlanExecutor.buildPlan] and asserts it is null. It does NOT verify
- * that episode data flows through or that KitsuMetadataService returns all episodes; that
- * behaviour is covered by [KitsuMetadataServiceSeasonFilterTest].
- *
- * This test is expected to FAIL before the fix in MetadataRouterFacade.kt and PASS after.
+ * Pins the routing contract that standard TV routes use TMDB's season-episode behavior.
  */
 class MetadataRouterFacadeSeasonDefaultTest {
 
     /**
-     * When both [TvMetadataRequest.seasonNumbers] and [MetadataRequest.seasonNumber] are absent,
-     * [fetchTvEpisodeEnrichment] must pass seasonNumber = null to [ProviderPlanExecutor.buildPlan]
-     * so that the unconstrained Kitsu route is used — NOT the old defaulted value of 1.
+     * TMDB requires a season at SEASON depth. When no caller hint exists for standard TV/SERIES,
+     * the facade defaults the provider plan to season 1.
      */
     @Test
-    fun `fetchTvEpisodeEnrichment must not default seasonNumber to 1 when no season hint is provided`() = runTest {
+    fun `fetchTvEpisodeEnrichment defaults standard tv tmdb episode route to season 1 when no season hint is provided`() = runTest {
         // Capture the route passed to providerPlanExecutor.buildPlan so we can assert on its seasonNumber.
         val capturedRoute = slot<MetadataRoute>()
         val mockPlanExecutor = mockk<ProviderPlanExecutor>()
         coEvery { mockPlanExecutor.buildPlan(capture(capturedRoute), any()) } returns ProviderExecutionPlan(
             route = MetadataRoute(
-                provider = MetadataPrimaryProvider.KITSU,
-                parentId = "kitsu:13881",
-                mediaKind = MetadataMediaKind.ANIME,
-                reason = MetadataDecisionReason.KITSU_PREFIX_DIRECT,
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:71446",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
                 sourceContext = MetadataSourceContext(),
-                targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:13881"),
+                targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:71446"),
                 trace = emptyList(),
-                seasonNumber = null
+                seasonNumber = 1
             ),
             depth = MetadataDepth.SEASON,
             steps = emptyList()
@@ -58,18 +44,18 @@ class MetadataRouterFacadeSeasonDefaultTest {
         val mockPlanRunner = mockk<ProviderPlanRunner>()
         coEvery { mockPlanRunner.run(any()) } returns ProviderPlanRunResult(
             route = MetadataRoute(
-                provider = MetadataPrimaryProvider.KITSU,
-                parentId = "kitsu:13881",
-                mediaKind = MetadataMediaKind.ANIME,
-                reason = MetadataDecisionReason.KITSU_PREFIX_DIRECT,
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:71446",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
                 sourceContext = MetadataSourceContext(),
-                targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:13881"),
+                targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:71446"),
                 trace = emptyList(),
-                seasonNumber = null
+                seasonNumber = 1
             ),
             depth = MetadataDepth.SEASON,
             primaryCandidate = MetadataCandidate(
-                provider = MetadataPrimaryProvider.KITSU,
+                provider = MetadataPrimaryProvider.TMDB,
                 fields = emptyMap()
             ),
             secondaryCandidates = emptyList(),
@@ -77,22 +63,22 @@ class MetadataRouterFacadeSeasonDefaultTest {
             trace = emptyList()
         )
 
-        val kitsuRoute = MetadataRoute(
-            provider = MetadataPrimaryProvider.KITSU,
-            parentId = "kitsu:13881",
-            mediaKind = MetadataMediaKind.ANIME,
-            reason = MetadataDecisionReason.KITSU_PREFIX_DIRECT,
+        val tmdbRoute = MetadataRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = "tmdb:71446",
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
             sourceContext = MetadataSourceContext(),
-            targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:13881"),
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:71446"),
             trace = emptyList(),
             seasonNumber = null
         )
 
         val mockRouter = mockk<MetadataRouter>()
-        coEvery { mockRouter.route(any()) } returns kitsuRoute
+        coEvery { mockRouter.route(any()) } returns tmdbRoute
 
         val mockIdentityResolver = mockk<MetadataIdentityResolver>()
-        coEvery { mockIdentityResolver.resolve(any()) } returns kitsuRoute
+        coEvery { mockIdentityResolver.resolve(any()) } returns tmdbRoute
 
         val facade = MetadataRouterFacade(
             router = mockRouter,
@@ -105,13 +91,13 @@ class MetadataRouterFacadeSeasonDefaultTest {
         )
 
         val metadataRequest = MetadataRequest(
-            contentId = "kitsu:13881",
+            contentId = "tmdb:71446",
             contentType = ContentType.SERIES,
             sourceContext = MetadataSourceContext(),
             seasonNumber = null  // no season hint on the metadata request
         )
         val tvRequest = TvMetadataRequest(
-            contentId = "kitsu:13881",
+            contentId = "tmdb:71446",
             contentType = ContentType.SERIES,
             seasonNumbers = emptyList()  // no season hint on the TV request
         )
@@ -121,13 +107,10 @@ class MetadataRouterFacadeSeasonDefaultTest {
             tvRequest = tvRequest
         )
 
-        // The captured route is the one that was built inside fetchTvEpisodeEnrichment
-        // (from MetadataRequest.copy(seasonNumber = ...)).
-        // Before the fix: capturedRoute.captured.seasonNumber == 1  (WRONG — the bug)
-        // After the fix:  capturedRoute.captured.seasonNumber == null (CORRECT)
-        assertNull(
-            "fetchTvEpisodeEnrichment must not default seasonNumber to 1 when no season hint is provided; " +
-                "got ${capturedRoute.captured.seasonNumber}",
+        assertEquals(
+            "fetchTvEpisodeEnrichment must default standard TV TMDB episode routing to season 1 " +
+                "when no season hint is provided",
+            1,
             capturedRoute.captured.seasonNumber
         )
     }

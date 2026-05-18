@@ -213,6 +213,67 @@ class MetadataRouterFacadeStableIdBundleTest {
         coVerify(exactly = 1) { stableIdBundleResolver.resolve(any()) }
     }
 
+    @Test
+    fun `series stable bundle uses tmdb tv canonical id when preview ids include tmdb`() = runTest {
+        val request = MetadataRequest(
+            contentId = "tmdb:71446",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(
+                previewSourceProvider = ProviderId.TRAKT.name,
+                previewStableIds = ProviderIds(
+                    tmdb = "71446",
+                    tvdb = "81189",
+                    imdb = "tt0903747"
+                ),
+                previewSourceItemId = "trakt-series-42",
+                previewRailSource = "popular-series"
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val traceSink = RecordingTraceSink()
+        val facade = facade(
+            router = MetadataRouter(
+                normalizer = MetadataRequestNormalizer(
+                    traceEvents = TraceMetadataEvents(traceSink) { "s1" }
+                ),
+                animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+                idMappingStore = InMemoryIdMappingStore(),
+                traceEvents = TraceMetadataEvents(traceSink) { "s1" }
+            ),
+            stableIdBundleResolver = StableIdBundleResolver(
+                idMappingStore = InMemoryIdMappingStore(),
+                lookup = object : StableIdBundleResolver.Lookup {
+                    override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+                    override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+                    override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
+                    override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+                    override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+                    override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+                },
+                nowEpochMs = { 123L }
+            ),
+            traceEvents = TraceMetadataEvents(traceSink) { "s1" }
+        )
+
+        val bundle = facade.resolveStableIdBundle(
+            request = request,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            itemKey = "series:tmdb:71446"
+        )
+
+        assertEquals("71446", bundle.canonical.tmdbTvId)
+        assertEquals(null, bundle.canonical.tmdbMovieId)
+        assertEquals(null, bundle.canonical.tvdbSeriesId)
+        assertEquals("81189", bundle.source.observedIds.tvdb)
+        assertEquals("tt0903747", bundle.sidecars.imdbId)
+
+        val routeDecision = traceSink.events.single { it.eventType == "metadata.route_decision" }
+        val routePayload = routeDecision.payload as Map<*, *>
+        assertEquals(MetadataPrimaryProvider.TMDB.name, routePayload["provider"])
+        assertEquals(MetadataMediaKind.SERIES.name, routePayload["mediaKind"])
+        assertEquals(false, routePayload["targetIdRequiresIdentityResolution"])
+    }
+
     private fun facade(
         router: MetadataRouter = mockk(relaxed = true),
         stableIdBundleResolver: StableIdBundleResolver = mockk(relaxed = true),
