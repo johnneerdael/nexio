@@ -8,22 +8,25 @@ import org.junit.Test
 class ProviderPrecedenceCopyTest {
 
     @Test
-    fun `provider precedence summary states tmdb tv default policy`() {
+    fun `visible tmdb settings row states tmdb tv default policy`() {
         val stringsXml = File("app/src/main/res/values/strings.xml").readText()
-        val summary = Regex("""<string name="provider_precedence_summary">([^<]+)</string>""")
+        val settingsScreen = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt")
+            .readText()
+        val subtitle = Regex("""<string name="settings_tmdb_subtitle">([^<]+)</string>""")
             .find(stringsXml)
             ?.groupValues
             ?.get(1)
             .orEmpty()
 
-        assertTrue(summary.contains("TMDB is used for movie and TV metadata"))
-        assertTrue(summary.contains("Kitsu is used for anime"))
+        assertTrue(settingsScreen.contains("subtitle = stringResource(R.string.settings_tmdb_subtitle)"))
+        assertTrue(subtitle.contains("TMDB is used for movie and TV metadata"))
+        assertTrue(subtitle.contains("Kitsu is used for anime"))
         assertTrue(
-            summary.contains(
+            subtitle.contains(
                 "TheTVDB season numbering can be enabled per show when streams follow TVDB order"
             )
         )
-        assertFalse(summary.contains("TVDB is used for TV metadata"))
-        assertFalse(summary.contains("fallback metadata"))
+        assertFalse(subtitle.contains("TVDB is used for TV metadata"))
+        assertFalse(subtitle.contains("fallback metadata"))
     }
 }

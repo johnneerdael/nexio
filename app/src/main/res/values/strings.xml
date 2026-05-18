@@ -160,7 +160,7 @@
     <string name="account_stat_addons">addons</string>
     <string name="settings_integrations_section">Integrations</string>
     <string name="settings_integrations_section_subtitle">Configure metadata, TheTVDB season numbering, and poster artwork providers</string>
-    <string name="settings_tmdb_subtitle">Default movie and TV metadata</string>
+    <string name="settings_tmdb_subtitle">TMDB is used for movie and TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
     <string name="settings_tvdb_subtitle">TheTVDB season numbering and crosswalks for show-level stream order overrides</string>
     <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
