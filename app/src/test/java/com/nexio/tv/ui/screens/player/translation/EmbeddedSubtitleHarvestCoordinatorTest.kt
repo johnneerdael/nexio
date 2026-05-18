@@ -243,6 +243,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
 
         override fun sessionStarted(
             session: TranslationTimelineSessionKey,
+            container: EmbeddedSubtitleContainer?,
             streamUrl: String,
             track: TrackInfo?
         ) = Unit

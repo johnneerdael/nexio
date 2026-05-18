@@ -14,6 +14,7 @@ internal interface EmbeddedSubtitleHarvestDiagnosticsLogger {
 
     fun sessionStarted(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         streamUrl: String,
         track: TrackInfo?
     )
@@ -72,19 +73,22 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
 
     override fun sessionStarted(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         streamUrl: String,
         track: TrackInfo?
     ) {
-        log(sessionStartedLine(session, streamUrl, track))
+        log(sessionStartedLine(session, container, streamUrl, track))
     }
 
     fun sessionStartedLine(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         streamUrl: String,
         track: TrackInfo?
     ): String {
         return "$PREFIX event=session_started session=${field(session.streamKey)} " +
-            "translationMode=$TIMELINE_MODE streamHost=${field(hostFor(streamUrl))} " +
+            "container=${containerField(container)} translationMode=$TIMELINE_MODE " +
+            "streamHost=${field(hostFor(streamUrl))} " +
             "trackIndex=${track?.index ?: -1} trackId=${field(track?.trackId)} " +
             "mime=${field(track?.mimeType)} language=${field(track?.language)} " +
             "trackName=${field(track?.name)}"
@@ -108,13 +112,21 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
             "reason=${field(reason)}"
     }
 
-    fun harvestFailed(session: TranslationTimelineSessionKey, reason: String) {
-        log(harvestFailedLine(session, reason))
+    fun harvestFailed(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
+        reason: String
+    ) {
+        log(harvestFailedLine(session, container, reason))
     }
 
-    fun harvestFailedLine(session: TranslationTimelineSessionKey, reason: String): String {
+    fun harvestFailedLine(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
+        reason: String
+    ): String {
         return "$PREFIX event=harvest_failed session=${field(session.streamKey)} " +
-            "reason=${field(reason)}"
+            "container=${containerField(container)} reason=${field(reason)}"
     }
 
     override fun harvestCompleted(

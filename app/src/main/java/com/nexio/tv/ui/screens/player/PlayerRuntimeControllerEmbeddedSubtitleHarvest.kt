@@ -88,6 +88,7 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
         } catch (error: Throwable) {
             EmbeddedSubtitleHarvestDiagnostics.harvestFailed(
                 session = sessionKey,
+                container = state.container,
                 reason = error.message?.takeIf(String::isNotBlank)
                     ?: error::class.java.simpleName
             )

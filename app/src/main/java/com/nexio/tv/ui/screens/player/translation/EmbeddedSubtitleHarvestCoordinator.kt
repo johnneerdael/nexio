@@ -113,6 +113,7 @@ internal class EmbeddedSubtitleHarvestCoordinator(
         lastUnsupportedReason = null
         diagnostics.sessionStarted(
             session = sessionKey,
+            container = state.container,
             streamUrl = state.streamUrl,
             track = state.selectedTrack
         )

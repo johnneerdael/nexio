@@ -14,6 +14,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     fun sessionStartedProofLineIncludesTrackAndModeFields() {
         val line = EmbeddedSubtitleHarvestDiagnostics.sessionStartedLine(
             session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
             streamUrl = "https://real-debrid.example.test/movie.mkv?token=secret",
             track = TrackInfo(
                 index = 3,
@@ -27,6 +28,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
         assertTrue(line.startsWith("EMBEDDED_SUB_TIMELINE "))
         assertTrue(line.contains("event=session_started"))
         assertTrue(line.contains("session=stream-key"))
+        assertTrue(line.contains("container=mp4"))
         assertTrue(line.contains("translationMode=embedded_text_timeline"))
         assertTrue(line.contains("streamHost=real-debrid.example.test"))
         assertTrue(line.contains("trackIndex=3"))
@@ -106,12 +108,13 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     fun harvestFailedProofLineIncludesSessionAndReason() {
         val line = EmbeddedSubtitleHarvestDiagnostics.harvestFailedLine(
             session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
             reason = "network_failed"
         )
 
         assertEquals(
             "EMBEDDED_SUB_TIMELINE event=harvest_failed " +
-                "session=stream-key reason=network_failed",
+                "session=stream-key container=mp4 reason=network_failed",
             line
         )
     }
