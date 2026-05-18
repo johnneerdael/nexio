@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.MimeTypes
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleContainer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -19,21 +20,58 @@ class PlayerRuntimeControllerEmbeddedSubtitleHarvestTest {
             0,
             selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
-                selectedTrack = tracks[1]
+                selectedTrack = tracks[1],
+                container = EmbeddedSubtitleContainer.MP4
             )
         )
         assertEquals(
             1,
             selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
-                selectedTrack = tracks[2]
+                selectedTrack = tracks[2],
+                container = EmbeddedSubtitleContainer.MP4
             )
         )
         assertEquals(
             2,
             selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
-                selectedTrack = tracks[3]
+                selectedTrack = tracks[3],
+                container = EmbeddedSubtitleContainer.MP4
+            )
+        )
+    }
+
+    @Test
+    fun matroskaOrdinalCountsOnlySubRipTracks() {
+        val tracks = listOf(
+            track(index = 0, mimeType = MimeTypes.TEXT_VTT),
+            track(index = 1, mimeType = MimeTypes.APPLICATION_SUBRIP),
+            track(index = 2, mimeType = MimeTypes.APPLICATION_TTML),
+            track(index = 3, mimeType = MimeTypes.APPLICATION_SUBRIP)
+        )
+
+        assertNull(
+            selectedTextOrdinalForHarvest(
+                subtitleTracks = tracks,
+                selectedTrack = tracks[0],
+                container = EmbeddedSubtitleContainer.MATROSKA
+            )
+        )
+        assertEquals(
+            0,
+            selectedTextOrdinalForHarvest(
+                subtitleTracks = tracks,
+                selectedTrack = tracks[1],
+                container = EmbeddedSubtitleContainer.MATROSKA
+            )
+        )
+        assertEquals(
+            1,
+            selectedTextOrdinalForHarvest(
+                subtitleTracks = tracks,
+                selectedTrack = tracks[3],
+                container = EmbeddedSubtitleContainer.MATROSKA
             )
         )
     }
@@ -48,7 +86,8 @@ class PlayerRuntimeControllerEmbeddedSubtitleHarvestTest {
         assertNull(
             selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
-                selectedTrack = tracks[0]
+                selectedTrack = tracks[0],
+                container = EmbeddedSubtitleContainer.MP4
             )
         )
     }
@@ -62,7 +101,8 @@ class PlayerRuntimeControllerEmbeddedSubtitleHarvestTest {
         assertNull(
             selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
-                selectedTrack = null
+                selectedTrack = null,
+                container = EmbeddedSubtitleContainer.MP4
             )
         )
     }

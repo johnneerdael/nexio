@@ -34,7 +34,11 @@ internal fun PlayerRuntimeController.updateEmbeddedSubtitleHarvest() {
             selectedTrack = selectedTrack,
             selectedSupportedTextOrdinal = selectedTextOrdinalForHarvest(
                 subtitleTracks = state.subtitleTracks,
-                selectedTrack = selectedTrack
+                selectedTrack = selectedTrack,
+                container = EmbeddedSubtitleHarvestEligibility.containerFor(
+                    streamUrl = currentStreamUrl,
+                    filename = currentFilename
+                )
             ),
             selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null,
             autoTranslateEnabled = state.aiSubtitlesEnabled,
@@ -123,19 +127,31 @@ private class HarvestDiscardingExtractorOutput : ExtractorOutput {
 
 internal fun selectedTextOrdinalForHarvest(
     subtitleTracks: List<TrackInfo>,
-    selectedTrack: TrackInfo?
+    selectedTrack: TrackInfo?,
+    container: EmbeddedSubtitleContainer? = null
 ): Int? {
     selectedTrack ?: return null
-    if (!EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(selectedTrack)) return null
+    if (!isSupportedTextTrackForContainer(selectedTrack, container)) return null
 
     var supportedOrdinal = 0
     for (index in subtitleTracks.indices) {
         val track = subtitleTracks[index]
-        if (!EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(track)) continue
+        if (!isSupportedTextTrackForContainer(track, container)) continue
         if (track == selectedTrack || track.index == selectedTrack.index) {
             return supportedOrdinal
         }
         supportedOrdinal += 1
     }
     return null
+}
+
+private fun isSupportedTextTrackForContainer(
+    track: TrackInfo,
+    container: EmbeddedSubtitleContainer?
+): Boolean {
+    return when (container) {
+        EmbeddedSubtitleContainer.MATROSKA -> EmbeddedSubtitleHarvestEligibility.isSubRip(track)
+        EmbeddedSubtitleContainer.MP4,
+        null -> EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(track)
+    }
 }
