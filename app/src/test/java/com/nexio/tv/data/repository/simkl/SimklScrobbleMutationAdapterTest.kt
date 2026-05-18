@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository.simkl
 
 import com.nexio.tv.data.repository.testSimklSession
+import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleResponseDto
 import com.nexio.tv.data.repository.SimklProgressService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
@@ -165,6 +166,55 @@ class SimklScrobbleMutationAdapterTest {
         assertEquals(5045L, payload.get("showSimkl").asLong)
         assertEquals(5, payload.get("season").asInt)
         assertEquals(14, payload.get("number").asInt)
+    }
+
+    @Test
+    fun `episode scrobble request preserves hydrated show tvdb id in outbound body`() = kotlinx.coroutines.test.runTest {
+        val remote = mockk<SimklTrackingRemoteDataSource>()
+        val progressService = mockk<SimklProgressService>(relaxed = true)
+        val adapter = SimklScrobbleMutationAdapter(
+            remote = remote,
+            simklProgressService = progressService,
+            watchingNowStateController = TraktWatchingNowStateController()
+        )
+        val envelope = SimklScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TrackingScrobbleItem.Episode(
+                contentId = "tmdb:1396",
+                showTitle = "Breaking Bad",
+                showYear = 2008,
+                season = 5,
+                number = 14,
+                episodeTitle = "Ozymandias",
+                hydratedIds = ProviderIds(
+                    imdb = "tt0903747",
+                    tmdb = "1396",
+                    tvdb = "81189",
+                    simkl = "5045"
+                ),
+            ),
+            action = "start",
+            progressPercent = 10f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testSimklSession(profileId = 2)
+        )
+        val scrobbleBodies = mutableListOf<SimklScrobbleRequestDto>()
+
+        coEvery {
+            remote.scrobbleStart(capture(scrobbleBodies), any())
+        } returns Response.success(SimklScrobbleResponseDto(action = "start"))
+
+        val result = adapter.execute(envelope)
+
+        assertTrue(result is TraktMutationExecutionResult.Success)
+        val body = scrobbleBodies.single()
+        val showIds = body.show?.ids
+        assertEquals(5045L, showIds?.simkl)
+        assertEquals("tt0903747", showIds?.imdb)
+        assertEquals("1396", showIds?.tmdb)
+        assertEquals("81189", showIds?.tvdb)
+        assertEquals(5, body.episode?.season)
+        assertEquals(14, body.episode?.number)
     }
 
     @Test
