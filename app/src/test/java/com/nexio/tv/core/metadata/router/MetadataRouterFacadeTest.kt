@@ -11,6 +11,7 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -471,25 +472,23 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
-    fun `provider-native conflict fails before provider plan execution when identity is unresolved`() = runTest {
-        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+    fun `tmdb series native id executes tmdb tv plan without identity conflict`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)
 
-        val error = try {
-            facade(adapter).resolveRequest(
-                MetadataRequest(
-                    contentId = "tmdb:1399",
-                    contentType = ContentType.SERIES,
-                    sourceContext = MetadataSourceContext(),
-                    depth = MetadataDepth.DETAIL_CORE
-                )
+        val result = facade(adapter).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                depth = MetadataDepth.DETAIL_CORE
             )
-            null
-        } catch (exception: MetadataRouteFailure.IdentityResolutionFailed) {
-            exception
-        }
+        )
 
-        assertTrue("Expected unresolved identity route to be rejected", error != null)
-        assertEquals(0, adapter.calls)
+        assertEquals(MetadataPrimaryProvider.TMDB, result.route?.provider)
+        assertEquals("tmdb:1399", result.route?.targetIds?.get(MetadataPrimaryProvider.TMDB))
+        assertEquals(false, result.route?.targetIdRequiresIdentityResolution)
+        assertTrue(adapter.apiShapeIds.contains(TmdbApiShapes.TV_CORE))
+        assertEquals("Runtime title", result.resolvedDocument.title)
     }
 
     @Test
@@ -538,7 +537,7 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
-    fun `episode enrichment retries fallback id when primary route returns no episodes`() = runTest {
+    fun `episode enrichment skips unresolved primary and retries fallback id`() = runTest {
         val adapter = RecordingMetadataProviderAdapter(
             provider = MetadataPrimaryProvider.TVDB,
             emptyEpisodeParentIds = setOf("addon-series-id")
@@ -563,7 +562,7 @@ class MetadataRouterFacadeTest {
         assertEquals(TvProvider.TVDB, result.provider)
         assertEquals("Runtime episode", result.value?.get(1 to 1)?.title)
         assertEquals(
-            listOf("addon-series-id", "tvdb:1399"),
+            listOf("tvdb:1399"),
             adapter.executedRoutes
                 .filter { route -> route.seasonNumber == 1 }
                 .map { route -> route.parentId }
@@ -677,34 +676,35 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
-    fun `top posters episode thumbnail missing supported id falls back to primary with rejection trace`() = runTest {
+    fun `raw addon episode enrichment without native tmdb target fails before execution`() = runTest {
         val cache = InMemoryArtworkDecisionCache()
-        val result = facade(
-            RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB),
-            posterResolver = posterResolver(topPostersThumbnailSettings(), cache)
-        ).fetchTvEpisodeEnrichment(
-            metadataRequest = MetadataRequest(
-                contentId = "addon-series-id",
-                contentType = ContentType.SERIES,
-                sourceContext = MetadataSourceContext(),
-                seasonNumber = 1,
-                depth = MetadataDepth.SEASON
-            ),
-            tvRequest = TvMetadataRequest(
-                contentId = "addon-series-id",
-                contentType = ContentType.SERIES,
-                seasonNumbers = listOf(1)
-            )
-        )
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
 
-        val episode = result.value?.get(1 to 1)
-        val artwork = episode?.thumbnailArtwork as? ArtworkDisplayRef.RuntimeAsset
-        assertNotNull(artwork)
-        artwork!!
-        assertEquals("primaryThumbnail", episode.thumbnail)
-        assertEquals("TVDB", artwork.selectedProvider?.key)
-        assertEquals(ArtworkSourceRole.PRIMARY, artwork.sourceRole)
-        assertEquals("missing_supported_provider_id", artwork.trace.rejectedCandidates.single().reason)
+        val error = try {
+            facade(
+                adapter,
+                posterResolver = posterResolver(topPostersThumbnailSettings(), cache)
+            ).fetchTvEpisodeEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = "addon-series-id",
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(),
+                    seasonNumber = 1,
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = "addon-series-id",
+                    contentType = ContentType.SERIES,
+                    seasonNumbers = listOf(1)
+                )
+            )
+            null
+        } catch (exception: MetadataRouteFailure.IdentityResolutionFailed) {
+            exception
+        }
+
+        assertTrue(error?.message?.contains("addon-series-id") == true)
+        assertEquals(0, adapter.calls)
     }
 
     private fun facade(

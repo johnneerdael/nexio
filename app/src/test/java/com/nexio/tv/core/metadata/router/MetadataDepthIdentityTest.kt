@@ -63,8 +63,8 @@ class MetadataDepthIdentityTest {
     }
 
     @Test
-    fun `identity facade request returns unresolved route with empty plan`() = runTest {
-        val adapter = RecordingProviderAdapter(MetadataPrimaryProvider.TVDB)
+    fun `identity facade request returns tmdb tv route with empty plan`() = runTest {
+        val adapter = RecordingProviderAdapter(MetadataPrimaryProvider.TMDB)
         val facade = MetadataRouterFacade(
             router = router(),
             providerPlanExecutor = ProviderPlanExecutor(),
@@ -88,9 +88,10 @@ class MetadataDepthIdentityTest {
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, result.route?.provider)
         assertEquals("tmdb:393268", result.route?.parentId)
-        assertTrue(result.route?.targetIdRequiresIdentityResolution == true)
+        assertEquals("tmdb:393268", result.route?.targetIds?.get(MetadataPrimaryProvider.TMDB))
+        assertEquals(false, result.route?.targetIdRequiresIdentityResolution)
         assertEquals(MetadataDepth.IDENTITY, result.plan?.depth)
         assertTrue(result.plan?.steps.orEmpty().isEmpty())
         assertTrue(result.providerRunResult?.stepResults.orEmpty().isEmpty())
