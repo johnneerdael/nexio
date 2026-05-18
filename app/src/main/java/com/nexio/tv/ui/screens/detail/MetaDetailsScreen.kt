@@ -232,7 +232,17 @@ internal fun shouldShowDetailTrailerButton(
 
 internal data class DetailTvEpisodeOrderToggleAction(
     val labelRes: Int,
-    val enabledMessageRes: Int,
+    val enabled: Boolean
+)
+
+internal enum class DetailActionKind {
+    MANAGE_LISTS,
+    TV_EPISODE_ORDER
+}
+
+internal data class DetailActionItem(
+    val kind: DetailActionKind,
+    val labelRes: Int,
     val enabled: Boolean
 )
 
@@ -249,13 +259,32 @@ internal fun resolveTvEpisodeOrderToggleAction(
         } else {
             R.string.detail_use_tmdb_season_numbering
         },
-        enabledMessageRes = if (targetIsTvdb) {
-            R.string.detail_tvdb_numbering_enabled
-        } else {
-            R.string.detail_tmdb_numbering_enabled
-        },
         enabled = !togglePending
     )
+}
+
+internal fun resolveGlobalDetailActions(
+    tvEpisodeOrderToggleAction: DetailTvEpisodeOrderToggleAction?,
+    canManageLists: Boolean
+): List<DetailActionItem> = buildList {
+    if (canManageLists) {
+        add(
+            DetailActionItem(
+                kind = DetailActionKind.MANAGE_LISTS,
+                labelRes = R.string.detail_lists_fallback,
+                enabled = true
+            )
+        )
+    }
+    if (tvEpisodeOrderToggleAction != null) {
+        add(
+            DetailActionItem(
+                kind = DetailActionKind.TV_EPISODE_ORDER,
+                labelRes = tvEpisodeOrderToggleAction.labelRes,
+                enabled = tvEpisodeOrderToggleAction.enabled
+            )
+        )
+    }
 }
 
 internal fun shouldShowDetailScrollableContent(
@@ -338,6 +367,18 @@ fun MetaDetailsScreen(
     var officialAppChooserTargets by remember { mutableStateOf<List<OfficialStreamingAppTarget>>(emptyList()) }
     var pendingOfficialAppTitle by remember { mutableStateOf<String?>(null) }
     var showNoOfficialAppDialog by remember { mutableStateOf(false) }
+    var showDetailActionsDialog by remember { mutableStateOf(false) }
+    val canManageLists = uiState.librarySourceMode == LibrarySourceMode.TRAKT ||
+        uiState.librarySourceMode == LibrarySourceMode.SIMKL
+    val tvEpisodeOrderToggleAction = resolveTvEpisodeOrderToggleAction(
+        toggleAvailable = uiState.tvEpisodeOrderToggleAvailable,
+        provider = uiState.tvEpisodeOrderProvider,
+        togglePending = uiState.tvEpisodeOrderTogglePending
+    )
+    val globalDetailActions = resolveGlobalDetailActions(
+        tvEpisodeOrderToggleAction = tvEpisodeOrderToggleAction,
+        canManageLists = canManageLists
+    )
 
     LaunchedEffect(activity) {
         if (activity != null) {
@@ -641,7 +682,6 @@ fun MetaDetailsScreen(
                         manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
                         episodesForSeason = uiState.episodesForSeason,
                         isInLibrary = uiState.isInLibrary,
-                        librarySourceMode = uiState.librarySourceMode,
                         nextToWatch = uiState.nextToWatch,
                         episodeProgressMap = uiState.episodeProgressMap,
                         watchedEpisodes = uiState.watchedEpisodes,
@@ -760,7 +800,13 @@ fun MetaDetailsScreen(
                         },
                         onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                         onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
-                        onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
+                        onLibraryLongPress = {
+                            if (tvEpisodeOrderToggleAction != null) {
+                                showDetailActionsDialog = true
+                            } else if (canManageLists) {
+                                viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress)
+                            }
+                        },
                         onToggleEpisodeWatched = { video ->
                             viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
                         },
@@ -864,19 +910,31 @@ fun MetaDetailsScreen(
                 membership = uiState.pickerMembership,
                 isPending = uiState.pickerPending,
                 error = uiState.pickerError,
-                tvEpisodeOrderToggleAction = resolveTvEpisodeOrderToggleAction(
-                    toggleAvailable = uiState.tvEpisodeOrderToggleAvailable,
-                    provider = uiState.tvEpisodeOrderProvider,
-                    togglePending = uiState.tvEpisodeOrderTogglePending
-                ),
                 onToggle = { key ->
                     viewModel.onEvent(MetaDetailsEvent.OnPickerMembershipToggled(key))
                 },
-                onToggleTvEpisodeOrderProvider = {
-                    viewModel.onEvent(MetaDetailsEvent.OnToggleTvEpisodeOrderProvider)
-                },
                 onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
                 onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
+            )
+        }
+
+        if (showDetailActionsDialog && globalDetailActions.isNotEmpty()) {
+            DetailActionsDialog(
+                title = uiState.meta?.name ?: stringResource(R.string.detail_lists_fallback),
+                actions = globalDetailActions,
+                onAction = { action ->
+                    when (action.kind) {
+                        DetailActionKind.MANAGE_LISTS -> {
+                            showDetailActionsDialog = false
+                            viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress)
+                        }
+                        DetailActionKind.TV_EPISODE_ORDER -> {
+                            showDetailActionsDialog = false
+                            viewModel.onEvent(MetaDetailsEvent.OnToggleTvEpisodeOrderProvider)
+                        }
+                    }
+                },
+                onDismiss = { showDetailActionsDialog = false }
             )
         }
 
@@ -1035,7 +1093,6 @@ private fun MetaDetailsContent(
     manualSeasonOverrideActive: Boolean,
     episodesForSeason: List<Video>,
     isInLibrary: Boolean,
-    librarySourceMode: LibrarySourceMode,
     nextToWatch: NextToWatch?,
     episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
     watchedEpisodes: Set<Pair<Int, Int>>,
@@ -1839,11 +1896,7 @@ private fun MetaDetailsContent(
                 onPlayClick = heroPlayClick,
                 isInLibrary = isInLibrary,
                 onToggleLibrary = onToggleLibrary,
-                onLibraryLongPress = {
-                    if (librarySourceMode == LibrarySourceMode.TRAKT || librarySourceMode == LibrarySourceMode.SIMKL) {
-                        onLibraryLongPress()
-                    }
-                },
+                onLibraryLongPress = onLibraryLongPress,
                 mdbListRatings = mdbListRatings,
                 hideMetaInfoImdb = showMdbListImdb,
                 trailerAvailable = shouldShowDetailTrailerButton(
@@ -2505,9 +2558,7 @@ private fun LibraryListPickerDialog(
     membership: Map<String, Boolean>,
     isPending: Boolean,
     error: String?,
-    tvEpisodeOrderToggleAction: DetailTvEpisodeOrderToggleAction?,
     onToggle: (String) -> Unit,
-    onToggleTvEpisodeOrderProvider: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2564,30 +2615,6 @@ private fun LibraryListPickerDialog(
             }
         }
 
-        if (tvEpisodeOrderToggleAction != null) {
-            Button(
-                onClick = onToggleTvEpisodeOrderProvider,
-                enabled = tvEpisodeOrderToggleAction.enabled,
-                modifier = if (tabs.isEmpty()) {
-                    Modifier
-                        .fillMaxWidth()
-                        .focusRequester(primaryFocusRequester)
-                } else {
-                    Modifier.fillMaxWidth()
-                },
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                Text(
-                    text = stringResource(tvEpisodeOrderToggleAction.labelRes),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
         HorizontalDivider(color = NexioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
@@ -2600,6 +2627,56 @@ private fun LibraryListPickerDialog(
                 )
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun DetailActionsDialog(
+    title: String,
+    actions: List<DetailActionItem>,
+    onAction: (DetailActionItem) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        width = 500.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            actions.forEachIndexed { index, action ->
+                Button(
+                    onClick = { onAction(action) },
+                    enabled = action.enabled,
+                    modifier = if (index == 0) {
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(primaryFocusRequester)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = stringResource(action.labelRes),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

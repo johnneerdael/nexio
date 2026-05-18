@@ -77,6 +77,23 @@ class MetaDetailsScreenRuntimeTest {
     }
 
     @Test
+    fun `tv episode order action is in global detail actions without list picker provider path`() {
+        val actions = resolveGlobalDetailActions(
+            tvEpisodeOrderToggleAction = resolveTvEpisodeOrderToggleAction(
+                toggleAvailable = true,
+                provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+                togglePending = false
+            ),
+            canManageLists = false
+        )
+
+        assertEquals(1, actions.size)
+        assertEquals(DetailActionKind.TV_EPISODE_ORDER, actions.single().kind)
+        assertEquals(R.string.detail_use_tvdb_season_numbering, actions.single().labelRes)
+        assertTrue(actions.single().enabled)
+    }
+
+    @Test
     fun `tv episode order strings exist and old metadata provider copy is absent`() {
         val stringsXml = Paths.get("app/src/main/res/values/strings.xml").toFile().readText()
 
