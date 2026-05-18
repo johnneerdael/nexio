@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.data.trailer.YouTubeCaptionTrack
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.TrailerDisplayState
 
@@ -27,6 +28,9 @@ data class MetaDetailsUiState(
     val error: String? = null,
     val selectedSeason: Int = 1,
     val manualSeasonOverrideActive: Boolean = false,
+    val tvEpisodeOrderProvider: TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+    val tvEpisodeOrderToggleAvailable: Boolean = false,
+    val tvEpisodeOrderTogglePending: Boolean = false,
     val seasons: List<Int> = emptyList(),
     val episodesForSeason: List<Video> = emptyList(),
     val isInLibrary: Boolean = false,
@@ -111,6 +115,7 @@ sealed class MetaDetailsEvent {
     data object OnLifecyclePause : MetaDetailsEvent()
     data object OnExternalTrailerConsumed : MetaDetailsEvent()
     data object OnToggleMovieWatched : MetaDetailsEvent()
+    data object OnToggleTvEpisodeOrderProvider : MetaDetailsEvent()
     data class OnToggleEpisodeWatched(val video: Video) : MetaDetailsEvent()
     data class OnClearEpisodeProgress(val video: Video) : MetaDetailsEvent()
     data class OnCheckInEpisode(val video: Video) : MetaDetailsEvent()

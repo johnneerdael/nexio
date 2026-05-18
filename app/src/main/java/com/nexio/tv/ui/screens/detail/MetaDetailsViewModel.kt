@@ -42,6 +42,11 @@ import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.data.repository.AirDateGate
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.TvEpisodeOrderResolution
+import com.nexio.tv.data.repository.TvEpisodeOrderResolver
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.ContentType
@@ -56,6 +61,7 @@ import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.TmdbSettings
@@ -105,6 +111,31 @@ private fun debugLog(tag: String, message: String) {
 }
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
 private const val KITSU_REVIEWS_PAGE_SIZE = 20
+
+private object DefaultDetailTvEpisodeOrderResolver : TvEpisodeOrderResolver {
+    override suspend fun resolve(
+        tmdbTvId: String?,
+        providerIds: ProviderIds
+    ): TvEpisodeOrderResolution {
+        val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty()
+        return TvEpisodeOrderResolution(
+            provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+            tmdbTvId = key,
+            tvdbSeriesId = providerIds.tvdb,
+            reason = "detail default"
+        )
+    }
+}
+
+private object DefaultDetailTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+    override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
+
+    override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) = Unit
+
+    override suspend fun clearOrder(tmdbTvId: String) = Unit
+
+    override suspend fun hasOverride(tmdbTvId: String): Boolean = false
+}
 
 internal fun formatTvdbDetailLocalReleaseInfo(
     enrichment: TvMetadataEnrichment,
@@ -168,8 +199,32 @@ private data class DetailMetadataEnrichment(
     val tvdbLanguage: String,
     val tmdbContentType: ContentType,
     val isTvContent: Boolean,
-    val settings: TmdbSettings
+    val settings: TmdbSettings,
+    val tvEpisodeOrder: DetailTvEpisodeOrder = DetailTvEpisodeOrder()
 )
+
+private data class DetailTvEpisodeOrder(
+    val provider: TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+    val toggleAvailable: Boolean = false,
+    val tmdbTvOrderKey: String? = null,
+    val tvdbSeriesId: String? = null
+)
+
+private fun DetailTvEpisodeOrder.episodeRequestContentId(defaultContentId: String): String {
+    if (provider != TvEpisodeOrderProvider.TVDB_DEFAULT) return defaultContentId
+    val cleanTvdbId = tvdbSeriesId?.trim()
+        ?.removePrefix("tvdb:")
+        ?.takeIf { it.isNotEmpty() }
+        ?: return defaultContentId
+    return "tvdb:$cleanTvdbId"
+}
+
+private fun DetailTvEpisodeOrder.uiProvider(): TvEpisodeOrderProvider =
+    if (provider == TvEpisodeOrderProvider.TVDB_DEFAULT && !tvdbSeriesId.isNullOrBlank()) {
+        TvEpisodeOrderProvider.TVDB_DEFAULT
+    } else {
+        TvEpisodeOrderProvider.TMDB_DEFAULT
+    }
 
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
@@ -192,6 +247,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val animeSeasonDetailRepository: AnimeSeasonDetailRepository,
     private val resolvedDisplaySurfaceRepository: com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository,
+    private val tvEpisodeOrderResolver: TvEpisodeOrderResolver = DefaultDetailTvEpisodeOrderResolver,
+    private val tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = DefaultDetailTvEpisodeOrderOverrideRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -396,6 +453,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
             MetaDetailsEvent.OnExternalTrailerConsumed -> consumePendingExternalTrailer()
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
+            MetaDetailsEvent.OnToggleTvEpisodeOrderProvider -> toggleTvEpisodeOrderProvider()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
             is MetaDetailsEvent.OnClearEpisodeProgress -> clearEpisodeProgress(event.video)
             is MetaDetailsEvent.OnCheckInEpisode -> checkInEpisode(event.video)
@@ -619,7 +677,10 @@ class MetaDetailsViewModel @Inject constructor(
                     collectionName = null,
                     resolvedDetail = null,
                     localizationFallbackReason = null,
-                    trailerState = TrailerDisplayState()
+                    trailerState = TrailerDisplayState(),
+                    tvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+                    tvEpisodeOrderToggleAvailable = false,
+                    tvEpisodeOrderTogglePending = false
                 )
             }
             trailerHasPlayed = false
@@ -1013,7 +1074,8 @@ class MetaDetailsViewModel @Inject constructor(
                         tmdbContentType = enrichment.tmdbContentType,
                         tvdbLanguage = enrichment.tvdbLanguage,
                         settings = enrichment.settings,
-                        isTvContent = enrichment.isTvContent
+                        isTvContent = enrichment.isTvContent,
+                        episodeOrder = enrichment.tvEpisodeOrder
                     )
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -1042,6 +1104,7 @@ class MetaDetailsViewModel @Inject constructor(
         enrichment.resolvedDetail?.let(::applyResolvedDetailState)
         applyMeta(enrichment.meta)
         applyRatingDisplay(enrichment.meta.id, enrichment.ratingDisplay)
+        applyTvEpisodeOrderState(enrichment.tvEpisodeOrder)
         if (preferredSeason != null) {
             _uiState.update { state ->
                 if (preferredSeason !in state.seasons || state.selectedSeason == preferredSeason) {
@@ -1108,7 +1171,8 @@ class MetaDetailsViewModel @Inject constructor(
                     tmdbContentType = enrichment.tmdbContentType,
                     tvdbLanguage = enrichment.tvdbLanguage,
                     settings = enrichment.settings,
-                    isTvContent = enrichment.isTvContent
+                    isTvContent = enrichment.isTvContent,
+                    episodeOrder = enrichment.tvEpisodeOrder
                 )
 
                 _uiState.update { state ->
@@ -1535,6 +1599,12 @@ class MetaDetailsViewModel @Inject constructor(
         var updated = detailDocument?.let { meta.applyResolvedDetail(it, settings) } ?: meta
         val tvEnrichment = detailDocument?.toTvMetadataEnrichment()
         val isKitsuAnimeByProvider = detailDocument?.route?.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU
+        val providerIds = providerIdsForEpisodeOrder(detailDocument, meta)
+        val tvEpisodeOrder = resolveTvEpisodeOrder(
+            providerIds = providerIds,
+            isTvContent = isTvContent,
+            isAnimeDetail = isKitsuAnimeByProvider
+        )
         val animeRelated = if (isKitsuAnimeByProvider) {
             detailDocument.recommendations
         } else {
@@ -1549,7 +1619,8 @@ class MetaDetailsViewModel @Inject constructor(
                 tmdbContentType = tmdbContentType,
                 tvdbLanguage = tvdbLanguage,
                 settings = settings,
-                isTvContent = isTvContent
+                isTvContent = isTvContent,
+                episodeOrder = tvEpisodeOrder
             )
         }
         return DetailMetadataEnrichment(
@@ -1562,8 +1633,133 @@ class MetaDetailsViewModel @Inject constructor(
             tvdbLanguage = tvdbLanguage,
             tmdbContentType = tmdbContentType,
             isTvContent = isTvContent,
-            settings = settings
+            settings = settings,
+            tvEpisodeOrder = tvEpisodeOrder
         )
+    }
+
+    private fun providerIdsForEpisodeOrder(
+        detailDocument: ResolvedDetailDisplayDocument?,
+        meta: Meta
+    ): ProviderIds {
+        val resolvedIds = detailDocument?.identity?.providerIds
+        if (resolvedIds != null && (!resolvedIds.tmdb.isNullOrBlank() || !resolvedIds.tvdb.isNullOrBlank())) {
+            return resolvedIds
+        }
+        val metaIds = parseContentIds(meta.id)
+        val itemIds = parseContentIds(itemId)
+        return ProviderIds(
+            imdb = metaIds.imdb ?: itemIds.imdb,
+            tmdb = (metaIds.tmdb ?: itemIds.tmdb)?.toString(),
+            tvdb = (metaIds.tvdb ?: itemIds.tvdb)?.toString(),
+            trakt = (metaIds.trakt ?: itemIds.trakt)?.toString()
+        )
+    }
+
+    private suspend fun resolveTvEpisodeOrder(
+        providerIds: ProviderIds,
+        isTvContent: Boolean,
+        isAnimeDetail: Boolean
+    ): DetailTvEpisodeOrder {
+        if (!isTvContent || isAnimeDetail) return DetailTvEpisodeOrder()
+        val tmdbTvId = providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return DetailTvEpisodeOrder()
+        val tvdbSeriesId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() }
+        val resolution = try {
+            tvEpisodeOrderResolver.resolve(tmdbTvId = tmdbTvId, providerIds = providerIds)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to resolve detail TV episode order for tmdb=$tmdbTvId: ${error.message}", error)
+            TvEpisodeOrderResolution(
+                provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+                tmdbTvId = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty(),
+                tvdbSeriesId = tvdbSeriesId,
+                reason = "resolver failed"
+            )
+        }
+        val selectedTvdbId = resolution.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() } ?: tvdbSeriesId
+        val selectedProvider = if (
+            resolution.provider == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            selectedTvdbId != null
+        ) {
+            TvEpisodeOrderProvider.TVDB_DEFAULT
+        } else {
+            TvEpisodeOrderProvider.TMDB_DEFAULT
+        }
+        return DetailTvEpisodeOrder(
+            provider = selectedProvider,
+            toggleAvailable = selectedTvdbId != null,
+            tmdbTvOrderKey = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: resolution.tmdbTvId.takeIf { it.isNotBlank() },
+            tvdbSeriesId = selectedTvdbId
+        )
+    }
+
+    private fun applyTvEpisodeOrderState(order: DetailTvEpisodeOrder) {
+        _uiState.update { state ->
+            state.copy(
+                tvEpisodeOrderProvider = order.uiProvider(),
+                tvEpisodeOrderToggleAvailable = order.toggleAvailable,
+                tvEpisodeOrderTogglePending = false
+            )
+        }
+    }
+
+    private fun toggleTvEpisodeOrderProvider() {
+        val snapshot = _uiState.value
+        if (!snapshot.tvEpisodeOrderToggleAvailable || snapshot.tvEpisodeOrderTogglePending) return
+        val meta = snapshot.meta ?: return
+        val providerIds = providerIdsForEpisodeOrder(snapshot.resolvedDetail, meta)
+        val tmdbOrderKey = normalizeTmdbTvEpisodeOrderKey(providerIds.tmdb) ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(tvEpisodeOrderTogglePending = true) }
+            try {
+                if (snapshot.tvEpisodeOrderProvider == TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                    tvEpisodeOrderOverrideRepository.clearOrder(tmdbOrderKey)
+                } else {
+                    tvEpisodeOrderOverrideRepository.setOrder(tmdbOrderKey, TvEpisodeOrderProvider.TVDB_DEFAULT)
+                }
+
+                val settings = tmdbSettingsDataStore.settings.first()
+                val tmdbContentType = resolveTmdbContentType(meta)
+                val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
+                val isAnimeDetail = snapshot.isAnimeDetail ||
+                    snapshot.resolvedDetail?.route?.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU
+                val order = resolveTvEpisodeOrder(
+                    providerIds = providerIds,
+                    isTvContent = isTvContent,
+                    isAnimeDetail = isAnimeDetail
+                )
+                val updated = applyTvEpisodeEnrichment(
+                    targetMeta = meta,
+                    tvEnrichment = snapshot.resolvedDetail?.toTvMetadataEnrichment(),
+                    tmdbContentType = tmdbContentType,
+                    tvdbLanguage = currentTvdbLanguageTag(),
+                    settings = settings,
+                    isTvContent = isTvContent,
+                    episodeOrder = order
+                )
+
+                _uiState.update { state ->
+                    val stateMeta = state.meta ?: return@update state.copy(tvEpisodeOrderTogglePending = false)
+                    if (stateMeta.id != meta.id) {
+                        state.copy(tvEpisodeOrderTogglePending = false)
+                    } else {
+                        state.withRefreshedMeta(updated).copy(
+                            tvEpisodeOrderProvider = order.uiProvider(),
+                            tvEpisodeOrderToggleAvailable = order.toggleAvailable,
+                            tvEpisodeOrderTogglePending = false
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to toggle detail TV episode order for ${meta.id}: ${error.message}", error)
+                _uiState.update { it.copy(tvEpisodeOrderTogglePending = false) }
+            }
+        }
     }
 
     private fun Meta.applyResolvedDetail(
@@ -1829,7 +2025,8 @@ class MetaDetailsViewModel @Inject constructor(
         tmdbContentType: ContentType,
         tvdbLanguage: String,
         settings: TmdbSettings,
-        isTvContent: Boolean
+        isTvContent: Boolean,
+        episodeOrder: DetailTvEpisodeOrder
     ): Meta {
         if (!settings.useEpisodes || !isTvContent) return targetMeta
 
@@ -1846,18 +2043,23 @@ class MetaDetailsViewModel @Inject constructor(
                 .distinct()
         }
 
+        val episodeRequestContentId = episodeOrder.episodeRequestContentId(targetMeta.id)
+        val episodeFallbackContentId = if (episodeRequestContentId != targetMeta.id) targetMeta.id else itemId
         val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(
             metadataRequest = MetadataRequest(
-                contentId = targetMeta.id,
+                contentId = episodeRequestContentId,
                 contentType = tmdbContentType,
-                sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
+                sourceContext = MetadataSourceContext(
+                    itemType = tmdbContentType.toApiString(),
+                    previewSourceItemId = episodeRequestContentId
+                ),
                 language = tvdbLanguage,
                 seasonNumber = seasonNumbers.firstOrNull(),
                 depth = MetadataDepth.SEASON
             ),
             tvRequest = TvMetadataRequest(
-                contentId = targetMeta.id,
-                fallbackContentId = itemId,
+                contentId = episodeRequestContentId,
+                fallbackContentId = episodeFallbackContentId,
                 contentType = tmdbContentType,
                 language = tvdbLanguage,
                 seasonNumbers = seasonNumbers
@@ -1867,6 +2069,7 @@ class MetaDetailsViewModel @Inject constructor(
         Log.i(
             TAG,
             "detail.episode_enrichment_result metaId=${targetMeta.id} provider=${episodeDecision.provider} " +
+                "orderProvider=${episodeOrder.uiProvider()} requestId=$episodeRequestContentId " +
                 "coreEpisodes=${tvdbCoreEpisodes.size} fetchedEpisodes=${episodeDecision.value.orEmpty().size} " +
                 "targetVideos=${targetMeta.videos.size}"
         )

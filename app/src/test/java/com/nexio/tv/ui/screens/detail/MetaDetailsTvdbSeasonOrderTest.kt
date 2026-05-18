@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.TvdbSeasonOrderContext
 import com.nexio.tv.domain.model.TvdbSeasonTypeSummary
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -153,6 +154,10 @@ class MetaDetailsTvdbSeasonOrderTest {
         val s1e1 = episodesForSeason1.first()
         assertNotNull(s1e1.tvdbEpisodeOrder)
         assertEquals(3, s1e1.tvdbEpisodeOrder?.defaultSeason)
+
+        // Detail lists remain TMDB/default order unless the ViewModel resolves an opt-in override.
+        assertEquals(TvEpisodeOrderProvider.TMDB_DEFAULT, state.tvEpisodeOrderProvider)
+        assertEquals(false, state.tvEpisodeOrderToggleAvailable)
     }
 
     @Test
