@@ -21,6 +21,7 @@ private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = Long.MAX_VALUE / 2
 private const val BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS = 60_000L
 private const val BUILT_IN_SUBTITLE_DISPATCH_DEBOUNCE_MS = 250L
 private const val BUILT_IN_SUBTITLE_DISPATCH_MAX_BATCH_CUE_GROUPS = 60
+private const val BUILT_IN_SUBTITLE_AHEAD_CACHE_MAX_CUE_GROUPS = 1_000
 
 internal class BuiltInSubtitleCueTranslator(
     private val scope: CoroutineScope,
@@ -38,6 +39,10 @@ internal class BuiltInSubtitleCueTranslator(
 
     private val activeRequestCount = AtomicInteger(0)
     private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
+    private val aheadCacheLock = Any()
+    private val aheadTranslatedCueGroupsByKey = LinkedHashMap<String, CueGroup>()
+    private val aheadPendingKeys = mutableSetOf<String>()
+    private var aheadCacheConfigurationToken: String? = null
 
     private val pendingLock = Any()
     private val pendingEntries = mutableListOf<PendingTranslate>()
@@ -60,6 +65,74 @@ internal class BuiltInSubtitleCueTranslator(
     }
 
     override fun getPrefetchDurationUs(): Long = BUILT_IN_SUBTITLE_PREFETCH_DURATION_US
+
+    override fun getTranslatedCueGroup(format: Format, sourceCueGroup: CueGroup): CueGroup? {
+        val configurationToken = getConfigurationToken(format) ?: return null
+        val key = aheadCueGroupKey(sourceCueGroup) ?: return null
+        synchronized(aheadCacheLock) {
+            ensureAheadCacheTokenLocked(configurationToken)
+            return aheadTranslatedCueGroupsByKey[key]
+        }
+    }
+
+    internal fun enqueueAheadCue(
+        format: Format,
+        cueGroup: CueGroup,
+        callback: (List<CueGroup>) -> Unit = {}
+    ) {
+        val configurationToken = getConfigurationToken(format)
+        if (configurationToken == null) {
+            callback(emptyList())
+            return
+        }
+        val key = aheadCueGroupKey(cueGroup)
+        if (key == null) {
+            callback(emptyList())
+            return
+        }
+
+        synchronized(aheadCacheLock) {
+            ensureAheadCacheTokenLocked(configurationToken)
+            aheadTranslatedCueGroupsByKey[key]?.let { cached ->
+                callback(listOf(cached))
+                return
+            }
+            if (!aheadPendingKeys.add(key)) {
+                return
+            }
+        }
+
+        translate(
+            format = format,
+            cueGroups = listOf(cueGroup),
+            callback = object : CueGroupSubtitleTranslator.TranslationCallback {
+                override fun onSuccess(translatedCueGroups: List<CueGroup>) {
+                    val translatedCueGroup = translatedCueGroups
+                        .firstOrNull { it.presentationTimeUs == cueGroup.presentationTimeUs }
+                        ?: translatedCueGroups.firstOrNull()
+                    synchronized(aheadCacheLock) {
+                        if (aheadCacheConfigurationToken == configurationToken) {
+                            aheadPendingKeys.remove(key)
+                            if (translatedCueGroup != null) {
+                                aheadTranslatedCueGroupsByKey[key] = translatedCueGroup
+                                trimAheadCacheLocked()
+                            }
+                        }
+                    }
+                    callback(translatedCueGroups)
+                }
+
+                override fun onFailure(exception: Exception) {
+                    synchronized(aheadCacheLock) {
+                        if (aheadCacheConfigurationToken == configurationToken) {
+                            aheadPendingKeys.remove(key)
+                        }
+                    }
+                    callback(emptyList())
+                }
+            }
+        )
+    }
 
     override fun translate(
         format: Format,
@@ -285,6 +358,32 @@ internal class BuiltInSubtitleCueTranslator(
             activeRequestCount.set(0)
         }
         onTranslatingChanged(active > 0)
+    }
+
+    private fun ensureAheadCacheTokenLocked(configurationToken: String) {
+        if (aheadCacheConfigurationToken == configurationToken) return
+        aheadCacheConfigurationToken = configurationToken
+        aheadTranslatedCueGroupsByKey.clear()
+        aheadPendingKeys.clear()
+    }
+
+    private fun trimAheadCacheLocked() {
+        while (aheadTranslatedCueGroupsByKey.size > BUILT_IN_SUBTITLE_AHEAD_CACHE_MAX_CUE_GROUPS) {
+            val iterator = aheadTranslatedCueGroupsByKey.entries.iterator()
+            if (!iterator.hasNext()) return
+            iterator.next()
+            iterator.remove()
+        }
+    }
+
+    private fun aheadCueGroupKey(cueGroup: CueGroup): String? {
+        val text = cueGroup.cues
+            .asSequence()
+            .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
+            .joinToString(separator = "\n")
+            .takeIf(String::isNotBlank)
+            ?: return null
+        return "${cueGroup.presentationTimeUs}|$text"
     }
 
     private fun builtInTranslationConfigurationToken(
