@@ -149,7 +149,7 @@ class SimklScrobbleMutationAdapterTest {
                 season = 5,
                 number = 14,
                 episodeTitle = "Ozymandias",
-                hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396", simkl = "5045"),
+                hydratedIds = ProviderIds(imdb = "tt0903747", tmdb = "1396", tvdb = "81189", simkl = "5045"),
             ),
             action = "start",
             progressPercent = 10f,
@@ -161,6 +161,7 @@ class SimklScrobbleMutationAdapterTest {
         val payload = envelope.payload
         assertEquals("tt0903747", payload.get("showImdb").asString)
         assertEquals("1396", payload.get("showTmdb").asString)
+        assertEquals("81189", payload.get("showTvdb").asString)
         assertEquals(5045L, payload.get("showSimkl").asLong)
         assertEquals(5, payload.get("season").asInt)
         assertEquals(14, payload.get("number").asInt)

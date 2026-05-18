@@ -208,7 +208,9 @@ class MetadataAuditRunner private constructor(
                     itemType = item.type,
                     sourceName = catalog.sourceName,
                     addonMetadata = item.toHomeDisplayMetadata(),
-                    rowItemIds = catalog.items.map { it.id }
+                    rowItemIds = catalog.items.map { it.id },
+                    previewStableIds = item.stableIds,
+                    previewSourceItemId = item.id
                 ),
                 language = scenario.language,
                 depth = scenario.depth
@@ -790,14 +792,26 @@ class MetadataAuditRunner private constructor(
             canonicalId = canonicalId,
             imdbId = stableIds.imdb,
             networkExecuted = requiresIdentityNetwork,
-            evidence = listOf(
-                StableIdBundleEvidenceEvent(
+            evidence = buildList {
+                add(StableIdBundleEvidenceEvent(
                     source = if (requiresIdentityNetwork) "provider.identity_lookup" else "knownIds",
                     target = route.provider.name,
                     networkExecuted = requiresIdentityNetwork,
                     resultId = canonicalId
-                )
-            )
+                ))
+                for ((provider, targetId) in route.targetIds) {
+                    if (provider != route.provider) {
+                        add(
+                            StableIdBundleEvidenceEvent(
+                                source = "knownIds",
+                                target = provider.name,
+                                networkExecuted = false,
+                                resultId = targetId
+                            )
+                        )
+                    }
+                }
+            }
         )
     }
 
@@ -1179,8 +1193,8 @@ class MetadataAuditRunner private constructor(
                 scenario = MetadataAuditScenario("mal-prefix-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("mal:21"))
             ),
             ScenarioSpec(
-                fixtureName = "netflix_series_nfx.json",
-                scenario = MetadataAuditScenario("tvdb-series-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"))
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("tmdb-tv-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tmdb:1399"))
             ),
             ScenarioSpec(
                 fixtureName = "provider_native_conflict.json",
@@ -1237,12 +1251,12 @@ class MetadataAuditRunner private constructor(
                 )
             ),
             ScenarioSpec(
-                fixtureName = "netflix_series_nfx.json",
-                scenario = MetadataAuditScenario("continue-watching-local-playback", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), continueWatching = true)
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("continue-watching-local-playback", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tmdb:1399"), continueWatching = true)
             ),
             ScenarioSpec(
-                fixtureName = "netflix_series_nfx.json",
-                scenario = MetadataAuditScenario("continue-watching-stale-routing-version", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), staleRoutingVersion = true)
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("continue-watching-stale-routing-version", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tmdb:1399"), staleRoutingVersion = true)
             ),
             ScenarioSpec(
                 fixtureName = "marvel_movies.json",
@@ -1253,8 +1267,8 @@ class MetadataAuditRunner private constructor(
                 scenario = MetadataAuditScenario("tmdb-movie-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), cacheMode = AuditCacheMode.WARM_FRESH)
             ),
             ScenarioSpec(
-                fixtureName = "netflix_series_nfx.json",
-                scenario = MetadataAuditScenario("tvdb-series-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), cacheMode = AuditCacheMode.WARM_FRESH)
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("tmdb-tv-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tmdb:1399"), cacheMode = AuditCacheMode.WARM_FRESH)
             ),
             ScenarioSpec(
                 fixtureName = "topstreaming_crunchyroll.json",
@@ -1269,8 +1283,8 @@ class MetadataAuditRunner private constructor(
                 scenario = MetadataAuditScenario("production-caller-ownership", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), productionCallerOwnership = true)
             ),
             ScenarioSpec(
-                fixtureName = "netflix_series_nfx.json",
-                scenario = MetadataAuditScenario("tvdb-localized-english-fallback", MetadataDepth.DETAIL_CORE, language = "nl-NL", visibleItemIds = setOf("tt14403178"))
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("tmdb-tv-localized-english-fallback", MetadataDepth.DETAIL_CORE, language = "nl-NL", visibleItemIds = setOf("tmdb:1399"))
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
@@ -1293,21 +1307,25 @@ class MetadataAuditRunner private constructor(
                 previewFields = mapOf("title" to "Hope", "year" to "2026")
             ),
             RailScenarioSpec(
-                name = "trakt-rail-visible-hydrates-tvdb",
+                name = "trakt-rail-visible-hydrates-tmdb",
                 railSource = "BUILT_IN_TRAKT",
                 sourceProvider = "TRAKT",
                 itemId = "trakt:show:signal-2026",
                 itemType = "series",
                 mediaKind = MetadataMediaKind.SERIES,
                 previewFields = mapOf("title" to "Signal", "year" to "2026"),
-                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB,
-                apiShapeId = "tvdb.series.extended",
-                targetIds = mapOf(com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:1001"),
-                usedInputs = setOf("railSource", "sourceProvider", "trakt.ids.tvdb"),
+                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
+                apiShapeId = "tmdb.tv.core",
+                targetIds = mapOf(
+                    com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:71446",
+                    com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:81189"
+                ),
+                imdbId = "tt0903747",
+                usedInputs = setOf("railSource", "sourceProvider", "trakt.ids.tmdb", "trakt.ids.tvdb"),
                 hydratedFields = mapOf(
-                    "title" to "Signal TVDB Canonical",
-                    "poster" to "https://example.test/tvdb-signal.jpg",
-                    "overview" to "Hydrated TVDB series overview"
+                    "title" to "Signal TMDB Canonical",
+                    "poster" to "https://example.test/tmdb-signal.jpg",
+                    "overview" to "Hydrated TMDB series overview"
                 )
             ),
             RailScenarioSpec(
@@ -1339,7 +1357,7 @@ class MetadataAuditRunner private constructor(
                 )
             ),
             RailScenarioSpec(
-                name = "tmdb-tv-rail-preview-then-tvdb-hydration",
+                name = "tmdb-tv-rail-preview-then-tmdb-hydration",
                 railSource = "BUILT_IN_TMDB",
                 sourceProvider = "TMDB",
                 itemId = "tmdb:tv:1399",
@@ -1349,18 +1367,18 @@ class MetadataAuditRunner private constructor(
                     "title" to "TMDB TV Preview",
                     "poster" to "https://example.test/tmdb-tv.jpg"
                 ),
-                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB,
-                apiShapeId = "tvdb.series.extended",
+                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
+                apiShapeId = "tmdb.tv.core",
                 targetIds = mapOf(
                     com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:1399",
                     com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:121361"
                 ),
                 imdbId = "tt0944947",
-                usedInputs = setOf("railSource", "sourceProvider", "tmdb.ids.tvdb"),
+                usedInputs = setOf("railSource", "sourceProvider", "tmdb.tv.id", "tmdb.ids.tvdb"),
                 hydratedFields = mapOf(
-                    "title" to "TVDB Hydrated Series",
-                    "poster" to "https://example.test/tvdb-tv.jpg",
-                    "overview" to "TVDB replaced rail preview fields"
+                    "title" to "TMDB Hydrated Series",
+                    "poster" to "https://example.test/tmdb-tv-hydrated.jpg",
+                    "overview" to "TMDB replaced rail preview fields"
                 )
             ),
             RailScenarioSpec(
@@ -1441,7 +1459,7 @@ class MetadataAuditRunner private constructor(
                 usedInputs = setOf("preview.stableIds.imdb", "item.type")
             ),
             HomeUpdateScenarioSpec(
-                name = "trakt_rail_first_paint_then_tvdb_update",
+                name = "trakt_rail_first_paint_then_tmdb_update",
                 firstPaintSource = "RAIL_PREVIEW",
                 railSource = "BUILT_IN_TRAKT",
                 sourceProvider = "TRAKT",
@@ -1449,22 +1467,22 @@ class MetadataAuditRunner private constructor(
                 itemType = "series",
                 mediaKind = MetadataMediaKind.SERIES,
                 previewFields = mapOf("title" to "Breaking Bad", "year" to "2008"),
-                canonicalProvider = MetadataPrimaryProvider.TVDB,
-                canonicalId = "tvdb:81189",
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:1396",
                 imdbId = "tt0903747",
-                runtimeApiShapes = listOf("tvdb.series.extended"),
+                runtimeApiShapes = listOf("tmdb.tv.core"),
                 metadataNetworkExecuted = true,
                 homeUpdate = HomeUpdateEvent(
                     before = mapOf("title" to "Breaking Bad", "poster" to null),
-                    after = mapOf("title" to "Breaking Bad", "poster" to "https://example.test/tvdb-breaking-bad.jpg", "overview" to "TVDB hydrated series overview"),
+                    after = mapOf("title" to "Breaking Bad", "poster" to "https://example.test/tmdb-breaking-bad.jpg", "overview" to "TMDB hydrated series overview"),
                     changedFields = listOf("poster", "overview"),
                     rowOrderChanged = false,
                     focusChanged = false,
                     displayHashBefore = "trakt-preview",
-                    displayHashAfter = "trakt-tvdb-hydrated"
+                    displayHashAfter = "trakt-tmdb-hydrated"
                 ),
-                usedInputs = setOf("trakt.ids.tvdb", "trakt.ids.imdb", "item.type"),
-                identityMappingsHarvested = mapOf("trakt:show:1" to "tvdb:81189", "tt0903747" to "tvdb:81189")
+                usedInputs = setOf("trakt.ids.tmdb", "trakt.ids.tvdb", "trakt.ids.imdb", "item.type"),
+                identityMappingsHarvested = mapOf("trakt:show:1" to "tmdb:1396", "tvdb:81189" to "tmdb:1396", "tt0903747" to "tmdb:1396")
             ),
             HomeUpdateScenarioSpec(
                 name = "tmdb_movie_rail_first_paint_then_tmdb_update",
@@ -1497,7 +1515,7 @@ class MetadataAuditRunner private constructor(
                 identityMappingsHarvested = mapOf("tmdb:550" to "tt0137523")
             ),
             HomeUpdateScenarioSpec(
-                name = "tmdb_tv_rail_first_paint_then_tvdb_update",
+                name = "tmdb_tv_rail_first_paint_then_tmdb_update",
                 firstPaintSource = "RAIL_PREVIEW",
                 railSource = "BUILT_IN_TMDB",
                 sourceProvider = "TMDB",
@@ -1505,22 +1523,22 @@ class MetadataAuditRunner private constructor(
                 itemType = "series",
                 mediaKind = MetadataMediaKind.SERIES,
                 previewFields = mapOf("title" to "Game of Thrones", "poster" to "https://image.tmdb.org/t/p/w500/tv-preview.jpg"),
-                canonicalProvider = MetadataPrimaryProvider.TVDB,
-                canonicalId = "tvdb:121361",
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:1399",
                 imdbId = "tt0944947",
-                runtimeApiShapes = listOf("tvdb.series.extended"),
+                runtimeApiShapes = listOf("tmdb.tv.core"),
                 metadataNetworkExecuted = true,
                 homeUpdate = HomeUpdateEvent(
                     before = mapOf("title" to "Game of Thrones", "poster" to "https://image.tmdb.org/t/p/w500/tv-preview.jpg"),
-                    after = mapOf("title" to "Game of Thrones", "poster" to "https://example.test/tvdb-got.jpg", "overview" to "TVDB hydrated TV overview"),
+                    after = mapOf("title" to "Game of Thrones", "poster" to "https://example.test/tmdb-got.jpg", "overview" to "TMDB hydrated TV overview"),
                     changedFields = listOf("poster", "overview"),
                     rowOrderChanged = false,
                     focusChanged = false,
                     displayHashBefore = "tmdb-tv-preview",
-                    displayHashAfter = "tmdb-tv-tvdb-hydrated"
+                    displayHashAfter = "tmdb-tv-tmdb-hydrated"
                 ),
-                usedInputs = setOf("tmdb.tv.id", "idMappingStore.tvdb", "item.type"),
-                identityMappingsHarvested = mapOf("tmdb:tv:1399" to "tvdb:121361", "tt0944947" to "tvdb:121361")
+                usedInputs = setOf("tmdb.tv.id", "item.type"),
+                identityMappingsHarvested = mapOf("tmdb:tv:1399" to "tmdb:1399", "tt0944947" to "tmdb:1399")
             ),
             HomeUpdateScenarioSpec(
                 name = "kitsu_rail_first_paint_then_kitsu_update",
@@ -2018,7 +2036,8 @@ private data class AddonCatalogItemFixture(
     val name: String?,
     val poster: String?,
     val background: String?,
-    val description: String?
+    val description: String?,
+    val stableIds: ProviderIds = ProviderIds()
 ) {
     fun toHomeDisplayMetadata(): HomeDisplayMetadata =
         HomeDisplayMetadata(
@@ -2057,7 +2076,8 @@ private class CatalogFixtureParser {
                     name = item.optStringOrNull("name"),
                     poster = item.optStringOrNull("poster"),
                     background = item.optStringOrNull("background"),
-                    description = item.optStringOrNull("description")
+                    description = item.optStringOrNull("description"),
+                    stableIds = item.optProviderIds()
                 )
             }
         )
@@ -2065,4 +2085,16 @@ private class CatalogFixtureParser {
 
     private fun JSONObject.optStringOrNull(name: String): String? =
         if (!has(name) || isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
+
+    private fun JSONObject.optProviderIds(): ProviderIds {
+        val ids = optJSONObject("ids") ?: return ProviderIds()
+        return ProviderIds(
+            imdb = ids.optStringOrNull("imdb"),
+            tmdb = ids.optStringOrNull("tmdb"),
+            tvdb = ids.optStringOrNull("tvdb"),
+            trakt = ids.optStringOrNull("trakt"),
+            simkl = ids.optStringOrNull("simkl"),
+            kitsu = ids.optStringOrNull("kitsu")
+        )
+    }
 }

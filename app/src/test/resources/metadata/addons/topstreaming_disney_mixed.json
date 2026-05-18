@@ -13,7 +13,12 @@
       "id": "tt27444205",
       "type": "series",
       "name": "Disney Series",
-      "poster": "https://example.test/disney-series.jpg"
+      "poster": "https://example.test/disney-series.jpg",
+      "ids": {
+        "imdb": "tt27444205",
+        "tmdb": "910001",
+        "tvdb": "910001"
+      }
     }
   ]
 }

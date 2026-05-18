@@ -10,7 +10,12 @@
       "name": "TMDB Series Conflict",
       "poster": "https://example.test/provider-native-conflict.jpg",
       "background": "https://example.test/provider-native-conflict-bg.jpg",
-      "description": "A provider-native TMDB id paired with series type to prove identity resolution before TVDB execution."
+      "description": "A provider-native TMDB id paired with series type to prove TMDB canonical routing with TVDB/IMDb sidecars.",
+      "ids": {
+        "tmdb": "1399",
+        "tvdb": "121361",
+        "imdb": "tt0944947"
+      }
     }
   ]
 }
