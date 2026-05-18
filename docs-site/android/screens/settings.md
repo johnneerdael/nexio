@@ -16,4 +16,4 @@ This is the legacy settings page. The old screen-by-screen breakdown is no longe
 - [Search and Cast](./search-and-cast.md) for finding titles and following cast links
 - [Portal Integrations](/web/admin-workspaces/integrations) for account-backed service setup
 
-TMDB and TheTVDB are active by default. Their settings screens only manage optional custom provider keys and metadata-field preferences.
+TMDB is active by default for movie and standard TV metadata. Kitsu remains the anime metadata source. TheTVDB settings manage optional credentials for crosswalks and show-level season numbering when streams follow TVDB order; they do not switch canonical show identity away from TMDB.

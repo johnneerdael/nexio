@@ -14,7 +14,8 @@ import org.junit.Test
  * user-facing toggles.
  *
  * It also verifies that the provider precedence copy remains present so users
- * understand TVDB is used for TV metadata when configured.
+ * understand TMDB is the default movie and TV metadata authority, while TVDB is
+ * limited to show-level season numbering when streams follow TVDB order.
  *
  * This test must remain green throughout Phase 9 execution.
  */
@@ -32,7 +33,9 @@ class TvdbSettingsNoAdvancedToggleTest {
             "Exact air-time toggle",
             "provider-specific timing",
             "Advanced TVDB surfaces",
-            "Enable TVDB trailers"
+            "Enable TVDB trailers",
+            "TVDB metadata provider toggle",
+            "Use TVDB as metadata provider"
         )
 
         /**
@@ -96,26 +99,9 @@ class TvdbSettingsNoAdvancedToggleTest {
     }
 
     @Test
-    fun `provider precedence copy is present in settings screen`() {
+    fun `provider precedence copy states tmdb tv default policy`() {
         val projectRoot = findProjectRoot()
 
-        // Settings screen must reference provider_precedence_summary
-        val settingsScreenFile = projectRoot.resolve(
-            "app/src/main/java/com/nexio/tv/ui/screens/settings/TvdbSettingsScreen.kt"
-        )
-        val settingsScreenContent = if (settingsScreenFile.exists()) {
-            settingsScreenFile.readText()
-        } else {
-            ""
-        }
-
-        assertTrue(
-            "TvdbSettingsScreen.kt must reference provider_precedence_summary " +
-                "so users understand TVDB is used for TV metadata when configured.",
-            settingsScreenContent.contains("provider_precedence_summary")
-        )
-
-        // strings.xml must contain the actual provider precedence text
         val stringsFile = projectRoot.resolve("app/src/main/res/values/strings.xml")
         val stringsContent = if (stringsFile.exists()) {
             stringsFile.readText()
@@ -124,9 +110,19 @@ class TvdbSettingsNoAdvancedToggleTest {
         }
 
         assertTrue(
-            "strings.xml must contain 'TVDB is used for TV metadata when configured' " +
+            "strings.xml must contain the TMDB movie and TV metadata policy " +
                 "in the provider_precedence_summary string.",
-            stringsContent.contains("TVDB is used for TV metadata when configured")
+            stringsContent.contains("TMDB is used for movie and TV metadata")
+        )
+        assertTrue(
+            "strings.xml must explain show-level TheTVDB season numbering.",
+            stringsContent.contains(
+                "TheTVDB season numbering can be enabled per show when streams follow TVDB order"
+            )
+        )
+        assertFalse(
+            "strings.xml must not describe TVDB as the global TV metadata authority.",
+            stringsContent.contains("TVDB is used for TV metadata")
         )
     }
 }
