@@ -89,6 +89,30 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
     }
 
     @Test
+    fun changedTextOrdinalStartsNewSessionAndCancelsPreviousJobs() = runTest {
+        val harvestJobs = mutableListOf<Job>()
+        val capturedOrdinals = mutableListOf<Int?>()
+        val diagnostics = RecordingHarvestDiagnostics()
+        val coordinator = coordinator(
+            diagnostics = diagnostics,
+            startHarvest = { _, state ->
+                capturedOrdinals += state.selectedSupportedTextOrdinal
+                Job().also(harvestJobs::add)
+            }
+        )
+
+        val state = eligibleState(selectedSupportedTextOrdinal = 0)
+        coordinator.update(state)
+        coordinator.update(state.copy(selectedSupportedTextOrdinal = 1))
+
+        assertEquals(2, harvestJobs.size)
+        assertTrue(harvestJobs.first().isCancelled)
+        assertFalse(harvestJobs.last().isCancelled)
+        assertEquals(listOf(0, 1), capturedOrdinals)
+        assertEquals(listOf("session_changed"), diagnostics.cancelReasons)
+    }
+
+    @Test
     fun broaderTextEligibilityDoesNotStartBeforeTextOrdinalExists() = runTest {
         val startedHarvests = mutableListOf<TranslationTimelineSessionKey>()
         val diagnostics = RecordingHarvestDiagnostics()

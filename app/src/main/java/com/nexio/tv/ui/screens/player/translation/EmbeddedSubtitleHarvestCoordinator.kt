@@ -171,7 +171,8 @@ internal class EmbeddedSubtitleHarvestCoordinator(
                     track?.language.orEmpty(),
                     track?.mimeType.orEmpty(),
                     track?.codec.orEmpty(),
-                    track?.name.orEmpty()
+                    track?.name.orEmpty(),
+                    selectedSupportedTextOrdinal?.toString().orEmpty()
                 ).joinToString(separator = "|")
             ),
             targetLanguage = targetLanguage.lowercase(Locale.ROOT),
