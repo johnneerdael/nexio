@@ -4,6 +4,7 @@ import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.ProviderIds
 import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.slot
@@ -115,5 +116,81 @@ class MetadataRouterFacadeSeasonDefaultTest {
         assertEquals(MetadataMediaKind.SERIES, capturedRoute.captured.mediaKind)
         assertEquals("tmdb:71446", capturedRoute.captured.targetIds[MetadataPrimaryProvider.TMDB])
         assertEquals(false, capturedRoute.captured.targetIdRequiresIdentityResolution)
+    }
+
+    @Test
+    fun `raw IMDB series with TVDB stable id bridges sidecar to TMDB before provider execution`() = runTest {
+        val capturedRoute = slot<MetadataRoute>()
+        val mockPlanExecutor = mockk<ProviderPlanExecutor>()
+        coEvery { mockPlanExecutor.buildPlan(capture(capturedRoute), any()) } answers {
+            ProviderExecutionPlan(
+                route = capturedRoute.captured,
+                depth = secondArg(),
+                steps = emptyList()
+            )
+        }
+        val mockPlanRunner = mockk<ProviderPlanRunner>()
+        coEvery { mockPlanRunner.run(any()) } answers {
+            ProviderPlanRunResult(
+                route = firstArg<ProviderExecutionPlan>().route,
+                depth = firstArg<ProviderExecutionPlan>().depth,
+                primaryCandidate = MetadataCandidate(
+                    provider = MetadataPrimaryProvider.TMDB,
+                    fields = emptyMap()
+                ),
+                secondaryCandidates = emptyList(),
+                stepResults = emptyList(),
+                trace = emptyList()
+            )
+        }
+        val identityCalls = mutableListOf<String>()
+        val facade = MetadataRouterFacade(
+            router = MetadataRouter(
+                normalizer = MetadataRequestNormalizer(
+                    traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
+                ),
+                animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+                idMappingStore = InMemoryIdMappingStore(),
+                traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
+            ),
+            providerPlanExecutor = mockPlanExecutor,
+            resolverOrchestrator = ResolverOrchestrator(),
+            identityResolver = MetadataIdentityResolver(
+                lookup = object : MetadataIdentityResolver.Lookup {
+                    override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+
+                    override suspend fun tvdbToTmdb(tvdbId: String): String? {
+                        identityCalls += "tvdbToTmdb:$tvdbId"
+                        return "71446"
+                    }
+                }
+            ),
+            providerPlanRunner = mockPlanRunner,
+            fieldResolver = FieldResolver(),
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
+        )
+
+        facade.resolveRequest(
+            MetadataRequest(
+                contentId = "tt0903747",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(
+                        imdb = "tt0903747",
+                        tvdb = "81189"
+                    )
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, capturedRoute.captured.provider)
+        assertEquals(MetadataMediaKind.SERIES, capturedRoute.captured.mediaKind)
+        assertEquals("71446", capturedRoute.captured.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals("tvdb:81189", capturedRoute.captured.targetIds[MetadataPrimaryProvider.TVDB])
+        assertEquals("tt0903747", capturedRoute.captured.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, capturedRoute.captured.targetIdRequiresIdentityResolution)
+        assertEquals(listOf("tvdbToTmdb:81189"), identityCalls)
     }
 }
