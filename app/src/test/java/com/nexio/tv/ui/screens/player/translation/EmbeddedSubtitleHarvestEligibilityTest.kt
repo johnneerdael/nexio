@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player.translation
 
 import androidx.media3.common.MimeTypes
 import com.nexio.tv.ui.screens.player.TrackInfo
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -105,6 +106,62 @@ class EmbeddedSubtitleHarvestEligibilityTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun mp4Tx3gTrackIsEligible() {
+        val result = EmbeddedSubtitleHarvestEligibility.evaluate(
+            streamUrl = "https://example.test/video/movie.mp4?token=abc",
+            filename = null,
+            selectedTrack = track(mimeType = MimeTypes.APPLICATION_TX3G),
+            selectedAddonSubtitlePresent = false,
+            autoTranslateEnabled = true
+        )
+
+        assertTrue(result.eligible)
+        assertEquals(EmbeddedSubtitleContainer.MP4, result.container)
+        assertEquals("eligible", result.reason)
+    }
+
+    @Test
+    fun mp4VttTrackIsEligible() {
+        assertTrue(
+            EmbeddedSubtitleHarvestEligibility.evaluate(
+                streamUrl = "https://example.test/video/movie.m4v",
+                filename = null,
+                selectedTrack = track(mimeType = MimeTypes.APPLICATION_MP4VTT),
+                selectedAddonSubtitlePresent = false,
+                autoTranslateEnabled = true
+            ).eligible
+        )
+    }
+
+    @Test
+    fun mp4TtmlTrackIsEligible() {
+        assertTrue(
+            EmbeddedSubtitleHarvestEligibility.evaluate(
+                streamUrl = "https://example.test/video/movie.mov",
+                filename = null,
+                selectedTrack = track(mimeType = MimeTypes.APPLICATION_TTML),
+                selectedAddonSubtitlePresent = false,
+                autoTranslateEnabled = true
+            ).eligible
+        )
+    }
+
+    @Test
+    fun mp4BitmapSubtitleIsRejected() {
+        val result = EmbeddedSubtitleHarvestEligibility.evaluate(
+            streamUrl = "https://example.test/video/movie.mp4",
+            filename = null,
+            selectedTrack = track(mimeType = "application/vobsub"),
+            selectedAddonSubtitlePresent = false,
+            autoTranslateEnabled = true
+        )
+
+        assertFalse(result.eligible)
+        assertEquals(EmbeddedSubtitleContainer.MP4, result.container)
+        assertEquals("unsupported_track", result.reason)
     }
 
     private fun track(
