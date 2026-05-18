@@ -33,7 +33,10 @@ internal data class Mp4ExtractorInputHandle(
 
 internal class Mp4TextTrackHarvester(
     private val extractorFactory: Mp4ExtractorFactory = Mp4ExtractorFactory {
-        Mp4Extractor(DefaultSubtitleParserFactory())
+        Mp4Extractor(
+            DefaultSubtitleParserFactory(),
+            Mp4Extractor.FLAG_READ_TEXT_TRACKS_ONLY
+        )
     },
     private val inputOpener: Mp4ExtractorInputOpener = DefaultMp4ExtractorInputOpener
 ) : EmbeddedSubtitleTrackHarvester {
