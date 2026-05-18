@@ -148,6 +148,30 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
             "container=${containerField(container)} harvested=$harvested durationMs=$durationMs"
     }
 
+    fun initialSeekApplied(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
+        requestedTimeUs: Long,
+        seekTimeUs: Long,
+        seekPosition: Long,
+        seekable: Boolean
+    ) {
+        log(initialSeekAppliedLine(session, container, requestedTimeUs, seekTimeUs, seekPosition, seekable))
+    }
+
+    fun initialSeekAppliedLine(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
+        requestedTimeUs: Long,
+        seekTimeUs: Long,
+        seekPosition: Long,
+        seekable: Boolean
+    ): String {
+        return "$PREFIX event=initial_seek_applied session=${field(session.streamKey)} " +
+            "container=${containerField(container)} requestedTimeUs=$requestedTimeUs " +
+            "seekTimeUs=$seekTimeUs seekPosition=$seekPosition seekable=$seekable"
+    }
+
     fun cueHarvested(
         session: TranslationTimelineSessionKey,
         container: EmbeddedSubtitleContainer,

@@ -18,6 +18,8 @@ import java.io.IOException
 internal class Mp4TextExtractorOutput(
     private val delegate: ExtractorOutput,
     private val selectedSupportedTextTrackOrdinalProvider: () -> Int,
+    private val shouldPublishCueGroups: () -> Boolean = { true },
+    private val onSeekMap: (SeekMap) -> Unit = {},
     private val onCueGroup: (CueGroup, Format) -> Unit
 ) : ExtractorOutput {
     private var nextSupportedTextTrackOrdinal = 0
@@ -36,6 +38,7 @@ internal class Mp4TextExtractorOutput(
                     ordinal
                 },
                 selectedSupportedTextTrackOrdinalProvider = selectedSupportedTextTrackOrdinalProvider,
+                shouldPublishCueGroups = shouldPublishCueGroups,
                 onCueGroup = onCueGroup
             )
         }
@@ -46,6 +49,7 @@ internal class Mp4TextExtractorOutput(
     }
 
     override fun seekMap(seekMap: SeekMap) {
+        onSeekMap(seekMap)
         delegate.seekMap(seekMap)
     }
 }
@@ -59,6 +63,7 @@ internal object NoOpExtractorOutput : ExtractorOutput {
 private class Mp4Media3CueTrackOutput(
     private val supportedTextTrackOrdinalProvider: () -> Int,
     private val selectedSupportedTextTrackOrdinalProvider: () -> Int,
+    private val shouldPublishCueGroups: () -> Boolean,
     private val onCueGroup: (CueGroup, Format) -> Unit
 ) : TrackOutput {
     private val cueDecoder = CueDecoder()
@@ -114,7 +119,8 @@ private class Mp4Media3CueTrackOutput(
             format != null &&
             size > 0 &&
             format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES &&
-            supportedTextTrackOrdinal == selectedSupportedTextTrackOrdinalProvider()
+            supportedTextTrackOrdinal == selectedSupportedTextTrackOrdinalProvider() &&
+            shouldPublishCueGroups()
         ) {
             publishCueSample(timeUs, size, offset, format)
         }

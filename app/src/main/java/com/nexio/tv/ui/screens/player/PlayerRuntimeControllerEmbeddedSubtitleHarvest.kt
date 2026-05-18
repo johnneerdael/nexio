@@ -64,6 +64,7 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
                     streamUrl = state.streamUrl,
                     headers = state.headers,
                     selectedSupportedTextOrdinal = state.selectedSupportedTextOrdinal ?: -1,
+                    initialPositionMs = backendCurrentPosition().coerceAtLeast(0L),
                     sourceLanguage = state.selectedTrack?.language,
                     sessionKey = sessionKey,
                     timelineStore = translatedSubtitleTimelineStore,

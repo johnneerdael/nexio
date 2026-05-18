@@ -8,6 +8,7 @@ import androidx.media3.extractor.DefaultExtractorInput
 import androidx.media3.extractor.Extractor
 import androidx.media3.extractor.ExtractorInput
 import androidx.media3.extractor.PositionHolder
+import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import kotlinx.coroutines.Dispatchers
@@ -53,12 +54,17 @@ internal class Mp4TextTrackHarvester(
             sourceLanguage = request.sourceLanguage
         )
         val extractor = extractorFactory.create()
+        val initialSeekTimeUs = (request.initialPositionMs * 1000L).coerceAtLeast(0L)
+        var seekMap: SeekMap? = null
+        var initialSeekApplied = initialSeekTimeUs == 0L
         extractor.init(
             Mp4TextExtractorOutput(
                 delegate = request.extractorOutput,
                 selectedSupportedTextTrackOrdinalProvider = {
                     request.selectedSupportedTextOrdinal
                 },
+                shouldPublishCueGroups = { initialSeekApplied },
+                onSeekMap = { map -> seekMap = map },
                 onCueGroup = { cueGroup, format ->
                     publisher.publish(cueGroup, format.language)
                 }
@@ -83,6 +89,38 @@ internal class Mp4TextTrackHarvester(
                     inputPosition = positionHolder.position
                     inputHandle = inputOpener.open(uri, request.headers, inputPosition)
                     readResult = Extractor.RESULT_CONTINUE
+                } else if (!initialSeekApplied) {
+                    val map = seekMap
+                    if (map != null && map.isSeekable) {
+                        val seekPoint = map.getSeekPoints(initialSeekTimeUs).first
+                        if (seekPoint.position != Long.MAX_VALUE) {
+                            currentInputHandle.close()
+                            inputHandle = null
+                            inputPosition = seekPoint.position
+                            extractor.seek(inputPosition, initialSeekTimeUs)
+                            inputHandle = inputOpener.open(uri, request.headers, inputPosition)
+                        }
+                        EmbeddedSubtitleHarvestDiagnostics.initialSeekApplied(
+                            session = request.sessionKey,
+                            container = container,
+                            requestedTimeUs = initialSeekTimeUs,
+                            seekTimeUs = seekPoint.timeUs,
+                            seekPosition = seekPoint.position,
+                            seekable = true
+                        )
+                        initialSeekApplied = true
+                        readResult = Extractor.RESULT_CONTINUE
+                    } else if (map != null) {
+                        EmbeddedSubtitleHarvestDiagnostics.initialSeekApplied(
+                            session = request.sessionKey,
+                            container = container,
+                            requestedTimeUs = initialSeekTimeUs,
+                            seekTimeUs = 0L,
+                            seekPosition = 0L,
+                            seekable = false
+                        )
+                        initialSeekApplied = true
+                    }
                 }
             }
             EmbeddedSubtitleTrackHarvestResult(

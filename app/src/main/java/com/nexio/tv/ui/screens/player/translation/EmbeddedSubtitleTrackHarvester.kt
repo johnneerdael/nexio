@@ -6,6 +6,7 @@ internal data class EmbeddedSubtitleTrackHarvestRequest(
     val streamUrl: String,
     val headers: Map<String, String>,
     val selectedSupportedTextOrdinal: Int,
+    val initialPositionMs: Long = 0L,
     val sourceLanguage: String?,
     val sessionKey: TranslationTimelineSessionKey,
     val timelineStore: TranslatedSubtitleTimelineStore,

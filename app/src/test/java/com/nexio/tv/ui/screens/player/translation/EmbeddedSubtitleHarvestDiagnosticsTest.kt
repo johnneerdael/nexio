@@ -152,6 +152,25 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun initialSeekProofLineIncludesRequestedTimeAndResolvedOffset() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.initialSeekAppliedLine(
+            session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
+            requestedTimeUs = 815_000_000L,
+            seekTimeUs = 814_750_000L,
+            seekPosition = 123_456_789L,
+            seekable = true
+        )
+
+        assertEquals(
+            "EMBEDDED_SUB_TIMELINE event=initial_seek_applied session=stream-key " +
+                "container=mp4 requestedTimeUs=815000000 seekTimeUs=814750000 " +
+                "seekPosition=123456789 seekable=true",
+            line
+        )
+    }
+
+    @Test
     fun cueProofLinesUseStoreCueKeyFields() {
         val store = TranslatedSubtitleTimelineStore()
         val cueGroup = cueGroup(" bonjour ", 42_000L)
