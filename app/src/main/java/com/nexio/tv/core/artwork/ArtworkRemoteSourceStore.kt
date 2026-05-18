@@ -44,15 +44,22 @@ class FileBackedArtworkRemoteSourceStore(
         source: SensitiveArtworkUrl
     ) {
         if (normalizedUrlHash.isBlank()) return
-        synchronized(lock) {
+        val snapshotToFlush = synchronized(lock) {
             ensureLoaded()
             if (source.value.isPremiumProviderRawUrl()) {
-                sourcesByHash.remove(normalizedUrlHash)
+                if (sourcesByHash.remove(normalizedUrlHash) == null) {
+                    null
+                } else {
+                    sourcesByHash.toSortedMap()
+                }
+            } else if (sourcesByHash[normalizedUrlHash] == source.value) {
+                null
             } else {
                 sourcesByHash[normalizedUrlHash] = source.value
+                sourcesByHash.toSortedMap()
             }
-            flush()
         }
+        snapshotToFlush?.let(::flush)
     }
 
     override fun get(normalizedUrlHash: String): SensitiveArtworkUrl? =
@@ -87,7 +94,7 @@ class FileBackedArtworkRemoteSourceStore(
                     .toMutableMap()
                 if (filtered.size != restored.size) {
                     sourcesByHash = filtered
-                    flush()
+                    flush(filtered.toSortedMap())
                 }
                 filtered
             }
@@ -95,10 +102,9 @@ class FileBackedArtworkRemoteSourceStore(
         loaded = true
     }
 
-    private fun flush() {
+    private fun flush(sorted: SortedMap<String, String>) {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile ?: File("."), "${file.name}.tmp")
-        val sorted: SortedMap<String, String> = sourcesByHash.toSortedMap()
         FileOutputStream(tmp).use { fos ->
             BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                 JsonWriter(bw).use { writer ->
