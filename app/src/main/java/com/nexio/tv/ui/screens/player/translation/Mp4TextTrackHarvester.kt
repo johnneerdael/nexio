@@ -17,7 +17,11 @@ import androidx.media3.extractor.mp4.Mp4TextTrackSampleTableListener
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleParser
 import com.google.common.collect.ImmutableList
+import java.util.ArrayDeque
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
@@ -221,7 +225,7 @@ internal class Mp4TextTrackHarvester(
         }
     }
 
-    private fun harvestFromSampleTable(
+    private suspend fun harvestFromSampleTable(
         request: EmbeddedSubtitleTrackHarvestRequest,
         publisher: TimelinePublishingTextCueSink,
         uri: Uri,
@@ -260,16 +264,40 @@ internal class Mp4TextTrackHarvester(
         var inputOpens = 0
         var bytesRead = 0L
         var nextProgressSample = firstSampleIndex
+        var lastProgressSample = firstSampleIndex
         var lastProgressLogMs = startedMs
         val rangeCount = ranges.size
-        for (rangeIndex in ranges.indices) {
-            val range = ranges[rangeIndex]
-            val handle = inputOpener.open(uri, request.headers, range.startOffset)
-            inputOpens += 1
-            try {
-                val rangeBytes = ByteArray(range.length)
-                handle.input.readFully(rangeBytes, 0, rangeBytes.size)
-                bytesRead += rangeBytes.size.toLong()
+        coroutineScope {
+            val inFlight = ArrayDeque<Deferred<Mp4TextSampleRangeBytes>>()
+            var nextRangeIndex = 0
+            var rangesRead = 0
+
+            fun launchPendingReads() {
+                while (
+                    nextRangeIndex < rangeCount &&
+                    inFlight.size < MP4_SAMPLE_TABLE_PARALLEL_RANGE_READS
+                ) {
+                    val range = ranges[nextRangeIndex]
+                    inFlight.add(
+                        async(Dispatchers.IO) {
+                            readSampleRangeBytes(
+                                uri = uri,
+                                headers = request.headers,
+                                range = range
+                            )
+                        }
+                    )
+                    nextRangeIndex += 1
+                }
+            }
+
+            launchPendingReads()
+            while (!inFlight.isEmpty()) {
+                ensureActive()
+                val rangeBytes = inFlight.removeFirst().await()
+                inputOpens += 1
+                bytesRead += rangeBytes.bytes.size.toLong()
+                val range = rangeBytes.range
                 for (sampleIndex in range.firstSampleIndex until range.lastSampleIndexExclusive) {
                     val sampleOffset = selectedTable.offsets[sampleIndex]
                     val sampleSize = selectedTable.sizes[sampleIndex]
@@ -277,7 +305,7 @@ internal class Mp4TextTrackHarvester(
                     publishParsedSample(
                         parser = parser,
                         format = format,
-                        data = rangeBytes,
+                        data = rangeBytes.bytes,
                         offset = sampleStart,
                         size = sampleSize,
                         sampleTimeUs = selectedTable.timestampsUs[sampleIndex],
@@ -285,29 +313,30 @@ internal class Mp4TextTrackHarvester(
                     )
                     nextProgressSample = sampleIndex + 1
                 }
-            } finally {
-                handle.close()
-            }
+                rangesRead += 1
+                launchPendingReads()
 
-            val nowMs = System.currentTimeMillis()
-            if (
-                rangeIndex == rangeCount - 1 ||
-                nextProgressSample - firstSampleIndex >= 100 ||
-                nowMs - lastProgressLogMs >= MP4_SAMPLE_TABLE_PROGRESS_LOG_INTERVAL_MS
-            ) {
-                EmbeddedSubtitleHarvestDiagnostics.mp4SampleTableHarvestProgress(
-                    session = request.sessionKey,
-                    selectedOrdinal = selectedTable.textTrackOrdinal,
-                    nextSampleIndex = nextProgressSample,
-                    totalSamples = selectedTable.sampleCount,
-                    rangesRead = rangeIndex + 1,
-                    totalRanges = rangeCount,
-                    inputOpens = inputOpens,
-                    bytesRead = bytesRead,
-                    harvested = publisher.sampleCount,
-                    elapsedMs = nowMs - startedMs
-                )
-                lastProgressLogMs = nowMs
+                val nowMs = System.currentTimeMillis()
+                if (
+                    rangesRead == rangeCount ||
+                    nextProgressSample - lastProgressSample >= 100 ||
+                    nowMs - lastProgressLogMs >= MP4_SAMPLE_TABLE_PROGRESS_LOG_INTERVAL_MS
+                ) {
+                    EmbeddedSubtitleHarvestDiagnostics.mp4SampleTableHarvestProgress(
+                        session = request.sessionKey,
+                        selectedOrdinal = selectedTable.textTrackOrdinal,
+                        nextSampleIndex = nextProgressSample,
+                        totalSamples = selectedTable.sampleCount,
+                        rangesRead = rangesRead,
+                        totalRanges = rangeCount,
+                        inputOpens = inputOpens,
+                        bytesRead = bytesRead,
+                        harvested = publisher.sampleCount,
+                        elapsedMs = nowMs - startedMs
+                    )
+                    lastProgressLogMs = nowMs
+                    lastProgressSample = nextProgressSample
+                }
             }
         }
 
@@ -316,6 +345,21 @@ internal class Mp4TextTrackHarvester(
             harvested = publisher.sampleCount,
             durationMs = System.currentTimeMillis() - startedMs
         )
+    }
+
+    private fun readSampleRangeBytes(
+        uri: Uri,
+        headers: Map<String, String>,
+        range: Mp4TextSampleRange
+    ): Mp4TextSampleRangeBytes {
+        val handle = inputOpener.open(uri, headers, range.startOffset)
+        try {
+            val rangeBytes = ByteArray(range.length)
+            handle.input.readFully(rangeBytes, 0, rangeBytes.size)
+            return Mp4TextSampleRangeBytes(range, rangeBytes)
+        } finally {
+            handle.close()
+        }
     }
 
     private fun publishParsedSample(
@@ -415,6 +459,11 @@ private data class Mp4TextSampleRange(
         get() = (endOffsetExclusive - startOffset).toInt()
 }
 
+private data class Mp4TextSampleRangeBytes(
+    val range: Mp4TextSampleRange,
+    val bytes: ByteArray
+)
+
 private object DefaultMp4ExtractorInputOpener : Mp4ExtractorInputOpener {
     override fun open(
         uri: Uri,
@@ -448,5 +497,6 @@ internal fun mp4ExtractorInputLength(position: Long, remainingLength: Long): Lon
 
 private const val MP4_READ_PROGRESS_LOG_INTERVAL_MS = 5_000L
 private const val MP4_SAMPLE_TABLE_PROGRESS_LOG_INTERVAL_MS = 5_000L
-private const val MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES = 8 * 1024 * 1024L
-private const val MP4_SAMPLE_TABLE_MAX_RANGE_BYTES = 64 * 1024 * 1024L
+private const val MP4_SAMPLE_TABLE_PARALLEL_RANGE_READS = 6
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES = 128 * 1024L
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_BYTES = 512 * 1024L
