@@ -28,9 +28,10 @@ class ScrobbleIdBundleHydratorTest {
         sidecars: SidecarStableIds = SidecarStableIds(),
         observedIds: ProviderIds = ProviderIds(),
         sourceProvider: ProviderId? = null,
+        itemType: ContentType = ContentType.SERIES,
     ): StableIdBundle = StableIdBundle(
         itemKey = "k",
-        itemType = ContentType.SERIES,
+        itemType = itemType,
         canonical = canonical,
         sidecars = sidecars,
         source = SourceStableIds(
@@ -55,6 +56,20 @@ class ScrobbleIdBundleHydratorTest {
         assertEquals("tt0903747", ids.imdb)
         assertEquals("1396", ids.tmdb)
         assertEquals("81189", ids.tvdb)
+    }
+
+    @Test
+    fun `hydrate maps movie tmdb canonical id when tv id is also present`() = runTest {
+        coEvery { resolver.resolve(any()) } returns bundleWith(
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446"),
+            sidecars = SidecarStableIds(imdbId = "tt0137523"),
+        )
+
+        val ids = hydrator.hydrate(rawContentId = "tmdb:550", contentType = "movie")
+
+        assertEquals("tt0137523", ids.imdb)
+        assertEquals("550", ids.tmdb)
     }
 
     @Test

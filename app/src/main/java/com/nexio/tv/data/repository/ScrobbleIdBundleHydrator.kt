@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdBundleRequest
@@ -90,7 +91,7 @@ class ScrobbleIdBundleHydrator @Inject constructor(
 
     private fun StableIdBundle.toProviderIds(seed: ProviderIds): ProviderIds = ProviderIds(
         imdb = sidecars.imdbId ?: seed.imdb,
-        tmdb = canonical.tmdbTvId ?: canonical.tmdbMovieId ?: source.observedIds.tmdb ?: seed.tmdb,
+        tmdb = canonical.tmdbIdFor(itemType) ?: source.observedIds.tmdb ?: seed.tmdb,
         tvdb = canonical.tvdbSeriesId ?: source.observedIds.tvdb ?: seed.tvdb,
         trakt = source.observedIds.trakt ?: seed.trakt,
         simkl = source.observedIds.simkl ?: seed.simkl,
@@ -100,4 +101,24 @@ class ScrobbleIdBundleHydrator @Inject constructor(
         anilist = sidecars.anilistId ?: seed.anilist,
         anidb = sidecars.anidbId ?: seed.anidb,
     )
+
+    private fun CanonicalStableIds.tmdbIdFor(itemType: ContentType): String? =
+        when (itemType) {
+            ContentType.MOVIE -> tmdbMovieId ?: tmdbTvId
+            ContentType.SERIES,
+            ContentType.TV -> tmdbTvId ?: tmdbMovieId
+            ContentType.CHANNEL,
+            ContentType.PERSON,
+            ContentType.UNKNOWN -> singleTypedTmdbIdOrNull()
+        }
+
+    private fun CanonicalStableIds.singleTypedTmdbIdOrNull(): String? {
+        val movieId = tmdbMovieId?.takeIf { it.isNotBlank() }
+        val tvId = tmdbTvId?.takeIf { it.isNotBlank() }
+        return when {
+            movieId != null && tvId == null -> movieId
+            tvId != null && movieId == null -> tvId
+            else -> null
+        }
+    }
 }

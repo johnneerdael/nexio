@@ -144,6 +144,31 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `movie hydration stable ids prefer tmdb movie id when tv id is also present`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundleWithBothTmdbIds()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+
+        coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds()),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
+        assertEquals("550", overlaySlot.captured.canonicalId)
+        assertEquals("550", overlaySlot.captured.stableIdsSnapshot.tmdb)
+    }
+
+    @Test
     fun `visible hydration preserves typed artwork in written overlay fields`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
@@ -1374,6 +1399,24 @@ class HomeHydrationCoordinatorTest {
             observedIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
         ),
         evidence = listOf(StableIdEvidence("tmdb", "imdb", networkExecuted = false, resultId = "tt0137523")),
+        resolvedAtMs = 1L
+    )
+
+    private fun stableBundleWithBothTmdbIds() = StableIdBundle(
+        itemKey = "movie:550",
+        itemType = ContentType.MOVIE,
+        canonical = CanonicalStableIds(
+            tmdbMovieId = "550",
+            tmdbTvId = "71446"
+        ),
+        sidecars = SidecarStableIds(imdbId = "tt0137523"),
+        source = SourceStableIds(
+            sourceProvider = ProviderId.TMDB,
+            sourceItemId = "550",
+            railId = RailSource.BUILT_IN_TMDB.name,
+            observedIds = ProviderIds()
+        ),
+        evidence = emptyList(),
         resolvedAtMs = 1L
     )
 }

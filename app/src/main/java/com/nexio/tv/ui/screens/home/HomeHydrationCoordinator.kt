@@ -5,6 +5,7 @@ import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -19,6 +20,7 @@ import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
@@ -109,7 +111,7 @@ class HomeHydrationCoordinator @Inject constructor(
             val stableIdsSnapshot = bundle?.let { b ->
                 ProviderIds(
                     imdb = b.sidecars.imdbId ?: item.firstPaintStableIds.imdb,
-                    tmdb = b.canonical.tmdbTvId ?: b.canonical.tmdbMovieId ?: item.firstPaintStableIds.tmdb,
+                    tmdb = b.canonical.tmdbIdFor(b.itemType) ?: item.firstPaintStableIds.tmdb,
                     tvdb = b.canonical.tvdbSeriesId ?: item.firstPaintStableIds.tvdb,
                     kitsu = b.canonical.kitsuAnimeId ?: item.firstPaintStableIds.kitsu,
                     trakt = item.firstPaintStableIds.trakt,
@@ -455,15 +457,15 @@ class HomeHydrationCoordinator @Inject constructor(
 
     private fun StableIdBundle.canonicalIdentity(): CanonicalIdentity? =
         when (itemType) {
-            com.nexio.tv.domain.model.ContentType.SERIES,
-            com.nexio.tv.domain.model.ContentType.TV -> when {
+            ContentType.SERIES,
+            ContentType.TV -> when {
                 !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
                 !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
                 !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
                 !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
                 else -> null
             }
-            com.nexio.tv.domain.model.ContentType.MOVIE -> when {
+            ContentType.MOVIE -> when {
                 !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
                 !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
                 !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
@@ -472,8 +474,10 @@ class HomeHydrationCoordinator @Inject constructor(
             }
             else -> when {
                 !canonical.kitsuAnimeId.isNullOrBlank() -> CanonicalIdentity(ProviderId.KITSU, canonical.kitsuAnimeId)
-                !canonical.tmdbTvId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
-                !canonical.tmdbMovieId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
+                !canonical.tmdbMovieId.isNullOrBlank() && canonical.tmdbTvId.isNullOrBlank() ->
+                    CanonicalIdentity(ProviderId.TMDB, canonical.tmdbMovieId)
+                !canonical.tmdbTvId.isNullOrBlank() && canonical.tmdbMovieId.isNullOrBlank() ->
+                    CanonicalIdentity(ProviderId.TMDB, canonical.tmdbTvId)
                 !canonical.tvdbSeriesId.isNullOrBlank() -> CanonicalIdentity(ProviderId.TVDB, canonical.tvdbSeriesId)
                 else -> null
             }
@@ -493,8 +497,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 ?: bundle?.sidecars?.imdbId,
             tmdb = firstPaintIds.tmdb
                 ?: observedIds?.tmdb
-                ?: bundle?.canonical?.tmdbTvId
-                ?: bundle?.canonical?.tmdbMovieId,
+                ?: bundle?.canonical?.tmdbIdFor(bundle.itemType),
             tvdb = firstPaintIds.tvdb
                 ?: observedIds?.tvdb
                 ?: bundle?.canonical?.tvdbSeriesId,
@@ -511,6 +514,26 @@ class HomeHydrationCoordinator @Inject constructor(
             canonicalProvider = overlay.canonicalProvider,
             canonicalId = overlay.canonicalId
         )
+    }
+
+    private fun CanonicalStableIds.tmdbIdFor(itemType: ContentType): String? =
+        when (itemType) {
+            ContentType.MOVIE -> tmdbMovieId ?: tmdbTvId
+            ContentType.SERIES,
+            ContentType.TV -> tmdbTvId ?: tmdbMovieId
+            ContentType.CHANNEL,
+            ContentType.PERSON,
+            ContentType.UNKNOWN -> singleTypedTmdbIdOrNull()
+        }
+
+    private fun CanonicalStableIds.singleTypedTmdbIdOrNull(): String? {
+        val movieId = tmdbMovieId?.takeIf { it.isNotBlank() }
+        val tvId = tmdbTvId?.takeIf { it.isNotBlank() }
+        return when {
+            movieId != null && tvId == null -> movieId
+            tvId != null && movieId == null -> tvId
+            else -> null
+        }
     }
 
     private fun MetadataPrimaryProvider.toProviderId(): ProviderId? =

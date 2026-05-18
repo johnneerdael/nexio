@@ -335,6 +335,34 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
+    fun `movie canonical identity prefers tmdb movie id when tv id is also present`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns movieBundleWithTvId()
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tmdb:550",
+                    contentType = "movie",
+                    videoId = "tmdb:550",
+                    season = null,
+                    episode = null
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals(ProviderId.TMDB, record.displayIdentity?.canonicalProvider)
+        assertEquals("550", record.displayIdentity?.canonicalId)
+        assertEquals("550", record.displayIdentity?.providerIds?.tmdb)
+        assertEquals("profile:1:movie:tmdb:550", record.canonicalKey?.stableKey())
+        assertEquals("movie:tmdb:550", record.parentId)
+        assertEquals("550", record.idBundle.tmdb)
+    }
+
+    @Test
     fun `kitsu anime id resolves continue watching record as anime`() = runTest {
         val requestSlot = slot<MetadataRequest>()
         coEvery {
@@ -611,6 +639,22 @@ class ContinueWatchingIdentityResolverTest {
                 sourceItemId = "123",
                 railId = null,
                 observedIds = ProviderIds(tmdb = "123")
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1_700_000_000_000L
+        )
+
+    private fun movieBundleWithTvId(): StableIdBundle =
+        StableIdBundle(
+            itemKey = "movie:tmdb:550",
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446"),
+            sidecars = SidecarStableIds(imdbId = "tt0137523"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TMDB,
+                sourceItemId = "550",
+                railId = null,
+                observedIds = ProviderIds(tmdb = "550")
             ),
             evidence = emptyList(),
             resolvedAtMs = 1_700_000_000_000L
