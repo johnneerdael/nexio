@@ -72,6 +72,9 @@ import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
 import com.nexio.tv.ui.screens.player.ass.AssSsaTranslatingSampleSink
+import com.nexio.tv.ui.screens.player.translation.ParserAheadSubtitleDiagnostics
+import com.nexio.tv.ui.screens.player.translation.ParserAheadSubtitleQueue
+import com.nexio.tv.ui.screens.player.translation.TappingSubtitleParserFactory
 import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
 import com.nexio.tv.integrations.hyperhdr.capture.FormatDetector
 import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
@@ -730,6 +733,27 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
             assSsaRenderController = assController
+            val parserAheadQueue = if (assController == null) {
+                ParserAheadSubtitleQueue(
+                    scope = scope,
+                    playbackPositionUsProvider = {
+                        (_exoPlayer?.currentPosition ?: 0L) * 1_000L
+                    },
+                    isEnabledProvider = { format ->
+                        builtInSubtitleCueTranslator.getConfigurationToken(format) != null
+                    },
+                    diagnostics = ParserAheadSubtitleDiagnostics.logcat(),
+                    enqueueForTranslation = { format, cueGroup ->
+                        builtInSubtitleCueTranslator.enqueueAheadCue(format, cueGroup)
+                    }
+                )
+            } else {
+                null
+            }
+            parserAheadSubtitleQueue = parserAheadQueue
+            val parserAheadSubtitleParserFactory = parserAheadQueue?.let { queue ->
+                TappingSubtitleParserFactory(cueSink = queue)
+            }
             if (assController != null) {
                 mediaSourceFactory.configureSubtitleParsing(
                     extractorsFactory = AssSsaExtractorsFactory(extractorsFactory, assSampleSink ?: assController),
@@ -738,14 +762,21 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             } else {
                 mediaSourceFactory.configureSubtitleParsing(
                     extractorsFactory = null,
-                    subtitleParserFactory = null
+                    subtitleParserFactory = parserAheadSubtitleParserFactory
                 )
+            }
+            val exoMediaSourceFactory = DefaultMediaSourceFactory(context, extractorsFactory).apply {
+                if (assController != null) {
+                    setSubtitleParserFactory(AssNoOpSubtitleParserFactory())
+                } else {
+                    parserAheadSubtitleParserFactory?.let(::setSubtitleParserFactory)
+                }
             }
 
             _exoPlayer = ExoPlayer.Builder(context)
                 .experimentalSetDynamicSchedulingEnabled(playerSettings.dynamicVideoSchedulingEnabled)
                 .setTrackSelector(trackSelector!!)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
+                .setMediaSourceFactory(exoMediaSourceFactory)
                 .setRenderersFactory(renderersFactory)
                 .setLoadControl(loadControl)
                 .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)

@@ -259,12 +259,16 @@ internal class PlayerMediaSourceFactory(
         }
 
         return when (resolvedMimeType) {
-            MimeTypes.APPLICATION_M3U8 -> HlsMediaSource.Factory(okHttpFactory)
-                .setAllowChunklessPreparation(true)
-                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+            MimeTypes.APPLICATION_M3U8 -> HlsMediaSource.Factory(okHttpFactory).apply {
+                setAllowChunklessPreparation(true)
+                setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                customSubtitleParserFactory?.let(::setSubtitleParserFactory)
+            }
                 .createMediaSource(mediaItem)
-            MimeTypes.APPLICATION_MPD -> DashMediaSource.Factory(okHttpFactory)
-                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+            MimeTypes.APPLICATION_MPD -> DashMediaSource.Factory(okHttpFactory).apply {
+                setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                customSubtitleParserFactory?.let(::setSubtitleParserFactory)
+            }
                 .createMediaSource(mediaItem)
             else -> defaultFactory.createMediaSource(mediaItem)
         }

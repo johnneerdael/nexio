@@ -46,6 +46,7 @@ import androidx.media3.session.MediaSession
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
+import com.nexio.tv.ui.screens.player.translation.ParserAheadSubtitleQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -263,6 +264,7 @@ class PlayerRuntimeController(
     internal var sourceChipErrorDismissJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
+    internal var parserAheadSubtitleQueue: ParserAheadSubtitleQueue? = null
     internal var aiSubtitleErrorDismissJob: Job? = null
     internal var addonSubtitleOverlayJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
