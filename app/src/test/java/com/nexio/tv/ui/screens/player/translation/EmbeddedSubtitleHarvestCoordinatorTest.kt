@@ -119,6 +119,30 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         assertEquals(listOf("unsupported_track"), diagnostics.unsupportedReasons)
     }
 
+    @Test
+    fun mp4SubRipDoesNotStartBeforeMp4HarvesterIsWired() = runTest {
+        val startedHarvests = mutableListOf<TranslationTimelineSessionKey>()
+        val diagnostics = RecordingHarvestDiagnostics()
+        val coordinator = coordinator(
+            diagnostics = diagnostics,
+            startHarvest = { key, _ ->
+                startedHarvests += key
+                Job()
+            }
+        )
+
+        coordinator.update(
+            eligibleState(
+                streamUrl = "https://example.test/video.mp4",
+                filename = "video.mp4"
+            )
+        )
+
+        assertNull(coordinator.activeSessionKey())
+        assertEquals(emptyList<TranslationTimelineSessionKey>(), startedHarvests)
+        assertEquals(listOf("not_mkv"), diagnostics.unsupportedReasons)
+    }
+
     private fun TestScope.coordinator(
         timelineStore: TranslatedSubtitleTimelineStore = TranslatedSubtitleTimelineStore(),
         diagnostics: EmbeddedSubtitleHarvestDiagnosticsLogger = EmbeddedSubtitleHarvestDiagnostics,
@@ -141,6 +165,8 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
     }
 
     private fun eligibleState(
+        streamUrl: String = "https://example.test/video.mkv?token=abc",
+        filename: String = "video.mkv",
         targetLanguage: String = "nl",
         selectedAddonSubtitlePresent: Boolean = false,
         track: TrackInfo? = subRipTrack(),
@@ -152,8 +178,8 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         )
     ): EmbeddedSubtitleHarvestState {
         return EmbeddedSubtitleHarvestState(
-            streamUrl = "https://example.test/video.mkv?token=abc",
-            filename = "video.mkv",
+            streamUrl = streamUrl,
+            filename = filename,
             headers = mapOf("Authorization" to "Bearer token"),
             selectedTrack = track,
             selectedSupportedSubRipOrdinal = selectedSupportedSubRipOrdinal,

@@ -51,6 +51,7 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             state.settings.enabled &&
             state.settings.apiKey.isNotBlank() &&
             targetLanguage.isNotBlank() &&
+            EmbeddedSubtitleHarvestEligibility.isMatroska(state.streamUrl, state.filename) &&
             state.selectedSupportedSubRipOrdinal != null
         val reason = if (isEligible) "eligible" else state.unsupportedReason(targetLanguage)
         diagnostics.stateEvaluated(
