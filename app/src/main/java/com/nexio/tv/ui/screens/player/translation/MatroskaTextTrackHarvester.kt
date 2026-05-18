@@ -28,12 +28,10 @@ internal data class MatroskaTextTrackHarvestRequest(
 )
 
 internal class TimelinePublishingMatroskaTextTrackSink(
-    private val sessionKey: TranslationTimelineSessionKey,
-    private val timelineStore: TranslatedSubtitleTimelineStore,
-    private val sourceLanguage: String? = null
+    private val cueSink: TimelinePublishingTextCueSink
 ) : MatroskaTextTrackSink {
-    var sampleCount: Int = 0
-        private set
+    val sampleCount: Int
+        get() = cueSink.sampleCount
 
     override fun onSupportedTextTrack(
         trackId: Int,
@@ -42,32 +40,28 @@ internal class TimelinePublishingMatroskaTextTrackSink(
     ) = Unit
 
     override fun onSubtitleSample(sample: HarvestedMatroskaTextSample) {
-        val text = sample.text.trim()
-        if (text.isBlank()) return
-
         val cueGroup = CueGroup(
-            listOf(Cue.Builder().setText(text).build()),
+            listOf(Cue.Builder().setText(sample.text.trim()).build()),
             sample.timeUs
         )
-        timelineStore.putSourceCue(sessionKey, cueGroup)
-        val sourceCue = timelineStore.registerMiss(sessionKey, cueGroup)
-        if (sourceCue != null) {
-            sampleCount += 1
-            EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
-                session = sessionKey,
-                cueKey = sourceCue.cueKey,
-                sourceLanguage = sourceLanguage ?: sample.format.language
-            )
-        }
+        cueSink.publish(cueGroup, sample.format.language)
     }
 }
 
-internal class MatroskaTextTrackHarvester {
-    suspend fun harvest(request: MatroskaTextTrackHarvestRequest): Int = withContext(Dispatchers.IO) {
+internal class MatroskaTextTrackHarvester : EmbeddedSubtitleTrackHarvester {
+    override val container: EmbeddedSubtitleContainer = EmbeddedSubtitleContainer.MATROSKA
+
+    override suspend fun harvest(
+        request: EmbeddedSubtitleTrackHarvestRequest
+    ): EmbeddedSubtitleTrackHarvestResult = withContext(Dispatchers.IO) {
+        val startedMs = System.currentTimeMillis()
         val sink = TimelinePublishingMatroskaTextTrackSink(
-            sessionKey = request.sessionKey,
-            timelineStore = request.timelineStore,
-            sourceLanguage = request.sourceLanguage
+            cueSink = TimelinePublishingTextCueSink(
+                sessionKey = request.sessionKey,
+                container = container,
+                timelineStore = request.timelineStore,
+                sourceLanguage = request.sourceLanguage
+            )
         )
         val extractor = MatroskaExtractor(
             SubtitleParser.Factory.UNSUPPORTED,
@@ -78,7 +72,7 @@ internal class MatroskaTextTrackHarvester {
                 delegate = request.extractorOutput,
                 sink = sink,
                 selectedSupportedTrackOrdinalProvider = {
-                    request.selectedSupportedSubRipOrdinal
+                    request.selectedSupportedTextOrdinal
                 }
             )
         )
@@ -103,11 +97,30 @@ internal class MatroskaTextTrackHarvester {
                     readResult = Extractor.RESULT_CONTINUE
                 }
             }
-            sink.sampleCount
+            EmbeddedSubtitleTrackHarvestResult(
+                container = container,
+                harvested = sink.sampleCount,
+                durationMs = System.currentTimeMillis() - startedMs
+            )
         } finally {
             dataSource.close()
             extractor.release()
         }
+    }
+
+    // Compatibility bridge for the current runtime call site. Remove in Task 6.
+    suspend fun harvest(request: MatroskaTextTrackHarvestRequest): Int {
+        return harvest(
+            EmbeddedSubtitleTrackHarvestRequest(
+                streamUrl = request.streamUrl,
+                headers = request.headers,
+                selectedSupportedTextOrdinal = request.selectedSupportedSubRipOrdinal,
+                sourceLanguage = request.sourceLanguage,
+                sessionKey = request.sessionKey,
+                timelineStore = request.timelineStore,
+                extractorOutput = request.extractorOutput
+            )
+        ).harvested
     }
 
     private fun openInput(

@@ -14,8 +14,11 @@ class MatroskaTextTrackHarvesterTest {
         val store = TranslatedSubtitleTimelineStore()
         val session = session()
         val sink = TimelinePublishingMatroskaTextTrackSink(
-            sessionKey = session,
-            timelineStore = store
+            cueSink = TimelinePublishingTextCueSink(
+                sessionKey = session,
+                container = EmbeddedSubtitleContainer.MATROSKA,
+                timelineStore = store
+            )
         )
 
         store.beginSession(session)
@@ -38,8 +41,11 @@ class MatroskaTextTrackHarvesterTest {
         val store = TranslatedSubtitleTimelineStore()
         val session = session()
         val sink = TimelinePublishingMatroskaTextTrackSink(
-            sessionKey = session,
-            timelineStore = store
+            cueSink = TimelinePublishingTextCueSink(
+                sessionKey = session,
+                container = EmbeddedSubtitleContainer.MATROSKA,
+                timelineStore = store
+            )
         )
 
         sink.onSubtitleSample(
