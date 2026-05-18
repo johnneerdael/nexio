@@ -47,6 +47,45 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun stateProofLineIncludesEligibilityInputs() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.stateEvaluatedLine(
+            state = EmbeddedSubtitleHarvestState(
+                streamUrl = "https://real-debrid.example.test/movie.mkv?token=secret",
+                filename = "movie.mkv",
+                headers = emptyMap(),
+                selectedTrack = TrackInfo(
+                    index = 3,
+                    name = "English",
+                    language = "en",
+                    trackId = "sub-3",
+                    mimeType = MimeTypes.APPLICATION_SUBRIP,
+                    codec = MimeTypes.APPLICATION_SUBRIP
+                ),
+                selectedSupportedSubRipOrdinal = 1,
+                selectedAddonSubtitlePresent = false,
+                autoTranslateEnabled = true,
+                targetLanguage = "nl",
+                settings = com.nexio.tv.domain.model.SubtitleTranslationSettings(
+                    enabled = true,
+                    apiKey = "test-key"
+                )
+            ),
+            eligible = true,
+            reason = "eligible"
+        )
+
+        assertTrue(line.contains("event=state"))
+        assertTrue(line.contains("eligible=true"))
+        assertTrue(line.contains("reason=eligible"))
+        assertTrue(line.contains("streamHost=real-debrid.example.test"))
+        assertTrue(line.contains("isMkv=true"))
+        assertTrue(line.contains("hasApiKey=true"))
+        assertTrue(line.contains("trackIndex=3"))
+        assertTrue(line.contains("mime=application/x-subrip"))
+        assertTrue(line.contains("subRipOrdinal=1"))
+    }
+
+    @Test
     fun sessionCancelledProofLineIncludesReason() {
         val line = EmbeddedSubtitleHarvestDiagnostics.sessionCancelledLine(
             session = session(),

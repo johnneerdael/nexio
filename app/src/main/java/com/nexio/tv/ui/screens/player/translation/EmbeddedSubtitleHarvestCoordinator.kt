@@ -51,9 +51,14 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             state.settings.enabled &&
             state.settings.apiKey.isNotBlank() &&
             targetLanguage.isNotBlank()
+        val reason = if (isEligible) "eligible" else state.unsupportedReason(targetLanguage)
+        diagnostics.stateEvaluated(
+            state = state,
+            eligible = isEligible,
+            reason = reason
+        )
 
         if (!isEligible) {
-            val reason = state.unsupportedReason(targetLanguage)
             if (activeKey == null && lastUnsupportedReason != reason) {
                 diagnostics.unsupported(reason)
             }

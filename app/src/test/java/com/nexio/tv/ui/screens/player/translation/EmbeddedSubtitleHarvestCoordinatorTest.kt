@@ -145,6 +145,12 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
     private class RecordingHarvestDiagnostics : EmbeddedSubtitleHarvestDiagnosticsLogger {
         val cancelReasons = mutableListOf<String>()
 
+        override fun stateEvaluated(
+            state: EmbeddedSubtitleHarvestState,
+            eligible: Boolean,
+            reason: String
+        ) = Unit
+
         override fun sessionStarted(
             session: TranslationTimelineSessionKey,
             streamUrl: String,

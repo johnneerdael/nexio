@@ -6,6 +6,12 @@ import java.net.URI
 import java.util.Locale
 
 internal interface EmbeddedSubtitleHarvestDiagnosticsLogger {
+    fun stateEvaluated(
+        state: EmbeddedSubtitleHarvestState,
+        eligible: Boolean,
+        reason: String
+    )
+
     fun sessionStarted(
         session: TranslationTimelineSessionKey,
         streamUrl: String,
@@ -24,7 +30,38 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
     private const val RENDERER_FALLBACK_MODE = "renderer_prefetch_fallback"
     private const val RENDERER_LOOKUP_LOG_INTERVAL_MS = 10_000L
     private const val MAX_RENDERER_LOOKUP_LOG_KEYS = 2_048
+    private const val STATE_LOG_INTERVAL_MS = 30_000L
     private val rendererLookupLastLogMs = LinkedHashMap<String, Long>()
+    private val stateLastLogMs = LinkedHashMap<String, Long>()
+
+    override fun stateEvaluated(
+        state: EmbeddedSubtitleHarvestState,
+        eligible: Boolean,
+        reason: String
+    ) {
+        val line = stateEvaluatedLine(state, eligible, reason)
+        if (shouldLogState(line)) {
+            log(line)
+        }
+    }
+
+    fun stateEvaluatedLine(
+        state: EmbeddedSubtitleHarvestState,
+        eligible: Boolean,
+        reason: String
+    ): String {
+        val track = state.selectedTrack
+        return "$PREFIX event=state eligible=$eligible reason=${field(reason)} " +
+            "translationMode=${if (eligible) TIMELINE_MODE else RENDERER_FALLBACK_MODE} " +
+            "streamHost=${field(hostFor(state.streamUrl))} filename=${field(state.filename)} " +
+            "isMkv=${EmbeddedSubtitleHarvestEligibility.isMatroska(state.streamUrl, state.filename)} " +
+            "autoTranslate=${state.autoTranslateEnabled} settingsEnabled=${state.settings.enabled} " +
+            "hasApiKey=${state.settings.apiKey.isNotBlank()} targetLanguage=${field(state.targetLanguage)} " +
+            "addonSubtitle=${state.selectedAddonSubtitlePresent} selectedTrack=${track != null} " +
+            "trackIndex=${track?.index ?: -1} trackId=${field(track?.trackId)} " +
+            "mime=${field(track?.mimeType)} codec=${field(track?.codec)} language=${field(track?.language)} " +
+            "subRipOrdinal=${state.selectedSupportedSubRipOrdinal ?: -1}"
+    }
 
     override fun sessionStarted(
         session: TranslationTimelineSessionKey,
@@ -203,6 +240,23 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
                 while (rendererLookupLastLogMs.size > MAX_RENDERER_LOOKUP_LOG_KEYS) {
                     val firstKey = rendererLookupLastLogMs.keys.firstOrNull() ?: break
                     rendererLookupLastLogMs.remove(firstKey)
+                }
+                true
+            }
+        }
+    }
+
+    private fun shouldLogState(line: String): Boolean {
+        val nowMs = System.currentTimeMillis()
+        return synchronized(stateLastLogMs) {
+            val lastLogMs = stateLastLogMs[line]
+            if (lastLogMs != null && nowMs - lastLogMs < STATE_LOG_INTERVAL_MS) {
+                false
+            } else {
+                stateLastLogMs[line] = nowMs
+                while (stateLastLogMs.size > 64) {
+                    val firstKey = stateLastLogMs.keys.firstOrNull() ?: break
+                    stateLastLogMs.remove(firstKey)
                 }
                 true
             }
