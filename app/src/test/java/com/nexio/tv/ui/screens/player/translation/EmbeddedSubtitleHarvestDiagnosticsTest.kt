@@ -78,11 +78,11 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
         assertTrue(line.contains("eligible=true"))
         assertTrue(line.contains("reason=eligible"))
         assertTrue(line.contains("streamHost=real-debrid.example.test"))
-        assertTrue(line.contains("isMkv=true"))
+        assertTrue(line.contains("container=mkv"))
         assertTrue(line.contains("hasApiKey=true"))
         assertTrue(line.contains("trackIndex=3"))
         assertTrue(line.contains("mime=application/x-subrip"))
-        assertTrue(line.contains("subRipOrdinal=1"))
+        assertTrue(line.contains("selectedTextOrdinal=1"))
     }
 
     @Test
@@ -114,6 +114,22 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun mp4HarvestCompletedLineIncludesContainerAndDuration() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.harvestCompletedLine(
+            session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
+            harvested = 120,
+            durationMs = 3_456L
+        )
+
+        assertEquals(
+            "EMBEDDED_SUB_TIMELINE event=harvest_completed " +
+                "session=stream-key container=mp4 harvested=120 durationMs=3456",
+            line
+        )
+    }
+
+    @Test
     fun cueProofLinesUseStoreCueKeyFields() {
         val store = TranslatedSubtitleTimelineStore()
         val cueGroup = cueGroup(" bonjour ", 42_000L)
@@ -121,6 +137,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
 
         val harvested = EmbeddedSubtitleHarvestDiagnostics.cueHarvestedLine(
             session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
             cueKey = cueKey,
             sourceLanguage = "fr"
         )
@@ -159,6 +176,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     fun progressProofLineIncludesAllCounters() {
         val line = EmbeddedSubtitleHarvestDiagnostics.progressLine(
             session = session(),
+            container = EmbeddedSubtitleContainer.MP4,
             harvested = 7,
             stats = TranslationTimelineStats(
                 sourceCueCount = 6,
@@ -172,7 +190,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
 
         assertEquals(
             "EMBEDDED_SUB_TIMELINE event=progress session=stream-key " +
-                "harvested=7 sourceStored=6 translated=4 pendingBackfill=2 " +
+                "container=mp4 harvested=7 sourceStored=6 translated=4 pendingBackfill=2 " +
                 "lookupHit=3 lookupMiss=5 fallbackOriginal=9",
             line
         )

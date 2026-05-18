@@ -72,9 +72,16 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
             )
             EmbeddedSubtitleHarvestDiagnostics.progress(
                 session = sessionKey,
+                container = result.container,
                 harvested = result.harvested,
                 stats = translatedSubtitleTimelineStore.stats(sessionKey),
                 fallbackOriginal = builtInSubtitleCueTranslator.timelineFallbackOriginalCount()
+            )
+            EmbeddedSubtitleHarvestDiagnostics.harvestCompleted(
+                session = sessionKey,
+                container = result.container,
+                harvested = result.harvested,
+                durationMs = result.durationMs
             )
         } catch (error: CancellationException) {
             throw error
@@ -108,6 +115,7 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleTranslateLoop(
             val stats = translatedSubtitleTimelineStore.stats(sessionKey)
             EmbeddedSubtitleHarvestDiagnostics.progress(
                 session = sessionKey,
+                container = state.container,
                 harvested = stats.sourceCueCount,
                 stats = stats,
                 fallbackOriginal = builtInSubtitleCueTranslator.timelineFallbackOriginalCount()

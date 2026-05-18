@@ -20,6 +20,13 @@ internal interface EmbeddedSubtitleHarvestDiagnosticsLogger {
 
     fun sessionCancelled(session: TranslationTimelineSessionKey?, reason: String)
 
+    fun harvestCompleted(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
+        harvested: Int,
+        durationMs: Long
+    ) = Unit
+
     fun unsupported(reason: String)
 }
 
@@ -54,13 +61,13 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         return "$PREFIX event=state eligible=$eligible reason=${field(reason)} " +
             "translationMode=${if (eligible) TIMELINE_MODE else RENDERER_FALLBACK_MODE} " +
             "streamHost=${field(hostFor(state.streamUrl))} filename=${field(state.filename)} " +
-            "isMkv=${EmbeddedSubtitleHarvestEligibility.isMatroska(state.streamUrl, state.filename)} " +
+            "container=${containerField(state.container)} " +
             "autoTranslate=${state.autoTranslateEnabled} settingsEnabled=${state.settings.enabled} " +
             "hasApiKey=${state.settings.apiKey.isNotBlank()} targetLanguage=${field(state.targetLanguage)} " +
             "addonSubtitle=${state.selectedAddonSubtitlePresent} selectedTrack=${track != null} " +
             "trackIndex=${track?.index ?: -1} trackId=${field(track?.trackId)} " +
             "mime=${field(track?.mimeType)} codec=${field(track?.codec)} language=${field(track?.language)} " +
-            "subRipOrdinal=${state.selectedSupportedSubRipOrdinal ?: -1}"
+            "selectedTextOrdinal=${state.selectedSupportedTextOrdinal ?: -1}"
     }
 
     override fun sessionStarted(
@@ -110,23 +117,45 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
             "reason=${field(reason)}"
     }
 
+    override fun harvestCompleted(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
+        harvested: Int,
+        durationMs: Long
+    ) {
+        log(harvestCompletedLine(session, container, harvested, durationMs))
+    }
+
+    fun harvestCompletedLine(
+        session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
+        harvested: Int,
+        durationMs: Long
+    ): String {
+        return "$PREFIX event=harvest_completed session=${field(session.streamKey)} " +
+            "container=${containerField(container)} harvested=$harvested durationMs=$durationMs"
+    }
+
     fun cueHarvested(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
         cueKey: TranslationTimelineCueKey?,
         sourceLanguage: String?
     ) {
         val key = cueKey ?: return
-        log(cueHarvestedLine(session, key, sourceLanguage))
+        log(cueHarvestedLine(session, container, key, sourceLanguage))
     }
 
     fun cueHarvestedLine(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer,
         cueKey: TranslationTimelineCueKey?,
         sourceLanguage: String?
     ): String {
         return cueLine(
             event = "cue_harvested",
             session = session,
+            container = container,
             cueKey = cueKey,
             extra = " sourceLanguage=${field(sourceLanguage)}"
         )
@@ -147,6 +176,7 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         return cueLine(
             event = "cue_translated",
             session = session,
+            container = null,
             cueKey = cueKey
         )
     }
@@ -170,6 +200,7 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         return cueLine(
             event = event,
             session = session,
+            container = null,
             cueKey = cueKey,
             extra = " translationMode=$TIMELINE_MODE"
         )
@@ -177,21 +208,23 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
 
     fun progress(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         harvested: Int,
         stats: TranslationTimelineStats,
         fallbackOriginal: Long
     ) {
-        log(progressLine(session, harvested, stats, fallbackOriginal))
+        log(progressLine(session, container, harvested, stats, fallbackOriginal))
     }
 
     fun progressLine(
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         harvested: Int,
         stats: TranslationTimelineStats,
         fallbackOriginal: Long
     ): String {
         return "$PREFIX event=progress session=${field(session.streamKey)} " +
-            "harvested=$harvested sourceStored=${stats.sourceCueCount} " +
+            "container=${containerField(container)} harvested=$harvested sourceStored=${stats.sourceCueCount} " +
             "translated=${stats.translatedCueCount} pendingBackfill=${stats.pendingBackfillCount} " +
             "lookupHit=${stats.hitCount} lookupMiss=${stats.missCount} " +
             "fallbackOriginal=$fallbackOriginal"
@@ -200,12 +233,17 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
     private fun cueLine(
         event: String,
         session: TranslationTimelineSessionKey,
+        container: EmbeddedSubtitleContainer?,
         cueKey: TranslationTimelineCueKey?,
         extra: String = ""
     ): String {
         return "$PREFIX event=$event session=${field(session.streamKey)} " +
-            "cueTimeUs=${cueKey?.presentationTimeUs ?: -1L} " +
+            "container=${containerField(container)} cueTimeUs=${cueKey?.presentationTimeUs ?: -1L} " +
             "cueHash=${field(cueKey?.sourceTextHash)}$extra"
+    }
+
+    private fun containerField(container: EmbeddedSubtitleContainer?): String {
+        return container?.logValue ?: "unknown"
     }
 
     private fun log(line: String) {

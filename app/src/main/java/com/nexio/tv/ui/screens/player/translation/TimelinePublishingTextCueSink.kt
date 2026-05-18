@@ -17,6 +17,7 @@ internal class TimelinePublishingTextCueSink(
         timelineStore.registerMiss(sessionKey, cueGroup)
         EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
             session = sessionKey,
+            container = container,
             cueKey = sourceCue.cueKey,
             sourceLanguage = sourceLanguage ?: language
         )
