@@ -42,6 +42,26 @@ class TimelinePublishingTextCueSinkTest {
         assertEquals(0, store.stats(session).sourceCueCount)
     }
 
+    @Test
+    fun countsDuplicatePublishableCueGroupsAsHarvestedSamples() {
+        val store = TranslatedSubtitleTimelineStore()
+        val session = session()
+        store.beginSession(session)
+        val sink = TimelinePublishingTextCueSink(
+            sessionKey = session,
+            container = EmbeddedSubtitleContainer.MP4,
+            timelineStore = store
+        )
+        val cueGroup = CueGroup(listOf(Cue.Builder().setText("Hello").build()), 1_000L)
+
+        sink.publish(cueGroup)
+        sink.publish(cueGroup)
+
+        assertEquals(2, sink.sampleCount)
+        assertEquals(1, store.stats(session).sourceCueCount)
+        assertEquals(1, store.stats(session).pendingBackfillCount)
+    }
+
     private fun session(): TranslationTimelineSessionKey {
         return TranslationTimelineSessionKey(
             streamKey = "stream",

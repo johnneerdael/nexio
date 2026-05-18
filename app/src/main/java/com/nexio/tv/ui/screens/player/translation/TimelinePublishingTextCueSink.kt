@@ -12,17 +12,13 @@ internal class TimelinePublishingTextCueSink(
         private set
 
     fun publish(cueGroup: CueGroup, language: String? = null) {
-        val beforeSourceCueCount = timelineStore.stats(sessionKey).sourceCueCount
-        timelineStore.putSourceCue(sessionKey, cueGroup)
-        val sourceCue = timelineStore.registerMiss(sessionKey, cueGroup)
-        val afterSourceCueCount = timelineStore.stats(sessionKey).sourceCueCount
-        if (sourceCue != null && afterSourceCueCount > beforeSourceCueCount) {
-            sampleCount += 1
-            EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
-                session = sessionKey,
-                cueKey = sourceCue.cueKey,
-                sourceLanguage = sourceLanguage ?: language
-            )
-        }
+        val sourceCue = timelineStore.putSourceCue(sessionKey, cueGroup) ?: return
+        sampleCount += 1
+        timelineStore.registerMiss(sessionKey, cueGroup)
+        EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
+            session = sessionKey,
+            cueKey = sourceCue.cueKey,
+            sourceLanguage = sourceLanguage ?: language
+        )
     }
 }
