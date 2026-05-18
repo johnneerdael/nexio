@@ -21,10 +21,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 
+private object TmdbDefaultContinueWatchingEpisodeOrderResolver : TvEpisodeOrderResolver {
+    override suspend fun resolve(
+        tmdbTvId: String?,
+        providerIds: ProviderIds
+    ): TvEpisodeOrderResolution =
+        TvEpisodeOrderResolution(
+            provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+            tmdbTvId = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty(),
+            reason = "tmdb default"
+        )
+}
+
 @Singleton
 class ContinueWatchingIdentityResolver @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade?,
     private val streamFetchIdentityResolver: StreamFetchIdentityResolver,
+    private val tvEpisodeOrderResolver: TvEpisodeOrderResolver = TmdbDefaultContinueWatchingEpisodeOrderResolver,
     // Optional so the internal test constructor stays parameter-free. When null,
     // crossBridgeIdentity() is a no-op; the resolver just returns whatever the
     // facade gave it (legacy behavior).
@@ -33,6 +46,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
     internal constructor() : this(
         metadataRouterFacade = null,
         streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+        tvEpisodeOrderResolver = TmdbDefaultContinueWatchingEpisodeOrderResolver,
         stableIdBundleResolver = null
     )
 
@@ -132,8 +146,9 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         identity: ContentIdentity,
         progress: WatchProgress,
         episodeContext: ContinueWatchingRecord.EpisodeContext?
-    ): StreamFetchIdentity? =
-        when (mediaKind) {
+    ): StreamFetchIdentity? {
+        val episodeOrderProvider = resolveEpisodeOrderProvider(mediaKind, identity)
+        return when (mediaKind) {
             MetadataMediaKind.SERIES,
             MetadataMediaKind.ANIME -> episodeContext?.let {
                 streamFetchIdentityResolver.resolveForEpisode(
@@ -141,7 +156,8 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                     knownIds = identity.providerIds,
                     season = it.season,
                     episode = it.number,
-                    sourceContext = StreamSourceContext(mediaKind, progress.videoId)
+                    sourceContext = StreamSourceContext(mediaKind, progress.videoId),
+                    episodeOrderProvider = episodeOrderProvider
                 )
             }
 
@@ -153,6 +169,33 @@ class ContinueWatchingIdentityResolver @Inject constructor(
 
             MetadataMediaKind.UNKNOWN -> null
         }
+    }
+
+    private suspend fun resolveEpisodeOrderProvider(
+        mediaKind: MetadataMediaKind,
+        identity: ContentIdentity
+    ): TvEpisodeOrderProvider {
+        if (mediaKind != MetadataMediaKind.SERIES) return TvEpisodeOrderProvider.TMDB_DEFAULT
+        val tmdbTvId = identity.providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return if (
+                identity.canonicalProvider == ProviderId.TVDB &&
+                !identity.providerIds.tvdb.isNullOrBlank()
+            ) {
+                TvEpisodeOrderProvider.TVDB_DEFAULT
+            } else {
+                TvEpisodeOrderProvider.TMDB_DEFAULT
+            }
+        return try {
+            tvEpisodeOrderResolver.resolve(
+                tmdbTvId = tmdbTvId,
+                providerIds = identity.providerIds
+            ).provider
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            TvEpisodeOrderProvider.TMDB_DEFAULT
+        }
+    }
 
     private fun legacyFallback(input: RawContinueWatchingInput, error: Throwable): ContinueWatchingRecord {
         val progress = input.progress

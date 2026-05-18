@@ -24,7 +24,8 @@ class StreamFetchIdentityResolver @Inject constructor() {
         knownIds: ProviderIds,
         season: Int,
         episode: Int,
-        sourceContext: StreamSourceContext
+        sourceContext: StreamSourceContext,
+        episodeOrderProvider: TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
     ): StreamFetchIdentity? {
         require(season > 0) { "season must be positive" }
         require(episode > 0) { "episode must be positive" }
@@ -44,7 +45,10 @@ class StreamFetchIdentityResolver @Inject constructor() {
             )
         }
 
-        if (sourceContext.mediaKind == MetadataMediaKind.SERIES) {
+        if (
+            sourceContext.mediaKind == MetadataMediaKind.SERIES &&
+            episodeOrderProvider == TvEpisodeOrderProvider.TVDB_DEFAULT
+        ) {
             val tvdbId = knownIds.tvdb?.takeIf { it.isNotBlank() }
                 ?: canonicalIdentity.canonicalId?.takeIf {
                     canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotBlank()

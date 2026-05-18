@@ -2662,7 +2662,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
-    private fun WatchProgress.toResolvedContinueWatchingRecord(
+    private suspend fun WatchProgress.toResolvedContinueWatchingRecord(
         resolved: ResolvedDisplayItem,
         profileId: Int,
         displayMetadata: HomeDisplayMetadata,
@@ -2802,7 +2802,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         else -> MetadataPrimaryProvider.IMDB
     }
 
-    private fun streamFetchIdentityFromResolved(
+    private suspend fun streamFetchIdentityFromResolved(
         mediaKind: MetadataMediaKind,
         providerIds: ProviderIds,
         season: Int?,
@@ -2810,6 +2810,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
         canonicalIdentity: ContentIdentity,
         resumeVideoId: String
     ): StreamFetchIdentity? {
+        val episodeOrderProvider = resolveResolvedEpisodeOrderProvider(
+            mediaKind = mediaKind,
+            providerIds = providerIds,
+            canonicalIdentity = canonicalIdentity
+        )
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
             val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
             if (imdbId != null) {
@@ -2824,6 +2829,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     )
                 )
             }
+            if (episodeOrderProvider != TvEpisodeOrderProvider.TVDB_DEFAULT) return null
             val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() }
                 ?: canonicalIdentity.canonicalId?.trim()?.takeIf {
                     canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotEmpty()
@@ -2864,6 +2870,33 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     "source mediaKind=$mediaKind canonical=${canonicalIdentity.canonicalProvider}:${canonicalIdentity.canonicalId} resumeVideoId=$resumeVideoId"
                 )
             )
+        }
+    }
+
+    private suspend fun resolveResolvedEpisodeOrderProvider(
+        mediaKind: MetadataMediaKind,
+        providerIds: ProviderIds,
+        canonicalIdentity: ContentIdentity
+    ): TvEpisodeOrderProvider {
+        if (mediaKind != MetadataMediaKind.SERIES) return TvEpisodeOrderProvider.TMDB_DEFAULT
+        val tmdbTvId = providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return if (
+                canonicalIdentity.canonicalProvider == ProviderId.TVDB &&
+                !providerIds.tvdb.isNullOrBlank()
+            ) {
+                TvEpisodeOrderProvider.TVDB_DEFAULT
+            } else {
+                TvEpisodeOrderProvider.TMDB_DEFAULT
+            }
+        return try {
+            tvEpisodeOrderResolver.resolve(
+                tmdbTvId = tmdbTvId,
+                providerIds = providerIds
+            ).provider
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            TvEpisodeOrderProvider.TMDB_DEFAULT
         }
     }
 
