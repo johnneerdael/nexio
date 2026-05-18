@@ -447,7 +447,8 @@ class MetadataRouter @Inject constructor(
             AnimeIdScheme.TVDB -> builder.putIfAbsent(MetadataPrimaryProvider.TVDB, "tvdb:${targetParsed.value}")
             AnimeIdScheme.KITSU -> builder.putIfAbsent(MetadataPrimaryProvider.KITSU, "kitsu:${targetParsed.value}")
             AnimeIdScheme.IMDB -> builder.putIfAbsent(MetadataPrimaryProvider.IMDB, targetParsed.value.canonicalImdbTarget() ?: targetParsed.value)
-            else -> builder.putIfAbsent(provider, targetId)
+            AnimeIdScheme.UNKNOWN -> builder.putIfAbsent(provider, targetId)
+            else -> Unit
         }
 
         val originalParsed = MetadataIdParser.parse(normalized.originalContentId)
@@ -491,10 +492,10 @@ class MetadataRouter @Inject constructor(
         }
 
         val providerHasNativeTarget = when (provider) {
-            MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TMDB)
-            MetadataPrimaryProvider.TVDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
-            MetadataPrimaryProvider.KITSU -> builder.containsKey(MetadataPrimaryProvider.KITSU)
-            MetadataPrimaryProvider.IMDB -> builder.containsKey(MetadataPrimaryProvider.IMDB)
+            MetadataPrimaryProvider.TMDB -> builder[MetadataPrimaryProvider.TMDB].hasNativeScheme(AnimeIdScheme.TMDB)
+            MetadataPrimaryProvider.TVDB -> builder[MetadataPrimaryProvider.TVDB].hasNativeScheme(AnimeIdScheme.TVDB)
+            MetadataPrimaryProvider.KITSU -> builder[MetadataPrimaryProvider.KITSU].hasNativeScheme(AnimeIdScheme.KITSU)
+            MetadataPrimaryProvider.IMDB -> builder[MetadataPrimaryProvider.IMDB].hasNativeScheme(AnimeIdScheme.IMDB)
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL -> builder.containsKey(provider)
             // RPDB and TOP_POSTERS are artwork-only providers — not used in metadata routing target resolution.
@@ -513,6 +514,9 @@ class MetadataRouter @Inject constructor(
             requiresIdentityResolution = !providerHasNativeTarget && canResolveThroughKnownCrossProviderTarget
         )
     }
+
+    private fun String?.hasNativeScheme(scheme: AnimeIdScheme): Boolean =
+        this?.let { MetadataIdParser.parse(it).scheme == scheme } == true
 
     private fun String.numericProviderTarget(prefix: String): String? {
         val trimmed = trim().takeIf { it.isNotBlank() } ?: return null

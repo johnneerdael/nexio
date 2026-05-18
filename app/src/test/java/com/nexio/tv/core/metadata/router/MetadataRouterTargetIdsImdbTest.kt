@@ -113,6 +113,30 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `trakt series id with stable TVDB sidecar does not become native TMDB target`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val route = router.route(
+            request(
+                id = "trakt:123",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(tvdb = "81189")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+        assertEquals(MetadataMediaKind.SERIES, route.mediaKind)
+        assertEquals("tvdb:81189", route.targetIds[MetadataPrimaryProvider.TVDB])
+        assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
     fun `raw IMDB movie addon content id resolves TMDB target through external-id lookup`() = runTest {
         val lookup = FakeTmdbExternalIdLookup(
             tmdbForImdb = mapOf("tt12042730" to 687163)
