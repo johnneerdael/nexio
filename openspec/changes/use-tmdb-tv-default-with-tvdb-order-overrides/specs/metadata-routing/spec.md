@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Standard TV metadata routes to TMDB by default
 
@@ -9,7 +9,8 @@ NEXIO SHALL route `ContentType.SERIES` and `ContentType.TV` to TMDB for metadata
 - **GIVEN** a standard TV item with `ContentType.SERIES`
 - **WHEN** metadata routing runs
 - **THEN** the route provider is TMDB
-- **AND** the canonical stable ID is the TMDB TV ID
+- **AND** `canonical.tmdbTvId` is populated with the TMDB TV ID
+- **AND** `canonical.tmdbMovieId` is not populated
 - **AND** any TVDB ID is retained only as a provider/crosswalk ID
 
 #### Scenario: Anime identity still routes to Kitsu
