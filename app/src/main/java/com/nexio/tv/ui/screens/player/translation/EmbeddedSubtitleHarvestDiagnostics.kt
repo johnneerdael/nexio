@@ -226,6 +226,89 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
             "openMs=$openMs lastReadResult=$lastReadResult"
     }
 
+    fun mp4SampleTableHarvestStarted(
+        session: TranslationTimelineSessionKey,
+        selectedOrdinal: Int,
+        trackId: Int,
+        sampleMimeType: String?,
+        totalSamples: Int,
+        startSampleIndex: Int,
+        ranges: Int
+    ) {
+        log(
+            mp4SampleTableHarvestStartedLine(
+                session = session,
+                selectedOrdinal = selectedOrdinal,
+                trackId = trackId,
+                sampleMimeType = sampleMimeType,
+                totalSamples = totalSamples,
+                startSampleIndex = startSampleIndex,
+                ranges = ranges
+            )
+        )
+    }
+
+    fun mp4SampleTableHarvestStartedLine(
+        session: TranslationTimelineSessionKey,
+        selectedOrdinal: Int,
+        trackId: Int,
+        sampleMimeType: String?,
+        totalSamples: Int,
+        startSampleIndex: Int,
+        ranges: Int
+    ): String {
+        return "$PREFIX event=mp4_sample_table_started session=${field(session.streamKey)} " +
+            "container=mp4 selectedOrdinal=$selectedOrdinal trackId=$trackId " +
+            "sampleMimeType=${field(sampleMimeType)} totalSamples=$totalSamples " +
+            "startSampleIndex=$startSampleIndex ranges=$ranges"
+    }
+
+    fun mp4SampleTableHarvestProgress(
+        session: TranslationTimelineSessionKey,
+        selectedOrdinal: Int,
+        nextSampleIndex: Int,
+        totalSamples: Int,
+        rangesRead: Int,
+        totalRanges: Int,
+        inputOpens: Int,
+        bytesRead: Long,
+        harvested: Int,
+        elapsedMs: Long
+    ) {
+        log(
+            mp4SampleTableHarvestProgressLine(
+                session = session,
+                selectedOrdinal = selectedOrdinal,
+                nextSampleIndex = nextSampleIndex,
+                totalSamples = totalSamples,
+                rangesRead = rangesRead,
+                totalRanges = totalRanges,
+                inputOpens = inputOpens,
+                bytesRead = bytesRead,
+                harvested = harvested,
+                elapsedMs = elapsedMs
+            )
+        )
+    }
+
+    fun mp4SampleTableHarvestProgressLine(
+        session: TranslationTimelineSessionKey,
+        selectedOrdinal: Int,
+        nextSampleIndex: Int,
+        totalSamples: Int,
+        rangesRead: Int,
+        totalRanges: Int,
+        inputOpens: Int,
+        bytesRead: Long,
+        harvested: Int,
+        elapsedMs: Long
+    ): String {
+        return "$PREFIX event=mp4_sample_table_progress session=${field(session.streamKey)} " +
+            "container=mp4 selectedOrdinal=$selectedOrdinal nextSampleIndex=$nextSampleIndex " +
+            "totalSamples=$totalSamples rangesRead=$rangesRead totalRanges=$totalRanges " +
+            "inputOpens=$inputOpens bytesRead=$bytesRead harvested=$harvested elapsedMs=$elapsedMs"
+    }
+
     fun cueHarvested(
         session: TranslationTimelineSessionKey,
         container: EmbeddedSubtitleContainer,

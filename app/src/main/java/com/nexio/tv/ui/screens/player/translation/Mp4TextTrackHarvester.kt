@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.player.translation
 
 import android.net.Uri
 import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.text.CueGroup
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.extractor.DefaultExtractorInput
@@ -10,13 +12,17 @@ import androidx.media3.extractor.ExtractorInput
 import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.mp4.Mp4Extractor
+import androidx.media3.extractor.mp4.Mp4TextTrackSampleTable
+import androidx.media3.extractor.mp4.Mp4TextTrackSampleTableListener
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
+import androidx.media3.extractor.text.SubtitleParser
+import com.google.common.collect.ImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 internal fun interface Mp4ExtractorFactory {
-    fun create(): Extractor
+    fun create(textTrackSampleTableListener: Mp4TextTrackSampleTableListener?): Extractor
 }
 
 internal fun interface Mp4ExtractorInputOpener {
@@ -34,12 +40,16 @@ internal data class Mp4ExtractorInputHandle(
 
 internal class Mp4TextTrackHarvester(
     private val extractorFactory: Mp4ExtractorFactory = Mp4ExtractorFactory {
+            textTrackSampleTableListener ->
         Mp4Extractor(
             DefaultSubtitleParserFactory(),
-            Mp4Extractor.FLAG_READ_TEXT_TRACKS_ONLY
+            Mp4Extractor.FLAG_READ_TEXT_TRACKS_ONLY,
+            null,
+            textTrackSampleTableListener
         )
     },
-    private val inputOpener: Mp4ExtractorInputOpener = DefaultMp4ExtractorInputOpener
+    private val inputOpener: Mp4ExtractorInputOpener = DefaultMp4ExtractorInputOpener,
+    private val subtitleParserFactory: SubtitleParser.Factory = DefaultSubtitleParserFactory()
 ) : EmbeddedSubtitleTrackHarvester {
     override val container: EmbeddedSubtitleContainer = EmbeddedSubtitleContainer.MP4
 
@@ -53,10 +63,16 @@ internal class Mp4TextTrackHarvester(
             timelineStore = request.timelineStore,
             sourceLanguage = request.sourceLanguage
         )
-        val extractor = extractorFactory.create()
+        var sampleTables: ImmutableList<Mp4TextTrackSampleTable>? = null
+        val extractor = extractorFactory.create(
+            Mp4TextTrackSampleTableListener { exportedTables ->
+                sampleTables = exportedTables
+            }
+        )
         val initialSeekTimeUs = (request.initialPositionMs * 1000L).coerceAtLeast(0L)
         var seekMap: SeekMap? = null
         var initialSeekApplied = initialSeekTimeUs == 0L
+        var sampleTablePathTried = false
         extractor.init(
             Mp4TextExtractorOutput(
                 delegate = request.extractorOutput,
@@ -177,6 +193,21 @@ internal class Mp4TextTrackHarvester(
                     }
                 }
                 logReadProgress()
+                val exportedTables = sampleTables
+                if (exportedTables != null && !sampleTablePathTried) {
+                    sampleTablePathTried = true
+                    val sampleTableResult = harvestFromSampleTable(
+                        request = request,
+                        publisher = publisher,
+                        uri = uri,
+                        tables = exportedTables,
+                        initialSeekTimeUs = initialSeekTimeUs,
+                        startedMs = startedMs
+                    )
+                    if (sampleTableResult != null) {
+                        return@withContext sampleTableResult
+                    }
+                }
             }
             logReadProgress(force = true)
             EmbeddedSubtitleTrackHarvestResult(
@@ -189,6 +220,191 @@ internal class Mp4TextTrackHarvester(
             extractor.release()
         }
     }
+
+    private fun harvestFromSampleTable(
+        request: EmbeddedSubtitleTrackHarvestRequest,
+        publisher: TimelinePublishingTextCueSink,
+        uri: Uri,
+        tables: ImmutableList<Mp4TextTrackSampleTable>,
+        initialSeekTimeUs: Long,
+        startedMs: Long
+    ): EmbeddedSubtitleTrackHarvestResult? {
+        if (tables.isEmpty()) {
+            return EmbeddedSubtitleTrackHarvestResult(
+                container = container,
+                harvested = 0,
+                durationMs = System.currentTimeMillis() - startedMs
+            )
+        }
+        val selectedTable = tableForSelectedOrdinal(tables, request.selectedSupportedTextOrdinal)
+            ?: return null
+        val format = selectedTable.format
+        if (!subtitleParserFactory.supportsFormat(format)) {
+            return null
+        }
+
+        val firstSampleIndex = firstSampleIndexAtOrAfter(selectedTable, initialSeekTimeUs)
+        val ranges = coalescedSampleRanges(selectedTable, firstSampleIndex)
+        EmbeddedSubtitleHarvestDiagnostics.mp4SampleTableHarvestStarted(
+            session = request.sessionKey,
+            selectedOrdinal = selectedTable.textTrackOrdinal,
+            trackId = selectedTable.trackId,
+            sampleMimeType = format.sampleMimeType,
+            totalSamples = selectedTable.sampleCount,
+            startSampleIndex = firstSampleIndex,
+            ranges = ranges.size
+        )
+
+        val parser = subtitleParserFactory.create(format)
+        var inputOpens = 0
+        var bytesRead = 0L
+        var nextProgressSample = firstSampleIndex
+        val rangeCount = ranges.size
+        for (rangeIndex in ranges.indices) {
+            val range = ranges[rangeIndex]
+            val handle = inputOpener.open(uri, request.headers, range.startOffset)
+            inputOpens += 1
+            try {
+                val rangeBytes = ByteArray(range.length)
+                handle.input.readFully(rangeBytes, 0, rangeBytes.size)
+                bytesRead += rangeBytes.size.toLong()
+                for (sampleIndex in range.firstSampleIndex until range.lastSampleIndexExclusive) {
+                    val sampleOffset = selectedTable.offsets[sampleIndex]
+                    val sampleSize = selectedTable.sizes[sampleIndex]
+                    val sampleStart = (sampleOffset - range.startOffset).toInt()
+                    publishParsedSample(
+                        parser = parser,
+                        format = format,
+                        data = rangeBytes,
+                        offset = sampleStart,
+                        size = sampleSize,
+                        sampleTimeUs = selectedTable.timestampsUs[sampleIndex],
+                        publisher = publisher
+                    )
+                    nextProgressSample = sampleIndex + 1
+                }
+            } finally {
+                handle.close()
+            }
+
+            if (rangeIndex == rangeCount - 1 || publisher.sampleCount % 100 == 0) {
+                EmbeddedSubtitleHarvestDiagnostics.mp4SampleTableHarvestProgress(
+                    session = request.sessionKey,
+                    selectedOrdinal = selectedTable.textTrackOrdinal,
+                    nextSampleIndex = nextProgressSample,
+                    totalSamples = selectedTable.sampleCount,
+                    rangesRead = rangeIndex + 1,
+                    totalRanges = rangeCount,
+                    inputOpens = inputOpens,
+                    bytesRead = bytesRead,
+                    harvested = publisher.sampleCount,
+                    elapsedMs = System.currentTimeMillis() - startedMs
+                )
+            }
+        }
+
+        return EmbeddedSubtitleTrackHarvestResult(
+            container = container,
+            harvested = publisher.sampleCount,
+            durationMs = System.currentTimeMillis() - startedMs
+        )
+    }
+
+    private fun publishParsedSample(
+        parser: SubtitleParser,
+        format: Format,
+        data: ByteArray,
+        offset: Int,
+        size: Int,
+        sampleTimeUs: Long,
+        publisher: TimelinePublishingTextCueSink
+    ) {
+        parser.parse(
+            data,
+            offset,
+            size,
+            SubtitleParser.OutputOptions.allCues()
+        ) { cuesWithTiming ->
+            if (cuesWithTiming.cues.isEmpty()) return@parse
+            val cueTimeUs = when {
+                cuesWithTiming.startTimeUs == C.TIME_UNSET -> sampleTimeUs
+                format.subsampleOffsetUs == Format.OFFSET_SAMPLE_RELATIVE ->
+                    sampleTimeUs + cuesWithTiming.startTimeUs
+                else -> cuesWithTiming.startTimeUs + format.subsampleOffsetUs
+            }
+            publisher.publish(CueGroup(cuesWithTiming.cues, cueTimeUs), format.language)
+        }
+    }
+
+    private fun tableForSelectedOrdinal(
+        tables: ImmutableList<Mp4TextTrackSampleTable>,
+        selectedOrdinal: Int
+    ): Mp4TextTrackSampleTable? {
+        for (i in tables.indices) {
+            val table = tables[i]
+            if (table.textTrackOrdinal == selectedOrdinal) return table
+        }
+        return null
+    }
+
+    private fun firstSampleIndexAtOrAfter(
+        table: Mp4TextTrackSampleTable,
+        timeUs: Long
+    ): Int {
+        for (i in table.timestampsUs.indices) {
+            if (table.timestampsUs[i] >= timeUs) return i
+        }
+        return table.sampleCount
+    }
+
+    private fun coalescedSampleRanges(
+        table: Mp4TextTrackSampleTable,
+        firstSampleIndex: Int
+    ): List<Mp4TextSampleRange> {
+        val ranges = mutableListOf<Mp4TextSampleRange>()
+        var rangeStart = -1L
+        var rangeEnd = -1L
+        var firstIndex = firstSampleIndex
+        var previousIndex = firstSampleIndex
+        for (sampleIndex in firstSampleIndex until table.sampleCount) {
+            val sampleStart = table.offsets[sampleIndex]
+            val sampleEnd = sampleStart + table.sizes[sampleIndex]
+            if (rangeStart < 0L) {
+                rangeStart = sampleStart
+                rangeEnd = sampleEnd
+                firstIndex = sampleIndex
+                previousIndex = sampleIndex
+                continue
+            }
+            val gap = sampleStart - rangeEnd
+            val mergedLength = sampleEnd - rangeStart
+            if (gap > MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES ||
+                mergedLength > MP4_SAMPLE_TABLE_MAX_RANGE_BYTES
+            ) {
+                ranges += Mp4TextSampleRange(rangeStart, rangeEnd, firstIndex, previousIndex + 1)
+                rangeStart = sampleStart
+                rangeEnd = sampleEnd
+                firstIndex = sampleIndex
+            } else {
+                rangeEnd = maxOf(rangeEnd, sampleEnd)
+            }
+            previousIndex = sampleIndex
+        }
+        if (rangeStart >= 0L) {
+            ranges += Mp4TextSampleRange(rangeStart, rangeEnd, firstIndex, previousIndex + 1)
+        }
+        return ranges
+    }
+}
+
+private data class Mp4TextSampleRange(
+    val startOffset: Long,
+    val endOffsetExclusive: Long,
+    val firstSampleIndex: Int,
+    val lastSampleIndexExclusive: Int
+) {
+    val length: Int
+        get() = (endOffsetExclusive - startOffset).toInt()
 }
 
 private object DefaultMp4ExtractorInputOpener : Mp4ExtractorInputOpener {
@@ -223,3 +439,5 @@ internal fun mp4ExtractorInputLength(position: Long, remainingLength: Long): Lon
 }
 
 private const val MP4_READ_PROGRESS_LOG_INTERVAL_MS = 5_000L
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES = 256 * 1024L
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_BYTES = 4 * 1024 * 1024L
