@@ -19,6 +19,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -81,6 +82,19 @@ private val NEXT_UP_SERIES_WHITESPACE = Regex("\\s+")
 private object NoopContinueWatchingAirScheduler : ContinueWatchingAirScheduler {
     override fun scheduleSoonest(triggerAtMs: Long?) = Unit
     override fun cancel() = Unit
+}
+
+private object TmdbDefaultTvEpisodeOrderResolver : TvEpisodeOrderResolver {
+    override suspend fun resolve(
+        tmdbTvId: String?,
+        providerIds: ProviderIds
+    ): TvEpisodeOrderResolution {
+        return TvEpisodeOrderResolution(
+            provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+            tmdbTvId = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty(),
+            reason = "tmdb default"
+        )
+    }
 }
 
 data class ContinueWatchingSnapshot(
@@ -293,6 +307,11 @@ private data class LiveContinueWatchingSnapshotEmission(
     val completedProgress: List<WatchProgress> = emptyList()
 )
 
+private data class NextUpTvdbProjectionOrder(
+    val resolution: TvEpisodeOrderResolution,
+    val providerIds: ProviderIds
+)
+
 private class TvdbEpisodeProjectionCache {
     private val episodeMaps = mutableMapOf<String, Map<Pair<Int, Int>, TvEpisodeMetadata>>()
 
@@ -338,6 +357,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
     private val identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver(),
     private val metadataRouterFacade: MetadataRouterFacade? = null,
+    private val tvEpisodeOrderResolver: TvEpisodeOrderResolver = TmdbDefaultTvEpisodeOrderResolver,
     @ApplicationContext private val appContext: Context? = null
 ) {
     @VisibleForTesting
@@ -354,6 +374,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
         identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver(),
         metadataRouterFacade: MetadataRouterFacade? = null,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver = TmdbDefaultTvEpisodeOrderResolver,
         @ApplicationContext appContext: Context? = null
     ) : this(
         watchProgressRepository = watchProgressRepository,
@@ -369,6 +390,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         activeRailTracker = activeRailTracker,
         identityResolver = identityResolver,
         metadataRouterFacade = metadataRouterFacade,
+        tvEpisodeOrderResolver = tvEpisodeOrderResolver,
         appContext = appContext
     )
 
@@ -1233,7 +1255,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         entry: TrackingNextUpEntry,
         projectionCache: TvdbEpisodeProjectionCache
     ): TrackingNextUpEntry? {
-        val canonicalContentId = canonicalTvdbContentId(facade, entry)
+        val order = resolveNextUpTvdbProjectionOrder(facade, entry) ?: return null
         return try {
             val episodes = projectionCache.getOrFetch(
                 contentType = entry.contentType,
@@ -1244,11 +1266,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     metadataRequest = MetadataRequest(
                         contentId = entry.contentId,
                         contentType = ContentType.SERIES,
-                        sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                        sourceContext = MetadataSourceContext(
+                            itemType = entry.contentType,
+                            previewStableIds = order.providerIds,
+                            previewSourceProvider = ProviderId.TMDB.name,
+                            previewSourceItemId = "tmdb:${order.resolution.tmdbTvId.removePrefix("tmdb:tv:")}"
+                        ),
                         depth = MetadataDepth.SEASON
                     ),
                     tvRequest = TvMetadataRequest(
-                        contentId = entry.contentId,
+                        contentId = "tvdb:${order.resolution.tvdbSeriesId}",
                         fallbackContentId = entry.videoId,
                         contentType = ContentType.SERIES,
                         seasonNumbers = emptyList()
@@ -1263,15 +1290,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 requestedFirstAired = entry.firstAired,
                 requestedActivityAtMs = entry.activityAtMs,
                 episodes = episodes
-            ) ?: return canonicalizeNextUpEntryContentId(entry, canonicalContentId)
+            ) ?: return null
 
-            val projectedContentId = canonicalContentId ?: entry.contentId
             entry.copy(
-                contentId = projectedContentId,
                 season = projected.season,
                 episode = projected.episode,
                 episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
-                videoId = "$projectedContentId:${projected.season}:${projected.episode}",
+                videoId = "${entry.contentId}:${projected.season}:${projected.episode}",
                 firstAired = projected.firstAired ?: entry.firstAired,
                 firstAiredMs = projected.firstAired
                     ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
@@ -1285,42 +1310,88 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 "next-up coordinate projection failed for ${entry.contentId} s${entry.season}e${entry.episode}: ${e.message}",
                 e
             )
-            canonicalizeNextUpEntryContentId(entry, canonicalContentId)
+            null
         }
     }
 
-    private fun canonicalizeNextUpEntryContentId(
-        entry: TrackingNextUpEntry,
-        canonicalContentId: String?
-    ): TrackingNextUpEntry? {
-        val contentId = canonicalContentId ?: return null
-        if (contentId == entry.contentId) return null
-        return entry.copy(
-            contentId = contentId,
-            videoId = "$contentId:${entry.season}:${entry.episode}"
+    private suspend fun resolveNextUpTvdbProjectionOrder(
+        facade: MetadataRouterFacade,
+        entry: TrackingNextUpEntry
+    ): NextUpTvdbProjectionOrder? {
+        val observedIds = providerIdsFromRawContinueWatchingContentId(entry.contentId)
+        val route = runCatching {
+            facade.routeRequest(
+                nextUpMetadataRequest(
+                    entry = entry,
+                    providerIds = observedIds
+                )
+            )
+        }.getOrNull() ?: return null
+        val providerIds = observedIds.withRouteTargetIds(route)
+        val tmdbTvId = providerIds.tmdb?.let { normalizeTmdbTvEpisodeOrderKey(it) } ?: return null
+        val resolution = tvEpisodeOrderResolver.resolve(
+            tmdbTvId = tmdbTvId,
+            providerIds = providerIds
+        )
+        if (resolution.provider != TvEpisodeOrderProvider.TVDB_DEFAULT) return null
+        val tvdbSeriesId = resolution.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return NextUpTvdbProjectionOrder(
+            resolution = resolution.copy(
+                tmdbTvId = normalizeTmdbTvEpisodeOrderKey(resolution.tmdbTvId) ?: tmdbTvId,
+                tvdbSeriesId = tvdbSeriesId
+            ),
+            providerIds = providerIds.copy(
+                tmdb = tmdbTvId.removePrefix("tmdb:tv:"),
+                tvdb = tvdbSeriesId
+            )
         )
     }
 
-    private suspend fun canonicalTvdbContentId(
-        facade: MetadataRouterFacade,
-        entry: TrackingNextUpEntry
-    ): String? {
-        return runCatching {
-            val route = facade.routeRequest(
-                MetadataRequest(
-                    contentId = entry.contentId,
-                    contentType = ContentType.SERIES,
-                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
-                    seasonNumber = entry.season,
-                    depth = MetadataDepth.SEASON
-                )
-            )
-            val tvdbTarget = route.targetIds[MetadataPrimaryProvider.TVDB]
-                ?.substringAfter("tvdb:", missingDelimiterValue = route.targetIds[MetadataPrimaryProvider.TVDB].orEmpty())
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-            tvdbTarget?.let { "tvdb:$it" }
-        }.getOrNull()
+    private fun nextUpMetadataRequest(
+        entry: TrackingNextUpEntry,
+        providerIds: ProviderIds
+    ): MetadataRequest =
+        MetadataRequest(
+            contentId = entry.contentId,
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(
+                itemType = entry.contentType,
+                previewStableIds = providerIds
+            ),
+            seasonNumber = entry.season,
+            depth = MetadataDepth.SEASON
+        )
+
+    private fun ProviderIds.withRouteTargetIds(route: MetadataRoute): ProviderIds =
+        copy(
+            imdb = imdb ?: route.targetIds[MetadataPrimaryProvider.IMDB].providerTargetId("imdb"),
+            tmdb = tmdb ?: route.targetIds[MetadataPrimaryProvider.TMDB].providerTargetId("tmdb"),
+            tvdb = tvdb ?: route.targetIds[MetadataPrimaryProvider.TVDB].providerTargetId("tvdb"),
+            trakt = trakt ?: route.targetIds[MetadataPrimaryProvider.TRAKT].providerTargetId("trakt"),
+            simkl = simkl ?: route.targetIds[MetadataPrimaryProvider.SIMKL].providerTargetId("simkl"),
+            kitsu = kitsu ?: route.targetIds[MetadataPrimaryProvider.KITSU].providerTargetId("kitsu")
+        )
+
+    private fun String?.providerTargetId(provider: String): String? {
+        val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val normalizedProvider = provider.lowercase(Locale.US)
+        val prefixes = when (normalizedProvider) {
+            "tmdb" -> listOf("tmdb:tv:", "tmdb:")
+            "tvdb" -> listOf("tvdb:series:", "tvdb:")
+            "imdb" -> listOf("imdb:")
+            "trakt" -> listOf("trakt:")
+            "simkl" -> listOf("simkl:")
+            "kitsu" -> listOf("kitsu:anime:", "kitsu:")
+            else -> listOf("$normalizedProvider:")
+        }
+        for (i in prefixes.indices) {
+            val prefix = prefixes[i]
+            if (value.startsWith(prefix, ignoreCase = true)) {
+                return value.substring(prefix.length).trim().takeIf { it.isNotEmpty() }
+            }
+        }
+        if (!value.contains(':')) return value
+        return value.takeIf { normalizedProvider == "imdb" && it.startsWith("tt", ignoreCase = true) }
     }
 
     private fun shouldPreferCompletedSeed(
