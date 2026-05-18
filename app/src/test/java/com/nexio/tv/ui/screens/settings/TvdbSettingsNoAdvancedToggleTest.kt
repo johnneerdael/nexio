@@ -14,7 +14,7 @@ import org.junit.Test
  * user-facing toggles.
  *
  * It also verifies that the provider precedence copy remains present so users
- * understand TMDB is the default movie and TV metadata authority, while TVDB is
+ * understand TMDB is the default movies and standard TV metadata authority, while TVDB is
  * limited to show-level season numbering when streams follow TVDB order.
  *
  * This test must remain green throughout Phase 9 execution.
@@ -107,7 +107,11 @@ class TvdbSettingsNoAdvancedToggleTest {
         }
 
         assertTrue(
-            "settings_tmdb_subtitle must contain the TMDB movie and TV metadata policy.",
+            "settings_tmdb_subtitle must contain the TMDB movies and standard TV metadata policy.",
+            visibleTmdbSubtitle(stringsContent).contains("TMDB is used for movies and standard TV metadata")
+        )
+        assertFalse(
+            "settings_tmdb_subtitle must not use broader movie and TV metadata wording.",
             visibleTmdbSubtitle(stringsContent).contains("TMDB is used for movie and TV metadata")
         )
         assertTrue(

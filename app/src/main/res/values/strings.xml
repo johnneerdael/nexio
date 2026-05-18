@@ -160,7 +160,7 @@
     <string name="account_stat_addons">addons</string>
     <string name="settings_integrations_section">Integrations</string>
     <string name="settings_integrations_section_subtitle">Configure metadata, TheTVDB season numbering, and poster artwork providers</string>
-    <string name="settings_tmdb_subtitle">TMDB is used for movie and TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
+    <string name="settings_tmdb_subtitle">TMDB is used for movies and standard TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
     <string name="settings_tvdb_subtitle">TheTVDB season numbering and crosswalks for show-level stream order overrides</string>
     <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
@@ -779,7 +779,7 @@
     <string name="tvdb_status_fallback_active">Fallback active</string>
     <string name="tvdb_last_failure_prefix">Last failure:</string>
     <string name="tvdb_provider_precedence_title">Provider precedence</string>
-    <string name="provider_precedence_summary">TMDB is used for movie and TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
+    <string name="provider_precedence_summary">TMDB is used for movies and standard TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
     <string name="tvdb_dialog_title">TVDB credentials</string>
     <string name="tvdb_dialog_subtitle">Add a personal TheTVDB API key only if you want to use your own provider quota. Add the subscriber PIN only if your TVDB account requires one.</string>
     <string name="tvdb_api_key_placeholder">Optional TheTVDB API key</string>
