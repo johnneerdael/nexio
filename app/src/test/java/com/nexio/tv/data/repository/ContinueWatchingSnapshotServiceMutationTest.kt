@@ -346,6 +346,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `resolved display surface corrects TVDB series sidecar and uses it for stream identity`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val tvEpisodeOrderResolver = tmdbDefaultOrderResolver()
             coEvery {
                 facade.resolveStableIdBundle(
                     request = any(),
@@ -366,7 +367,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 evidence = emptyList(),
                 resolvedAtMs = 1778611202000L
             )
-            val service = buildServiceWithMetadataFacade(facade)
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvEpisodeOrderResolver
+            )
             val progress = resume(
                 contentId = "tvdb:413033",
                 videoId = "tvdb:413033:2:2",
@@ -394,6 +398,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("tt16288804", record.streamFetchIdentity?.contentId)
             assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
             assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
+            coVerify(exactly = 0) {
+                tvEpisodeOrderResolver.resolve(any(), any())
+            }
         }
 
     @Test

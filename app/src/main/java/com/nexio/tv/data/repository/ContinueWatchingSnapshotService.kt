@@ -2814,10 +2814,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
         canonicalIdentity: ContentIdentity,
         resumeVideoId: String
     ): StreamFetchIdentity? {
-        val episodeOrderProvider = resolveResolvedEpisodeOrderProvider(
-            mediaKind = mediaKind,
-            providerIds = providerIds
-        )
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
             val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
             if (imdbId != null) {
@@ -2832,11 +2828,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     )
                 )
             }
+            val episodeOrderProvider = resolveResolvedEpisodeOrderProvider(
+                mediaKind = mediaKind,
+                providerIds = providerIds
+            )
             if (episodeOrderProvider != TvEpisodeOrderProvider.TVDB_DEFAULT) return null
             val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() }
-                ?: canonicalIdentity.canonicalId?.trim()?.takeIf {
-                    canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotEmpty()
-                }
             if (tvdbId != null) {
                 return StreamFetchIdentity(
                     contentId = "tvdb:$tvdbId",

@@ -33,6 +33,8 @@ private object TmdbDefaultContinueWatchingEpisodeOrderResolver : TvEpisodeOrderR
         )
 }
 
+private val STRICT_IMDB_TITLE_ID = Regex("^tt\\d+$")
+
 @Singleton
 class ContinueWatchingIdentityResolver @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade?,
@@ -147,10 +149,15 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         progress: WatchProgress,
         episodeContext: ContinueWatchingRecord.EpisodeContext?
     ): StreamFetchIdentity? {
-        val episodeOrderProvider = resolveEpisodeOrderProvider(mediaKind, identity)
         return when (mediaKind) {
             MetadataMediaKind.SERIES,
             MetadataMediaKind.ANIME -> episodeContext?.let {
+                val episodeOrderProvider =
+                    if (identity.providerIds.imdb?.isStrictImdbTitleId() == true) {
+                        TvEpisodeOrderProvider.TMDB_DEFAULT
+                    } else {
+                        resolveEpisodeOrderProvider(mediaKind, identity)
+                    }
                 streamFetchIdentityResolver.resolveForEpisode(
                     canonicalIdentity = identity,
                     knownIds = identity.providerIds,
@@ -245,6 +252,9 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS -> TrackingProvider.TRAKT
         else -> TrackingProvider.TRAKT  // SOURCE_LOCAL and unknown sources stay TRAKT for legacy display
     }
+
+    private fun String.isStrictImdbTitleId(): Boolean =
+        STRICT_IMDB_TITLE_ID.matches(this)
 
     private fun ProviderIds.toContinueWatchingIdBundle(
         episodeContext: ContinueWatchingRecord.EpisodeContext?,

@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import java.util.concurrent.CancellationException
@@ -276,6 +277,43 @@ class ContinueWatchingIdentityResolverTest {
         assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
         assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
         assertEquals(emptyList<String>(), record.identityWarnings)
+    }
+
+    @Test
+    fun `identity depth does not resolve episode order when imdb sidecar provides stream identity`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle()
+        val tvEpisodeOrderResolver = mockk<TvEpisodeOrderResolver> {
+            coEvery { resolve(any(), any()) } returns TvEpisodeOrderResolution(
+                provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                tmdbTvId = "tmdb:tv:71446",
+                tvdbSeriesId = "81189",
+                reason = "test override"
+            )
+        }
+        val resolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
+        )
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tmdb:71446",
+                    videoId = "tmdb:71446:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals("tt0903747:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        coVerify(exactly = 0) {
+            tvEpisodeOrderResolver.resolve(any(), any())
+        }
     }
 
     @Test

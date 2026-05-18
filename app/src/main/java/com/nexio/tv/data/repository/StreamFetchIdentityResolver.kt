@@ -2,7 +2,6 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentIdentity
-import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,9 +49,6 @@ class StreamFetchIdentityResolver @Inject constructor() {
             episodeOrderProvider == TvEpisodeOrderProvider.TVDB_DEFAULT
         ) {
             val tvdbId = knownIds.tvdb?.takeIf { it.isNotBlank() }
-                ?: canonicalIdentity.canonicalId?.takeIf {
-                    canonicalIdentity.canonicalProvider == ProviderId.TVDB && it.isNotBlank()
-                }
             if (tvdbId != null) {
                 val videoId = "tvdb:$tvdbId:$season:$episode"
                 return StreamFetchIdentity(

@@ -54,6 +54,26 @@ class StreamFetchIdentityResolverTest {
     }
 
     @Test
+    fun `tvdb default stream identity requires tvdb sidecar even when canonical provider is tvdb`() = runTest {
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "393268",
+            providerIds = ProviderIds(tmdb = "71446")
+        )
+
+        val result = resolver.resolveForEpisode(
+            identity,
+            identity.providerIds,
+            2,
+            1,
+            StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1"),
+            episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
+        )
+
+        assertNull(result)
+    }
+
+    @Test
     fun `tmdb default series with tmdb canonical id and tvdb sidecar does not use tvdb episode stream id`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TMDB,
