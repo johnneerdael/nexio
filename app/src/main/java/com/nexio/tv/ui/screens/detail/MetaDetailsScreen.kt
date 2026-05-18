@@ -97,6 +97,7 @@ import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
 import com.nexio.tv.core.metadata.parseRuntimeMinutes
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.ui.findLifecycleOwner
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -227,6 +228,34 @@ internal fun shouldShowDetailTrailerButton(
     return titleHasPlayableTrailerMedia ||
         !trailerUrl.isNullOrBlank() ||
         !trailerExternalUrl.isNullOrBlank()
+}
+
+internal data class DetailTvEpisodeOrderToggleAction(
+    val labelRes: Int,
+    val enabledMessageRes: Int,
+    val enabled: Boolean
+)
+
+internal fun resolveTvEpisodeOrderToggleAction(
+    toggleAvailable: Boolean,
+    provider: TvEpisodeOrderProvider,
+    togglePending: Boolean
+): DetailTvEpisodeOrderToggleAction? {
+    if (!toggleAvailable) return null
+    val targetIsTvdb = provider != TvEpisodeOrderProvider.TVDB_DEFAULT
+    return DetailTvEpisodeOrderToggleAction(
+        labelRes = if (targetIsTvdb) {
+            R.string.detail_use_tvdb_season_numbering
+        } else {
+            R.string.detail_use_tmdb_season_numbering
+        },
+        enabledMessageRes = if (targetIsTvdb) {
+            R.string.detail_tvdb_numbering_enabled
+        } else {
+            R.string.detail_tmdb_numbering_enabled
+        },
+        enabled = !togglePending
+    )
 }
 
 internal fun shouldShowDetailScrollableContent(
@@ -835,8 +864,16 @@ fun MetaDetailsScreen(
                 membership = uiState.pickerMembership,
                 isPending = uiState.pickerPending,
                 error = uiState.pickerError,
+                tvEpisodeOrderToggleAction = resolveTvEpisodeOrderToggleAction(
+                    toggleAvailable = uiState.tvEpisodeOrderToggleAvailable,
+                    provider = uiState.tvEpisodeOrderProvider,
+                    togglePending = uiState.tvEpisodeOrderTogglePending
+                ),
                 onToggle = { key ->
                     viewModel.onEvent(MetaDetailsEvent.OnPickerMembershipToggled(key))
+                },
+                onToggleTvEpisodeOrderProvider = {
+                    viewModel.onEvent(MetaDetailsEvent.OnToggleTvEpisodeOrderProvider)
                 },
                 onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
                 onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
@@ -2468,7 +2505,9 @@ private fun LibraryListPickerDialog(
     membership: Map<String, Boolean>,
     isPending: Boolean,
     error: String?,
+    tvEpisodeOrderToggleAction: DetailTvEpisodeOrderToggleAction?,
     onToggle: (String) -> Unit,
+    onToggleTvEpisodeOrderProvider: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2522,6 +2561,30 @@ private fun LibraryListPickerDialog(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+        }
+
+        if (tvEpisodeOrderToggleAction != null) {
+            Button(
+                onClick = onToggleTvEpisodeOrderProvider,
+                enabled = tvEpisodeOrderToggleAction.enabled,
+                modifier = if (tabs.isEmpty()) {
+                    Modifier
+                        .fillMaxWidth()
+                        .focusRequester(primaryFocusRequester)
+                } else {
+                    Modifier.fillMaxWidth()
+                },
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(
+                    text = stringResource(tvEpisodeOrderToggleAction.labelRes),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 

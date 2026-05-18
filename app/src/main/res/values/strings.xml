@@ -105,6 +105,10 @@
     <string name="detail_section_production">Production</string>
     <string name="detail_lists_fallback">Lists</string>
     <string name="detail_lists_subtitle">Select which lists should include this title.</string>
+    <string name="detail_use_tvdb_season_numbering">Use TheTVDB season numbering</string>
+    <string name="detail_use_tmdb_season_numbering">Use TMDB season numbering</string>
+    <string name="detail_tvdb_numbering_enabled">TheTVDB season numbering enabled</string>
+    <string name="detail_tmdb_numbering_enabled">TMDB season numbering enabled</string>
     <string name="action_save">Save</string>
     <string name="action_saving">Saving…</string>
 

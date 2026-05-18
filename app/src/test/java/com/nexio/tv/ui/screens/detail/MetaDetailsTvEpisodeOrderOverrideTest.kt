@@ -15,8 +15,10 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
 import com.nexio.tv.data.repository.TvEpisodeOrderResolution
 import com.nexio.tv.data.repository.TvEpisodeOrderResolver
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LocalizationDisplayState
@@ -215,6 +217,41 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
         coVerify(exactly = 0) { facade.fetchTvEpisodeEnrichment(any(), any()) }
     }
 
+    @Test
+    fun `toggle event persists tvdb order override and refreshes detail state`() = runTest(dispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val metadataDisplayRepository = mockDisplayRepository(
+            resolvedDocument(providerIds = ProviderIds(tmdb = "1399", tvdb = "121361", imdb = "tt0944947"))
+        )
+        coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns episodeDecision()
+        val overrideRepository = RecordingTvEpisodeOrderOverrideRepository()
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = seriesMeta(),
+            itemId = "tmdb:1399",
+            itemType = "series",
+            metadataRouterFacade = facade,
+            metadataDisplayRepository = metadataDisplayRepository,
+            tmdbSettings = episodeSettings(),
+            tvEpisodeOrderResolver = repoBackedOrderResolver(overrideRepository),
+            tvEpisodeOrderOverrideRepository = overrideRepository
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(TvEpisodeOrderProvider.TMDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
+        assertFalse(overrideRepository.hasOverride("1399"))
+
+        viewModel.onEvent(MetaDetailsEvent.OnToggleTvEpisodeOrderProvider)
+        advanceUntilIdle()
+
+        assertTrue(overrideRepository.hasOverride("tmdb:tv:1399"))
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, overrideRepository.getOrder("1399"))
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
+        assertTrue(viewModel.uiState.value.tvEpisodeOrderToggleAvailable)
+        assertFalse(viewModel.uiState.value.tvEpisodeOrderTogglePending)
+    }
+
     private fun mockDisplayRepository(document: ResolvedDetailDisplayDocument): MetadataDisplayRepository {
         return mockk<MetadataDisplayRepository>().also { repository ->
             coEvery { repository.resolveDetailDisplay(any(), any()) } returns document
@@ -237,6 +274,51 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
                     reason = "test"
                 )
         }
+    }
+
+    private fun repoBackedOrderResolver(
+        overrideRepository: TvEpisodeOrderOverrideRepository
+    ): TvEpisodeOrderResolver {
+        return object : TvEpisodeOrderResolver {
+            override suspend fun resolve(
+                tmdbTvId: String?,
+                providerIds: ProviderIds
+            ): TvEpisodeOrderResolution {
+                val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId)
+                val provider = key
+                    ?.let { overrideRepository.getOrder(it) }
+                    ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+                return TvEpisodeOrderResolution(
+                    provider = provider,
+                    tmdbTvId = key.orEmpty(),
+                    tvdbSeriesId = providerIds.tvdb,
+                    reason = "repo-backed test"
+                )
+            }
+        }
+    }
+
+    private class RecordingTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+        private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
+
+        override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider =
+            overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+
+        override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) {
+            val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return
+            if (provider == TvEpisodeOrderProvider.TMDB_DEFAULT) {
+                overrides.remove(key)
+            } else {
+                overrides[key] = provider
+            }
+        }
+
+        override suspend fun clearOrder(tmdbTvId: String) {
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::remove)
+        }
+
+        override suspend fun hasOverride(tmdbTvId: String): Boolean =
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::containsKey) == true
     }
 
     private fun episodeDecision(): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> =
