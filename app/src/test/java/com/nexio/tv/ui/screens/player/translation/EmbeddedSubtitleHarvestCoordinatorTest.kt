@@ -102,7 +102,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
 
         coordinator.update(
             eligibleState(
-                selectedSupportedSubRipOrdinal = null,
+                selectedSupportedTextOrdinal = null,
                 track = TrackInfo(
                     index = 3,
                     name = "English",
@@ -116,17 +116,15 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
 
         assertNull(coordinator.activeSessionKey())
         assertEquals(emptyList<TranslationTimelineSessionKey>(), startedHarvests)
-        assertEquals(listOf("unsupported_track"), diagnostics.unsupportedReasons)
+        assertEquals(listOf("missing_text_ordinal"), diagnostics.unsupportedReasons)
     }
 
     @Test
-    fun mp4SubRipDoesNotStartBeforeMp4HarvesterIsWired() = runTest {
-        val startedHarvests = mutableListOf<TranslationTimelineSessionKey>()
-        val diagnostics = RecordingHarvestDiagnostics()
+    fun mp4EligibleSessionCarriesContainerAndTextOrdinal() = runTest {
+        val capturedStates = mutableListOf<EmbeddedSubtitleHarvestState>()
         val coordinator = coordinator(
-            diagnostics = diagnostics,
-            startHarvest = { key, _ ->
-                startedHarvests += key
+            startHarvest = { _, state ->
+                capturedStates += state
                 Job()
             }
         )
@@ -134,13 +132,21 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         coordinator.update(
             eligibleState(
                 streamUrl = "https://example.test/video.mp4",
-                filename = "video.mp4"
+                filename = "video.mp4",
+                track = TrackInfo(
+                    index = 5,
+                    name = "English",
+                    language = "en",
+                    trackId = "text-5",
+                    isSelected = true,
+                    mimeType = MimeTypes.APPLICATION_TX3G
+                ),
+                selectedSupportedTextOrdinal = 1
             )
         )
 
-        assertNull(coordinator.activeSessionKey())
-        assertEquals(emptyList<TranslationTimelineSessionKey>(), startedHarvests)
-        assertEquals(listOf("not_mkv"), diagnostics.unsupportedReasons)
+        assertEquals(EmbeddedSubtitleContainer.MP4, capturedStates.single().container)
+        assertEquals(1, capturedStates.single().selectedSupportedTextOrdinal)
     }
 
     private fun TestScope.coordinator(
@@ -170,7 +176,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         targetLanguage: String = "nl",
         selectedAddonSubtitlePresent: Boolean = false,
         track: TrackInfo? = subRipTrack(),
-        selectedSupportedSubRipOrdinal: Int? = if (track == null) null else 0,
+        selectedSupportedTextOrdinal: Int? = if (track == null) null else 0,
         settings: SubtitleTranslationSettings = SubtitleTranslationSettings(
             enabled = true,
             apiKey = "test-key",
@@ -182,7 +188,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
             filename = filename,
             headers = mapOf("Authorization" to "Bearer token"),
             selectedTrack = track,
-            selectedSupportedSubRipOrdinal = selectedSupportedSubRipOrdinal,
+            selectedSupportedTextOrdinal = selectedSupportedTextOrdinal,
             selectedAddonSubtitlePresent = selectedAddonSubtitlePresent,
             autoTranslateEnabled = true,
             targetLanguage = targetLanguage,

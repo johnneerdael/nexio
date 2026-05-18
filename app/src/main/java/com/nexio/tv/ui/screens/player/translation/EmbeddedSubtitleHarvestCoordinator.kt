@@ -12,12 +12,42 @@ internal data class EmbeddedSubtitleHarvestState(
     val filename: String?,
     val headers: Map<String, String>,
     val selectedTrack: TrackInfo?,
-    val selectedSupportedSubRipOrdinal: Int? = null,
+    val selectedSupportedTextOrdinal: Int? = null,
     val selectedAddonSubtitlePresent: Boolean,
     val autoTranslateEnabled: Boolean,
     val targetLanguage: String?,
-    val settings: SubtitleTranslationSettings
-)
+    val settings: SubtitleTranslationSettings,
+    val container: EmbeddedSubtitleContainer? = EmbeddedSubtitleHarvestEligibility.containerFor(streamUrl, filename)
+) {
+    @Suppress("LongParameterList", "unused")
+    constructor(
+        streamUrl: String,
+        filename: String?,
+        headers: Map<String, String>,
+        selectedTrack: TrackInfo?,
+        selectedSupportedSubRipOrdinal: Int? = null,
+        selectedAddonSubtitlePresent: Boolean,
+        autoTranslateEnabled: Boolean,
+        targetLanguage: String?,
+        settings: SubtitleTranslationSettings,
+        container: EmbeddedSubtitleContainer? = EmbeddedSubtitleHarvestEligibility.containerFor(streamUrl, filename),
+        compatibilityMarker: Unit = Unit
+    ) : this(
+        streamUrl = streamUrl,
+        filename = filename,
+        headers = headers,
+        selectedTrack = selectedTrack,
+        selectedSupportedTextOrdinal = selectedSupportedSubRipOrdinal,
+        selectedAddonSubtitlePresent = selectedAddonSubtitlePresent,
+        autoTranslateEnabled = autoTranslateEnabled,
+        targetLanguage = targetLanguage,
+        settings = settings,
+        container = container
+    )
+
+    val selectedSupportedSubRipOrdinal: Int?
+        get() = selectedSupportedTextOrdinal
+}
 
 internal class EmbeddedSubtitleHarvestCoordinator(
     private val scope: CoroutineScope,
@@ -41,19 +71,19 @@ internal class EmbeddedSubtitleHarvestCoordinator(
     @Synchronized
     fun update(state: EmbeddedSubtitleHarvestState) {
         val targetLanguage = state.targetLanguage?.trim().orEmpty()
-        val isEligible = EmbeddedSubtitleHarvestEligibility.isEligible(
+        val baseEligibility = EmbeddedSubtitleHarvestEligibility.evaluate(
             streamUrl = state.streamUrl,
             filename = state.filename,
             selectedTrack = state.selectedTrack,
             selectedAddonSubtitlePresent = state.selectedAddonSubtitlePresent,
             autoTranslateEnabled = state.autoTranslateEnabled
-        ) &&
+        )
+        val isEligible = baseEligibility.eligible &&
             state.settings.enabled &&
             state.settings.apiKey.isNotBlank() &&
             targetLanguage.isNotBlank() &&
-            EmbeddedSubtitleHarvestEligibility.isMatroska(state.streamUrl, state.filename) &&
-            state.selectedSupportedSubRipOrdinal != null
-        val reason = if (isEligible) "eligible" else state.unsupportedReason(targetLanguage)
+            state.selectedSupportedTextOrdinal != null
+        val reason = if (isEligible) "eligible" else state.unsupportedReason(targetLanguage, baseEligibility)
         diagnostics.stateEvaluated(
             state = state,
             eligible = isEligible,
@@ -130,6 +160,8 @@ internal class EmbeddedSubtitleHarvestCoordinator(
                     append(headers.toSortedMap().entries.joinToString(separator = "&") { entry ->
                         "${entry.key.trim()}=${entry.value.trim()}"
                     })
+                    append('|')
+                    append(container?.logValue.orEmpty())
                 }
             ),
             trackKey = shortSha256Hex(
@@ -165,7 +197,10 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             }
     }
 
-    private fun EmbeddedSubtitleHarvestState.unsupportedReason(targetLanguage: String): String {
+    private fun EmbeddedSubtitleHarvestState.unsupportedReason(
+        targetLanguage: String,
+        baseEligibility: EmbeddedSubtitleEligibilityResult
+    ): String {
         val track = selectedTrack
         return when {
             !autoTranslateEnabled -> "auto_translate_disabled"
@@ -174,9 +209,9 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             targetLanguage.isBlank() -> "missing_target_language"
             selectedAddonSubtitlePresent -> "addon_subtitle_selected"
             track == null -> "missing_track"
-            !EmbeddedSubtitleHarvestEligibility.isMatroska(streamUrl, filename) -> "not_mkv"
-            !EmbeddedSubtitleHarvestEligibility.isSubRip(track) -> "unsupported_track"
-            selectedSupportedSubRipOrdinal == null -> "missing_subrip_ordinal"
+            baseEligibility.container == null -> "unsupported_container"
+            !EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(track) -> "unsupported_track"
+            selectedSupportedTextOrdinal == null -> "missing_text_ordinal"
             else -> "ineligible"
         }
     }

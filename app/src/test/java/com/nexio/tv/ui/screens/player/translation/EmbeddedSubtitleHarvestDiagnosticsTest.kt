@@ -61,7 +61,7 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
                     mimeType = MimeTypes.APPLICATION_SUBRIP,
                     codec = MimeTypes.APPLICATION_SUBRIP
                 ),
-                selectedSupportedSubRipOrdinal = 1,
+                selectedSupportedTextOrdinal = 1,
                 selectedAddonSubtitlePresent = false,
                 autoTranslateEnabled = true,
                 targetLanguage = "nl",
