@@ -362,6 +362,72 @@ class BuiltInSubtitleCueTranslatorTest {
     }
 
     @Test
+    fun parserAheadAndRendererRequestsForSameTextShareSingleProviderRequest() = runTest {
+        val service = mockk<SubtitleTranslationService>(relaxed = true)
+        val requestedTexts = mutableListOf<List<String>>()
+        coEvery {
+            service.translateCueTexts(
+                texts = any(),
+                targetLanguageCode = any(),
+                sourceLanguageCode = any(),
+                settings = any()
+            )
+        } answers {
+            @Suppress("UNCHECKED_CAST")
+            val texts = arg<List<String>>(0)
+            requestedTexts += texts
+            Result.success(texts.associateWith { "translated-$it" })
+        }
+        val translator = BuiltInSubtitleCueTranslator(
+            scope = this,
+            translationService = service,
+            isEnabledProvider = { true },
+            settingsProvider = {
+                SubtitleTranslationSettings(
+                    enabled = true,
+                    apiKey = "test-key",
+                    model = "test-model"
+                )
+            },
+            targetLanguageProvider = { "nl" },
+            onTranslatingChanged = {},
+            onTranslationError = {},
+            dispatchDebounceMs = 0L,
+            maxBatchCueGroups = 20
+        )
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
+            .setCodecs(MimeTypes.TEXT_VTT)
+            .setLanguage("en")
+            .build()
+        val rendererCallback = RecordingCallback()
+
+        translator.enqueueAheadCue(format, cueGroup("hello", 0L))
+        advanceUntilIdle()
+        translator.translate(format, listOf(cueGroup("hello", 42_000L)), rendererCallback)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            service.translateCueTexts(
+                texts = listOf("hello"),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = any()
+            )
+        }
+        assertEquals(listOf(listOf("hello")), requestedTexts)
+        assertEquals("translated-hello", rendererCallback.successCueText())
+        assertEquals(
+            "translated-hello",
+            translator.getTranslatedCueGroup(format, cueGroup("hello", 42_000L))
+                ?.cues
+                ?.single()
+                ?.text
+                .toString()
+        )
+    }
+
+    @Test
     fun enqueueAheadCueDoesNotDispatchDuplicateWhilePending() = runTest {
         val service = mockk<SubtitleTranslationService>(relaxed = true)
         coEvery {

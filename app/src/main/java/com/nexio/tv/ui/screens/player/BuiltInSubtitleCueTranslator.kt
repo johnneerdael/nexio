@@ -43,6 +43,7 @@ internal class BuiltInSubtitleCueTranslator(
     private val aheadTranslatedCueGroupsByTimedKey = LinkedHashMap<String, CueGroup>()
     private val aheadTranslatedCueGroupsByTextKey = LinkedHashMap<String, CueGroup>()
     private val aheadPendingKeys = mutableSetOf<String>()
+    private val aheadPendingAwaiters = mutableListOf<AheadPendingAwaiter>()
     private var aheadCacheConfigurationToken: String? = null
 
     private val pendingLock = Any()
@@ -95,7 +96,7 @@ internal class BuiltInSubtitleCueTranslator(
         }
         val timedKey = aheadCueGroupTimedKey(cueGroup)
         val textKey = aheadCueGroupTextKey(cueGroup)
-        val pendingKey = textKey ?: timedKey
+        val pendingKey = aheadCueGroupPendingKey(cueGroup)
         if (pendingKey == null) {
             callback(emptyList())
             return
@@ -120,9 +121,10 @@ internal class BuiltInSubtitleCueTranslator(
             }
         }
 
-        translate(
+        translateInternal(
             format = format,
             cueGroups = listOf(cueGroup),
+            waitForAheadPending = false,
             callback = object : CueGroupSubtitleTranslator.TranslationCallback {
                 override fun onSuccess(translatedCueGroups: List<CueGroup>) {
                     val translatedCueGroup = translatedCueGroups
@@ -162,6 +164,20 @@ internal class BuiltInSubtitleCueTranslator(
         cueGroups: List<CueGroup>,
         callback: CueGroupSubtitleTranslator.TranslationCallback
     ) {
+        translateInternal(
+            format = format,
+            cueGroups = cueGroups,
+            waitForAheadPending = true,
+            callback = callback
+        )
+    }
+
+    private fun translateInternal(
+        format: Format,
+        cueGroups: List<CueGroup>,
+        waitForAheadPending: Boolean,
+        callback: CueGroupSubtitleTranslator.TranslationCallback
+    ) {
         val settings = settingsProvider()
         val targetLanguage = targetLanguageProvider()?.trim().orEmpty()
         if (!isEnabledProvider() || !settings.enabled || settings.apiKey.isBlank() || targetLanguage.isBlank()) {
@@ -184,6 +200,36 @@ internal class BuiltInSubtitleCueTranslator(
             if (failure.configurationToken != configurationToken || failure.retryAfterMs <= nowMs()) {
                 suppressedProviderFailure.compareAndSet(failure, null)
             }
+        }
+
+        val cachedCueGroups = synchronized(aheadCacheLock) {
+            ensureAheadCacheTokenLocked(configurationToken)
+            cachedAheadCueGroupsLocked(cueGroups)
+        }
+        if (cachedCueGroups != null) {
+            callback.onSuccess(cachedCueGroups)
+            return
+        }
+
+        val waitingForAhead = if (waitForAheadPending) {
+            synchronized(aheadCacheLock) {
+                ensureAheadCacheTokenLocked(configurationToken)
+                val pendingKeys = cueGroups.map { cueGroup -> aheadCueGroupPendingKey(cueGroup) }
+                if (pendingKeys.isNotEmpty() && pendingKeys.all { key -> key != null && aheadPendingKeys.contains(key) }) {
+                    aheadPendingAwaiters += AheadPendingAwaiter(
+                        cueGroups = cueGroups,
+                        callback = callback
+                    )
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            false
+        }
+        if (waitingForAhead) {
+            return
         }
 
         val entry = PendingTranslate(
@@ -338,7 +384,20 @@ internal class BuiltInSubtitleCueTranslator(
             cueGroupsByEntry.getOrPut(pending.entry) { mutableListOf() } += pending.cueGroup
         }
         cueGroupsByEntry.forEach { (entry, cueGroups) ->
-            entry.callback.onSuccess(translateBuiltInCueGroups(cueGroups, translatedTexts))
+            val translatedCueGroups = translateBuiltInCueGroups(cueGroups, translatedTexts)
+            val readyAwaiters = synchronized(aheadCacheLock) {
+                if (aheadCacheConfigurationToken == entry.configurationToken) {
+                    cacheAheadTranslationsLocked(cueGroups, translatedCueGroups)
+                    collectReadyAheadAwaitersLocked()
+                } else {
+                    emptyList()
+                }
+            }
+            entry.callback.onSuccess(translatedCueGroups)
+            for (index in readyAwaiters.indices) {
+                val readyAwaiter = readyAwaiters[index]
+                readyAwaiter.callback.onSuccess(readyAwaiter.translatedCueGroups)
+            }
         }
     }
 
@@ -389,6 +448,7 @@ internal class BuiltInSubtitleCueTranslator(
         aheadTranslatedCueGroupsByTimedKey.clear()
         aheadTranslatedCueGroupsByTextKey.clear()
         aheadPendingKeys.clear()
+        aheadPendingAwaiters.clear()
     }
 
     private fun trimAheadCacheLocked() {
@@ -410,12 +470,77 @@ internal class BuiltInSubtitleCueTranslator(
         return "${cueGroup.presentationTimeUs}|$text"
     }
 
+    private fun aheadCueGroupPendingKey(cueGroup: CueGroup): String? {
+        return aheadCueGroupTextKey(cueGroup) ?: aheadCueGroupTimedKey(cueGroup)
+    }
+
     private fun aheadCueGroupTextKey(cueGroup: CueGroup): String? {
         return cueGroup.cues
             .asSequence()
             .mapNotNull { cue -> cue.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
             .joinToString(separator = "\n")
             .takeIf(String::isNotBlank)
+    }
+
+    private fun cachedAheadCueGroupsLocked(cueGroups: List<CueGroup>): List<CueGroup>? {
+        if (cueGroups.isEmpty()) return emptyList()
+        val cachedCueGroups = ArrayList<CueGroup>(cueGroups.size)
+        for (index in cueGroups.indices) {
+            val sourceCueGroup = cueGroups[index]
+            val cachedCueGroup = cachedAheadCueGroupLocked(sourceCueGroup) ?: return null
+            cachedCueGroups += cachedCueGroup
+        }
+        return cachedCueGroups
+    }
+
+    private fun cachedAheadCueGroupLocked(sourceCueGroup: CueGroup): CueGroup? {
+        aheadCueGroupTimedKey(sourceCueGroup)?.let { key ->
+            aheadTranslatedCueGroupsByTimedKey[key]?.let {
+                return it.atPresentationTime(sourceCueGroup.presentationTimeUs)
+            }
+        }
+        aheadCueGroupTextKey(sourceCueGroup)?.let { key ->
+            aheadTranslatedCueGroupsByTextKey[key]?.let {
+                return it.atPresentationTime(sourceCueGroup.presentationTimeUs)
+            }
+        }
+        return null
+    }
+
+    private fun cacheAheadTranslationsLocked(
+        sourceCueGroups: List<CueGroup>,
+        translatedCueGroups: List<CueGroup>
+    ) {
+        val count = minOf(sourceCueGroups.size, translatedCueGroups.size)
+        for (index in 0 until count) {
+            val sourceCueGroup = sourceCueGroups[index]
+            val translatedCueGroup = translatedCueGroups[index]
+            aheadCueGroupTimedKey(sourceCueGroup)?.let { key ->
+                aheadTranslatedCueGroupsByTimedKey[key] = translatedCueGroup
+            }
+            aheadCueGroupTextKey(sourceCueGroup)?.let { key ->
+                aheadTranslatedCueGroupsByTextKey[key] = translatedCueGroup
+            }
+            aheadCueGroupPendingKey(sourceCueGroup)?.let { key ->
+                aheadPendingKeys.remove(key)
+            }
+        }
+        trimAheadCacheLocked()
+    }
+
+    private fun collectReadyAheadAwaitersLocked(): List<ReadyAheadAwaiter> {
+        if (aheadPendingAwaiters.isEmpty()) return emptyList()
+        val readyAwaiters = mutableListOf<ReadyAheadAwaiter>()
+        val iterator = aheadPendingAwaiters.iterator()
+        while (iterator.hasNext()) {
+            val awaiter = iterator.next()
+            val translatedCueGroups = cachedAheadCueGroupsLocked(awaiter.cueGroups)
+            if (translatedCueGroups != null) {
+                readyAwaiters += ReadyAheadAwaiter(awaiter.callback, translatedCueGroups)
+                iterator.remove()
+            }
+        }
+        return readyAwaiters
     }
 
     private fun CueGroup.atPresentationTime(presentationTimeUs: Long): CueGroup {
@@ -443,6 +568,16 @@ internal class BuiltInSubtitleCueTranslator(
     private data class PendingCueGroup(
         val entry: PendingTranslate,
         val cueGroup: CueGroup
+    )
+
+    private data class AheadPendingAwaiter(
+        val cueGroups: List<CueGroup>,
+        val callback: CueGroupSubtitleTranslator.TranslationCallback
+    )
+
+    private data class ReadyAheadAwaiter(
+        val callback: CueGroupSubtitleTranslator.TranslationCallback,
+        val translatedCueGroups: List<CueGroup>
     )
 
     private data class SuppressedProviderFailure(

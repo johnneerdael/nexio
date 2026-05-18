@@ -16,6 +16,8 @@ import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.Subtitle
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -29,6 +31,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 
 class SubtitleTranslationServiceProviderTest {
@@ -205,6 +208,67 @@ class SubtitleTranslationServiceProviderTest {
             assertTrue(body.contains(""""target_lang":"Dutch""""))
             assertTrue(body.contains("[[0]] Czesc"))
             assertTrue(body.contains("[[1]] Do widzenia"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun concurrentCueTranslationRequestsShareInFlightProviderRequest() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":0,\"text\":\"Hallo\"}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
+            )
+            val settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                apiKey = "test-key",
+                model = "gpt-5-nano",
+                baseUrl = server.url("/v1").toString()
+            )
+
+            val results = listOf(
+                async {
+                    service.translateCueTexts(
+                        texts = listOf("Hello"),
+                        targetLanguageCode = "nl",
+                        sourceLanguageCode = "en",
+                        settings = settings
+                    )
+                },
+                async {
+                    service.translateCueTexts(
+                        texts = listOf("Hello"),
+                        targetLanguageCode = "nl",
+                        sourceLanguageCode = "en",
+                        settings = settings
+                    )
+                }
+            ).awaitAll()
+
+            assertEquals(listOf(mapOf("Hello" to "Hallo"), mapOf("Hello" to "Hallo")), results.map { it.getOrThrow() })
+            assertEquals(1, server.requestCount)
         } finally {
             server.shutdown()
         }
