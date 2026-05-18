@@ -66,11 +66,14 @@ class StableIdBundleModelsTest {
 
         assertEquals("71446", canonical.providerNativeIdFor(MetadataPrimaryProvider.TMDB))
         assertTrue(canonical.hasCanonicalId())
-        assertEquals(
-            "71446",
-            CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446")
-                .providerNativeIdFor(MetadataPrimaryProvider.TMDB)
-        )
+    }
+
+    @Test
+    fun `tmdb native id is unresolved when movie and tv ids are both present`() {
+        val canonical = CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446")
+
+        assertNull(canonical.providerNativeIdFor(MetadataPrimaryProvider.TMDB))
+        assertTrue(canonical.hasCanonicalId())
     }
 
     @Test

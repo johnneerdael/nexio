@@ -30,7 +30,15 @@ data class CanonicalStableIds(
 
     fun providerNativeIdFor(provider: MetadataPrimaryProvider): String? =
         when (provider) {
-            MetadataPrimaryProvider.TMDB -> tmdbTvId.toPresentStableId() ?: tmdbMovieId.toPresentStableId()
+            MetadataPrimaryProvider.TMDB -> {
+                val movieId = tmdbMovieId.toPresentStableId()
+                val tvId = tmdbTvId.toPresentStableId()
+                when {
+                    movieId != null && tvId == null -> movieId
+                    tvId != null && movieId == null -> tvId
+                    else -> null
+                }
+            }
             MetadataPrimaryProvider.TVDB -> tvdbSeriesId.toPresentStableId()
             MetadataPrimaryProvider.KITSU -> kitsuAnimeId.toPresentStableId()
             MetadataPrimaryProvider.IMDB,

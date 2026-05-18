@@ -86,6 +86,7 @@ class StableIdBundleResolver @Inject constructor(
             }
 
             MetadataPrimaryProvider.TVDB -> {
+                tmdbTvId = known.tmdb.presentStableId()
                 tvdbSeriesId = known.tvdb.presentStableId()
                     ?: imdbId?.let { imdb ->
                         resolveViaStoreOrProvider(
@@ -98,22 +99,22 @@ class StableIdBundleResolver @Inject constructor(
                     }
 
                 if (tvdbSeriesId == null) {
-                    val tmdbTvId = known.tmdb.presentStableId()
-                    if (tmdbTvId != null) {
+                    val knownTmdbTvId = tmdbTvId
+                    if (knownTmdbTvId != null) {
                         tvdbSeriesId = resolveViaStoreOrProvider(
-                            sourceId = tmdbTvSourceId(tmdbTvId),
+                            sourceId = tmdbTvSourceId(knownTmdbTvId),
                             provider = MetadataPrimaryProvider.TVDB,
                             operation = "tmdbTvToTvdb",
                             target = "TVDB",
                             evidence = evidence
-                        ) { lookup.tmdbTvToTvdb(tmdbTvId) }
+                        ) { lookup.tmdbTvToTvdb(knownTmdbTvId) }
                         val bridgeImdb = if (imdbId == null || tvdbSeriesId == null) resolveViaStoreOrProvider(
-                            sourceId = tmdbTvSourceId(tmdbTvId),
+                            sourceId = tmdbTvSourceId(knownTmdbTvId),
                             provider = MetadataPrimaryProvider.IMDB,
                             operation = "tmdbTvToImdb",
                             target = "IMDB",
                             evidence = evidence
-                        ) { lookup.tmdbTvToImdb(tmdbTvId) } else null
+                        ) { lookup.tmdbTvToImdb(knownTmdbTvId) } else null
                         imdbId = imdbId ?: bridgeImdb
                         tvdbSeriesId = tvdbSeriesId ?: bridgeImdb?.let { imdb ->
                             resolveViaStoreOrProvider(

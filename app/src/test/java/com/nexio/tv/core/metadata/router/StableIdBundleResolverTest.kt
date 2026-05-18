@@ -91,6 +91,7 @@ class StableIdBundleResolverTest {
         )
 
         assertEquals("121361", bundle.canonical.tvdbSeriesId)
+        assertEquals("1399", bundle.canonical.tmdbTvId)
         assertEquals("tt0944947", bundle.sidecars.imdbId)
         assertEquals(listOf("tmdbTvToTvdb:1399", "tmdbTvToImdb:1399"), lookup.calls)
         assertEquals(
