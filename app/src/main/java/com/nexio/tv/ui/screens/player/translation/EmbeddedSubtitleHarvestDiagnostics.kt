@@ -172,6 +172,60 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
             "seekTimeUs=$seekTimeUs seekPosition=$seekPosition seekable=$seekable"
     }
 
+    fun mp4HarvestReadProgress(
+        session: TranslationTimelineSessionKey,
+        requestedTimeUs: Long,
+        reads: Long,
+        extractorSeeks: Long,
+        inputOpens: Long,
+        lastInputPosition: Long,
+        pendingSeekPosition: Long,
+        harvested: Int,
+        lastCueTimeUs: Long,
+        elapsedMs: Long,
+        openMs: Long,
+        lastReadResult: Int
+    ) {
+        log(
+            mp4HarvestReadProgressLine(
+                session = session,
+                requestedTimeUs = requestedTimeUs,
+                reads = reads,
+                extractorSeeks = extractorSeeks,
+                inputOpens = inputOpens,
+                lastInputPosition = lastInputPosition,
+                pendingSeekPosition = pendingSeekPosition,
+                harvested = harvested,
+                lastCueTimeUs = lastCueTimeUs,
+                elapsedMs = elapsedMs,
+                openMs = openMs,
+                lastReadResult = lastReadResult
+            )
+        )
+    }
+
+    fun mp4HarvestReadProgressLine(
+        session: TranslationTimelineSessionKey,
+        requestedTimeUs: Long,
+        reads: Long,
+        extractorSeeks: Long,
+        inputOpens: Long,
+        lastInputPosition: Long,
+        pendingSeekPosition: Long,
+        harvested: Int,
+        lastCueTimeUs: Long,
+        elapsedMs: Long,
+        openMs: Long,
+        lastReadResult: Int
+    ): String {
+        return "$PREFIX event=mp4_harvest_read session=${field(session.streamKey)} " +
+            "container=mp4 requestedTimeUs=$requestedTimeUs reads=$reads " +
+            "extractorSeeks=$extractorSeeks inputOpens=$inputOpens " +
+            "lastInputPosition=$lastInputPosition pendingSeekPosition=$pendingSeekPosition " +
+            "harvested=$harvested lastCueTimeUs=$lastCueTimeUs elapsedMs=$elapsedMs " +
+            "openMs=$openMs lastReadResult=$lastReadResult"
+    }
+
     fun cueHarvested(
         session: TranslationTimelineSessionKey,
         container: EmbeddedSubtitleContainer,

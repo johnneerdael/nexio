@@ -10,10 +10,13 @@ internal class TimelinePublishingTextCueSink(
 ) {
     var sampleCount: Int = 0
         private set
+    var lastCueTimeUs: Long = -1L
+        private set
 
     fun publish(cueGroup: CueGroup, language: String? = null) {
         val sourceCue = timelineStore.putSourceCue(sessionKey, cueGroup) ?: return
         sampleCount += 1
+        lastCueTimeUs = cueGroup.presentationTimeUs
         timelineStore.registerMiss(sessionKey, cueGroup)
         EmbeddedSubtitleHarvestDiagnostics.cueHarvested(
             session = sessionKey,

@@ -171,6 +171,33 @@ class EmbeddedSubtitleHarvestDiagnosticsTest {
     }
 
     @Test
+    fun mp4HarvestReadProgressLineIncludesExtractorAndInputCounters() {
+        val line = EmbeddedSubtitleHarvestDiagnostics.mp4HarvestReadProgressLine(
+            session = session(),
+            requestedTimeUs = 815_000_000L,
+            reads = 120,
+            extractorSeeks = 14,
+            inputOpens = 15,
+            lastInputPosition = 987_654_321L,
+            pendingSeekPosition = 987_700_000L,
+            harvested = 42,
+            lastCueTimeUs = 1_234_000_000L,
+            elapsedMs = 10_500L,
+            openMs = 3_200L,
+            lastReadResult = 1
+        )
+
+        assertEquals(
+            "EMBEDDED_SUB_TIMELINE event=mp4_harvest_read session=stream-key " +
+                "container=mp4 requestedTimeUs=815000000 reads=120 extractorSeeks=14 " +
+                "inputOpens=15 lastInputPosition=987654321 pendingSeekPosition=987700000 " +
+                "harvested=42 lastCueTimeUs=1234000000 elapsedMs=10500 openMs=3200 " +
+                "lastReadResult=1",
+            line
+        )
+    }
+
+    @Test
     fun cueProofLinesUseStoreCueKeyFields() {
         val store = TranslatedSubtitleTimelineStore()
         val cueGroup = cueGroup(" bonjour ", 42_000L)

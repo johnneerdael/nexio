@@ -75,19 +75,69 @@ internal class Mp4TextTrackHarvester(
         val positionHolder = PositionHolder()
         var inputPosition = 0L
         var inputHandle: Mp4ExtractorInputHandle? = null
+        var reads = 0L
+        var extractorSeeks = 0L
+        var inputOpens = 0L
+        var inputOpenMs = 0L
+        var lastInputPosition = 0L
+        var lastPendingSeekPosition = -1L
+        var lastReadResult = Extractor.RESULT_CONTINUE
+        var lastReadProgressLogMs = startedMs
+        var lastReadProgressHarvested = -1
+
+        fun openInput(position: Long): Mp4ExtractorInputHandle {
+            val openStartedMs = System.currentTimeMillis()
+            return inputOpener.open(uri, request.headers, position).also {
+                inputOpens += 1
+                inputOpenMs += System.currentTimeMillis() - openStartedMs
+                lastInputPosition = position
+            }
+        }
+
+        fun logReadProgress(force: Boolean = false) {
+            val nowMs = System.currentTimeMillis()
+            val harvested = publisher.sampleCount
+            if (
+                !force &&
+                harvested == lastReadProgressHarvested &&
+                nowMs - lastReadProgressLogMs < MP4_READ_PROGRESS_LOG_INTERVAL_MS
+            ) {
+                return
+            }
+            EmbeddedSubtitleHarvestDiagnostics.mp4HarvestReadProgress(
+                session = request.sessionKey,
+                requestedTimeUs = initialSeekTimeUs,
+                reads = reads,
+                extractorSeeks = extractorSeeks,
+                inputOpens = inputOpens,
+                lastInputPosition = lastInputPosition,
+                pendingSeekPosition = lastPendingSeekPosition,
+                harvested = harvested,
+                lastCueTimeUs = publisher.lastCueTimeUs,
+                elapsedMs = nowMs - startedMs,
+                openMs = inputOpenMs,
+                lastReadResult = lastReadResult
+            )
+            lastReadProgressLogMs = nowMs
+            lastReadProgressHarvested = harvested
+        }
 
         try {
-            inputHandle = inputOpener.open(uri, request.headers, inputPosition)
+            inputHandle = openInput(inputPosition)
             var readResult = Extractor.RESULT_CONTINUE
             while (readResult != Extractor.RESULT_END_OF_INPUT) {
                 ensureActive()
                 val currentInputHandle = checkNotNull(inputHandle)
                 readResult = extractor.read(currentInputHandle.input, positionHolder)
+                reads += 1
+                lastReadResult = readResult
                 if (readResult == Extractor.RESULT_SEEK) {
                     currentInputHandle.close()
                     inputHandle = null
                     inputPosition = positionHolder.position
-                    inputHandle = inputOpener.open(uri, request.headers, inputPosition)
+                    lastPendingSeekPosition = inputPosition
+                    extractorSeeks += 1
+                    inputHandle = openInput(inputPosition)
                     readResult = Extractor.RESULT_CONTINUE
                 } else if (!initialSeekApplied) {
                     val map = seekMap
@@ -97,8 +147,10 @@ internal class Mp4TextTrackHarvester(
                             currentInputHandle.close()
                             inputHandle = null
                             inputPosition = seekPoint.position
+                            lastPendingSeekPosition = inputPosition
+                            extractorSeeks += 1
                             extractor.seek(inputPosition, initialSeekTimeUs)
-                            inputHandle = inputOpener.open(uri, request.headers, inputPosition)
+                            inputHandle = openInput(inputPosition)
                         }
                         EmbeddedSubtitleHarvestDiagnostics.initialSeekApplied(
                             session = request.sessionKey,
@@ -110,6 +162,7 @@ internal class Mp4TextTrackHarvester(
                         )
                         initialSeekApplied = true
                         readResult = Extractor.RESULT_CONTINUE
+                        logReadProgress(force = true)
                     } else if (map != null) {
                         EmbeddedSubtitleHarvestDiagnostics.initialSeekApplied(
                             session = request.sessionKey,
@@ -120,9 +173,12 @@ internal class Mp4TextTrackHarvester(
                             seekable = false
                         )
                         initialSeekApplied = true
+                        logReadProgress(force = true)
                     }
                 }
+                logReadProgress()
             }
+            logReadProgress(force = true)
             EmbeddedSubtitleTrackHarvestResult(
                 container = container,
                 harvested = publisher.sampleCount,
@@ -165,3 +221,5 @@ internal fun mp4ExtractorInputLength(position: Long, remainingLength: Long): Lon
     if (remainingLength == C.LENGTH_UNSET.toLong()) return C.LENGTH_UNSET.toLong()
     return position + remainingLength
 }
+
+private const val MP4_READ_PROGRESS_LOG_INTERVAL_MS = 5_000L
