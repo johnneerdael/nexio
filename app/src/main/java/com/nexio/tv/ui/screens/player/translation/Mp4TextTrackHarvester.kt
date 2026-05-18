@@ -252,13 +252,15 @@ internal class Mp4TextTrackHarvester(
             sampleMimeType = format.sampleMimeType,
             totalSamples = selectedTable.sampleCount,
             startSampleIndex = firstSampleIndex,
-            ranges = ranges.size
+            ranges = ranges.size,
+            bytesPlanned = ranges.sumOf { it.length.toLong() }
         )
 
         val parser = subtitleParserFactory.create(format)
         var inputOpens = 0
         var bytesRead = 0L
         var nextProgressSample = firstSampleIndex
+        var lastProgressLogMs = startedMs
         val rangeCount = ranges.size
         for (rangeIndex in ranges.indices) {
             val range = ranges[rangeIndex]
@@ -287,7 +289,12 @@ internal class Mp4TextTrackHarvester(
                 handle.close()
             }
 
-            if (rangeIndex == rangeCount - 1 || publisher.sampleCount % 100 == 0) {
+            val nowMs = System.currentTimeMillis()
+            if (
+                rangeIndex == rangeCount - 1 ||
+                nextProgressSample - firstSampleIndex >= 100 ||
+                nowMs - lastProgressLogMs >= MP4_SAMPLE_TABLE_PROGRESS_LOG_INTERVAL_MS
+            ) {
                 EmbeddedSubtitleHarvestDiagnostics.mp4SampleTableHarvestProgress(
                     session = request.sessionKey,
                     selectedOrdinal = selectedTable.textTrackOrdinal,
@@ -298,8 +305,9 @@ internal class Mp4TextTrackHarvester(
                     inputOpens = inputOpens,
                     bytesRead = bytesRead,
                     harvested = publisher.sampleCount,
-                    elapsedMs = System.currentTimeMillis() - startedMs
+                    elapsedMs = nowMs - startedMs
                 )
+                lastProgressLogMs = nowMs
             }
         }
 
@@ -439,5 +447,6 @@ internal fun mp4ExtractorInputLength(position: Long, remainingLength: Long): Lon
 }
 
 private const val MP4_READ_PROGRESS_LOG_INTERVAL_MS = 5_000L
-private const val MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES = 256 * 1024L
-private const val MP4_SAMPLE_TABLE_MAX_RANGE_BYTES = 4 * 1024 * 1024L
+private const val MP4_SAMPLE_TABLE_PROGRESS_LOG_INTERVAL_MS = 5_000L
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_GAP_BYTES = 8 * 1024 * 1024L
+private const val MP4_SAMPLE_TABLE_MAX_RANGE_BYTES = 64 * 1024 * 1024L

@@ -233,7 +233,8 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         sampleMimeType: String?,
         totalSamples: Int,
         startSampleIndex: Int,
-        ranges: Int
+        ranges: Int,
+        bytesPlanned: Long
     ) {
         log(
             mp4SampleTableHarvestStartedLine(
@@ -243,7 +244,8 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
                 sampleMimeType = sampleMimeType,
                 totalSamples = totalSamples,
                 startSampleIndex = startSampleIndex,
-                ranges = ranges
+                ranges = ranges,
+                bytesPlanned = bytesPlanned
             )
         )
     }
@@ -255,12 +257,13 @@ internal object EmbeddedSubtitleHarvestDiagnostics : EmbeddedSubtitleHarvestDiag
         sampleMimeType: String?,
         totalSamples: Int,
         startSampleIndex: Int,
-        ranges: Int
+        ranges: Int,
+        bytesPlanned: Long
     ): String {
         return "$PREFIX event=mp4_sample_table_started session=${field(session.streamKey)} " +
             "container=mp4 selectedOrdinal=$selectedOrdinal trackId=$trackId " +
             "sampleMimeType=${field(sampleMimeType)} totalSamples=$totalSamples " +
-            "startSampleIndex=$startSampleIndex ranges=$ranges"
+            "startSampleIndex=$startSampleIndex ranges=$ranges bytesPlanned=$bytesPlanned"
     }
 
     fun mp4SampleTableHarvestProgress(
