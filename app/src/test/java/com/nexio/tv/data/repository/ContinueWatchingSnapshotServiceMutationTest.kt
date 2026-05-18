@@ -173,7 +173,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     private fun tvdbDefaultOrderResolver(
-        tmdbTvId: String = "tmdb:tv:303904",
+        tmdbTvId: String = "tmdb:tv:12345",
         tvdbSeriesId: String = "303904"
     ): TvEpisodeOrderResolver =
         mockk {
@@ -1504,10 +1504,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(14, projected.season)
             assertEquals(1, projected.episode)
             assertEquals("The Multiverse", projected.episodeTitle)
-            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals("tmdb:12345:14:1", projected.videoId)
             assertEquals("2026-02-17", projected.firstAired)
             assertEquals(AirDateGate.pendingTriggerMs(0L, null, "2026-02-17"), projected.firstAiredMs)
         }
@@ -1754,9 +1755,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(14, projected.season)
             assertEquals(1, projected.episode)
-            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals("tmdb:12345:14:1", projected.videoId)
         }
 
     @Test
@@ -1798,10 +1800,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.traktUpNextItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(3, projected.season)
             assertEquals(4, projected.episode)
             assertEquals("The Canonical One", projected.episodeTitle)
-            assertEquals("tvdb:303904:3:4", projected.videoId)
+            assertEquals("tmdb:12345:3:4", projected.videoId)
         }
 
     @Test
@@ -2142,10 +2145,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
             val scheduled = snapshot.scheduledReemit.single()
+            assertEquals("tmdb:12345", scheduled.contentId)
             assertEquals(14, scheduled.season)
             assertEquals(1, scheduled.episode)
             assertEquals(tomorrow, scheduled.firstAired)
-            assertEquals("tvdb:303904:14:1", scheduled.videoId)
+            assertEquals("tmdb:12345:14:1", scheduled.videoId)
         }
 
     @Test

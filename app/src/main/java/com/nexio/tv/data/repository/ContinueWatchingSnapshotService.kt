@@ -1292,11 +1292,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 episodes = episodes
             ) ?: return null
 
+            val projectedContentId = order.resolution.tmdbTvId.toNextUpTmdbContentId()
             entry.copy(
+                contentId = projectedContentId,
                 season = projected.season,
                 episode = projected.episode,
                 episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
-                videoId = "${entry.contentId}:${projected.season}:${projected.episode}",
+                videoId = "$projectedContentId:${projected.season}:${projected.episode}",
                 firstAired = projected.firstAired ?: entry.firstAired,
                 firstAiredMs = projected.firstAired
                     ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
@@ -1392,6 +1394,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         if (!value.contains(':')) return value
         return value.takeIf { normalizedProvider == "imdb" && it.startsWith("tt", ignoreCase = true) }
+    }
+
+    private fun String.toNextUpTmdbContentId(): String {
+        val id = removePrefix("tmdb:tv:")
+            .removePrefix("tmdb:")
+            .trim()
+        return "tmdb:$id"
     }
 
     private fun shouldPreferCompletedSeed(
