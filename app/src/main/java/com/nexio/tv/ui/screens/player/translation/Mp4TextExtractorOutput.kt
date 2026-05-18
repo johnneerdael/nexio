@@ -26,10 +26,12 @@ internal class Mp4TextExtractorOutput(
             return delegate.track(id, type)
         }
 
-        val supportedTextTrackOrdinal = nextSupportedTextTrackOrdinal
-        nextSupportedTextTrackOrdinal += 1
         return Mp4Media3CueTrackOutput(
-            supportedTextTrackOrdinal = supportedTextTrackOrdinal,
+            supportedTextTrackOrdinalProvider = {
+                val ordinal = nextSupportedTextTrackOrdinal
+                nextSupportedTextTrackOrdinal += 1
+                ordinal
+            },
             selectedSupportedTextTrackOrdinalProvider = selectedSupportedTextTrackOrdinalProvider,
             onCueGroup = onCueGroup
         )
@@ -51,16 +53,23 @@ internal object NoOpExtractorOutput : ExtractorOutput {
 }
 
 private class Mp4Media3CueTrackOutput(
-    private val supportedTextTrackOrdinal: Int,
+    private val supportedTextTrackOrdinalProvider: () -> Int,
     private val selectedSupportedTextTrackOrdinalProvider: () -> Int,
     private val onCueGroup: (CueGroup, Format) -> Unit
 ) : TrackOutput {
     private val cueDecoder = CueDecoder()
     private val pendingData = ByteArrayOutputStream()
     private var currentFormat: Format? = null
+    private var supportedTextTrackOrdinal: Int? = null
 
     override fun format(format: Format) {
         currentFormat = format
+        if (
+            format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES &&
+            supportedTextTrackOrdinal == null
+        ) {
+            supportedTextTrackOrdinal = supportedTextTrackOrdinalProvider()
+        }
     }
 
     @Throws(IOException::class)
@@ -131,6 +140,7 @@ private class Mp4Media3CueTrackOutput(
     }
 
     private fun shouldCaptureSampleData(): Boolean {
-        return supportedTextTrackOrdinal == selectedSupportedTextTrackOrdinalProvider()
+        return currentFormat?.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES &&
+            supportedTextTrackOrdinal == selectedSupportedTextTrackOrdinalProvider()
     }
 }

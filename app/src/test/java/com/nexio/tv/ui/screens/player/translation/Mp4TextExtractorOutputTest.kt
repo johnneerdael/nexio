@@ -83,6 +83,39 @@ class Mp4TextExtractorOutputTest {
         )
     }
 
+    @Test
+    fun unsupportedTextTrackDoesNotConsumeSupportedOrdinal() {
+        val published = mutableListOf<CueGroup>()
+        val output = Mp4TextExtractorOutput(
+            delegate = RecordingExtractorOutput(),
+            selectedSupportedTextTrackOrdinalProvider = { 0 },
+            onCueGroup = { cueGroup, _ -> published += cueGroup }
+        )
+        val unsupportedTrack = output.track(1, C.TRACK_TYPE_TEXT)
+        val supportedTrack = output.track(2, C.TRACK_TYPE_TEXT)
+        val sample = encodedCueSample("Supported")
+
+        unsupportedTrack.format(
+            Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_VTT)
+                .build()
+        )
+        unsupportedTrack.sampleData(
+            ParsableByteArray("WEBVTT".toByteArray()),
+            6,
+            TrackOutput.SAMPLE_DATA_PART_MAIN
+        )
+        unsupportedTrack.sampleMetadata(1_000L, C.BUFFER_FLAG_KEY_FRAME, 6, 0, null)
+        supportedTrack.format(media3CueFormat())
+        supportedTrack.sampleData(ParsableByteArray(sample), sample.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
+        supportedTrack.sampleMetadata(2_000L, C.BUFFER_FLAG_KEY_FRAME, sample.size, 0, null)
+
+        assertEquals(
+            listOf(2_000L to "Supported"),
+            published.map { it.presentationTimeUs to it.cues.single().text.toString() }
+        )
+    }
+
     private fun media3CueFormat(): Format {
         return Format.Builder()
             .setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
