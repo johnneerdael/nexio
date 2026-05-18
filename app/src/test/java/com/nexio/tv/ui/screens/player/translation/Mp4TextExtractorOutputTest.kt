@@ -11,7 +11,9 @@ import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.text.CueEncoder
+import java.io.EOFException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,6 +116,68 @@ class Mp4TextExtractorOutputTest {
             listOf(2_000L to "Supported"),
             published.map { it.presentationTimeUs to it.cues.single().text.toString() }
         )
+    }
+
+    @Test
+    fun repeatedTextTrackIdReturnsSameOutputAndDoesNotConsumeNewOrdinal() {
+        val published = mutableListOf<CueGroup>()
+        val output = Mp4TextExtractorOutput(
+            delegate = RecordingExtractorOutput(),
+            selectedSupportedTextTrackOrdinalProvider = { 1 },
+            onCueGroup = { cueGroup, _ -> published += cueGroup }
+        )
+        val firstTrack = output.track(1, C.TRACK_TYPE_TEXT)
+        val sameTrack = output.track(1, C.TRACK_TYPE_TEXT)
+        val secondTrack = output.track(2, C.TRACK_TYPE_TEXT)
+        val firstSample = encodedCueSample("First")
+        val secondSample = encodedCueSample("Second")
+
+        assertSame(firstTrack, sameTrack)
+
+        firstTrack.format(media3CueFormat())
+        firstTrack.sampleData(ParsableByteArray(firstSample), firstSample.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
+        firstTrack.sampleMetadata(1_000L, C.BUFFER_FLAG_KEY_FRAME, firstSample.size, 0, null)
+        secondTrack.format(media3CueFormat())
+        secondTrack.sampleData(ParsableByteArray(secondSample), secondSample.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
+        secondTrack.sampleMetadata(2_000L, C.BUFFER_FLAG_KEY_FRAME, secondSample.size, 0, null)
+
+        assertEquals(
+            listOf(2_000L to "Second"),
+            published.map { it.presentationTimeUs to it.cues.single().text.toString() }
+        )
+    }
+
+    @Test
+    fun dataReaderEndOfInputHonorsAllowEndOfInput() {
+        val output = Mp4TextExtractorOutput(
+            delegate = RecordingExtractorOutput(),
+            selectedSupportedTextTrackOrdinalProvider = { 0 },
+            onCueGroup = { _, _ -> }
+        )
+        val track = output.track(1, C.TRACK_TYPE_TEXT)
+        val endOfInputReader = DataReader { _, _, _ -> C.RESULT_END_OF_INPUT }
+
+        assertEquals(
+            C.RESULT_END_OF_INPUT,
+            track.sampleData(
+                endOfInputReader,
+                8,
+                true,
+                TrackOutput.SAMPLE_DATA_PART_MAIN
+            )
+        )
+
+        try {
+            track.sampleData(
+                endOfInputReader,
+                8,
+                false,
+                TrackOutput.SAMPLE_DATA_PART_MAIN
+            )
+            throw AssertionError("Expected EOFException")
+        } catch (expected: EOFException) {
+            // Expected.
+        }
     }
 
     private fun media3CueFormat(): Format {

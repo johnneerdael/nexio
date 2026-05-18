@@ -12,6 +12,7 @@ import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.text.CueDecoder
 import java.io.ByteArrayOutputStream
+import java.io.EOFException
 import java.io.IOException
 
 internal class Mp4TextExtractorOutput(
@@ -20,21 +21,24 @@ internal class Mp4TextExtractorOutput(
     private val onCueGroup: (CueGroup, Format) -> Unit
 ) : ExtractorOutput {
     private var nextSupportedTextTrackOrdinal = 0
+    private val textOutputs = LinkedHashMap<Int, TrackOutput>()
 
     override fun track(id: Int, type: Int): TrackOutput {
         if (type != C.TRACK_TYPE_TEXT) {
             return delegate.track(id, type)
         }
 
-        return Mp4Media3CueTrackOutput(
-            supportedTextTrackOrdinalProvider = {
-                val ordinal = nextSupportedTextTrackOrdinal
-                nextSupportedTextTrackOrdinal += 1
-                ordinal
-            },
-            selectedSupportedTextTrackOrdinalProvider = selectedSupportedTextTrackOrdinalProvider,
-            onCueGroup = onCueGroup
-        )
+        return textOutputs.getOrPut(id) {
+            Mp4Media3CueTrackOutput(
+                supportedTextTrackOrdinalProvider = {
+                    val ordinal = nextSupportedTextTrackOrdinal
+                    nextSupportedTextTrackOrdinal += 1
+                    ordinal
+                },
+                selectedSupportedTextTrackOrdinalProvider = selectedSupportedTextTrackOrdinalProvider,
+                onCueGroup = onCueGroup
+            )
+        }
     }
 
     override fun endTracks() {
@@ -81,6 +85,10 @@ private class Mp4Media3CueTrackOutput(
     ): Int {
         val buffer = ByteArray(length)
         val bytesRead = input.read(buffer, 0, length)
+        if (bytesRead == C.RESULT_END_OF_INPUT) {
+            if (allowEndOfInput) return C.RESULT_END_OF_INPUT
+            throw EOFException()
+        }
         if (bytesRead > 0 && shouldCaptureSampleData()) {
             pendingData.write(buffer, 0, bytesRead)
         }
