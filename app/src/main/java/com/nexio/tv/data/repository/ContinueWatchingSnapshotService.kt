@@ -383,7 +383,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
         traktSettingsDataStore = traktSettingsDataStore,
         metadataDiskCacheStore = metadataDiskCacheStore,
         snapshotStore = snapshotStore,
-        continueWatchingIdentityResolver = ContinueWatchingIdentityResolver(),
+        continueWatchingIdentityResolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
+        ),
         airScheduler = airScheduler,
         profileManager = profileManager,
         ownershipService = ownershipService,
@@ -2812,8 +2816,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     ): StreamFetchIdentity? {
         val episodeOrderProvider = resolveResolvedEpisodeOrderProvider(
             mediaKind = mediaKind,
-            providerIds = providerIds,
-            canonicalIdentity = canonicalIdentity
+            providerIds = providerIds
         )
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
             val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
@@ -2875,19 +2878,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun resolveResolvedEpisodeOrderProvider(
         mediaKind: MetadataMediaKind,
-        providerIds: ProviderIds,
-        canonicalIdentity: ContentIdentity
+        providerIds: ProviderIds
     ): TvEpisodeOrderProvider {
         if (mediaKind != MetadataMediaKind.SERIES) return TvEpisodeOrderProvider.TMDB_DEFAULT
         val tmdbTvId = providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return if (
-                canonicalIdentity.canonicalProvider == ProviderId.TVDB &&
-                !providerIds.tvdb.isNullOrBlank()
-            ) {
-                TvEpisodeOrderProvider.TVDB_DEFAULT
-            } else {
-                TvEpisodeOrderProvider.TMDB_DEFAULT
-            }
+            ?: return TvEpisodeOrderProvider.TMDB_DEFAULT
         return try {
             tvEpisodeOrderResolver.resolve(
                 tmdbTvId = tmdbTvId,

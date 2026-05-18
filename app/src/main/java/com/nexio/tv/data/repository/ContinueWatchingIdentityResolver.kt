@@ -177,14 +177,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
     ): TvEpisodeOrderProvider {
         if (mediaKind != MetadataMediaKind.SERIES) return TvEpisodeOrderProvider.TMDB_DEFAULT
         val tmdbTvId = identity.providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return if (
-                identity.canonicalProvider == ProviderId.TVDB &&
-                !identity.providerIds.tvdb.isNullOrBlank()
-            ) {
-                TvEpisodeOrderProvider.TVDB_DEFAULT
-            } else {
-                TvEpisodeOrderProvider.TMDB_DEFAULT
-            }
+            ?: return TvEpisodeOrderProvider.TMDB_DEFAULT
         return try {
             tvEpisodeOrderResolver.resolve(
                 tmdbTvId = tmdbTvId,

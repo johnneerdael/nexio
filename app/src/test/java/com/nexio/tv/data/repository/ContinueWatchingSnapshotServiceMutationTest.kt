@@ -142,6 +142,41 @@ class ContinueWatchingSnapshotServiceMutationTest {
         )
     }
 
+    private fun buildServiceViaTestingConstructor(
+        metadataRouterFacade: MetadataRouterFacade,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver
+    ): ContinueWatchingSnapshotService {
+        val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+            every { state } returns flowOf(EffectiveTrackingProviderState())
+        }
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
+            every { dismissedNextUpKeys } returns flowOf(emptySet())
+        }
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+        }
+        val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
+            every { observeProgress(any()) } returns flowOf(emptyList())
+        }
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+        }
+
+        return ContinueWatchingSnapshotService(
+            watchProgressRepository = watchProgressRepository,
+            trackingProgressService = trackingProgressService,
+            trackingProviderStateService = trackingProviderStateService,
+            traktSettingsDataStore = traktSettingsDataStore,
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            metadataRouterFacade = metadataRouterFacade,
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
+        )
+    }
+
     private fun buildServiceWithMetadataFacade(
         facade: MetadataRouterFacade,
         tvEpisodeOrderResolver: TvEpisodeOrderResolver = tvdbDefaultOrderResolver()
@@ -359,6 +394,57 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("tt16288804", record.streamFetchIdentity?.contentId)
             assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
             assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        }
+
+    @Test
+    fun `testing constructor raw snapshot passes tv order resolver into identity resolver`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.resolveStableIdBundle(any(), any(), any())
+            } returns StableIdBundle(
+                itemKey = "series:tmdb:71446",
+                itemType = ContentType.SERIES,
+                canonical = CanonicalStableIds(
+                    tmdbTvId = "71446",
+                    tvdbSeriesId = "81189"
+                ),
+                sidecars = SidecarStableIds(),
+                source = SourceStableIds(
+                    sourceProvider = ProviderId.TMDB,
+                    sourceItemId = "71446",
+                    railId = null,
+                    observedIds = ProviderIds(tmdb = "71446", tvdb = "81189")
+                ),
+                evidence = emptyList(),
+                resolvedAtMs = 1778611202000L
+            )
+            val service = buildServiceViaTestingConstructor(
+                metadataRouterFacade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:71446",
+                    tvdbSeriesId = "81189"
+                )
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(
+                    resume(
+                        contentId = "tmdb:71446",
+                        videoId = "tmdb:71446:2:1",
+                        season = 2,
+                        episode = 1,
+                        source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                    )
+                ),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            val record = snapshot.records.single()
+            assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
         }
 
     @Test

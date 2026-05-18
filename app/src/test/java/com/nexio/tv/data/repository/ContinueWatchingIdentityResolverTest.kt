@@ -217,7 +217,7 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
-    fun `identity depth with tvdb series id resolves tvdb stream identity without imdb`() = runTest {
+    fun `identity depth with tvdb series id does not resolve tvdb stream identity without selected order`() = runTest {
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
         } returns citadelBundle(sidecars = SidecarStableIds())
@@ -233,11 +233,49 @@ class ContinueWatchingIdentityResolverTest {
             )
         )
 
+        assertEquals(IdentityConfidence.MEDIUM, record.identityConfidence)
+        assertNull(record.streamFetchIdentity)
+        assertEquals(listOf("stream fetch identity unresolved"), record.identityWarnings)
+        assertEquals("tvdb:393268", record.resumeIdentities.single().contentId)
+    }
+
+    @Test
+    fun `identity depth resolves tvdb stream identity only when order resolver selects tvdb`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle().copy(sidecars = SidecarStableIds())
+        val resolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            tvEpisodeOrderResolver = object : TvEpisodeOrderResolver {
+                override suspend fun resolve(
+                    tmdbTvId: String?,
+                    providerIds: ProviderIds
+                ): TvEpisodeOrderResolution =
+                    TvEpisodeOrderResolution(
+                        provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                        tmdbTvId = "tmdb:tv:71446",
+                        tvdbSeriesId = "81189",
+                        reason = "test override"
+                    )
+            }
+        )
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tvdb:81189",
+                    videoId = "tvdb:81189:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
         assertEquals(IdentityConfidence.HIGH, record.identityConfidence)
-        assertEquals("tvdb:393268:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
         assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
         assertEquals(emptyList<String>(), record.identityWarnings)
-        assertEquals("tvdb:393268", record.resumeIdentities.single().contentId)
     }
 
     @Test
