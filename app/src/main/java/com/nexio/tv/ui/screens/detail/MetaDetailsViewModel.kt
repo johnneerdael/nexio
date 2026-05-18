@@ -15,6 +15,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.PaginationCursor
 import com.nexio.tv.core.metadata.router.ReviewsPage
+import com.nexio.tv.core.metadata.router.providerNativeIdFromContentId
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
@@ -3720,9 +3721,7 @@ class MetaDetailsViewModel @Inject constructor(
 private fun ResolvedDetailDisplayDocument.toMeta(contentId: String, contentType: ContentType): Meta {
     val fields = fields
     return Meta(
-        id = identity.canonicalProvider?.let { provider ->
-            identity.canonicalId?.let { canonicalId -> "${provider.name.lowercase()}:$canonicalId" }
-        } ?: contentId,
+        id = detailMetaId(contentId, contentType),
         type = contentType,
         rawType = contentType.toApiString(),
         name = fields.title.orEmpty(),
@@ -3752,6 +3751,27 @@ private fun ResolvedDetailDisplayDocument.toMeta(contentId: String, contentType:
         trailerYtIds = trailer.fallbackTrailerYtIds,
         artwork = artwork.takeUnless { it.poster == null && it.backdrop == null && it.logo == null && it.thumbnail == null }
     )
+}
+
+private fun ResolvedDetailDisplayDocument.detailMetaId(contentId: String, contentType: ContentType): String {
+    val tmdbSeriesId = contentId.toStandardTvTmdbMetaId(contentType)
+        ?: route?.sourceContext?.previewSourceItemId?.toStandardTvTmdbMetaId(contentType)
+        ?: route?.takeIf { it.provider == MetadataPrimaryProvider.TMDB }
+            ?.parentId
+            ?.toStandardTvTmdbMetaId(contentType)
+    if (tmdbSeriesId != null) return tmdbSeriesId
+
+    return identity.canonicalProvider?.let { provider ->
+        identity.canonicalId?.let { canonicalId -> "${provider.name.lowercase()}:$canonicalId" }
+    } ?: contentId
+}
+
+private fun String.toStandardTvTmdbMetaId(contentType: ContentType): String? {
+    if (contentType != ContentType.SERIES && contentType != ContentType.TV) return null
+    val tmdbId = providerNativeIdFromContentId(this, "tmdb")
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return "tmdb:$tmdbId"
 }
 
 internal fun parseDetailApiTypeToContentType(apiType: String?): ContentType? {

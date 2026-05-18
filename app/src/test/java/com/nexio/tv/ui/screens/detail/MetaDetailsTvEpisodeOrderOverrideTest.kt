@@ -183,6 +183,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
         assertEquals("tvdb:121361", metadataRequest.captured.contentId)
         assertEquals("tvdb:121361", request.captured.contentId)
         assertEquals("tmdb:1399", request.captured.fallbackContentId)
+        assertEquals("tmdb:1399", viewModel.uiState.value.meta?.id)
     }
 
     @Test
