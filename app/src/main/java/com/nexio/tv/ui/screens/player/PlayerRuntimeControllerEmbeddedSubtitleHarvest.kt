@@ -6,11 +6,13 @@ import androidx.media3.extractor.DummyTrackOutput
 import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleContainer
 import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestDiagnostics
 import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestEligibility
 import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleHarvestState
-import com.nexio.tv.ui.screens.player.translation.MatroskaTextTrackHarvestRequest
+import com.nexio.tv.ui.screens.player.translation.EmbeddedSubtitleTrackHarvestRequest
 import com.nexio.tv.ui.screens.player.translation.MatroskaTextTrackHarvester
+import com.nexio.tv.ui.screens.player.translation.Mp4TextTrackHarvester
 import com.nexio.tv.ui.screens.player.translation.SubtitleTimelineTranslationPipeline
 import com.nexio.tv.ui.screens.player.translation.TranslationTimelineSessionKey
 import kotlinx.coroutines.CancellationException
@@ -30,7 +32,7 @@ internal fun PlayerRuntimeController.updateEmbeddedSubtitleHarvest() {
             filename = currentFilename,
             headers = currentHeaders,
             selectedTrack = selectedTrack,
-            selectedSupportedSubRipOrdinal = selectedSubRipOrdinalForHarvest(
+            selectedSupportedTextOrdinal = selectedTextOrdinalForHarvest(
                 subtitleTracks = state.subtitleTracks,
                 selectedTrack = selectedTrack
             ),
@@ -48,11 +50,16 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
 ): Job {
     return scope.launch {
         try {
-            val harvested = MatroskaTextTrackHarvester().harvest(
-                MatroskaTextTrackHarvestRequest(
+            val harvester = when (state.container) {
+                EmbeddedSubtitleContainer.MATROSKA -> MatroskaTextTrackHarvester()
+                EmbeddedSubtitleContainer.MP4 -> Mp4TextTrackHarvester()
+                null -> error("Unsupported embedded subtitle container")
+            }
+            val result = harvester.harvest(
+                EmbeddedSubtitleTrackHarvestRequest(
                     streamUrl = state.streamUrl,
                     headers = state.headers,
-                    selectedSupportedSubRipOrdinal = state.selectedSupportedSubRipOrdinal ?: -1,
+                    selectedSupportedTextOrdinal = state.selectedSupportedTextOrdinal ?: -1,
                     sourceLanguage = state.selectedTrack?.language,
                     sessionKey = sessionKey,
                     timelineStore = translatedSubtitleTimelineStore,
@@ -61,7 +68,7 @@ internal fun PlayerRuntimeController.startEmbeddedSubtitleHarvest(
             )
             EmbeddedSubtitleHarvestDiagnostics.progress(
                 session = sessionKey,
-                harvested = harvested,
+                harvested = result.harvested,
                 stats = translatedSubtitleTimelineStore.stats(sessionKey),
                 fallbackOriginal = builtInSubtitleCueTranslator.timelineFallbackOriginalCount()
             )
@@ -114,17 +121,17 @@ private class HarvestDiscardingExtractorOutput : ExtractorOutput {
     override fun seekMap(seekMap: SeekMap) = Unit
 }
 
-internal fun selectedSubRipOrdinalForHarvest(
+internal fun selectedTextOrdinalForHarvest(
     subtitleTracks: List<TrackInfo>,
     selectedTrack: TrackInfo?
 ): Int? {
     selectedTrack ?: return null
-    if (!EmbeddedSubtitleHarvestEligibility.isSubRip(selectedTrack)) return null
+    if (!EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(selectedTrack)) return null
 
     var supportedOrdinal = 0
     for (index in subtitleTracks.indices) {
         val track = subtitleTracks[index]
-        if (!EmbeddedSubtitleHarvestEligibility.isSubRip(track)) continue
+        if (!EmbeddedSubtitleHarvestEligibility.isSupportedTextTrack(track)) continue
         if (track == selectedTrack || track.index == selectedTrack.index) {
             return supportedOrdinal
         }

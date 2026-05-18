@@ -7,17 +7,31 @@ import org.junit.Test
 
 class PlayerRuntimeControllerEmbeddedSubtitleHarvestTest {
     @Test
-    fun selectedSubRipOrdinalCountsOnlyPrecedingSupportedSubRipTracks() {
+    fun textOrdinalCountsAllSupportedTextFormats() {
         val tracks = listOf(
-            track(index = 0, mimeType = MimeTypes.TEXT_VTT),
+            track(index = 0, mimeType = MimeTypes.APPLICATION_PGS),
             track(index = 1, mimeType = MimeTypes.APPLICATION_SUBRIP),
-            track(index = 2, mimeType = MimeTypes.TEXT_SSA),
-            track(index = 3, codec = "srt")
+            track(index = 2, mimeType = MimeTypes.APPLICATION_TX3G),
+            track(index = 3, mimeType = MimeTypes.APPLICATION_TTML)
         )
 
         assertEquals(
+            0,
+            selectedTextOrdinalForHarvest(
+                subtitleTracks = tracks,
+                selectedTrack = tracks[1]
+            )
+        )
+        assertEquals(
             1,
-            selectedSubRipOrdinalForHarvest(
+            selectedTextOrdinalForHarvest(
+                subtitleTracks = tracks,
+                selectedTrack = tracks[2]
+            )
+        )
+        assertEquals(
+            2,
+            selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
                 selectedTrack = tracks[3]
             )
@@ -25,20 +39,28 @@ class PlayerRuntimeControllerEmbeddedSubtitleHarvestTest {
     }
 
     @Test
-    fun selectedSubRipOrdinalReturnsNullForUnsupportedOrMissingSelection() {
+    fun bitmapTrackHasNoTextOrdinal() {
         val tracks = listOf(
-            track(index = 0, mimeType = MimeTypes.TEXT_VTT),
+            track(index = 0, mimeType = MimeTypes.APPLICATION_PGS),
             track(index = 1, mimeType = MimeTypes.APPLICATION_SUBRIP)
         )
 
         assertNull(
-            selectedSubRipOrdinalForHarvest(
+            selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
                 selectedTrack = tracks[0]
             )
         )
+    }
+
+    @Test
+    fun selectedTextOrdinalReturnsNullForMissingSelection() {
+        val tracks = listOf(
+            track(index = 0, mimeType = MimeTypes.APPLICATION_SUBRIP)
+        )
+
         assertNull(
-            selectedSubRipOrdinalForHarvest(
+            selectedTextOrdinalForHarvest(
                 subtitleTracks = tracks,
                 selectedTrack = null
             )
