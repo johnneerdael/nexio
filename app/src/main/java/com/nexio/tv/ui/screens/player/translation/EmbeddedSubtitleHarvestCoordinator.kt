@@ -50,7 +50,8 @@ internal class EmbeddedSubtitleHarvestCoordinator(
         ) &&
             state.settings.enabled &&
             state.settings.apiKey.isNotBlank() &&
-            targetLanguage.isNotBlank()
+            targetLanguage.isNotBlank() &&
+            state.selectedSupportedSubRipOrdinal != null
         val reason = if (isEligible) "eligible" else state.unsupportedReason(targetLanguage)
         diagnostics.stateEvaluated(
             state = state,
@@ -174,6 +175,7 @@ internal class EmbeddedSubtitleHarvestCoordinator(
             track == null -> "missing_track"
             !EmbeddedSubtitleHarvestEligibility.isMatroska(streamUrl, filename) -> "not_mkv"
             !EmbeddedSubtitleHarvestEligibility.isSubRip(track) -> "unsupported_track"
+            selectedSupportedSubRipOrdinal == null -> "missing_subrip_ordinal"
             else -> "ineligible"
         }
     }

@@ -88,6 +88,37 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         assertEquals(listOf("session_changed"), diagnostics.cancelReasons)
     }
 
+    @Test
+    fun broaderTextEligibilityDoesNotStartBeforeTextOrdinalExists() = runTest {
+        val startedHarvests = mutableListOf<TranslationTimelineSessionKey>()
+        val diagnostics = RecordingHarvestDiagnostics()
+        val coordinator = coordinator(
+            diagnostics = diagnostics,
+            startHarvest = { key, _ ->
+                startedHarvests += key
+                Job()
+            }
+        )
+
+        coordinator.update(
+            eligibleState(
+                selectedSupportedSubRipOrdinal = null,
+                track = TrackInfo(
+                    index = 3,
+                    name = "English",
+                    language = "en",
+                    trackId = "subtitle:3",
+                    isSelected = true,
+                    mimeType = MimeTypes.APPLICATION_MP4VTT
+                )
+            )
+        )
+
+        assertNull(coordinator.activeSessionKey())
+        assertEquals(emptyList<TranslationTimelineSessionKey>(), startedHarvests)
+        assertEquals(listOf("unsupported_track"), diagnostics.unsupportedReasons)
+    }
+
     private fun TestScope.coordinator(
         timelineStore: TranslatedSubtitleTimelineStore = TranslatedSubtitleTimelineStore(),
         diagnostics: EmbeddedSubtitleHarvestDiagnosticsLogger = EmbeddedSubtitleHarvestDiagnostics,
@@ -113,6 +144,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
         targetLanguage: String = "nl",
         selectedAddonSubtitlePresent: Boolean = false,
         track: TrackInfo? = subRipTrack(),
+        selectedSupportedSubRipOrdinal: Int? = if (track == null) null else 0,
         settings: SubtitleTranslationSettings = SubtitleTranslationSettings(
             enabled = true,
             apiKey = "test-key",
@@ -124,6 +156,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
             filename = "video.mkv",
             headers = mapOf("Authorization" to "Bearer token"),
             selectedTrack = track,
+            selectedSupportedSubRipOrdinal = selectedSupportedSubRipOrdinal,
             selectedAddonSubtitlePresent = selectedAddonSubtitlePresent,
             autoTranslateEnabled = true,
             targetLanguage = targetLanguage,
@@ -144,6 +177,7 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
 
     private class RecordingHarvestDiagnostics : EmbeddedSubtitleHarvestDiagnosticsLogger {
         val cancelReasons = mutableListOf<String>()
+        val unsupportedReasons = mutableListOf<String>()
 
         override fun stateEvaluated(
             state: EmbeddedSubtitleHarvestState,
@@ -161,6 +195,8 @@ class EmbeddedSubtitleHarvestCoordinatorTest {
             cancelReasons += reason
         }
 
-        override fun unsupported(reason: String) = Unit
+        override fun unsupported(reason: String) {
+            unsupportedReasons += reason
+        }
     }
 }
