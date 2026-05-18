@@ -508,10 +508,14 @@ class MetadataRouter @Inject constructor(
             MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
             else -> false
         }
+        val tmdbSeriesRouteMissingNativeTarget = provider == MetadataPrimaryProvider.TMDB &&
+            (normalized.contentType == ContentType.SERIES || normalized.contentType == ContentType.TV) &&
+            !providerHasNativeTarget
 
         return TargetIdBuildResult(
             targetIds = builder.toMap(),
-            requiresIdentityResolution = !providerHasNativeTarget && canResolveThroughKnownCrossProviderTarget
+            requiresIdentityResolution = !providerHasNativeTarget &&
+                (canResolveThroughKnownCrossProviderTarget || tmdbSeriesRouteMissingNativeTarget)
         )
     }
 

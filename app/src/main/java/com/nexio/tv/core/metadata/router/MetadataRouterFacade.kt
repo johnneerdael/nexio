@@ -180,7 +180,10 @@ class MetadataRouterFacade(
                 itemKey = itemKey,
                 itemType = request.contentType,
                 routeProvider = route.provider,
-                knownIds = request.sourceContext.previewStableIds,
+                knownIds = request.sourceContext.previewStableIds.withResolvedRouteNativeIds(
+                    route = route,
+                    itemType = request.contentType
+                ),
                 sourceProvider = request.sourceContext.previewSourceProvider
                     ?.let { raw -> ProviderId.entries.firstOrNull { it.name == raw } },
                 sourceItemId = request.sourceContext.previewSourceItemId,
@@ -190,6 +193,26 @@ class MetadataRouterFacade(
         )
         traceEvents.emitStableIdBundle(bundle, trigger)
         return bundle
+    }
+
+    private fun ProviderIds.withResolvedRouteNativeIds(
+        route: MetadataRoute,
+        itemType: ContentType
+    ): ProviderIds {
+        if (route.provider != MetadataPrimaryProvider.TMDB) return this
+        if (itemType != ContentType.SERIES && itemType != ContentType.TV) return this
+        val resolvedTmdbTvId = route.targetIds[MetadataPrimaryProvider.TMDB]
+            ?.tmdbNumericTarget()
+            ?: return this
+        return copy(tmdb = resolvedTmdbTvId)
+    }
+
+    private fun String.tmdbNumericTarget(): String? {
+        val trimmed = trim()
+        val raw = providerNativeIdFromContentId(trimmed, "tmdb")
+            ?: trimmed.takeIf { value -> value.all { it.isDigit() } }
+            ?: return null
+        return raw.takeIf { value -> value.all { it.isDigit() } }
     }
 
     suspend fun resolveRequest(request: MetadataRequest): MetadataResolutionResult {

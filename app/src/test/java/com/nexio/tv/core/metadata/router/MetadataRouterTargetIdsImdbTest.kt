@@ -331,12 +331,12 @@ class MetadataRouterTargetIdsImdbTest {
         assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
-        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
         assertEquals(listOf(LookupCall.FindTmdb("tt0903747", "tv")), lookup.calls)
     }
 
     @Test
-    fun `raw IMDB series without stable ids attempts TMDB tv target lookup`() = runTest {
+    fun `raw IMDB series without stable ids requires identity when TMDB tv target lookup misses`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
 
@@ -346,8 +346,28 @@ class MetadataRouterTargetIdsImdbTest {
         assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
-        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
         assertEquals(listOf(LookupCall.FindTmdb("tt0903747", "tv")), lookup.calls)
+    }
+
+    @Test
+    fun `raw Trakt and Simkl series without stable ids require identity before TMDB execution`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val ids = listOf("trakt:123", "simkl:456")
+        val routes = mutableListOf<MetadataRoute>()
+        for (i in ids.indices) {
+            routes += router.route(request(ids[i], ContentType.SERIES))
+        }
+
+        for (route in routes) {
+            assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+            assertEquals(MetadataMediaKind.SERIES, route.mediaKind)
+            assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
+            assertEquals(true, route.targetIdRequiresIdentityResolution)
+        }
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
     }
 
     @Test
