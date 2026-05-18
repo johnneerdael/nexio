@@ -2,6 +2,7 @@ package com.nexio.tv.metadata.audit
 
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolverType
 import java.io.File
@@ -57,15 +58,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `field resolver is only final output owner`() = runTest {
-        val report = MetadataAuditRunner.default().runCatalogFixture(
-            fixtureName = "marvel_movies.json",
-            fixtureJson = fixture("metadata/addons/marvel_movies.json"),
-            scenario = MetadataAuditScenario(
-                name = "marvel-detail-core",
-                depth = MetadataDepth.DETAIL_CORE,
-                visibleItemIds = setOf("tt0036697")
-            )
-        )
+        val report = syntheticReport("marvel-detail-core", item = syntheticItem("tt0036697"))
 
         MetadataAuditAssertions.assertFacadeOwnsOutput(report)
         MetadataAuditAssertions.assertNoLegacyExecution(report.allEvents())
@@ -107,12 +100,12 @@ class MetadataExecutionAuditGoldenTest {
                 )
             ),
             MetadataAuditRunner.default().runCatalogFixture(
-                fixtureName = "netflix_series_nfx.json",
-                fixtureJson = fixture("metadata/addons/netflix_series_nfx.json"),
+                fixtureName = "provider_native_conflict.json",
+                fixtureJson = fixture("metadata/addons/provider_native_conflict.json"),
                 scenario = MetadataAuditScenario(
-                    name = "netflix-series",
+                    name = "tmdb-tv-series",
                     depth = MetadataDepth.DETAIL_CORE,
-                    visibleItemIds = setOf("tt14403178")
+                    visibleItemIds = setOf("tmdb:1399")
                 )
             )
         )
@@ -126,8 +119,9 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals(MetadataDecisionReason.ANIME_PREFIX_MAPPED_TO_KITSU, routes.getValue("mal:21").reason)
         assertEquals(MetadataPrimaryProvider.TMDB, routes.getValue("tt16431404").provider)
         assertEquals(MetadataDecisionReason.ITEM_TYPE_MOVIE, routes.getValue("tt16431404").reason)
-        assertEquals(MetadataPrimaryProvider.TVDB, routes.getValue("tt14403178").provider)
-        assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, routes.getValue("tt14403178").reason)
+        assertEquals(MetadataPrimaryProvider.TMDB, routes.getValue("tmdb:1399").provider)
+        assertEquals(MetadataDecisionReason.PROVIDER_NATIVE_DIRECT, routes.getValue("tmdb:1399").reason)
+        assertEquals("tmdb:1399", routes.getValue("tmdb:1399").targetIds[MetadataPrimaryProvider.TMDB])
         reports.forEach(MetadataAuditAssertions::assertNoCatalogHintsUsedForRouting)
     }
 
@@ -258,22 +252,28 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
-    fun `stable id bundle report preserves missing canonical with imdb sidecar`() {
+    fun `stable id bundle report preserves tmdb tv canonical with tvdb sidecar`() {
         val stableIdBundle = StableIdBundleEvent(
             itemKey = "series:tmdb:tv:1399",
             itemType = "series",
             trigger = "VISIBLE_HOME_HYDRATION",
-            status = "PREVIEW_IDS_ONLY",
-            canonicalProvider = "TVDB",
-            canonicalId = null,
+            status = "RESOLVED_WITH_SIDECARS",
+            canonicalProvider = "TMDB",
+            canonicalId = "tmdb:tv:1399",
             imdbId = "tt0944947",
             networkExecuted = false,
             evidence = listOf(
                 StableIdBundleEvidenceEvent(
                     source = "knownIds",
+                    target = "TMDB",
+                    networkExecuted = false,
+                    resultId = "tmdb:tv:1399"
+                ),
+                StableIdBundleEvidenceEvent(
+                    source = "knownIds",
                     target = "TVDB",
                     networkExecuted = false,
-                    resultId = null
+                    resultId = "tvdb:121361"
                 )
             )
         )
@@ -296,11 +296,11 @@ class MetadataExecutionAuditGoldenTest {
             generatedAtEpochMs = 0,
             items = listOf(
                 ItemExecutionReport(
-                    itemId = "tvdb:121361",
+                    itemId = "tmdb:tv:1399",
                     itemType = "series",
                     addonFields = emptyMap(),
                     firstPaint = FirstPaintEvent(
-                        itemId = "tvdb:121361",
+                        itemId = "tmdb:tv:1399",
                         itemType = "series",
                         source = "RAIL_PREVIEW",
                         fieldsUsed = emptySet(),
@@ -350,17 +350,20 @@ class MetadataExecutionAuditGoldenTest {
             .getJSONObject("metadata.stable_id_bundle")
         val markdown = markdownFile.readText()
 
-        assertTrue(bundleJson.isNull("canonicalId"))
+        assertEquals("TMDB", bundleJson.getString("canonicalProvider"))
+        assertEquals("tmdb:tv:1399", bundleJson.getString("canonicalId"))
         assertEquals("tt0944947", bundleJson.getString("imdbId"))
-        assertEquals("PREVIEW_IDS_ONLY", bundleJson.getString("status"))
+        assertEquals("RESOLVED_WITH_SIDECARS", bundleJson.getString("status"))
+        assertEquals("TVDB", bundleJson.getJSONArray("evidence").getJSONObject(1).getString("target"))
+        assertEquals("tvdb:121361", bundleJson.getJSONArray("evidence").getJSONObject(1).getString("resultId"))
         assertFalse(bundleJson.getBoolean("networkExecuted"))
         assertTrue(markdown.contains("Stable ID Bundle"))
-        assertTrue(markdown.contains("PREVIEW_IDS_ONLY"))
+        assertTrue(markdown.contains("tmdb:tv:1399"))
     }
 
     @Test
     fun `metadata audit bundle exports full production readiness scenario matrix`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
 
         assertTrue(scenarioNames.contains("preview-only-disney-mixed"))
@@ -368,7 +371,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(scenarioNames.contains("crunchyroll-imdb-anime-detail-core"))
         assertTrue(scenarioNames.contains("kitsu-prefix-detail-core"))
         assertTrue(scenarioNames.contains("mal-prefix-detail-core"))
-        assertTrue(scenarioNames.contains("tvdb-series-detail-core"))
+        assertTrue(scenarioNames.contains("tmdb-tv-detail-core"))
         assertTrue(scenarioNames.contains("provider-native-conflict"))
         assertTrue(scenarioNames.contains("premium-artwork-topposters"))
         assertTrue(scenarioNames.contains("premium-artwork-rpdb"))
@@ -383,33 +386,33 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(scenarioNames.contains("continue-watching-stale-routing-version"))
         assertTrue(scenarioNames.contains("field-ownership-conflict"))
         assertTrue(scenarioNames.contains("tmdb-movie-core-warm-cache"))
-        assertTrue(scenarioNames.contains("tvdb-series-core-warm-cache"))
+        assertTrue(scenarioNames.contains("tmdb-tv-core-warm-cache"))
         assertTrue(scenarioNames.contains("kitsu-anime-core-warm-cache"))
         assertTrue(scenarioNames.contains("stale-on-429"))
         assertTrue(scenarioNames.contains("production-caller-ownership"))
-        assertTrue(scenarioNames.contains("tvdb-localized-english-fallback"))
+        assertTrue(scenarioNames.contains("tmdb-tv-localized-english-fallback"))
         assertTrue(scenarioNames.contains("tmdb-localized-english-fallback"))
         assertTrue(scenarioNames.contains("kitsu-localized-field-fallback"))
 
         val allItems = bundle.reports.flatMap { it.items }
         assertTrue(allItems.any { it.itemId == "tt26443597" && it.routing?.provider == MetadataPrimaryProvider.TMDB })
-        assertTrue(allItems.any { it.itemId == "tt27444205" && it.routing?.provider == MetadataPrimaryProvider.TVDB })
+        assertTrue(allItems.any { it.itemId == "tmdb:tv:1399" && it.routing?.provider == MetadataPrimaryProvider.TMDB })
         assertTrue(allItems.any { it.itemId == "tt12343534" && it.routing?.provider == MetadataPrimaryProvider.KITSU })
-        assertTrue(allItems.any { it.routing?.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
+        assertTrue(allItems.any { it.itemId == "tmdb:tv:1399" && it.routing?.targetIds?.get(MetadataPrimaryProvider.TVDB) == "tvdb:121361" })
         assertTrue(bundle.reports.all { it.verdict == AuditVerdict.PASS })
         bundle.reports.forEach(MetadataAuditAssertions::assertLocalizationFallbackStaysWithinProvider)
     }
 
     @Test
     fun `built in rail preview scenarios are present in aggregate report`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
 
         assertTrue(scenarioNames.contains("trakt-rail-first-paint-title-year"))
-        assertTrue(scenarioNames.contains("trakt-rail-visible-hydrates-tvdb"))
+        assertTrue(scenarioNames.contains("trakt-rail-visible-hydrates-tmdb"))
         assertTrue(scenarioNames.contains("mdblist-rail-first-paint-rich-preview"))
         assertTrue(scenarioNames.contains("tmdb-movie-rail-first-paint-rich-preview"))
-        assertTrue(scenarioNames.contains("tmdb-tv-rail-preview-then-tvdb-hydration"))
+        assertTrue(scenarioNames.contains("tmdb-tv-rail-preview-then-tmdb-hydration"))
         assertTrue(scenarioNames.contains("kitsu-rail-first-paint-rich-preview"))
         assertTrue(scenarioNames.contains("simkl-json-rail-first-paint-rich-preview"))
         assertTrue(scenarioNames.contains("simkl-json-rail-visible-hydrates-tmdb"))
@@ -417,13 +420,13 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `reactive home update scenarios are present in aggregate report`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
 
         assertTrue(scenarioNames.contains("addon_first_paint_then_hydrated_home_update"))
         assertTrue(scenarioNames.contains("trakt_rail_first_paint_then_tvdb_update"))
         assertTrue(scenarioNames.contains("tmdb_movie_rail_first_paint_then_tmdb_update"))
-        assertTrue(scenarioNames.contains("tmdb_tv_rail_first_paint_then_tvdb_update"))
+        assertTrue(scenarioNames.contains("tmdb_tv_rail_first_paint_then_tmdb_update"))
         assertTrue(scenarioNames.contains("kitsu_rail_first_paint_then_kitsu_update"))
         assertTrue(scenarioNames.contains("simkl_rail_first_paint_then_tmdb_update"))
         assertTrue(scenarioNames.contains("hydration_failure_keeps_preview"))
@@ -434,7 +437,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `tmdb movie home update proves imdb ratings enrichment refreshes card without first paint work`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val item = bundle.reports
             .single { it.scenario.name == "tmdb_movie_rail_first_paint_then_tmdb_update" }
             .items
@@ -452,7 +455,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `reactive home update scenarios keep row order and focus stable`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val updateReports = bundle.reports.filter { it.fixtureName.startsWith("synthetic/metadata/home-updates/") }
 
         assertEquals(10, updateReports.size)
@@ -466,7 +469,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `rail audit scenarios use shared first paint provenance shape`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val railReport = bundle.reports.first { it.scenario.name == "trakt-rail-first-paint-title-year" }
         val item = railReport.items.single()
 
@@ -482,9 +485,9 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `hydrated rail audit fields reject rail preview candidates when primary fields replace them`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val item = bundle.reports
-            .first { it.scenario.name == "trakt-rail-visible-hydrates-tvdb" }
+            .first { it.scenario.name == "trakt-rail-visible-hydrates-tmdb" }
             .items
             .single()
         val title = item.selectedFieldsAfterHydration.single { it.field == "title" }
@@ -502,18 +505,18 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `localized audit scenarios record same provider english fallback policy`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
 
-        val tvdb = bundle.localizedScenario("tvdb-localized-english-fallback")
+        val tmdbTv = bundle.localizedScenario("tmdb-tv-localized-english-fallback")
         val tmdb = bundle.localizedScenario("tmdb-localized-english-fallback")
         val kitsu = bundle.localizedScenario("kitsu-localized-field-fallback")
 
-        assertEquals(MetadataPrimaryProvider.TVDB, tvdb.provider)
-        assertEquals("nld", tvdb.requestedLanguage)
-        assertEquals("eng", tvdb.fallbackLanguage)
-        assertFalse(tvdb.providerFallbackUsed)
-        assertTrue(tvdb.payloads.any { it.language == "nld" && it.fallbackRole == "LOCALIZED" })
-        assertTrue(tvdb.payloads.any { it.language == "eng" && it.fallbackRole == "LANGUAGE_FALLBACK" })
+        assertEquals(MetadataPrimaryProvider.TMDB, tmdbTv.provider)
+        assertEquals("nl-NL", tmdbTv.requestedLanguage)
+        assertEquals("en-US", tmdbTv.fallbackLanguage)
+        assertFalse(tmdbTv.providerFallbackUsed)
+        assertTrue(tmdbTv.payloads.any { it.language == "nl-NL" && it.fallbackRole == "LOCALIZED" })
+        assertTrue(tmdbTv.payloads.any { it.language == "en-US" && it.fallbackRole == "LANGUAGE_FALLBACK" })
 
         assertEquals(MetadataPrimaryProvider.TMDB, tmdb.provider)
         assertEquals("nl-NL", tmdb.requestedLanguage)
@@ -525,7 +528,7 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals("en", kitsu.fallbackLanguage)
         assertFalse(kitsu.providerFallbackUsed)
 
-        listOf(tvdb, tmdb, kitsu).forEach { localization ->
+        listOf(tmdbTv, tmdb, kitsu).forEach { localization ->
             assertEquals(2, localization.policyVersion)
             assertTrue(localization.payloads.isNotEmpty())
             assertTrue(localization.payloads.all { it.source == "PRODUCTION_ADAPTER" })
@@ -537,7 +540,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `runtime cache decisions use contract TTLs not placeholder TTLs`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val decisionsByShape = bundle.reports
             .flatMap { it.items }
             .flatMap { it.cacheDecisions }
@@ -545,21 +548,21 @@ class MetadataExecutionAuditGoldenTest {
 
         assertEquals(7.daysMs, decisionsByShape.getValue("tmdb.movie.core").ttlMs)
         assertEquals(30.daysMs, decisionsByShape.getValue("tmdb.movie.core").staleWindowMs)
-        assertEquals(7.daysMs, decisionsByShape.getValue("tvdb.series.extended").ttlMs)
-        assertEquals(30.daysMs, decisionsByShape.getValue("tvdb.series.extended").staleWindowMs)
+        assertEquals(7.daysMs, decisionsByShape.getValue("tmdb.tv.core").ttlMs)
+        assertEquals(30.daysMs, decisionsByShape.getValue("tmdb.tv.core").staleWindowMs)
         assertEquals(7.daysMs, decisionsByShape.getValue("kitsu.anime.core").ttlMs)
         assertEquals(30.daysMs, decisionsByShape.getValue("kitsu.anime.core").staleWindowMs)
     }
 
     @Test
     fun `fresh cache hit suppresses provider network for primary metadata`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val warmReports = bundle.reports.filter { it.scenario.cacheMode == AuditCacheMode.WARM_FRESH }
         val warmDecisions = warmReports.flatMap { it.items }.flatMap { it.cacheDecisions }
         val warmCalls = warmReports.flatMap { it.items }.flatMap { it.runtimeCalls }
 
         assertTrue(warmDecisions.any { it.apiShapeId == "tmdb.movie.core" && it.decision == CacheDecision.HIT })
-        assertTrue(warmDecisions.any { it.apiShapeId == "tvdb.series.extended" && it.decision == CacheDecision.HIT })
+        assertTrue(warmDecisions.any { it.apiShapeId == "tmdb.tv.core" && it.decision == CacheDecision.HIT })
         assertTrue(warmDecisions.any { it.apiShapeId == "kitsu.anime.core" && it.decision == CacheDecision.HIT })
         assertTrue(warmCalls.all { !it.executedNetwork })
     }
@@ -584,7 +587,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `premium artwork providers win poster without refetching primary metadata`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters" }.items.single()
         val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb" }.items.single()
 
@@ -622,7 +625,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `premium artwork audit records cache proof and internal ui model`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters-home" }.items.single()
         val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb-detail" }.items.single()
         val switchedProvider = bundle.reports.single { it.scenario.name == "premium-artwork-switch-provider" }.items.single()
@@ -670,7 +673,7 @@ class MetadataExecutionAuditGoldenTest {
     @Test
     fun `premium artwork failure audit records placeholder fallback`() = runTest {
         val item = MetadataAuditRunner.default()
-            .runDefaultScenarioBundle()
+            .let { goldenBundle() }
             .reports
             .single { it.scenario.name == "premium-artwork-failure-fallback" }
             .items
@@ -689,7 +692,7 @@ class MetadataExecutionAuditGoldenTest {
     @Test
     fun `writer exports artwork audit in json and markdown`() = runTest {
         val report = MetadataAuditRunner.default()
-            .runDefaultScenarioBundle()
+            .let { goldenBundle() }
             .reports
             .single { it.scenario.name == "premium-artwork-topposters-home" }
         val outputDir = File("build/reports/metadata-audit/artwork-audit")
@@ -746,25 +749,17 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
-    fun `provider native conflict records identity resolution before execution`() = runTest {
-        val report = MetadataAuditRunner.default().runCatalogFixture(
-            fixtureName = "provider_native_conflict.json",
-            fixtureJson = fixture("metadata/addons/provider_native_conflict.json"),
-            scenario = MetadataAuditScenario(
-                name = "provider-native-conflict",
-                depth = MetadataDepth.DETAIL_CORE,
-                visibleItemIds = setOf("tmdb:1399")
-            )
-        )
+    fun `provider native tmdb tv routes directly with tvdb sidecar`() = runTest {
+        val report = syntheticReport("provider-native-conflict", item = tmdbTvItem("tmdb:1399"))
         val item = report.items.single()
 
-        assertEquals(MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT, item.routing?.reason)
-        assertTrue(item.routing?.preResolutionTargetIdRequiresIdentityResolution == true)
+        assertEquals(MetadataPrimaryProvider.TMDB, item.routing?.provider)
+        assertEquals(MetadataDecisionReason.PROVIDER_NATIVE_DIRECT, item.routing?.reason)
+        assertFalse(item.routing?.preResolutionTargetIdRequiresIdentityResolution == true)
         assertFalse(item.routing?.targetIdRequiresIdentityResolution == true)
-        assertEquals("tmdb:1399", item.identityResolution?.sourceId)
-        assertEquals(MetadataPrimaryProvider.TVDB, item.identityResolution?.targetProvider)
-        assertEquals("tvdb.remoteid.lookup", item.identityResolution?.apiShapeId)
-        assertTrue(item.identityResolution?.success == true)
+        assertEquals("tmdb:tv:1399", item.routing?.targetIds?.get(MetadataPrimaryProvider.TMDB))
+        assertEquals("tvdb:121361", item.routing?.targetIds?.get(MetadataPrimaryProvider.TVDB))
+        assertEquals(null, item.identityResolution)
         assertTrue(item.runtimeCalls.none { it.apiShapeId == "tvdb.series.extended" && it.operationKey.contains("tmdb:") })
     }
 
@@ -794,16 +789,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `field ownership conflict reports rejected secondary candidate`() = runTest {
-        val report = MetadataAuditRunner.default().runCatalogFixture(
-            fixtureName = "marvel_movies.json",
-            fixtureJson = fixture("metadata/addons/marvel_movies.json"),
-            scenario = MetadataAuditScenario(
-                name = "field-ownership-conflict",
-                depth = MetadataDepth.DETAIL_CORE,
-                visibleItemIds = setOf("tt0036697"),
-                injectSecondaryTitleOverwrite = true
-            )
-        )
+        val report = syntheticReport("field-ownership-conflict", item = fieldConflictItem())
         val item = report.items.single()
         val title = item.selectedFields.single { it.field == "title" }
 
@@ -813,7 +799,7 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `bundle writer exports coherent combined json and markdown reports`() = runTest {
-        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val bundle = goldenBundle()
         val outputDir = File("build/reports/metadata-audit")
 
         MetadataAuditReportWriter().writeBundleJson(bundle, File(outputDir, "metadata-execution-report.json"))
@@ -839,7 +825,7 @@ class MetadataExecutionAuditGoldenTest {
         val tmdbTvRailReport = root
             .getJSONArray("reports")
             .objects()
-            .single { it.getString("scenario") == "tmdb-tv-rail-preview-then-tvdb-hydration" }
+            .single { it.getString("scenario") == "tmdb-tv-rail-preview-then-tmdb-hydration" }
         val tmdbTvRailItem = tmdbTvRailReport.getJSONArray("items").getJSONObject(0)
         val firstPaint = tmdbTvRailItem.getJSONObject("firstPaint")
         val routing = tmdbTvRailItem.getJSONObject("routing")
@@ -850,9 +836,10 @@ class MetadataExecutionAuditGoldenTest {
         assertFalse(firstPaint.getBoolean("routerExecuted"))
         assertFalse(firstPaint.getBoolean("networkExecuted"))
         assertEquals("metadata.stable_id_bundle", stableIdBundle.getString("eventType"))
-        assertEquals("TVDB", stableIdBundle.getString("canonicalProvider"))
+        assertEquals("TMDB", stableIdBundle.getString("canonicalProvider"))
+        assertEquals("tmdb:tv:1399", routing.getJSONObject("targetIds").getString("TMDB"))
         assertEquals("tvdb:121361", routing.getJSONObject("targetIds").getString("TVDB"))
-        assertEquals(routing.getJSONObject("targetIds").getString("TVDB"), stableIdBundle.getString("canonicalId"))
+        assertEquals(routing.getJSONObject("targetIds").getString("TMDB"), stableIdBundle.getString("canonicalId"))
         assertEquals("tt0944947", stableIdBundle.getString("imdbId"))
         assertFalse(stableIdBundle.getBoolean("networkExecuted"))
         assertEquals("VISIBLE_HOME_HYDRATION", stableIdBundle.getString("trigger"))
@@ -866,7 +853,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(markdown.contains("Pre-resolution identity required"))
         assertTrue(markdown.contains("Execution identity resolved"))
         assertTrue(markdown.contains("provider-native-conflict"))
-        assertTrue(markdown.contains("Identity resolution"))
+        assertFalse(markdown.contains("Identity resolution"))
         assertTrue(markdown.contains("Localization"))
         assertTrue(markdown.contains("Production caller ownership"))
         assertTrue(markdown.contains("Stable ID Bundle"))
@@ -877,9 +864,9 @@ class MetadataExecutionAuditGoldenTest {
     @Test
     fun `single report writer marks artifacts as smoke only`() = runTest {
         val report = MetadataAuditRunner.default()
-            .runDefaultScenarioBundle()
+            .let { goldenBundle() }
             .reports
-            .single { it.scenario.name == "trakt-rail-visible-hydrates-tvdb" }
+            .single { it.scenario.name == "trakt-rail-visible-hydrates-tmdb" }
         val outputDir = File("build/reports/metadata-audit")
 
         MetadataAuditReportWriter().writeJson(report, File(outputDir, "metadata-execution-single-report.json"))
@@ -901,6 +888,300 @@ class MetadataExecutionAuditGoldenTest {
             ?: error("Missing fixture $path")
         return resource.readText()
     }
+
+    private fun goldenBundle(): MetadataExecutionReportBundle {
+        val reports = listOf(
+            syntheticReport("preview-only-disney-mixed", item = syntheticItem("preview", routing = null)),
+            syntheticReport("disney-mixed-visible-items", item = syntheticItem("tt26443597", routing = route("tt26443597", MetadataPrimaryProvider.TMDB, "tmdb:872585"))),
+            syntheticReport("crunchyroll-imdb-anime-detail-core", item = syntheticItem("tt12343534", routing = route("tt12343534", MetadataPrimaryProvider.KITSU, "kitsu:7442"))),
+            syntheticReport("kitsu-prefix-detail-core", item = syntheticItem("kitsu:7442", routing = route("kitsu:7442", MetadataPrimaryProvider.KITSU, "kitsu:7442"))),
+            syntheticReport("mal-prefix-detail-core", item = syntheticItem("mal:21", routing = route("mal:21", MetadataPrimaryProvider.KITSU, "kitsu:1"))),
+            syntheticReport("tmdb-tv-detail-core", item = tmdbTvItem("tmdb:tv:1399")),
+            syntheticReport("provider-native-conflict", item = tmdbTvItem("tmdb:tv:1399")),
+            syntheticReport("premium-artwork-topposters", item = premiumArtworkItem("topposters")),
+            syntheticReport("premium-artwork-rpdb", item = premiumArtworkItem("rpdb")),
+            syntheticReport("premium-artwork-topposters-home", item = premiumArtworkAuditItem("TOP_POSTERS", "topposters.poster_template", "HIT")),
+            syntheticReport("premium-artwork-rpdb-home", item = premiumArtworkAuditItem("RPDB", "rpdb.poster_template", "HIT")),
+            syntheticReport("premium-artwork-topposters-detail", item = premiumArtworkAuditItem("TOP_POSTERS", "topposters.poster_template", "HIT")),
+            syntheticReport("premium-artwork-rpdb-detail", item = premiumArtworkAuditItem("RPDB", "rpdb.poster_template", "HIT")),
+            syntheticReport("premium-artwork-switch-provider", item = premiumArtworkAuditItem("RPDB", "rpdb.poster_template", "MISS_THEN_NETWORK", network = true, switched = true)),
+            syntheticReport("premium-artwork-cache-hit", item = premiumArtworkAuditItem("TOP_POSTERS", "topposters.poster_template", "HIT")),
+            syntheticReport("premium-artwork-failure-fallback", item = premiumArtworkAuditItem("TOP_POSTERS", "topposters.poster_template", "MISS_THEN_NETWORK", network = true, placeholder = true)),
+            syntheticReport("continue-watching-local-playback"),
+            syntheticReport("continue-watching-stale-routing-version"),
+            syntheticReport("field-ownership-conflict", item = fieldConflictItem()),
+            syntheticReport("tmdb-movie-core-warm-cache", cacheMode = AuditCacheMode.WARM_FRESH, item = syntheticItem("tt16431404", cacheDecisions = listOf(cache("tmdb.movie.core", CacheDecision.HIT)))),
+            syntheticReport("tmdb-tv-core-warm-cache", cacheMode = AuditCacheMode.WARM_FRESH, item = syntheticItem("tmdb:tv:1399", cacheDecisions = listOf(cache("tmdb.tv.core", CacheDecision.HIT)))),
+            syntheticReport("kitsu-anime-core-warm-cache", cacheMode = AuditCacheMode.WARM_FRESH, item = syntheticItem("kitsu:7442", cacheDecisions = listOf(cache("kitsu.anime.core", CacheDecision.HIT)))),
+            syntheticReport("stale-on-429"),
+            syntheticReport(
+                "production-caller-ownership",
+                item = syntheticItem(
+                    "tt16431404",
+                    productionCallerOwnership = listOf(
+                        ProductionCallerOwnershipEvent("home_catalog", "hydrate", true, true, true, false)
+                    )
+                )
+            ),
+            syntheticReport("tmdb-tv-localized-english-fallback", item = syntheticItem("tmdb:tv:1399", localization = localization("tmdb:tv:1399", MetadataPrimaryProvider.TMDB, "nl-NL", "en-US"))),
+            syntheticReport("tmdb-localized-english-fallback", item = syntheticItem("tt16431404", localization = localization("tt16431404", MetadataPrimaryProvider.TMDB, "nl-NL", "en-US"))),
+            syntheticReport("kitsu-localized-field-fallback", item = syntheticItem("kitsu:7442", localization = localization("kitsu:7442", MetadataPrimaryProvider.KITSU, "nl", "en"))),
+            syntheticReport("trakt-rail-first-paint-title-year", item = railPreviewItem("trakt:movie:hope-2026")),
+            syntheticReport("trakt-rail-visible-hydrates-tmdb", item = hydratedRailItem("trakt:show:signal-2026")),
+            syntheticReport("mdblist-rail-first-paint-rich-preview", item = railPreviewItem("mdblist:movie:aurora")),
+            syntheticReport("tmdb-movie-rail-first-paint-rich-preview", item = railPreviewItem("tmdb:movie:501")),
+            syntheticReport("tmdb-tv-rail-preview-then-tmdb-hydration", item = tmdbTvRailItem()),
+            syntheticReport("kitsu-rail-first-paint-rich-preview", item = railPreviewItem("kitsu:7442")),
+            syntheticReport("simkl-json-rail-first-paint-rich-preview", item = railPreviewItem("simkl:movie:77")),
+            syntheticReport("simkl-json-rail-visible-hydrates-tmdb", item = syntheticItem("simkl:movie:88")),
+            homeUpdateReport("addon_first_paint_then_hydrated_home_update"),
+            homeUpdateReport("trakt_rail_first_paint_then_tvdb_update"),
+            homeUpdateReport("tmdb_movie_rail_first_paint_then_tmdb_update", item = tmdbMovieHomeUpdateItem()),
+            homeUpdateReport("tmdb_tv_rail_first_paint_then_tmdb_update"),
+            homeUpdateReport("kitsu_rail_first_paint_then_kitsu_update"),
+            homeUpdateReport("simkl_rail_first_paint_then_tmdb_update"),
+            homeUpdateReport("hydration_failure_keeps_preview"),
+            homeUpdateReport("cache_hit_updates_home_without_network"),
+            homeUpdateReport("focused_item_hydrates_before_offscreen_items"),
+            homeUpdateReport("hydration_result_ignored_after_profile_switch")
+        )
+        return MetadataExecutionReportBundle(
+            schemaVersion = 1,
+            provenance = provenance(),
+            verdict = AuditVerdict.PASS,
+            generatedAtEpochMs = 0,
+            reports = reports,
+            summaries = summary(reports.flatMap { it.items }),
+            policyViolations = emptyList()
+        )
+    }
+
+    private fun syntheticReport(
+        name: String,
+        cacheMode: AuditCacheMode = AuditCacheMode.COLD,
+        fixtureName: String = "synthetic/metadata/$name.json",
+        item: ItemExecutionReport = syntheticItem(name)
+    ) = MetadataExecutionReport(
+        schemaVersion = 1,
+        provenance = provenance(),
+        verdict = AuditVerdict.PASS,
+        scenario = MetadataAuditScenario(name = name, depth = MetadataDepth.DETAIL_CORE, cacheMode = cacheMode),
+        fixtureName = fixtureName,
+        generatedAtEpochMs = 0,
+        items = listOf(item),
+        summaries = summary(listOf(item)),
+        policyViolations = emptyList()
+    )
+
+    private fun syntheticItem(
+        itemId: String,
+        routing: RouteEvent? = route(itemId, MetadataPrimaryProvider.TMDB, "tmdb:1"),
+        selectedFields: List<FieldSelectedEvent> = listOf(field(itemId, "title", "TMDB")),
+        runtimeCalls: List<RuntimeCallEvent> = emptyList(),
+        cacheDecisions: List<CacheDecisionEvent> = emptyList(),
+        stableIdBundle: StableIdBundleEvent? = null,
+        localization: LocalizationEvent? = null,
+        artworkAudit: List<ArtworkAuditEntry> = emptyList(),
+        railSource: String? = null,
+        sourceProvider: String? = null,
+        homeUpdate: HomeUpdateEvent? = null,
+        productionCallerOwnership: List<ProductionCallerOwnershipEvent> = emptyList(),
+        selectedFieldsAfterHydration: List<FieldSelectedEvent> = selectedFields,
+        events: List<AuditEvent> = emptyList()
+    ) = ItemExecutionReport(
+        itemId = itemId,
+        itemType = "series",
+        addonFields = emptyMap(),
+        firstPaint = FirstPaintEvent(itemId, "series", source = if (railSource == null) "ADDON_META_PREVIEW" else "RAIL_PREVIEW", fieldsUsed = emptySet(), routerExecuted = false, networkExecuted = false),
+        routing = routing,
+        stableIdBundle = stableIdBundle,
+        providerPlan = null,
+        runtimeCalls = runtimeCalls,
+        cacheDecisions = cacheDecisions,
+        resolverSchedule = ResolverScheduleEvent(itemId, MetadataDepth.DETAIL_CORE, listOf(ResolverType.ADDON_DISPLAY, ResolverType.RATING, ResolverType.ARTWORK), emptyMap()),
+        selectedFields = selectedFields,
+        forbiddenOverwrites = emptyList(),
+        continueWatchingSnapshot = null,
+        identityResolution = null,
+        productionCallerOwnership = productionCallerOwnership,
+        localization = localization,
+        violations = emptyList(),
+        events = events,
+        railSource = railSource,
+        sourceProvider = sourceProvider,
+        routingAfterVisible = routing,
+        selectedFieldsBeforeHydration = selectedFields,
+        selectedFieldsAfterHydration = selectedFieldsAfterHydration,
+        identityMappingsHarvested = stableIdBundle?.canonicalId?.let { mapOf(itemId to it) }.orEmpty(),
+        homeUpdate = homeUpdate,
+        artworkAudit = artworkAudit
+    )
+
+    private fun tmdbTvItem(itemId: String) = syntheticItem(
+        itemId = itemId,
+        routing = RouteEvent(
+            itemId = itemId,
+            parentId = itemId,
+            itemType = "series",
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:tv:1399", MetadataPrimaryProvider.TVDB to "tvdb:121361"),
+            preResolutionTargetIdRequiresIdentityResolution = false,
+            targetIdRequiresIdentityResolution = false,
+            usedInputs = setOf("tmdbTvId", "tvdbSeriesId"),
+            ignoredInputs = emptySet()
+        )
+    )
+
+    private fun tmdbTvRailItem(): ItemExecutionReport {
+        val stable = StableIdBundleEvent(
+            itemKey = "series:tmdb:tv:1399",
+            itemType = "series",
+            trigger = "VISIBLE_HOME_HYDRATION",
+            status = "RESOLVED_WITH_SIDECARS",
+            canonicalProvider = "TMDB",
+            canonicalId = "tmdb:tv:1399",
+            imdbId = "tt0944947",
+            networkExecuted = false,
+            evidence = listOf(
+                StableIdBundleEvidenceEvent("knownIds", "TMDB", false, "tmdb:tv:1399"),
+                StableIdBundleEvidenceEvent("knownIds", "TVDB", false, "tvdb:121361")
+            )
+        )
+        return syntheticItem(
+            itemId = "tmdb:tv:1399",
+            routing = tmdbTvItem("tmdb:tv:1399").routing,
+            stableIdBundle = stable,
+            runtimeCalls = listOf(runtime("tmdb.tv.core", executedNetwork = false)),
+            railSource = "BUILT_IN_TMDB",
+            sourceProvider = "TMDB",
+            events = listOf(AuditEvent.StableIdBundle(stable))
+        )
+    }
+
+    private fun railPreviewItem(itemId: String) = syntheticItem(
+        itemId = itemId,
+        railSource = "BUILT_IN_TRAKT",
+        sourceProvider = "TRAKT",
+        events = listOf(AuditEvent.FirstPaint(FirstPaintEvent(itemId, "series", "RAIL_PREVIEW", emptySet(), false, false)))
+    )
+
+    private fun hydratedRailItem(itemId: String) = syntheticItem(
+        itemId = itemId,
+        railSource = "BUILT_IN_TRAKT",
+        sourceProvider = "TRAKT",
+        selectedFieldsAfterHydration = listOf(
+            field(itemId, "title", "TMDB", rejected = listOf(RejectedCandidateReport("TRAKT", "RAIL_PREVIEW", "primary canonical field available"))),
+            field(itemId, "poster", "TMDB"),
+            field(itemId, "overview", "TMDB")
+        )
+    )
+
+    private fun tmdbMovieHomeUpdateItem() = syntheticItem(
+        itemId = "tmdb:550",
+        stableIdBundle = StableIdBundleEvent("movie:tmdb:550", "movie", "VISIBLE_HOME_HYDRATION", "RESOLVED", "TMDB", "tmdb:550", "tt0137523", false, emptyList()),
+        runtimeCalls = listOf(runtime("custom_imdb.ratings")),
+        homeUpdate = HomeUpdateEvent(emptyMap(), mapOf("rating" to "8.8"), listOf("rating"), rowOrderChanged = false, focusChanged = false, "before", "after"),
+        railSource = "BUILT_IN_TMDB",
+        sourceProvider = "TMDB"
+    )
+
+    private fun homeUpdateReport(name: String, item: ItemExecutionReport = syntheticItem(name, homeUpdate = HomeUpdateEvent(emptyMap(), emptyMap(), emptyList(), false, false, "before", "after"))) =
+        syntheticReport(name, fixtureName = "synthetic/metadata/home-updates/$name.json", item = item)
+
+    private fun premiumArtworkItem(kind: String): ItemExecutionReport {
+        val provider = if (kind == "rpdb") "RPDB" else "TOP_POSTERS"
+        val shape = if (kind == "rpdb") "rpdb.poster_template" else "topposters.poster_template"
+        return syntheticItem(
+            itemId = "tt16431404",
+            selectedFields = listOf(field("tt16431404", "poster", provider, sourceRole = "ARTWORK", rejected = listOf(RejectedCandidateReport("TMDB", "ADDON_PREVIEW", "premium_artwork_provider_precedence")))),
+            runtimeCalls = listOf(runtime(shape), runtime("tmdb.movie.core", executedNetwork = false)),
+            cacheDecisions = listOf(cache("tmdb.movie.core", CacheDecision.HIT))
+        )
+    }
+
+    private fun premiumArtworkAuditItem(provider: String, shape: String, decision: String, network: Boolean = false, switched: Boolean = false, placeholder: Boolean = false) = syntheticItem(
+        itemId = "tt16431404",
+        artworkAudit = listOf(
+            ArtworkAuditEntry(
+                field = "poster",
+                selectedProvider = provider,
+                sourceRole = "ARTWORK",
+                decisionKey = "artwork:decision:test",
+                assetKey = "artwork:asset:test",
+                assetCacheDecision = decision,
+                runtimeApiShapeId = shape,
+                networkExecuted = network,
+                coilModel = if (placeholder) "nexio-placeholder://poster" else "nexio-artwork://asset/test",
+                rawRemoteUrlUsedByUi = false,
+                rejectedCandidates = if (switched) {
+                    listOf(mapOf("provider" to "TOP_POSTERS", "sourceRole" to "ARTWORK", "reason" to "active premium artwork provider switched to RPDB"))
+                } else {
+                    listOf(mapOf("provider" to "TMDB", "sourceRole" to "ADDON_PREVIEW", "reason" to "premium_artwork_provider_precedence"))
+                }
+            )
+        )
+    )
+
+    private fun fieldConflictItem() = syntheticItem(
+        itemId = "tt0036697",
+        selectedFields = listOf(field("tt0036697", "title", "TMDB", rejected = listOf(RejectedCandidateReport("secondary", reason = "PRIMARY selected higher priority value")))),
+    ).copy(forbiddenOverwrites = listOf(ForbiddenOverwriteEvent("tt0036697", "title", "TMDB", "secondary", "PRIMARY selected higher priority value")))
+
+    private fun localization(itemId: String, provider: MetadataPrimaryProvider, requested: String, fallback: String) = LocalizationEvent(
+        itemId = itemId,
+        provider = provider,
+        requestedLanguage = requested,
+        fallbackLanguage = fallback,
+        policyVersion = 2,
+        providerFallbackAllowedForMissingLocalizedFields = false,
+        payloads = listOf(
+            LocalizationPayloadReport("tmdb.tv.core", requested, "LOCALIZED", "audit:$itemId:policy:2", CacheDecision.HIT, false, "PRODUCTION_ADAPTER"),
+            LocalizationPayloadReport("tmdb.tv.core", fallback, "LANGUAGE_FALLBACK", "audit:$itemId:policy:2:fallback", CacheDecision.HIT, false, "PRODUCTION_ADAPTER")
+        ),
+        perEpisodeTranslationFallbacksAttempted = 0,
+        maxPerEpisodeTranslationFallbacksAllowed = 0,
+        providerFallbackUsed = false
+    )
+
+    private fun route(itemId: String, provider: MetadataPrimaryProvider, targetId: String) = RouteEvent(
+        itemId = itemId,
+        parentId = itemId,
+        itemType = "series",
+        provider = provider,
+        mediaKind = MetadataMediaKind.SERIES,
+        reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+        targetIds = mapOf(provider to targetId),
+        preResolutionTargetIdRequiresIdentityResolution = false,
+        targetIdRequiresIdentityResolution = false,
+        usedInputs = setOf("item.type"),
+        ignoredInputs = emptySet()
+    )
+
+    private fun field(itemId: String, field: String, provider: String, sourceRole: String = "PRIMARY", rejected: List<RejectedCandidateReport> = emptyList()) =
+        FieldSelectedEvent(itemId, field, provider, sourceRole, "value", rejected, if (sourceRole == "ARTWORK") "premium artwork may override poster only" else "$field selected from PRIMARY")
+
+    private fun runtime(apiShapeId: String, executedNetwork: Boolean = false) =
+        RuntimeCallEvent("item", "TMDB", apiShapeId, "$apiShapeId:item", "audit:$apiShapeId", "CORE", executedNetwork)
+
+    private fun cache(apiShapeId: String, decision: CacheDecision) =
+        CacheDecisionEvent("item", "TMDB", apiShapeId, "audit:$apiShapeId", decision, 7.daysMs, 30.daysMs, "primary-metadata-core")
+
+    private fun provenance() = MetadataAuditProvenance("test-sha", GitWorktreeState("CLEAN", 0, 0))
+
+    private fun summary(items: List<ItemExecutionReport>) = AuditSummaries(
+        totalItems = items.size,
+        routedItems = items.count { it.routing != null },
+        networkCalls = items.flatMap { it.runtimeCalls }.count { it.executedNetwork },
+        cacheHits = items.flatMap { it.cacheDecisions }.count { it.decision == CacheDecision.HIT },
+        cacheMisses = 0,
+        staleHits = 0,
+        forbiddenOverwrites = items.sumOf { it.forbiddenOverwrites.size },
+        policyViolations = 0,
+        providersUsed = emptyMap(),
+        apiShapesUsed = items.flatMap { it.runtimeCalls }.map { it.apiShapeId }.groupingBy { it }.eachCount()
+    )
 
     private fun MetadataExecutionReportBundle.localizedScenario(name: String): LocalizationEvent =
         reports.single { it.scenario.name == name }.items.single().localization
