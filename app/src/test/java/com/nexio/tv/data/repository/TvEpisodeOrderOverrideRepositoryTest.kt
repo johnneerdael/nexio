@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class TvEpisodeOrderOverrideRepositoryTest {
@@ -63,6 +64,49 @@ class TvEpisodeOrderOverrideRepositoryTest {
         assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, repository.getOrder("tmdb:71446"))
         assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, repository.getOrder("tmdb:tv:71446"))
         assertTrue(repository.hasOverride("tmdb:tv:71446"))
+    }
+
+    @Test
+    fun `public APIs reject invalid tmdb tv keys`() = runTest {
+        val repository = repository()
+        val invalidInputs = listOf("abc", "tmdb:movie:71446", " ")
+
+        for (input in invalidInputs) {
+            assertInvalidInput { repository.getOrder(input) }
+            assertInvalidInput { repository.setOrder(input, TvEpisodeOrderProvider.TVDB_DEFAULT) }
+            assertInvalidInput { repository.clearOrder(input) }
+            assertInvalidInput { repository.hasOverride(input) }
+        }
+    }
+
+    @Test
+    fun `invalid persisted keys are ignored without dropping valid overrides`() = runTest {
+        val file = overrideFile()
+        file.parentFile?.mkdirs()
+        file.writeText(
+            """
+            {
+              "schemaVersion": 1,
+              "overrides": {
+                "abc": "TVDB_DEFAULT",
+                "tmdb:movie:71446": "TVDB_DEFAULT",
+                "tmdb:tv:71446": "TVDB_DEFAULT"
+              }
+            }
+            """.trimIndent()
+        )
+
+        val repository = FileTvEpisodeOrderOverrideRepository(file)
+
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, repository.getOrder("71446"))
+    }
+
+    private suspend fun assertInvalidInput(block: suspend () -> Unit) {
+        try {
+            block()
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
     }
 
     private fun repository(): FileTvEpisodeOrderOverrideRepository =

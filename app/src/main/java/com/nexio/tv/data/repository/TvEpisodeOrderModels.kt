@@ -12,15 +12,22 @@ data class TvEpisodeOrderResolution(
     val reason: String
 )
 
-fun normalizeTmdbTvEpisodeOrderKey(tmdbTvId: String?): String? {
-    val value = tmdbTvId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+fun toTmdbTvOrderKey(tmdbTvId: String?): String {
+    val value = tmdbTvId?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw IllegalArgumentException("TMDB TV ID is required")
     val id = when {
         value.startsWith(TMDB_TV_PREFIX) -> value.removePrefix(TMDB_TV_PREFIX)
         value.startsWith(TMDB_PREFIX) -> value.removePrefix(TMDB_PREFIX)
         else -> value
     }.trim()
-    return id.takeIf { it.isNotEmpty() }?.let { "$TMDB_TV_PREFIX$it" }
+    require(id.isNotEmpty() && id.all { char -> char.isDigit() }) {
+        "TMDB TV ID must be numeric"
+    }
+    return "$TMDB_TV_PREFIX$id"
 }
+
+fun normalizeTmdbTvEpisodeOrderKey(tmdbTvId: String?): String? =
+    runCatching { toTmdbTvOrderKey(tmdbTvId) }.getOrNull()
 
 private const val TMDB_PREFIX = "tmdb:"
 private const val TMDB_TV_PREFIX = "tmdb:tv:"

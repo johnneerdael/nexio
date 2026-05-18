@@ -48,13 +48,13 @@ class FileTvEpisodeOrderOverrideRepository(
     private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
 
     override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = mutex.withLock {
-        val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return@withLock TvEpisodeOrderProvider.TMDB_DEFAULT
+        val key = toTmdbTvOrderKey(tmdbTvId)
         ensureLoadedLocked()
         overrides[key] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
     }
 
     override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) {
-        val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return
+        val key = toTmdbTvOrderKey(tmdbTvId)
         mutex.withLock {
             ensureLoadedLocked()
             val candidate = linkedMapOf<String, TvEpisodeOrderProvider>()
@@ -69,7 +69,7 @@ class FileTvEpisodeOrderOverrideRepository(
     }
 
     override suspend fun clearOrder(tmdbTvId: String) {
-        val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return
+        val key = toTmdbTvOrderKey(tmdbTvId)
         mutex.withLock {
             ensureLoadedLocked()
             if (!overrides.containsKey(key)) return@withLock
@@ -81,7 +81,7 @@ class FileTvEpisodeOrderOverrideRepository(
     }
 
     override suspend fun hasOverride(tmdbTvId: String): Boolean = mutex.withLock {
-        val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return@withLock false
+        val key = toTmdbTvOrderKey(tmdbTvId)
         ensureLoadedLocked()
         overrides.containsKey(key)
     }
