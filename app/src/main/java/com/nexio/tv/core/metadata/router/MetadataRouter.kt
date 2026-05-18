@@ -264,9 +264,22 @@ class MetadataRouter @Inject constructor(
         trace: MutableList<MetadataRouteTrace>
     ): MetadataRoute {
         val mediaKind = when (normalized.contentType) {
+            ContentType.MOVIE -> MetadataMediaKind.MOVIE
             ContentType.SERIES,
             ContentType.TV -> MetadataMediaKind.SERIES
-            else -> MetadataMediaKind.MOVIE
+            else -> null
+        }
+        if (mediaKind == null) {
+            trace += MetadataRouteTrace(
+                MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT,
+                "Provider-native id ${parsedId.raw} conflicts with ${normalized.contentType}"
+            )
+            return fallbackByItemType(
+                normalized = normalized,
+                trace = trace,
+                conflictFallbackProvider = MetadataPrimaryProvider.TVDB,
+                requiresIdentityResolution = true
+            )
         }
         trace += MetadataRouteTrace(
             MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,

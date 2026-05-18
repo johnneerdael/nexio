@@ -87,7 +87,7 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
-    fun `addon preview stable TVDB id wins over raw IMDB series content id`() = runTest {
+    fun `addon preview stable TVDB id remains available on raw IMDB series TMDB route`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
 
@@ -105,11 +105,11 @@ class MetadataRouterTargetIdsImdbTest {
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals("tvdb:81189", route.targetIds[MetadataPrimaryProvider.TVDB])
         assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
-        assertEquals(false, route.targetIdRequiresIdentityResolution)
-        assertEquals(emptyList<LookupCall>(), lookup.calls)
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(LookupCall.FindTmdb("tt0903747", "tv")), lookup.calls)
     }
 
     @Test
@@ -303,26 +303,27 @@ class MetadataRouterTargetIdsImdbTest {
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
-        assertEquals(true, route.targetIdRequiresIdentityResolution)
-        assertEquals(emptyList<LookupCall>(), lookup.calls)
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(LookupCall.FindTmdb("tt0903747", "tv")), lookup.calls)
     }
 
     @Test
-    fun `raw IMDB series without TVDB stable id remains identity resolution required`() = runTest {
+    fun `raw IMDB series without stable ids attempts TMDB tv target lookup`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
 
         val route = router.route(request("tt0903747", ContentType.SERIES))
 
-        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
         assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
-        assertEquals(true, route.targetIdRequiresIdentityResolution)
-        assertEquals(emptyList<LookupCall>(), lookup.calls)
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(LookupCall.FindTmdb("tt0903747", "tv")), lookup.calls)
     }
 
     @Test

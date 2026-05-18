@@ -63,28 +63,26 @@ class MetadataRouterFacadeSeasonDefaultTest {
             trace = emptyList()
         )
 
-        val tmdbRoute = MetadataRoute(
-            provider = MetadataPrimaryProvider.TMDB,
-            parentId = "tmdb:71446",
-            mediaKind = MetadataMediaKind.SERIES,
-            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
-            sourceContext = MetadataSourceContext(),
-            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:71446"),
-            trace = emptyList(),
-            seasonNumber = null
+        val router = MetadataRouter(
+            normalizer = MetadataRequestNormalizer(
+                traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
+            ),
+            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+            idMappingStore = InMemoryIdMappingStore(),
+            traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
+        )
+        val identityResolver = MetadataIdentityResolver(
+            lookup = object : MetadataIdentityResolver.Lookup {
+                override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+            }
         )
 
-        val mockRouter = mockk<MetadataRouter>()
-        coEvery { mockRouter.route(any()) } returns tmdbRoute
-
-        val mockIdentityResolver = mockk<MetadataIdentityResolver>()
-        coEvery { mockIdentityResolver.resolve(any()) } returns tmdbRoute
-
         val facade = MetadataRouterFacade(
-            router = mockRouter,
+            router = router,
             providerPlanExecutor = mockPlanExecutor,
             resolverOrchestrator = ResolverOrchestrator(),
-            identityResolver = mockIdentityResolver,
+            identityResolver = identityResolver,
             providerPlanRunner = mockPlanRunner,
             fieldResolver = FieldResolver(),
             traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }
@@ -113,5 +111,9 @@ class MetadataRouterFacadeSeasonDefaultTest {
             1,
             capturedRoute.captured.seasonNumber
         )
+        assertEquals(MetadataPrimaryProvider.TMDB, capturedRoute.captured.provider)
+        assertEquals(MetadataMediaKind.SERIES, capturedRoute.captured.mediaKind)
+        assertEquals("tmdb:71446", capturedRoute.captured.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(false, capturedRoute.captured.targetIdRequiresIdentityResolution)
     }
 }

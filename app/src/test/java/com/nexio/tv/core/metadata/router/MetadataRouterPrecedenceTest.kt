@@ -184,6 +184,22 @@ class MetadataRouterPrecedenceTest {
     }
 
     @Test
+    fun `tmdb person id preserves provider conflict fallback behavior`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex()
+        val router = router(animeIndex = animeIndex)
+
+        val route = router.route(request("tmdb:123", ContentType.PERSON))
+
+        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataMediaKind.UNKNOWN, route.mediaKind)
+        assertEquals("tmdb:123", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(MetadataDecisionReason.UNSUPPORTED_TYPE, route.reason)
+        assertTrue(route.targetIdRequiresIdentityResolution)
+        assertTrue(route.trace.any { it.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
+        assertTrue(animeIndex.lookups.isEmpty())
+    }
+
+    @Test
     fun `anime identity index rejects tmdb and tvdb ids`() {
         val animeIndex = InMemoryAnimeIdentityIndex()
 
