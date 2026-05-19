@@ -67,6 +67,22 @@ class ResolvedDisplaySurfaceRepository(
         surfaces.value[HOME_SURFACE_KEY]?.get(profileId).orEmpty()
 
     @Synchronized
+    fun clearSurface(surfaceKey: String, profileId: Int): Boolean {
+        if (!isSupportedSurface(surfaceKey)) return false
+        var cleared = false
+        surfaces.update { current ->
+            val currentSurface = current[surfaceKey].orEmpty()
+            if (currentSurface[profileId].isNullOrEmpty()) {
+                current
+            } else {
+                cleared = true
+                current + (surfaceKey to (currentSurface - profileId))
+            }
+        }
+        return cleared
+    }
+
+    @Synchronized
     fun publishResolvedItems(
         surfaceKey: String,
         items: List<ResolvedDisplayItem>

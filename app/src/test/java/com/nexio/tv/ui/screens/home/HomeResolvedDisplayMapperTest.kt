@@ -7,6 +7,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -23,12 +24,51 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HomeResolvedDisplayMapperTest {
+    @Test
+    fun `enriched mapper bulk applies custom imdb ratings per catalog row`() = runTest {
+        val movieA = preview(
+            id = "tmdb:550",
+            title = "Fight Club",
+            overview = "Overview",
+            rating = 6.2f,
+            artwork = ArtworkBundle(),
+            stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")
+        ).copy(ratingSource = TitleRatingSource.TMDB)
+        val movieB = preview(
+            id = "tmdb:13",
+            title = "Forrest Gump",
+            overview = "Overview",
+            rating = 7.1f,
+            artwork = ArtworkBundle(),
+            stableIds = ProviderIds(imdb = "tt0109830", tmdb = "13")
+        ).copy(ratingSource = TitleRatingSource.TMDB)
+        val calls = mutableListOf<List<String>>()
+
+        val resolved = HomeResolvedDisplayMapper.toResolvedDisplayItemsEnriched(
+            rows = listOf(row(listOf(movieA, movieB))),
+            overlaysByItemKey = emptyMap(),
+            idMappingStore = InMemoryIdMappingStore(),
+            nowMs = 10_000L,
+            resolveCustomImdbRatings = { imdbIds ->
+                calls += imdbIds
+                mapOf("tt0137523" to 8.8, "tt0109830" to 8.7)
+            }
+        )
+
+        assertEquals(listOf(listOf("tt0137523", "tt0109830")), calls)
+        assertEquals(TitleRatingSource.IMDB, resolved[0].rating?.source)
+        assertEquals(8.8, resolved[0].rating?.value ?: 0.0, 0.000001)
+        assertEquals(TitleRatingSource.IMDB, resolved[1].rating?.source)
+        assertEquals(8.7, resolved[1].rating?.value ?: 0.0, 0.000001)
+    }
+
     @Test
     fun `mapper merges hydrated overlay fields and preserves overlay trace`() {
         val finalItem = preview(

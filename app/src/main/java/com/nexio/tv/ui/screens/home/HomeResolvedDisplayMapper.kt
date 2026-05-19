@@ -14,6 +14,7 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerResolveRequest
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolution
 import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.repository.extractCanonicalImdbId
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -35,6 +36,7 @@ import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -42,6 +44,8 @@ import com.nexio.tv.domain.model.toMetadataMediaKind
 import com.nexio.tv.domain.model.toSettingsSignature
 
 internal object HomeResolvedDisplayMapper {
+    private const val CUSTOM_IMDB_RATINGS_PROVIDER = "IMDB"
+    private const val CUSTOM_IMDB_RATINGS_ROLE = "CUSTOM_IMDB_RATINGS"
 
     /**
      * Cache key for memoization. We rely on structural equality of the underlying
@@ -66,7 +70,8 @@ internal object HomeResolvedDisplayMapper {
          * pre-existing [toSettingsSignature] (4 short fields) rather than the
          * full settings hashCode to avoid pinning credential text in the key.
          */
-        val settingsSignature: String
+        val settingsSignature: String,
+        val customImdbRatingHash: Int
     )
 
     private val cache = mutableMapOf<MapperCacheKey, ResolvedDisplayItem>()
@@ -98,7 +103,8 @@ internal object HomeResolvedDisplayMapper {
                 itemKey = itemKey,
                 metaContentHash = item.hashCode(),
                 overlayContentHash = overlay?.hashCode() ?: 0,
-                settingsSignature = settingsSignature
+                settingsSignature = settingsSignature,
+                customImdbRatingHash = 0
             )
             activeKeys += cacheKey
             // Cache hit: skip recomputation entirely. We deliberately do NOT emit
@@ -152,34 +158,65 @@ internal object HomeResolvedDisplayMapper {
         currentSettings: ArtworkProviderSettings = ArtworkProviderSettings(),
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
-        traceEvents: TraceMetadataEvents? = null
+        traceEvents: TraceMetadataEvents? = null,
+        resolveCustomImdbRatings: suspend (List<String>) -> Map<String, Double> = { emptyMap() }
     ): List<ResolvedDisplayItem> {
-        val items = rows.flatMap { row -> row.items }
         // Collect cache hits synchronously first; misses need suspend overlay lookup.
         val result = mutableListOf<ResolvedDisplayItem>()
-        val activeKeys = HashSet<MapperCacheKey>(items.size)
+        var itemCount = 0
+        for (rowIndex in rows.indices) {
+            itemCount += rows[rowIndex].items.size
+        }
+        val activeKeys = HashSet<MapperCacheKey>(itemCount)
         val settingsSignature = currentSettings.toSettingsSignature()
-        for (i in items.indices) {
-            val item = items[i]
-            val itemKey = homeDisplayItemKey(item.apiType, item.id)
-            val overlay = item.overlayFromMapEnriched(overlaysByItemKey, idMappingStore)
-            val cacheKey = MapperCacheKey(
-                itemKey = itemKey,
-                metaContentHash = item.hashCode(),
-                overlayContentHash = overlay?.hashCode() ?: 0,
-                settingsSignature = settingsSignature
-            )
-            activeKeys += cacheKey
-            val cached = synchronized(this) { cache[cacheKey] }
-            if (cached != null) {
-                result += cached
+        for (rowIndex in rows.indices) {
+            val rowItems = rows[rowIndex].items
+            val rowOverlays = ArrayList<HydratedHomeOverlay?>(rowItems.size)
+            val rowStableIds = ArrayList<ProviderIds>(rowItems.size)
+            val rowImdbIds = mutableListOf<String>()
+            for (itemIndex in rowItems.indices) {
+                val item = rowItems[itemIndex]
+                val overlay = item.overlayFromMapEnriched(overlaysByItemKey, idMappingStore)
+                val stableIds = item.firstPaintStableIds.withOverlayStableId(overlay)
+                rowOverlays += overlay
+                rowStableIds += stableIds
+                val imdbId = extractCanonicalImdbId(stableIds.imdb)
+                if (imdbId != null && imdbId !in rowImdbIds) {
+                    rowImdbIds += imdbId
+                }
+            }
+
+            val customRatings = if (rowImdbIds.isEmpty()) {
+                emptyMap()
             } else {
-                val computed = item.toResolvedDisplayItemWithOverlay(
-                    overlay, nowMs, resolveTrailer, traceEvents,
-                    resolver, currentSettings
+                resolveCustomImdbRatings(rowImdbIds)
+            }
+
+            for (itemIndex in rowItems.indices) {
+                val item = rowItems[itemIndex]
+                val itemKey = homeDisplayItemKey(item.apiType, item.id)
+                val overlay = rowOverlays[itemIndex]
+                val customImdbRating = extractCanonicalImdbId(rowStableIds[itemIndex].imdb)
+                    ?.let { customRatings[it] }
+                val cacheKey = MapperCacheKey(
+                    itemKey = itemKey,
+                    metaContentHash = item.hashCode(),
+                    overlayContentHash = overlay?.hashCode() ?: 0,
+                    settingsSignature = settingsSignature,
+                    customImdbRatingHash = customImdbRating?.hashCode() ?: 0
                 )
-                synchronized(this) { cache[cacheKey] = computed }
-                result += computed
+                activeKeys += cacheKey
+                val cached = synchronized(this) { cache[cacheKey] }
+                if (cached != null) {
+                    result += cached
+                } else {
+                    val computed = item.toResolvedDisplayItemWithOverlay(
+                        overlay, nowMs, resolveTrailer, traceEvents,
+                        resolver, currentSettings, customImdbRating
+                    )
+                    synchronized(this) { cache[cacheKey] = computed }
+                    result += computed
+                }
             }
         }
         synchronized(this) { cache.keys.retainAll(activeKeys) }
@@ -206,7 +243,8 @@ internal object HomeResolvedDisplayMapper {
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
         traceEvents: TraceMetadataEvents? = null,
         resolver: ArtworkProviderResolver,
-        currentSettings: ArtworkProviderSettings
+        currentSettings: ArtworkProviderSettings,
+        customImdbRating: Double? = null
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
 
@@ -217,7 +255,7 @@ internal object HomeResolvedDisplayMapper {
             overlay = overlaySlots,
             existing = null,
             profile = null
-        )
+        ).withCustomImdbRating(customImdbRating, nowMs)
 
         if (traceEvents != null) {
             emitProjectionTrace(
@@ -290,6 +328,25 @@ internal object HomeResolvedDisplayMapper {
             updatedAtMs = overlay?.updatedAtMs ?: nowMs,
             slots = mergedSlots,
             preferredArtworkProviders = preferred
+        )
+    }
+
+    private fun ResolvedDisplayFieldSlots.withCustomImdbRating(
+        customImdbRating: Double?,
+        nowMs: Long
+    ): ResolvedDisplayFieldSlots {
+        val sanitized = RatingValueValidator.sanitizeTitleRating(customImdbRating?.toFloat())
+            ?: return this
+        return copy(
+            rating = ResolvedSlot(
+                value = TitleRating(sanitized.toDouble(), TitleRatingSource.IMDB),
+                rank = DisplaySourceRank.RESOLVED,
+                provider = CUSTOM_IMDB_RATINGS_PROVIDER,
+                role = CUSTOM_IMDB_RATINGS_ROLE,
+                updatedAtMs = nowMs,
+                expiresAtMs = null,
+                trace = emptyList()
+            )
         )
     }
 

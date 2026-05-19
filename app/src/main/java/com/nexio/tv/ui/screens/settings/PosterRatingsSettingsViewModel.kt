@@ -14,6 +14,7 @@ import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.data.local.ResolvedDisplaySnapshotStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSettings
@@ -41,6 +42,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private val providerSettingsRepository: ProviderSettingsRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    private val resolvedDisplaySnapshotStore: ResolvedDisplaySnapshotStore,
     private val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
     private val profileManager: ProfileManager,
     private val integrationOwnershipService: IntegrationOwnershipService,
@@ -104,6 +106,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
                 emptyList()
             )
             homeCatalogSnapshotStore.clear(profileId = profileId)
+            resolvedDisplaySnapshotStore.clear(profileId = profileId)
             hydratedHomeOverlayStore.clearAll()
             artworkDecisionCache.invalidatePremiumArtworkPolicy()
             premiumArtworkInvalidationNotifier.notifyInvalidated()

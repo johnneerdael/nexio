@@ -811,6 +811,14 @@ class HomeViewModelFocusHydrationTest {
         viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(
             "movie:tmdb:550" to mockk<HydratedHomeOverlay>(relaxed = true)
         )
+        viewModel.resolvedDisplaySurfaceRepository.publishResolvedItems(
+            profileSession = profileSession(profileId = 1, sessionId = "test-session"),
+            items = listOf(
+                mockk<com.nexio.tv.domain.model.ResolvedDisplayItem> {
+                    every { itemKey } returns "movie:tmdb:550"
+                }
+            )
+        )
         viewModel.lastCatalogComputationSignature = "previous"
 
         notifier.notifyInvalidated()
@@ -820,6 +828,7 @@ class HomeViewModelFocusHydrationTest {
         assertNull(viewModel.hydratedHomeOverlayObserverJob)
         assertNull(viewModel.hydratedHomeOverlayObserverSignature)
         assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
+        assertTrue(viewModel.resolvedDisplaySurfaceRepository.getSnapshot(profileId = 1).isEmpty())
         assertNull(viewModel.lastCatalogComputationSignature)
         assertNotNull(viewModel.catalogUpdateJob)
         viewModel.catalogUpdateJob?.cancel()
@@ -1451,6 +1460,7 @@ class HomeViewModelFocusHydrationTest {
             artworkProviderResolver = com.nexio.tv.core.artwork.ArtworkProviderResolver(
                 com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver()
             ),
+            customImdbTitleRatingsRepository = mockk(relaxed = true),
             posterRatingsSettingsDataStore = mockk(relaxed = true),
             appContext = appContext
         ).also(createdViewModels::add)

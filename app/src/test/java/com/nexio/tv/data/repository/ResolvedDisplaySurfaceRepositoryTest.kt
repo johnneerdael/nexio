@@ -326,6 +326,30 @@ class ResolvedDisplaySurfaceRepositoryTest {
         assertTrue(Modifier.isSynchronized(method.modifiers))
     }
 
+    @Test
+    fun `clearSurface removes only the requested profile surface`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:550", title = "Profile 1"))
+        )
+        activeSession.value = profileSession(profileId = 2, sessionId = "session-b")
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:551", title = "Profile 2"))
+        )
+
+        val cleared = repository.clearSurface(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileId = 1
+        )
+
+        assertTrue(cleared)
+        assertTrue(repository.getSnapshot(profileId = 1).isEmpty())
+        assertEquals("Profile 2", repository.getSnapshot(profileId = 2).single().display.title)
+    }
+
     private fun profileSession(
         profileId: Int,
         sessionId: String

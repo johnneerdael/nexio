@@ -1,5 +1,8 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,6 +40,7 @@ class ProviderPlanRunner @Inject constructor(
         // CLAUDE.md). Indexed-for compiles to a primitive int counter — no iterator,
         // nothing pinned across suspensions.
         val stepResults = mutableListOf<ProviderStepResult>()
+        var primaryCandidateForFallback: MetadataCandidate? = null
         for (i in plan.steps.indices) {
             val step = plan.steps[i]
             val adapter = adapters
@@ -46,12 +50,21 @@ class ProviderPlanRunner @Inject constructor(
                         .thenBy { it::class.qualifiedName.orEmpty() }
                 )
                 .firstOrNull()
+            val routeForStep = if (step.role == ProviderPlanRole.ARTWORK) {
+                plan.route.withPrimaryPosterFallback(primaryCandidateForFallback)
+            } else {
+                plan.route
+            }
             val result = when {
-                adapter != null -> adapter.execute(route = plan.route, step = step)
+                adapter != null -> adapter.execute(route = routeForStep, step = step)
                 step.required -> throw MetadataRouteFailure.MissingPlanStepAdapter(step.apiShapeId)
                 else -> null  // optional step with no registered adapter — skip silently
             }
             if (result != null) stepResults += result
+            val candidate = result?.candidate
+            if (candidate != null && candidate.provider == plan.route.provider) {
+                primaryCandidateForFallback = candidate
+            }
         }
 
         val candidates = stepResults.mapNotNull { it.candidate }
@@ -68,4 +81,19 @@ class ProviderPlanRunner @Inject constructor(
             trace = plan.route.trace + stepResults.flatMap { it.trace }
         )
     }
+
+    private fun MetadataRoute.withPrimaryPosterFallback(primary: MetadataCandidate?): MetadataRoute {
+        val poster = primary?.fields?.get(ResolvedField.POSTER)?.value.toPosterFallbackString()
+            ?: return this
+        val currentMetadata = sourceContext.addonMetadata
+        val fallbackMetadata = (currentMetadata ?: HomeDisplayMetadata()).copy(poster = poster)
+        return copy(sourceContext = sourceContext.copy(addonMetadata = fallbackMetadata))
+    }
+
+    private fun Any?.toPosterFallbackString(): String? =
+        when (this) {
+            is ArtworkDisplayRef -> toLegacyArtworkString()
+            is String -> trim().takeIf { it.isNotEmpty() }
+            else -> null
+        }
 }

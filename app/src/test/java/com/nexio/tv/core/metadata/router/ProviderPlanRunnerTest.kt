@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
@@ -84,6 +85,42 @@ class ProviderPlanRunnerTest {
         )
     }
 
+    @Test
+    fun `artwork step receives primary poster as fallback source context`() = runTest {
+        val primaryStep = ProviderPlanStep(
+            apiShapeId = "tmdb.movie.core",
+            provider = MetadataPrimaryProvider.TMDB,
+            role = ProviderPlanRole.PRIMARY_CORE,
+            required = true
+        )
+        val artworkStep = ProviderPlanStep(
+            apiShapeId = "rpdb.poster_template",
+            provider = MetadataPrimaryProvider.RPDB,
+            role = ProviderPlanRole.ARTWORK,
+            required = false
+        )
+        val artworkAdapter = CapturingArtworkAdapter()
+        val runner = ProviderPlanRunner(
+            adapters = setOf(
+                PosterPrimaryAdapter(primaryStep.apiShapeId),
+                artworkAdapter
+            )
+        )
+
+        runner.run(
+            ProviderExecutionPlan(
+                route = route(provider = MetadataPrimaryProvider.TMDB),
+                depth = MetadataDepth.DETAIL_CORE,
+                steps = listOf(primaryStep, artworkStep)
+            )
+        )
+
+        assertEquals(
+            "https://image.tmdb.org/t/p/w500/primary.jpg",
+            artworkAdapter.capturedRoute?.sourceContext?.addonMetadata?.poster
+        )
+    }
+
     private fun route(provider: MetadataPrimaryProvider) = MetadataRoute(
         provider = provider,
         parentId = "tmdb:550",
@@ -140,5 +177,51 @@ class ProviderPlanRunnerTest {
                     fields = mapOf(ResolvedField.TITLE to FieldValue(title, FieldOwner.PRIMARY))
                 )
             )
+    }
+
+    private class PosterPrimaryAdapter(
+        private val supportedShape: String
+    ) : MetadataProviderAdapter {
+        override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
+
+        override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId == supportedShape
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(
+                        ResolvedField.POSTER to FieldValue(
+                            "https://image.tmdb.org/t/p/w500/primary.jpg",
+                            FieldOwner.PRIMARY
+                        )
+                    )
+                )
+            )
+    }
+
+    private class CapturingArtworkAdapter : MetadataProviderAdapter {
+        override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.RPDB
+        var capturedRoute: MetadataRoute? = null
+
+        override fun supports(step: ProviderPlanStep): Boolean = step.provider == provider
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            capturedRoute = route
+            return ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(
+                        ResolvedField.POSTER to FieldValue(
+                            route.sourceContext.addonMetadata ?: HomeDisplayMetadata(),
+                            FieldOwner.ARTWORK,
+                            SourceRole.ARTWORK
+                        )
+                    )
+                )
+            )
+        }
     }
 }

@@ -11,6 +11,7 @@ import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.data.local.ResolvedDisplaySnapshotStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
@@ -156,6 +157,7 @@ class PosterRatingsSettingsViewModelTest {
             )
         }
         verify(exactly = 1) { fixture.homeCatalogSnapshotStore.clear(profileId = 7) }
+        verify(exactly = 1) { fixture.resolvedDisplaySnapshotStore.clear(profileId = 7) }
         coVerify(exactly = 1) { fixture.hydratedHomeOverlayStore.clearAll() }
         verify(exactly = 1) { fixture.artworkDecisionCache.invalidatePremiumArtworkPolicy() }
         fixture.verifyPrimaryMetadataCachesNotCleared()
@@ -177,6 +179,7 @@ class PosterRatingsSettingsViewModelTest {
             )
         }
         verify(exactly = 1) { fixture.homeCatalogSnapshotStore.clear(profileId = 7) }
+        verify(exactly = 1) { fixture.resolvedDisplaySnapshotStore.clear(profileId = 7) }
         coVerify(exactly = 1) { fixture.hydratedHomeOverlayStore.clearAll() }
         verify(exactly = 1) { fixture.artworkDecisionCache.invalidatePremiumArtworkPolicy() }
         fixture.verifyPrimaryMetadataCachesNotCleared()
@@ -203,6 +206,7 @@ class PosterRatingsSettingsViewModelTest {
             )
         }
         verify(exactly = 1) { fixture.homeCatalogSnapshotStore.clear(profileId = 7) }
+        verify(exactly = 1) { fixture.resolvedDisplaySnapshotStore.clear(profileId = 7) }
         coVerify(exactly = 1) { fixture.hydratedHomeOverlayStore.clearAll() }
         verify(exactly = 1) { fixture.artworkDecisionCache.invalidatePremiumArtworkPolicy() }
         fixture.verifyPrimaryMetadataCachesNotCleared()
@@ -273,6 +277,7 @@ class PosterRatingsSettingsViewModelTest {
         val providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true)
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val homeCatalogSnapshotStore = mockk<HomeCatalogSnapshotStore>(relaxed = true)
+        val resolvedDisplaySnapshotStore = mockk<ResolvedDisplaySnapshotStore>(relaxed = true)
         val hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val profileManager = mockk<ProfileManager> {
             every { activeProfileId } returns MutableStateFlow(7)
@@ -290,6 +295,7 @@ class PosterRatingsSettingsViewModelTest {
                 providerSettingsRepository = providerSettingsRepository,
                 metadataDiskCacheStore = metadataDiskCacheStore,
                 homeCatalogSnapshotStore = homeCatalogSnapshotStore,
+                resolvedDisplaySnapshotStore = resolvedDisplaySnapshotStore,
                 hydratedHomeOverlayStore = hydratedHomeOverlayStore,
                 profileManager = profileManager,
                 integrationOwnershipService = integrationOwnershipService,

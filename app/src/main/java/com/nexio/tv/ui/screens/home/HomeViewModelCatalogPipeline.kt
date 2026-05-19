@@ -3159,7 +3159,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
             idMappingStore = idMappingStore,
             resolver = artworkProviderResolver,
             currentSettings = currentArtworkProviderSettings.value,
-            resolveTrailer = null
+            resolveTrailer = null,
+            resolveCustomImdbRatings = { imdbIds ->
+                customImdbTitleRatingsRepository.getTitleRatingsByImdbIds(imdbIds, cacheOnly = false)
+            }
         )
         resolvedDisplaySurfaceRepository.publishResolvedItems(
             surfaceKey = com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,

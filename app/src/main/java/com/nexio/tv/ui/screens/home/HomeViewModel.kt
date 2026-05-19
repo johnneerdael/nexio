@@ -54,6 +54,7 @@ import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.CustomImdbTitleRatingsRepository
 import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
@@ -193,6 +194,7 @@ class HomeViewModel @Inject constructor(
     internal val animeSeasonProjectionResolver: com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver,
     internal val catalogRowMemo: CatalogRowMemo,
     internal val artworkProviderResolver: ArtworkProviderResolver,
+    internal val customImdbTitleRatingsRepository: CustomImdbTitleRatingsRepository,
     internal val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = DefaultHomeTvEpisodeOrderOverrideRepository,
     private val bootNetworkGovernor: BootNetworkGovernor = BootNetworkGovernor(),
@@ -1251,6 +1253,10 @@ class HomeViewModel @Inject constructor(
     private fun observePremiumArtworkInvalidations() {
         viewModelScope.launch {
             premiumArtworkInvalidationNotifier.events.collectLatest {
+                resolvedDisplaySurfaceRepository.clearSurface(
+                    surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                    profileId = profileManager.activeProfileId.value
+                )
                 invalidateHydratedHomeOverlayScope()
             }
         }
