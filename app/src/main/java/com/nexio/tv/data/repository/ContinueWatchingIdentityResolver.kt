@@ -21,10 +21,25 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 
+private object TmdbDefaultContinueWatchingEpisodeOrderResolver : TvEpisodeOrderResolver {
+    override suspend fun resolve(
+        tmdbTvId: String?,
+        providerIds: ProviderIds
+    ): TvEpisodeOrderResolution =
+        TvEpisodeOrderResolution(
+            provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+            tmdbTvId = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty(),
+            reason = "tmdb default"
+        )
+}
+
+private val STRICT_IMDB_TITLE_ID = Regex("^tt\\d+$")
+
 @Singleton
 class ContinueWatchingIdentityResolver @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade?,
     private val streamFetchIdentityResolver: StreamFetchIdentityResolver,
+    private val tvEpisodeOrderResolver: TvEpisodeOrderResolver = TmdbDefaultContinueWatchingEpisodeOrderResolver,
     // Optional so the internal test constructor stays parameter-free. When null,
     // crossBridgeIdentity() is a no-op; the resolver just returns whatever the
     // facade gave it (legacy behavior).
@@ -33,6 +48,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
     internal constructor() : this(
         metadataRouterFacade = null,
         streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+        tvEpisodeOrderResolver = TmdbDefaultContinueWatchingEpisodeOrderResolver,
         stableIdBundleResolver = null
     )
 
@@ -132,16 +148,23 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         identity: ContentIdentity,
         progress: WatchProgress,
         episodeContext: ContinueWatchingRecord.EpisodeContext?
-    ): StreamFetchIdentity? =
-        when (mediaKind) {
+    ): StreamFetchIdentity? {
+        return when (mediaKind) {
             MetadataMediaKind.SERIES,
             MetadataMediaKind.ANIME -> episodeContext?.let {
+                val episodeOrderProvider =
+                    if (identity.providerIds.imdb?.isStrictImdbTitleId() == true) {
+                        TvEpisodeOrderProvider.TMDB_DEFAULT
+                    } else {
+                        resolveEpisodeOrderProvider(mediaKind, identity)
+                    }
                 streamFetchIdentityResolver.resolveForEpisode(
                     canonicalIdentity = identity,
                     knownIds = identity.providerIds,
                     season = it.season,
                     episode = it.number,
-                    sourceContext = StreamSourceContext(mediaKind, progress.videoId)
+                    sourceContext = StreamSourceContext(mediaKind, progress.videoId),
+                    episodeOrderProvider = episodeOrderProvider
                 )
             }
 
@@ -153,6 +176,26 @@ class ContinueWatchingIdentityResolver @Inject constructor(
 
             MetadataMediaKind.UNKNOWN -> null
         }
+    }
+
+    private suspend fun resolveEpisodeOrderProvider(
+        mediaKind: MetadataMediaKind,
+        identity: ContentIdentity
+    ): TvEpisodeOrderProvider {
+        if (mediaKind != MetadataMediaKind.SERIES) return TvEpisodeOrderProvider.TMDB_DEFAULT
+        val tmdbTvId = identity.providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return TvEpisodeOrderProvider.TMDB_DEFAULT
+        return try {
+            tvEpisodeOrderResolver.resolve(
+                tmdbTvId = tmdbTvId,
+                providerIds = identity.providerIds
+            ).provider
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            TvEpisodeOrderProvider.TMDB_DEFAULT
+        }
+    }
 
     private fun legacyFallback(input: RawContinueWatchingInput, error: Throwable): ContinueWatchingRecord {
         val progress = input.progress
@@ -210,6 +253,9 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         else -> TrackingProvider.TRAKT  // SOURCE_LOCAL and unknown sources stay TRAKT for legacy display
     }
 
+    private fun String.isStrictImdbTitleId(): Boolean =
+        STRICT_IMDB_TITLE_ID.matches(this)
+
     private fun ProviderIds.toContinueWatchingIdBundle(
         episodeContext: ContinueWatchingRecord.EpisodeContext?,
     ): ContinueWatchingIdBundle = ContinueWatchingIdBundle(
@@ -257,10 +303,19 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                 }
             }
             MetadataMediaKind.SERIES -> {
+                if (current.imdb.isNullOrBlank() && !current.tmdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TMDB
+                }
+                if (current.tmdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TMDB
+                }
+                if (current.tvdb.isNullOrBlank() && !current.tmdb.isNullOrBlank()) {
+                    passes += MetadataPrimaryProvider.TMDB
+                }
                 if (current.imdb.isNullOrBlank() && !current.tvdb.isNullOrBlank()) {
                     passes += MetadataPrimaryProvider.TVDB
                 }
-                if (current.tvdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
+                if (current.tvdb.isNullOrBlank() && current.tmdb.isNullOrBlank() && !current.imdb.isNullOrBlank()) {
                     passes += MetadataPrimaryProvider.TVDB
                 }
                 if (!current.imdb.isNullOrBlank() && !current.tvdb.isNullOrBlank()) {
@@ -272,7 +327,9 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         if (passes.isEmpty()) return identity
 
         var providerIds = current
-        passes.distinct().forEach { route ->
+        val distinctPasses = passes.distinct()
+        for (i in distinctPasses.indices) {
+            val route = distinctPasses[i]
             val idsForLookup = when {
                 mediaKind == MetadataMediaKind.SERIES &&
                     route == MetadataPrimaryProvider.TVDB &&
@@ -299,7 +356,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                         trigger = StableIdResolutionTrigger.CONTINUE_WATCHING
                     )
                 )
-            }.getOrNull() ?: return@forEach
+            }.getOrNull() ?: continue
             providerIds = providerIds.copy(
                 imdb = correctedSeriesImdbId(
                     current = providerIds,
@@ -308,7 +365,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
                     route = route,
                     mediaKind = mediaKind
                 ) ?: providerIds.imdb ?: bundle.sidecars.imdbId,
-                tmdb = providerIds.tmdb ?: bundle.canonical.tmdbMovieId,
+                tmdb = providerIds.tmdb ?: bundle.canonical.tmdbIdFor(mediaKind),
                 tvdb = providerIds.tvdb ?: bundle.canonical.tvdbSeriesId,
                 kitsu = providerIds.kitsu ?: bundle.canonical.kitsuAnimeId,
             )
@@ -316,8 +373,12 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         if (providerIds == current) return identity
         // Strengthen canonicalProvider/canonicalId once we have a richer set.
         val strongerCanonicalProvider = when {
-            !providerIds.tvdb.isNullOrBlank() && identity.canonicalProvider != ProviderId.TVDB -> ProviderId.TVDB
+            mediaKind == MetadataMediaKind.ANIME && !providerIds.kitsu.isNullOrBlank() -> ProviderId.KITSU
+            mediaKind == MetadataMediaKind.SERIES && !providerIds.tmdb.isNullOrBlank() -> ProviderId.TMDB
+            mediaKind == MetadataMediaKind.MOVIE && !providerIds.tmdb.isNullOrBlank() -> ProviderId.TMDB
+            !providerIds.kitsu.isNullOrBlank() && identity.canonicalProvider == null -> ProviderId.KITSU
             !providerIds.tmdb.isNullOrBlank() && identity.canonicalProvider == null -> ProviderId.TMDB
+            !providerIds.tvdb.isNullOrBlank() && identity.canonicalProvider == null -> ProviderId.TVDB
             else -> identity.canonicalProvider
         }
         val strongerCanonicalId = when (strongerCanonicalProvider) {
@@ -355,7 +416,7 @@ class ContinueWatchingIdentityResolver @Inject constructor(
         val observed = source.observedIds
         val providerIds = ProviderIds(
             imdb = sidecars.imdbId ?: observed.imdb,
-            tmdb = canonical.tmdbMovieId ?: observed.tmdb,
+            tmdb = canonical.tmdbIdFor(itemType) ?: observed.tmdb,
             tvdb = canonical.tvdbSeriesId ?: observed.tvdb,
             trakt = observed.trakt,
             simkl = observed.simkl,
@@ -365,29 +426,74 @@ class ContinueWatchingIdentityResolver @Inject constructor(
             anilist = sidecars.anilistId ?: observed.anilist,
             anidb = sidecars.anidbId ?: observed.anidb
         )
-        val canonicalProvider = canonical.provider()
+        val canonicalProvider = canonical.provider(itemType)
         return ContentIdentity(
             canonicalProvider = canonicalProvider,
-            canonicalId = canonical.idFor(canonicalProvider),
+            canonicalId = canonical.idFor(canonicalProvider, itemType),
             providerIds = providerIds
         )
     }
 
-    private fun CanonicalStableIds.provider(): ProviderId? =
-        when {
-            !kitsuAnimeId.isNullOrBlank() -> ProviderId.KITSU
-            !tvdbSeriesId.isNullOrBlank() -> ProviderId.TVDB
-            !tmdbMovieId.isNullOrBlank() -> ProviderId.TMDB
-            else -> null
+    private fun CanonicalStableIds.provider(itemType: ContentType): ProviderId? =
+        when (itemType) {
+            ContentType.SERIES,
+            ContentType.TV -> when {
+                !kitsuAnimeId.isNullOrBlank() -> ProviderId.KITSU
+                !tmdbTvId.isNullOrBlank() -> ProviderId.TMDB
+                !tmdbMovieId.isNullOrBlank() -> ProviderId.TMDB
+                !tvdbSeriesId.isNullOrBlank() -> ProviderId.TVDB
+                else -> null
+            }
+            ContentType.MOVIE -> when {
+                !tmdbMovieId.isNullOrBlank() -> ProviderId.TMDB
+                !tmdbTvId.isNullOrBlank() -> ProviderId.TMDB
+                !tvdbSeriesId.isNullOrBlank() -> ProviderId.TVDB
+                !kitsuAnimeId.isNullOrBlank() -> ProviderId.KITSU
+                else -> null
+            }
+            else -> when {
+                !kitsuAnimeId.isNullOrBlank() -> ProviderId.KITSU
+                tmdbIdFor(itemType) != null -> ProviderId.TMDB
+                !tvdbSeriesId.isNullOrBlank() -> ProviderId.TVDB
+                else -> null
+            }
         }
 
-    private fun CanonicalStableIds.idFor(provider: ProviderId?): String? =
+    private fun CanonicalStableIds.idFor(provider: ProviderId?, itemType: ContentType): String? =
         when (provider) {
             ProviderId.TVDB -> tvdbSeriesId
-            ProviderId.TMDB -> tmdbMovieId
+            ProviderId.TMDB -> tmdbIdFor(itemType)
             ProviderId.KITSU -> kitsuAnimeId
             else -> null
         }
+
+    private fun CanonicalStableIds.tmdbIdFor(itemType: ContentType): String? =
+        when (itemType) {
+            ContentType.MOVIE -> tmdbMovieId ?: tmdbTvId
+            ContentType.SERIES,
+            ContentType.TV -> tmdbTvId ?: tmdbMovieId
+            ContentType.CHANNEL,
+            ContentType.PERSON,
+            ContentType.UNKNOWN -> singleTypedTmdbIdOrNull()
+        }
+
+    private fun CanonicalStableIds.tmdbIdFor(mediaKind: MetadataMediaKind): String? =
+        when (mediaKind) {
+            MetadataMediaKind.MOVIE -> tmdbMovieId ?: tmdbTvId
+            MetadataMediaKind.SERIES,
+            MetadataMediaKind.ANIME -> tmdbTvId ?: tmdbMovieId
+            MetadataMediaKind.UNKNOWN -> singleTypedTmdbIdOrNull()
+        }
+
+    private fun CanonicalStableIds.singleTypedTmdbIdOrNull(): String? {
+        val movieId = tmdbMovieId?.takeIf { it.isNotBlank() }
+        val tvId = tmdbTvId?.takeIf { it.isNotBlank() }
+        return when {
+            movieId != null && tvId == null -> movieId
+            tvId != null && movieId == null -> tvId
+            else -> null
+        }
+    }
 
     private fun WatchProgress.toEpisodeContextOrNull(): ContinueWatchingRecord.EpisodeContext? =
         if (season != null || episode != null) {

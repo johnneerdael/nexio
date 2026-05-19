@@ -91,6 +91,8 @@ Nexio goes well beyond raw addon metadata.
 ### Metadata enrichment
 
 - **TMDB** artwork, summaries, details, cast, networks, episodes, collections, and related content
+- **Kitsu** anime metadata where anime identity mappings are available
+- **TheTVDB** episode-order crosswalks and show-level season numbering for streams that follow TVDB order
 
 ### Ratings and poster systems
 

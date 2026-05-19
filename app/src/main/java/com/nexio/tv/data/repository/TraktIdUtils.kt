@@ -18,8 +18,12 @@ internal fun parseContentIds(contentId: String?): ParsedContentIds {
         return ParsedContentIds(imdb = raw.substringBefore(':'))
     }
 
+    if (raw.startsWith("tmdb:tv:", ignoreCase = true)) {
+        return ParsedContentIds(tmdb = raw.substringAfter("tmdb:tv:", "").toIntOrNull())
+    }
+
     if (raw.startsWith("tmdb:", ignoreCase = true)) {
-        return ParsedContentIds(tmdb = raw.substringAfter(':').toIntOrNull())
+        return ParsedContentIds(tmdb = raw.substringAfter("tmdb:", "").toIntOrNull())
     }
 
     if (raw.startsWith("tvdb:", ignoreCase = true)) {
@@ -56,8 +60,8 @@ internal fun normalizeContentId(
 
     return when (kind) {
         MediaKind.SHOW -> when {
-            tvdb != null -> "tvdb:$tvdb"
             tmdb != null -> "tmdb:$tmdb"
+            tvdb != null -> "tvdb:$tvdb"
             !imdb.isNullOrBlank() -> imdb
             trakt != null -> "trakt:$trakt"
             else -> fallback?.takeIf { it.isNotBlank() } ?: ""

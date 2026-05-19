@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import java.util.concurrent.CancellationException
@@ -217,7 +218,7 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
-    fun `identity depth with tvdb series id resolves tvdb stream identity without imdb`() = runTest {
+    fun `identity depth with tvdb series id does not resolve tvdb stream identity without selected order`() = runTest {
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
         } returns citadelBundle(sidecars = SidecarStableIds())
@@ -233,11 +234,114 @@ class ContinueWatchingIdentityResolverTest {
             )
         )
 
+        assertEquals(IdentityConfidence.MEDIUM, record.identityConfidence)
+        assertNull(record.streamFetchIdentity)
+        assertEquals(listOf("stream fetch identity unresolved"), record.identityWarnings)
+        assertEquals("tvdb:393268", record.resumeIdentities.single().contentId)
+    }
+
+    @Test
+    fun `identity depth resolves tvdb stream identity only when order resolver selects tvdb`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle().copy(sidecars = SidecarStableIds())
+        val resolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            tvEpisodeOrderResolver = object : TvEpisodeOrderResolver {
+                override suspend fun resolve(
+                    tmdbTvId: String?,
+                    providerIds: ProviderIds
+                ): TvEpisodeOrderResolution =
+                    TvEpisodeOrderResolution(
+                        provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                        tmdbTvId = "tmdb:tv:71446",
+                        tvdbSeriesId = "81189",
+                        reason = "test override"
+                    )
+            }
+        )
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tvdb:81189",
+                    videoId = "tvdb:81189:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
         assertEquals(IdentityConfidence.HIGH, record.identityConfidence)
-        assertEquals("tvdb:393268:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
         assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
         assertEquals(emptyList<String>(), record.identityWarnings)
-        assertEquals("tvdb:393268", record.resumeIdentities.single().contentId)
+    }
+
+    @Test
+    fun `identity depth does not resolve episode order when imdb sidecar provides stream identity`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle()
+        val tvEpisodeOrderResolver = mockk<TvEpisodeOrderResolver> {
+            coEvery { resolve(any(), any()) } returns TvEpisodeOrderResolution(
+                provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                tmdbTvId = "tmdb:tv:71446",
+                tvdbSeriesId = "81189",
+                reason = "test override"
+            )
+        }
+        val resolver = ContinueWatchingIdentityResolver(
+            metadataRouterFacade = metadataRouterFacade,
+            streamFetchIdentityResolver = StreamFetchIdentityResolver(),
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
+        )
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tmdb:71446",
+                    videoId = "tmdb:71446:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals("tt0903747:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        coVerify(exactly = 0) {
+            tvEpisodeOrderResolver.resolve(any(), any())
+        }
+    }
+
+    @Test
+    fun `series canonical identity prefers tmdb tv id while preserving tvdb sidecar`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns breakingBadBundle()
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tvdb:81189",
+                    videoId = "tvdb:81189:2:1"
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals(ProviderId.TMDB, record.displayIdentity?.canonicalProvider)
+        assertEquals("71446", record.displayIdentity?.canonicalId)
+        assertEquals("71446", record.displayIdentity?.providerIds?.tmdb)
+        assertEquals("81189", record.displayIdentity?.providerIds?.tvdb)
+        assertEquals("profile:1:series:tmdb:71446:s2e1", record.canonicalKey?.stableKey())
+        assertEquals("series:tmdb:71446", record.parentId)
+        assertEquals("series:tmdb:71446:s2e1", record.contentId)
+        assertEquals("71446", record.idBundle.tmdb)
+        assertEquals("81189", record.idBundle.tvdb)
     }
 
     @Test
@@ -304,6 +408,34 @@ class ContinueWatchingIdentityResolverTest {
         assertEquals(IdentityConfidence.MEDIUM, record.identityConfidence)
         assertNull(record.streamFetchIdentity)
         assertEquals(listOf("stream fetch identity unresolved"), record.identityWarnings)
+    }
+
+    @Test
+    fun `movie canonical identity prefers tmdb movie id when tv id is also present`() = runTest {
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
+        } returns movieBundleWithTvId()
+
+        val record = resolver.resolveOrFallback(
+            RawContinueWatchingInput(
+                profileId = 1,
+                progress = citadelProgress(
+                    contentId = "tmdb:550",
+                    contentType = "movie",
+                    videoId = "tmdb:550",
+                    season = null,
+                    episode = null
+                ),
+                languageTag = "en-US"
+            )
+        )
+
+        assertEquals(ProviderId.TMDB, record.displayIdentity?.canonicalProvider)
+        assertEquals("550", record.displayIdentity?.canonicalId)
+        assertEquals("550", record.displayIdentity?.providerIds?.tmdb)
+        assertEquals("profile:1:movie:tmdb:550", record.canonicalKey?.stableKey())
+        assertEquals("movie:tmdb:550", record.parentId)
+        assertEquals("550", record.idBundle.tmdb)
     }
 
     @Test
@@ -551,6 +683,25 @@ class ContinueWatchingIdentityResolverTest {
             resolvedAtMs = 1_700_000_000_000L
         )
 
+    private fun breakingBadBundle(): StableIdBundle =
+        StableIdBundle(
+            itemKey = "series:tmdb:71446",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(
+                tmdbTvId = "71446",
+                tvdbSeriesId = "81189"
+            ),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TVDB,
+                sourceItemId = "81189",
+                railId = null,
+                observedIds = ProviderIds(tvdb = "81189")
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1_700_000_000_000L
+        )
+
     private fun movieBundle(
         sidecars: SidecarStableIds = SidecarStableIds(imdbId = "tt1234567")
     ): StableIdBundle =
@@ -564,6 +715,22 @@ class ContinueWatchingIdentityResolverTest {
                 sourceItemId = "123",
                 railId = null,
                 observedIds = ProviderIds(tmdb = "123")
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1_700_000_000_000L
+        )
+
+    private fun movieBundleWithTvId(): StableIdBundle =
+        StableIdBundle(
+            itemKey = "movie:tmdb:550",
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446"),
+            sidecars = SidecarStableIds(imdbId = "tt0137523"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TMDB,
+                sourceItemId = "550",
+                railId = null,
+                observedIds = ProviderIds(tmdb = "550")
             ),
             evidence = emptyList(),
             resolvedAtMs = 1_700_000_000_000L

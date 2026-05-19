@@ -24,11 +24,12 @@ class MetadataIdentityResolver @Inject constructor(
         if (!route.targetIdRequiresIdentityResolution) return route
 
         val parsed = MetadataIdParser.parse(route.parentId)
-        val cacheSourceId = parsed.identityCacheSourceId(route)
+        val tvdbSidecarSourceId = route.tvdbSidecarSourceId()
+        val cacheSourceId = tvdbSidecarSourceId ?: parsed.identityCacheSourceId(route)
         val now = System.currentTimeMillis()
 
         // F-B-06: short-circuit on prior negative-cached failure
-        if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+        if (cacheSourceId.scheme != AnimeIdScheme.UNKNOWN) {
             val existing = idMappingStore.readRaw(provider = route.provider, sourceId = cacheSourceId)
             if (existing?.source == IdMappingSource.NEGATIVE) {
                 return route
@@ -36,6 +37,8 @@ class MetadataIdentityResolver @Inject constructor(
         }
 
         val (resolverName, apiShapeId, lookupResult) = when {
+            tvdbSidecarSourceId != null ->
+                Triple("TvdbToTmdbResolver", "identity.tvdb_to_tmdb", lookup.tvdbToTmdb(tvdbSidecarSourceId.value))
             parsed.scheme == AnimeIdScheme.TMDB && route.provider == MetadataPrimaryProvider.TVDB ->
                 Triple("TmdbToTvdbResolver", "identity.tmdb_to_tvdb", lookup.tmdbToTvdb(parsed.value))
             parsed.scheme == AnimeIdScheme.IMDB && route.provider == MetadataPrimaryProvider.TVDB ->
@@ -58,7 +61,7 @@ class MetadataIdentityResolver @Inject constructor(
 
         if (lookupResult == null) {
             // F-B-06: persist NEGATIVE mapping for 24-hour TTL
-            if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+            if (cacheSourceId.scheme != AnimeIdScheme.UNKNOWN) {
                 idMappingStore.persist(
                     IdMapping(
                         sourceId = cacheSourceId,
@@ -73,7 +76,7 @@ class MetadataIdentityResolver @Inject constructor(
             return route
         }
 
-        if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+        if (cacheSourceId.scheme != AnimeIdScheme.UNKNOWN) {
             idMappingStore.persist(
                 IdMapping(
                     sourceId = cacheSourceId,
@@ -121,4 +124,35 @@ class MetadataIdentityResolver @Inject constructor(
                 )
             else -> this
         }
+
+    private fun MetadataRoute.tvdbSidecarSourceId(): ParsedMetadataId? {
+        if (provider != MetadataPrimaryProvider.TMDB) return null
+        if (mediaKind != MetadataMediaKind.SERIES) return null
+        val targetId = targetIds[MetadataPrimaryProvider.TVDB] ?: return null
+        return targetId.toTvdbParsedIdOrNull()
+    }
+
+    private fun String.toTvdbParsedIdOrNull(): ParsedMetadataId? {
+        val trimmed = trim()
+        if (trimmed.isEmpty()) return null
+
+        val parsed = MetadataIdParser.parse(trimmed)
+        if (parsed.scheme == AnimeIdScheme.TVDB) {
+            return ParsedMetadataId(
+                scheme = AnimeIdScheme.TVDB,
+                value = parsed.value,
+                raw = "tvdb:${parsed.value}"
+            )
+        }
+
+        if (trimmed.all { it.isDigit() }) {
+            return ParsedMetadataId(
+                scheme = AnimeIdScheme.TVDB,
+                value = trimmed,
+                raw = "tvdb:$trimmed"
+            )
+        }
+
+        return null
+    }
 }

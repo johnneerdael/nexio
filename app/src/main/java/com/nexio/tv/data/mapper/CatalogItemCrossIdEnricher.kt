@@ -5,6 +5,7 @@ import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.AnimeIdScheme
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.IdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataIdParser
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -111,7 +112,7 @@ class CatalogItemCrossIdEnricher @Inject constructor(
         val current = preview.firstPaintStableIds
         val enrichedIds = current.copy(
             imdb = current.imdb ?: bundle.sidecars.imdbId,
-            tmdb = current.tmdb ?: bundle.canonical.tmdbMovieId,
+            tmdb = current.tmdb ?: bundle.canonical.tmdbIdFor(mediaKind),
             tvdb = current.tvdb ?: bundle.canonical.tvdbSeriesId,
             kitsu = current.kitsu ?: animeKitsuId ?: bundle.canonical.kitsuAnimeId
         )
@@ -228,6 +229,12 @@ class CatalogItemCrossIdEnricher @Inject constructor(
         ContentType.SERIES, ContentType.TV -> ContentMediaKind.SERIES
         ContentType.CHANNEL, ContentType.PERSON, ContentType.UNKNOWN -> null
     }
+
+    private fun CanonicalStableIds.tmdbIdFor(mediaKind: ContentMediaKind): String? =
+        when (mediaKind) {
+            ContentMediaKind.MOVIE -> tmdbMovieId ?: tmdbTvId
+            ContentMediaKind.SERIES -> tmdbTvId ?: tmdbMovieId
+        }
 }
 
 data class CrossIdResolutionEvent(

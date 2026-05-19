@@ -28,9 +28,10 @@ class ScrobbleIdBundleHydratorTest {
         sidecars: SidecarStableIds = SidecarStableIds(),
         observedIds: ProviderIds = ProviderIds(),
         sourceProvider: ProviderId? = null,
+        itemType: ContentType = ContentType.SERIES,
     ): StableIdBundle = StableIdBundle(
         itemKey = "k",
-        itemType = ContentType.SERIES,
+        itemType = itemType,
         canonical = canonical,
         sidecars = sidecars,
         source = SourceStableIds(
@@ -55,6 +56,52 @@ class ScrobbleIdBundleHydratorTest {
         assertEquals("tt0903747", ids.imdb)
         assertEquals("1396", ids.tmdb)
         assertEquals("81189", ids.tvdb)
+    }
+
+    @Test
+    fun `hydrate maps movie tmdb canonical id when tv id is also present`() = runTest {
+        coEvery { resolver.resolve(any()) } returns bundleWith(
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = "550", tmdbTvId = "71446"),
+            sidecars = SidecarStableIds(imdbId = "tt0137523"),
+        )
+
+        val ids = hydrator.hydrate(rawContentId = "tmdb:550", contentType = "movie")
+
+        assertEquals("tt0137523", ids.imdb)
+        assertEquals("550", ids.tmdb)
+    }
+
+    @Test
+    fun `hydrate maps series tmdb tv canonical id into provider ids tmdb`() = runTest {
+        coEvery { resolver.resolve(any()) } returns bundleWith(
+            canonical = CanonicalStableIds(tmdbTvId = "71446", tvdbSeriesId = "81189"),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+        )
+
+        val ids = hydrator.hydrate(rawContentId = "tvdb:81189", contentType = "series")
+
+        assertEquals("tt0903747", ids.imdb)
+        assertEquals("71446", ids.tmdb)
+        assertEquals("81189", ids.tvdb)
+    }
+
+    @Test
+    fun `hydrate keeps tmdb tv canonical and scrobble sidecars for tvdb order override`() = runTest {
+        coEvery { resolver.resolve(any()) } returns bundleWith(
+            canonical = CanonicalStableIds(tmdbTvId = "71446", tvdbSeriesId = "81189"),
+            sidecars = SidecarStableIds(imdbId = "tt0903747"),
+            observedIds = ProviderIds(trakt = "1", simkl = "456"),
+            sourceProvider = ProviderId.TVDB,
+        )
+
+        val ids = hydrator.hydrate(rawContentId = "tvdb:81189", contentType = "series")
+
+        assertEquals("tt0903747", ids.imdb)
+        assertEquals("71446", ids.tmdb)
+        assertEquals("81189", ids.tvdb)
+        assertEquals("1", ids.trakt)
+        assertEquals("456", ids.simkl)
     }
 
     @Test

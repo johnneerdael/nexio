@@ -94,6 +94,7 @@ class LogcatRuntimeTraceSink(
             "status" to payload["status"],
             "trigger" to payload["trigger"],
             "tmdbMovieId" to payload["tmdbMovieId"],
+            "tmdbTvId" to payload["tmdbTvId"],
             "tvdbSeriesId" to payload["tvdbSeriesId"],
             "kitsuAnimeId" to payload["kitsuAnimeId"],
             "imdbId" to payload["imdbId"],

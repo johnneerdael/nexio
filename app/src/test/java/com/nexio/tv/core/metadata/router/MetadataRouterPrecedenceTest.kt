@@ -4,6 +4,7 @@ import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -143,16 +144,56 @@ class MetadataRouterPrecedenceTest {
     }
 
     @Test
-    fun `provider native id type conflict records conflict and falls back by item type`() = runTest {
+    fun `tmdb series id routes as native tmdb tv without identity resolution`() = runTest {
         val animeIndex = InMemoryAnimeIdentityIndex()
         val router = router(animeIndex = animeIndex)
 
-        val route = router.route(request("tmdb:1399", ContentType.SERIES))
+        val route = router.route(
+            request(
+                "tmdb:71446",
+                ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewStableIds = ProviderIds(tmdb = "71446")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+        assertEquals(MetadataMediaKind.SERIES, route.mediaKind)
+        assertEquals("tmdb:71446", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(MetadataDecisionReason.PROVIDER_NATIVE_DIRECT, route.reason)
+        assertFalse(route.targetIdRequiresIdentityResolution)
+        assertFalse(route.trace.any { it.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
+        assertTrue(animeIndex.lookups.isEmpty())
+    }
+
+    @Test
+    fun `tmdb tv id routes as native tmdb tv without identity resolution`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex()
+        val router = router(animeIndex = animeIndex)
+
+        val route = router.route(request("tmdb:71446", ContentType.TV))
+
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+        assertEquals(MetadataMediaKind.SERIES, route.mediaKind)
+        assertEquals("tmdb:71446", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(MetadataDecisionReason.PROVIDER_NATIVE_DIRECT, route.reason)
+        assertFalse(route.targetIdRequiresIdentityResolution)
+        assertFalse(route.trace.any { it.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
+        assertTrue(animeIndex.lookups.isEmpty())
+    }
+
+    @Test
+    fun `tmdb person id preserves provider conflict fallback behavior`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex()
+        val router = router(animeIndex = animeIndex)
+
+        val route = router.route(request("tmdb:123", ContentType.PERSON))
 
         assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
-        assertEquals("tmdb:1399", route.parentId)
-        assertEquals("tmdb:1399", route.targetIds[MetadataPrimaryProvider.TMDB])
-        assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, route.reason)
+        assertEquals(MetadataMediaKind.UNKNOWN, route.mediaKind)
+        assertEquals("tmdb:123", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(MetadataDecisionReason.UNSUPPORTED_TYPE, route.reason)
         assertTrue(route.targetIdRequiresIdentityResolution)
         assertTrue(route.trace.any { it.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
         assertTrue(animeIndex.lookups.isEmpty())
@@ -304,7 +345,7 @@ class MetadataRouterPrecedenceTest {
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, route.reason)
         assertFalse(route.targetIds.containsKey(MetadataPrimaryProvider.KITSU))
     }
@@ -333,7 +374,7 @@ class MetadataRouterPrecedenceTest {
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, route.reason)
     }
 

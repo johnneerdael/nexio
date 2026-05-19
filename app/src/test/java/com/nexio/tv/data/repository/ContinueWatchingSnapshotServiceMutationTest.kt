@@ -6,6 +6,7 @@ import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -38,6 +39,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,7 +106,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
      */
     private fun buildService(
         continueWatchingIdentityResolver: ContinueWatchingIdentityResolver = canonicalResolver(),
-        metadataRouterFacade: MetadataRouterFacade? = null
+        metadataRouterFacade: MetadataRouterFacade? = null,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver = tmdbDefaultOrderResolver()
     ): ContinueWatchingSnapshotService {
         val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
             every { state } returns flowOf(EffectiveTrackingProviderState())
@@ -134,13 +137,53 @@ class ContinueWatchingSnapshotServiceMutationTest {
             metadataDiskCacheStore = metadataDiskCacheStore,
             snapshotStore = snapshotStore,
             continueWatchingIdentityResolver = continueWatchingIdentityResolver,
-            metadataRouterFacade = metadataRouterFacade
+            metadataRouterFacade = metadataRouterFacade,
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
+        )
+    }
+
+    private fun buildServiceViaTestingConstructor(
+        metadataRouterFacade: MetadataRouterFacade,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver
+    ): ContinueWatchingSnapshotService {
+        val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+            every { state } returns flowOf(EffectiveTrackingProviderState())
+        }
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
+            every { dismissedNextUpKeys } returns flowOf(emptySet())
+        }
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeAllProgress() } returns flowOf(emptyList())
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+        }
+        val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
+            every { observeProgress(any()) } returns flowOf(emptyList())
+        }
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+        }
+
+        return ContinueWatchingSnapshotService(
+            watchProgressRepository = watchProgressRepository,
+            trackingProgressService = trackingProgressService,
+            trackingProviderStateService = trackingProviderStateService,
+            traktSettingsDataStore = traktSettingsDataStore,
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            metadataRouterFacade = metadataRouterFacade,
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver
         )
     }
 
     private fun buildServiceWithMetadataFacade(
-        facade: MetadataRouterFacade
-    ): ContinueWatchingSnapshotService = buildService(metadataRouterFacade = facade)
+        facade: MetadataRouterFacade,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver = tvdbDefaultOrderResolver()
+    ): ContinueWatchingSnapshotService = buildService(
+        metadataRouterFacade = facade,
+        tvEpisodeOrderResolver = tvEpisodeOrderResolver
+    )
 
     private fun canonicalResolver(
         resolver: suspend (RawContinueWatchingInput) -> ContinueWatchingRecord = { input ->
@@ -152,6 +195,51 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 resolver(firstArg())
             }
         }
+
+    private fun tmdbDefaultOrderResolver(): TvEpisodeOrderResolver =
+        mockk {
+            coEvery { resolve(any(), any()) } coAnswers {
+                TvEpisodeOrderResolution(
+                    provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+                    tmdbTvId = firstArg<String?>()?.trim().orEmpty(),
+                    reason = "tmdb default"
+                )
+            }
+        }
+
+    private fun tvdbDefaultOrderResolver(
+        tmdbTvId: String = "tmdb:tv:12345",
+        tvdbSeriesId: String = "303904"
+    ): TvEpisodeOrderResolver =
+        mockk {
+            coEvery { resolve(any(), any()) } returns TvEpisodeOrderResolution(
+                provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                tmdbTvId = tmdbTvId,
+                tvdbSeriesId = tvdbSeriesId,
+                reason = "tvdb override"
+            )
+        }
+
+    private fun stubTvdbProjectionRoute(
+        facade: MetadataRouterFacade,
+        tmdbTvId: String = "12345",
+        tvdbSeriesId: String = "303904"
+    ) {
+        coEvery {
+            facade.routeRequest(any())
+        } returns MetadataRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = "tmdb:$tmdbTvId",
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            targetIds = mapOf(
+                MetadataPrimaryProvider.TMDB to "tmdb:$tmdbTvId",
+                MetadataPrimaryProvider.TVDB to "tvdb:$tvdbSeriesId"
+            ),
+            trace = emptyList()
+        )
+    }
 
     private fun canonicalRecord(
         input: RawContinueWatchingInput,
@@ -258,6 +346,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `resolved display surface corrects TVDB series sidecar and uses it for stream identity`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val tvEpisodeOrderResolver = tmdbDefaultOrderResolver()
             coEvery {
                 facade.resolveStableIdBundle(
                     request = any(),
@@ -278,7 +367,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 evidence = emptyList(),
                 resolvedAtMs = 1778611202000L
             )
-            val service = buildServiceWithMetadataFacade(facade)
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvEpisodeOrderResolver
+            )
             val progress = resume(
                 contentId = "tvdb:413033",
                 videoId = "tvdb:413033:2:2",
@@ -306,6 +398,60 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("tt16288804", record.streamFetchIdentity?.contentId)
             assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
             assertEquals(StreamIdScheme.IMDB_EPISODE, record.streamFetchIdentity?.idScheme)
+            coVerify(exactly = 0) {
+                tvEpisodeOrderResolver.resolve(any(), any())
+            }
+        }
+
+    @Test
+    fun `testing constructor raw snapshot passes tv order resolver into identity resolver`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.resolveStableIdBundle(any(), any(), any())
+            } returns StableIdBundle(
+                itemKey = "series:tmdb:71446",
+                itemType = ContentType.SERIES,
+                canonical = CanonicalStableIds(
+                    tmdbTvId = "71446",
+                    tvdbSeriesId = "81189"
+                ),
+                sidecars = SidecarStableIds(),
+                source = SourceStableIds(
+                    sourceProvider = ProviderId.TMDB,
+                    sourceItemId = "71446",
+                    railId = null,
+                    observedIds = ProviderIds(tmdb = "71446", tvdb = "81189")
+                ),
+                evidence = emptyList(),
+                resolvedAtMs = 1778611202000L
+            )
+            val service = buildServiceViaTestingConstructor(
+                metadataRouterFacade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:71446",
+                    tvdbSeriesId = "81189"
+                )
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(
+                    resume(
+                        contentId = "tmdb:71446",
+                        videoId = "tmdb:71446:2:1",
+                        season = 2,
+                        episode = 1,
+                        source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                    )
+                ),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            val record = snapshot.records.single()
+            assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
         }
 
     @Test
@@ -681,6 +827,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 RailMediaIdentityResolver::class.java -> RailMediaIdentityResolver()
                 ContinueWatchingIdentityResolver::class.java -> canonicalResolver()
                 MetadataRouterFacade::class.java -> null
+                TvEpisodeOrderResolver::class.java -> tmdbDefaultOrderResolver()
                 else -> null
             }
         }.toTypedArray()
@@ -1281,9 +1428,232 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot keeps TMDB next-up coordinates when order policy is TMDB default`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.routeRequest(any())
+            } returns MetadataRoute(
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:71446",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.TMDB to "tmdb:71446",
+                    MetadataPrimaryProvider.TVDB to "tvdb:81189"
+                ),
+                trace = emptyList()
+            )
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (3 to 1) to TvEpisodeMetadata(
+                        seasonNumber = 3,
+                        episodeNumber = 1,
+                        title = "TVDB Coordinate",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tmdbDefaultOrderResolver()
+            )
+            val tmdbNextUp = nextUp(
+                contentId = "tmdb:71446",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 2,
+                episode = 1,
+                episodeTitle = "TMDB Coordinate",
+                videoId = "tmdb:71446:2:1"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(tmdbNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            val item = snapshot.nextUpItems.single()
+            assertEquals("tmdb:71446", item.contentId)
+            assertEquals(2, item.season)
+            assertEquals(1, item.episode)
+            assertEquals("tmdb:71446:2:1", item.videoId)
+            coVerify(exactly = 0) {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            }
+        }
+
+    @Test
+    fun `buildRawSnapshot projects TMDB next-up coordinates only for manual TVDB order override`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val requestSlot = slot<MetadataRequest>()
+            coEvery {
+                facade.routeRequest(any())
+            } returns MetadataRoute(
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:12345",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.TMDB to "tmdb:12345",
+                    MetadataPrimaryProvider.TVDB to "tvdb:67890"
+                ),
+                trace = emptyList()
+            )
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = capture(requestSlot), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (14 to 10) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 10,
+                        title = "TVDB Override Coordinate",
+                        airDate = "2026-02-17"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:12345",
+                    tvdbSeriesId = "67890"
+                )
+            )
+            val tmdbNextUp = nextUp(
+                contentId = "tmdb:12345",
+                firstAiredMs = 1L,
+                firstAired = "2026-02-01"
+            ).copy(
+                season = 12,
+                episode = 10,
+                episodeTitle = "TVDB Override Coordinate",
+                videoId = "tmdb:12345:12:10"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(tmdbNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            val item = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", item.contentId)
+            assertEquals(14, item.season)
+            assertEquals(10, item.episode)
+            assertEquals("tmdb:12345:14:10", item.videoId)
+            assertEquals("12345", requestSlot.captured.sourceContext.previewStableIds.tmdb)
+            assertEquals("67890", requestSlot.captured.sourceContext.previewStableIds.tvdb)
+        }
+
+    @Test
+    fun `reprojectEpisodeOrderForTmdbShow republishes existing next-up rows with TVDB coordinates`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.routeRequest(any())
+            } returns MetadataRoute(
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:10957",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:10957"),
+                trace = emptyList()
+            )
+            coEvery {
+                facade.resolveStableIdBundle(any<MetadataRequest>(), any(), any())
+            } returns StableIdBundle(
+                itemKey = "series:tmdb:10957",
+                itemType = ContentType.SERIES,
+                canonical = CanonicalStableIds(tmdbTvId = "10957", tvdbSeriesId = "303904"),
+                sidecars = SidecarStableIds(imdbId = "tt6103712"),
+                source = SourceStableIds(
+                    sourceProvider = ProviderId.TMDB,
+                    sourceItemId = "tmdb:10957",
+                    railId = null,
+                    observedIds = ProviderIds(tmdb = "10957")
+                ),
+                evidence = emptyList(),
+                resolvedAtMs = 1L
+            )
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (12 to 20) to TvEpisodeMetadata(
+                        seasonNumber = 12,
+                        episodeNumber = 20,
+                        title = "TMDB Coordinate",
+                        airDate = "2025-03-31"
+                    ),
+                    (14 to 20) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 20,
+                        title = "Maggots",
+                        airDate = "2026-04-06"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:10957",
+                    tvdbSeriesId = "303904"
+                )
+            )
+            setPublishedSnapshot(
+                service = service,
+                profileId = 1,
+                snapshot = ContinueWatchingSnapshot(
+                    nextUpItems = listOf(
+                        nextUp(
+                            contentId = "tmdb:10957",
+                            firstAiredMs = 1L,
+                            firstAired = "2025-03-31",
+                            episode = 20
+                        ).copy(
+                            name = "Australian Survivor",
+                            season = 12,
+                            episodeTitle = "TMDB Coordinate",
+                            videoId = "tmdb:10957:12:20",
+                            activityAtMs = java.time.Instant.parse("2026-04-18T21:32:00Z").toEpochMilli()
+                        )
+                    ),
+                    updatedAtMs = 100L
+                )
+            )
+
+            service.reprojectEpisodeOrderForTmdbShow("tmdb:tv:10957", profileId = 1)
+
+            val item = rawSnapshot(service).nextUpItems.single()
+            assertEquals("tmdb:10957", item.contentId)
+            assertEquals(14, item.season)
+            assertEquals(20, item.episode)
+            assertEquals("Maggots", item.episodeTitle)
+            assertEquals("tmdb:10957:14:20", item.videoId)
+            assertEquals("2026-04-06", item.firstAired)
+        }
+
+    @Test
     fun `buildRawSnapshot projects non-anime next-up rows to TVDB coordinates`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1318,10 +1688,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(14, projected.season)
             assertEquals(1, projected.episode)
             assertEquals("The Multiverse", projected.episodeTitle)
-            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals("tmdb:12345:14:1", projected.videoId)
             assertEquals("2026-02-17", projected.firstAired)
             assertEquals(AirDateGate.pendingTriggerMs(0L, null, "2026-02-17"), projected.firstAiredMs)
         }
@@ -1523,6 +1894,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot keeps provider next-up that projects after completion anchor`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1567,15 +1939,17 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(14, projected.season)
             assertEquals(1, projected.episode)
-            assertEquals("tvdb:303904:14:1", projected.videoId)
+            assertEquals("tmdb:12345:14:1", projected.videoId)
         }
 
     @Test
     fun `buildRawSnapshot projects Trakt up-next rows to TVDB coordinates`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1610,16 +1984,18 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val projected = snapshot.traktUpNextItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
             assertEquals(3, projected.season)
             assertEquals(4, projected.episode)
             assertEquals("The Canonical One", projected.episodeTitle)
-            assertEquals("tvdb:303904:3:4", projected.videoId)
+            assertEquals("tmdb:12345:3:4", projected.videoId)
         }
 
     @Test
     fun `buildRawSnapshot shares TVDB episode enrichment across duplicate next-up rows`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1743,6 +2119,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot reuses local next-up episode map during projection`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1793,6 +2170,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot keeps original next-up row when TVDB projection fails`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } throws IllegalStateException("tvdb unavailable")
@@ -1819,18 +2197,19 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot suppresses imdb next-up when route resolves watched TVDB show`() =
+    fun `buildRawSnapshot suppresses tmdb next-up when route resolves watched TV show`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             coEvery {
                 facade.routeRequest(any())
             } returns MetadataRoute(
-                provider = MetadataPrimaryProvider.IMDB,
-                parentId = "tt15677150",
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:71446",
                 mediaKind = MetadataMediaKind.SERIES,
                 reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
                 sourceContext = MetadataSourceContext(itemType = "series"),
                 targetIds = mapOf(
+                    MetadataPrimaryProvider.TMDB to "tmdb:71446",
                     MetadataPrimaryProvider.IMDB to "tt15677150",
                     MetadataPrimaryProvider.TVDB to "tvdb:411364"
                 ),
@@ -1845,8 +2224,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
             val service = buildServiceWithMetadataFacade(facade)
             val watchedAnchor = resume(
-                contentId = "tvdb:411364",
-                videoId = "tvdb:411364:3:11",
+                contentId = "tmdb:71446",
+                videoId = "tmdb:71446:3:11",
                 season = 3,
                 episode = 11,
                 lastWatched = 1778959000000L,
@@ -1854,13 +2233,13 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 source = WatchProgress.SOURCE_TRAKT_HISTORY
             ).copy(name = "Shrinking")
             val staleNextUp = nextUp(
-                contentId = "tt15677150",
+                contentId = "tmdb:71446",
                 firstAiredMs = 1L,
                 episode = 8
             ).copy(
                 name = "Shrinking",
                 season = 3,
-                videoId = "tt15677150:3:8",
+                videoId = "tmdb:71446:3:8",
                 activityAtMs = 1773247741000L
             )
 
@@ -1878,6 +2257,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot rethrows cancellation from TVDB projection`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } throws CancellationException("cancelled")
@@ -1913,6 +2293,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 .plusDays(1)
                 .toString()
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(facade)
             coEvery {
                 facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
@@ -1948,10 +2329,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
             val scheduled = snapshot.scheduledReemit.single()
+            assertEquals("tmdb:12345", scheduled.contentId)
             assertEquals(14, scheduled.season)
             assertEquals(1, scheduled.episode)
             assertEquals(tomorrow, scheduled.firstAired)
-            assertEquals("tvdb:303904:14:1", scheduled.videoId)
+            assertEquals("tmdb:12345:14:1", scheduled.videoId)
         }
 
     @Test

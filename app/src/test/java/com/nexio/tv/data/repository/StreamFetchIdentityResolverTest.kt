@@ -45,10 +45,73 @@ class StreamFetchIdentityResolverTest {
             identity.providerIds,
             2,
             1,
-            StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1")
+            StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1"),
+            episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
         )
 
         assertEquals("tvdb:393268:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.TVDB_EPISODE, result?.idScheme)
+    }
+
+    @Test
+    fun `tvdb default stream identity requires tvdb sidecar even when canonical provider is tvdb`() = runTest {
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "393268",
+            providerIds = ProviderIds(tmdb = "71446")
+        )
+
+        val result = resolver.resolveForEpisode(
+            identity,
+            identity.providerIds,
+            2,
+            1,
+            StreamSourceContext(MetadataMediaKind.SERIES, "tvdb:393268:2:1"),
+            episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `tmdb default series with tmdb canonical id and tvdb sidecar does not use tvdb episode stream id`() = runTest {
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "71446",
+            providerIds = ProviderIds(tmdb = "71446", tvdb = "81189")
+        )
+
+        val result = resolver.resolveForEpisode(
+            identity,
+            identity.providerIds,
+            2,
+            1,
+            StreamSourceContext(MetadataMediaKind.SERIES, "tmdb:71446:2:1"),
+            episodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `tvdb override series with tmdb canonical id and tvdb sidecar uses tvdb episode stream id`() = runTest {
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "71446",
+            providerIds = ProviderIds(tmdb = "71446", tvdb = "81189")
+        )
+
+        val result = resolver.resolveForEpisode(
+            identity,
+            identity.providerIds,
+            2,
+            1,
+            StreamSourceContext(MetadataMediaKind.SERIES, "tmdb:71446:2:1"),
+            episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
+        )
+
+        assertEquals("tvdb:81189", result?.contentId)
+        assertEquals("tvdb:81189:2:1", result?.videoId)
         assertEquals(StreamIdScheme.TVDB_EPISODE, result?.idScheme)
     }
 

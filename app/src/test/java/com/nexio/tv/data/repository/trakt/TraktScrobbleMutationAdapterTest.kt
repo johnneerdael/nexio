@@ -181,6 +181,52 @@ class TraktScrobbleMutationAdapterTest {
     }
 
     @Test
+    fun `episode scrobble payload preserves tmdb tvdb imdb and trakt show ids`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = TraktWatchingNowStateController(),
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TraktScrobbleItem.Episode(
+                showTitle = "Breaking Bad",
+                showYear = 2008,
+                showIds = TraktIdsDto(
+                    trakt = 1388,
+                    tmdb = 1396,
+                    tvdb = 81189,
+                    imdb = "tt0903747"
+                ),
+                season = 1,
+                number = 1,
+                episodeTitle = "Pilot"
+            ),
+            action = "start",
+            progressPercent = 12f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession(profileId = 2)
+        )
+        val scrobbleBodies = mutableListOf<TraktScrobbleRequestDto>()
+
+        coEvery {
+            traktIntegrationProvider.scrobble(any(), "start", capture(scrobbleBodies))
+        } returns Response.success(null)
+
+        val result = adapter.execute(envelope)
+
+        assertTrue(result is TraktMutationExecutionResult.Success)
+        val showIds = scrobbleBodies.single().show?.ids
+        assertEquals(1388, showIds?.trakt)
+        assertEquals(1396, showIds?.tmdb)
+        assertEquals(81189, showIds?.tvdb)
+        assertEquals("tt0903747", showIds?.imdb)
+    }
+
+    @Test
     fun `episode 404 retries once with episode ids from trakt search`() = kotlinx.coroutines.test.runTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
         val traktProgressService = mockk<TraktProgressService>(relaxed = true)

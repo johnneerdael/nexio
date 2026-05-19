@@ -6,22 +6,24 @@ Ratings and metadata shape how detail pages feel in Nexio. This page is the prac
 
 For most users, the simplest path is:
 
-1. Use the built-in TMDB and TheTVDB metadata layer.
+1. Use the built-in TMDB metadata layer for movies and standard TV.
 2. Add MDBList if you want extra ratings or list-backed inputs to appear where supported.
 3. Use OMDb if you want a straightforward season and episode ratings path.
 4. Ignore the self-hosted IMDb path unless you already know you want to operate it yourself.
 
 ## TMDB and TheTVDB
 
-TMDB and TheTVDB enrichment are enabled by default. Nexio uses built-in metadata access so artwork, descriptions, cast, release details, episode data, trailers, and TV season ordering work without setup.
+TMDB is the default metadata authority for movies and standard TV. Nexio uses built-in TMDB access so artwork, descriptions, cast, release details, episode data, trailers, and related browsing surfaces work without setup.
+
+TheTVDB remains integrated as an episode-order provider and crosswalk source. For shows whose streams follow TheTVDB order, use the show-level action to enable TheTVDB season numbering. The canonical show identity remains TMDB.
 
 Optional custom API keys remain supported. When a custom key is saved, Nexio uses it before the built-in key. Removing the custom key returns the app to built-in access.
 
 ## Anime metadata IDs
 
-Nexio can enrich anime metadata from Kitsu when a title has a Kitsu-backed ID in the bundled anime map. Direct `kitsu:{id}` IDs are resolved as Kitsu anime IDs. `mal:{id}`, `anilist:{id}`, `anidb:{id}`, `tmdb:{id}`, `tvdb:{id}`, `tt...`, and `imdb:{id}` IDs are resolved through `anime/anime-id-map.json` before Kitsu is called.
+Anime metadata remains Kitsu-backed when a title has a Kitsu-backed ID in the bundled anime map. Direct `kitsu:{id}` IDs are resolved as Kitsu anime IDs. `mal:{id}`, `anilist:{id}`, `anidb:{id}`, `tmdb:{id}`, `tvdb:{id}`, `tt...`, and `imdb:{id}` IDs are resolved through `anime/anime-id-map.json` before Kitsu is called.
 
-TMDB, TheTVDB, and IMDb IDs still fall back to the normal TMDB/TheTVDB metadata routes when the bundled anime map has no matching Kitsu ID. TMDB lookups use separate movie and series indexes to avoid cross-media collisions.
+TMDB, TheTVDB, and IMDb IDs still fall back to the normal TMDB metadata routes when the bundled anime map has no matching Kitsu ID. TMDB lookups use separate movie and series indexes to avoid cross-media collisions.
 
 ## Kitsu authentication
 
@@ -42,7 +44,8 @@ Kitsu login is optional for public metadata. When connected, Nexio uses Kitsu OA
 
 ## What to expect in Nexio
 
-- TMDB and TheTVDB handle the main enrichment layer for titles, seasons, episodes, cast, and related browsing surfaces.
+- TMDB handles the main enrichment layer for movies and standard TV titles, seasons, episodes, cast, and related browsing surfaces.
+- TheTVDB provides episode-order data, season-numbering overrides, and crosswalks for shows whose streams follow TVDB order.
 - MDBList and OMDb add rating context where their inputs are enabled and supported.
 - Ratings and metadata do not all come from one place, so one missing signal does not always mean the whole detail flow is broken.
 - If detail pages are mostly complete but one rating source is missing, check that service first instead of resetting the full account.

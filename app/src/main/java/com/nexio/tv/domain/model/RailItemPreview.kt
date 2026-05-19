@@ -222,6 +222,8 @@ fun RailDisplaySeed.toPreviewRating(fallbackProvider: ProviderId? = null): Previ
 fun RailItemPreview.bestSupportedRoutingId(): String = when {
     stableIds.kitsu != null -> "kitsu:${stableIds.kitsu}"
     itemType == ContentType.MOVIE && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
+    itemType == ContentType.SERIES && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
+    itemType == ContentType.TV && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
     itemType == ContentType.SERIES && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
     itemType == ContentType.TV && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
     else -> sourceItemId

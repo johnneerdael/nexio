@@ -105,6 +105,10 @@
     <string name="detail_section_production">Production</string>
     <string name="detail_lists_fallback">Lists</string>
     <string name="detail_lists_subtitle">Select which lists should include this title.</string>
+    <string name="detail_use_tvdb_season_numbering">Use TheTVDB season numbering</string>
+    <string name="detail_use_tmdb_season_numbering">Use TMDB season numbering</string>
+    <string name="detail_tvdb_numbering_enabled">TheTVDB season numbering enabled</string>
+    <string name="detail_tmdb_numbering_enabled">TMDB season numbering enabled</string>
     <string name="action_save">Save</string>
     <string name="action_saving">Saving…</string>
 
@@ -155,9 +159,9 @@
     <string name="settings_account_section_subtitle">Account and sync status.</string>
     <string name="account_stat_addons">addons</string>
     <string name="settings_integrations_section">Integrations</string>
-    <string name="settings_integrations_section_subtitle">Configure metadata, TVDB, TMDB, and poster artwork providers</string>
-    <string name="settings_tmdb_subtitle">Movie metadata and explicit TV fallback when TVDB is not configured</string>
-    <string name="settings_tvdb_subtitle">TVDB is used for TV metadata when configured</string>
+    <string name="settings_integrations_section_subtitle">Configure metadata, TheTVDB season numbering, and poster artwork providers</string>
+    <string name="settings_tmdb_subtitle">TMDB is used for movies and standard TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
+    <string name="settings_tvdb_subtitle">TheTVDB season numbering and crosswalks for show-level stream order overrides</string>
     <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
@@ -702,7 +706,7 @@
     <string name="tmdb_title">TMDB Enrichment</string>
     <string name="tmdb_subtitle">TMDB metadata is included by default. Add a custom key only to use your own provider quota.</string>
     <string name="tmdb_enable_title">Enable TMDB Enrichment</string>
-    <string name="tmdb_enable_subtitle">Use TMDB for movies and as the explicit TV fallback when TVDB is unavailable</string>
+    <string name="tmdb_enable_subtitle">Use TMDB for movie and standard TV metadata</string>
     <string name="tmdb_api_key_title">API Key</string>
     <string name="tmdb_api_key_subtitle">Optional custom TMDB key. Nexio works with built-in metadata access when this is empty.</string>
     <string name="tmdb_dialog_title">TMDB API Key</string>
@@ -735,11 +739,11 @@
     <string name="tmdb_catalog_series_by_language">Series By Language</string>
     <string name="tmdb_catalog_series_by_language_subtitle">Series grouped by original language.</string>
     <string name="tmdb_artwork_title">Artwork</string>
-    <string name="tmdb_artwork_subtitle">Movie artwork from TMDB; TV artwork uses TVDB when configured</string>
+    <string name="tmdb_artwork_subtitle">Movie and standard TV artwork from TMDB</string>
     <string name="tmdb_basic_info_title">Basic Info</string>
-    <string name="tmdb_basic_info_subtitle">Movie details from TMDB; TV details use TVDB when configured</string>
+    <string name="tmdb_basic_info_subtitle">Movie and standard TV details from TMDB</string>
     <string name="tmdb_details_title">Details</string>
-    <string name="tmdb_details_subtitle">Movie runtime, release date, country, and language from TMDB; TV details use TVDB when configured</string>
+    <string name="tmdb_details_subtitle">Movie and standard TV runtime, release date, country, and language from TMDB</string>
     <string name="tmdb_credits_title">Credits</string>
     <string name="tmdb_credits_subtitle">Cast with photos, director, and writer from TMDB</string>
     <string name="tmdb_productions_title">Productions</string>
@@ -747,7 +751,7 @@
     <string name="tmdb_networks_title">Networks</string>
     <string name="tmdb_networks_subtitle">Networks with logos from TMDB</string>
     <string name="tmdb_episodes_title">Episodes</string>
-    <string name="tmdb_episodes_subtitle">TV episode metadata uses TVDB when configured; TMDB remains fallback</string>
+    <string name="tmdb_episodes_subtitle">Standard TV episode metadata from TMDB; TheTVDB season numbering can be enabled per show</string>
     <string name="tmdb_more_like_this_title">More Like This</string>
     <string name="tmdb_more_like_this_subtitle">TMDB recommendation backdrops on detail page</string>
     <string name="tmdb_reviews_title">Reviews</string>
@@ -756,16 +760,16 @@
     <string name="tmdb_collections_subtitle">TMDB movie collections in release order</string>
 
     <string name="tvdb_hub_title">TVDB</string>
-    <string name="tvdb_title">TVDB Metadata</string>
-    <string name="tvdb_subtitle">TVDB metadata is included by default. Add custom credentials only to use your own provider quota.</string>
-    <string name="tvdb_enable_title">Enable TVDB</string>
-    <string name="tvdb_enable_subtitle">TVDB is active by default for TV metadata. Custom credentials are optional.</string>
+    <string name="tvdb_title">TheTVDB season numbering</string>
+    <string name="tvdb_subtitle">TheTVDB crosswalks and season numbering are available for shows whose streams follow TVDB order. Add custom credentials only to use your own provider quota.</string>
+    <string name="tvdb_enable_title">Enable TheTVDB order data</string>
+    <string name="tvdb_enable_subtitle">Use TheTVDB crosswalks and show-level season numbering overrides. Custom credentials are optional.</string>
     <string name="tvdb_credentials_title">TVDB credentials</string>
     <string name="tvdb_credentials_subtitle">Optional custom TheTVDB key. Built-in metadata access is used when this is empty.</string>
     <string name="tvdb_status_title">TVDB status</string>
     <string name="tvdb_status_subtitle_not_configured">Built-in TVDB access is active.</string>
     <string name="tvdb_status_subtitle_validating">Checking TVDB credentials...</string>
-    <string name="tvdb_status_subtitle_valid">TVDB is ready for TV metadata and identity matching.</string>
+    <string name="tvdb_status_subtitle_valid">TVDB is ready for crosswalks and show-level season numbering.</string>
     <string name="tvdb_status_subtitle_invalid">Custom credentials failed; built-in TVDB access remains active.</string>
     <string name="tvdb_status_subtitle_fallback_active">Built-in TVDB access remains active while custom credentials are unavailable.</string>
     <string name="tvdb_status_not_configured">Built-in</string>
@@ -775,7 +779,7 @@
     <string name="tvdb_status_fallback_active">Fallback active</string>
     <string name="tvdb_last_failure_prefix">Last failure:</string>
     <string name="tvdb_provider_precedence_title">Provider precedence</string>
-    <string name="provider_precedence_summary">TVDB is used for TV metadata. TMDB is used for movies and fallback metadata. Poster-ratings providers override supported poster artwork.</string>
+    <string name="provider_precedence_summary">TMDB is used for movies and standard TV metadata. Kitsu is used for anime. TheTVDB season numbering can be enabled per show when streams follow TVDB order.</string>
     <string name="tvdb_dialog_title">TVDB credentials</string>
     <string name="tvdb_dialog_subtitle">Add a personal TheTVDB API key only if you want to use your own provider quota. Add the subscriber PIN only if your TVDB account requires one.</string>
     <string name="tvdb_api_key_placeholder">Optional TheTVDB API key</string>

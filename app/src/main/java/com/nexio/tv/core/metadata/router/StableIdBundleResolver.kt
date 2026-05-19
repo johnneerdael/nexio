@@ -35,34 +35,58 @@ class StableIdBundleResolver @Inject constructor(
         val known = request.knownIds
 
         var tmdbMovieId: String? = null
+        var tmdbTvId: String? = null
         var tvdbSeriesId: String? = null
         var kitsuAnimeId: String? = null
         var imdbId: String? = known.imdb.presentImdbId()
 
         when (request.routeProvider) {
             MetadataPrimaryProvider.TMDB -> {
-                tmdbMovieId = known.tmdb.presentStableId()
-                    ?: imdbId?.let { imdb ->
-                        resolveViaStoreOrProvider(
-                            sourceId = parsed(AnimeIdScheme.IMDB, imdb),
-                            provider = MetadataPrimaryProvider.TMDB,
-                            operation = "imdbToTmdbMovie",
-                            target = "TMDB",
-                            evidence = evidence
-                        ) { lookup.imdbToTmdbMovie(imdb) }
+                when (request.itemType) {
+                    ContentType.MOVIE -> {
+                        tmdbMovieId = known.tmdb.presentStableId()
+                            ?: imdbId?.let { imdb ->
+                                resolveViaStoreOrProvider(
+                                    sourceId = parsed(AnimeIdScheme.IMDB, imdb),
+                                    provider = MetadataPrimaryProvider.TMDB,
+                                    operation = "imdbToTmdbMovie",
+                                    target = "TMDB",
+                                    evidence = evidence
+                                ) { lookup.imdbToTmdbMovie(imdb) }
+                            }
+                        if (imdbId == null && tmdbMovieId != null) {
+                            imdbId = resolveViaStoreOrProvider(
+                                sourceId = tmdbMovieSourceId(tmdbMovieId),
+                                provider = MetadataPrimaryProvider.IMDB,
+                                operation = "tmdbMovieToImdb",
+                                target = "IMDB",
+                                evidence = evidence
+                            ) { lookup.tmdbMovieToImdb(tmdbMovieId) }
+                        }
                     }
-                if (imdbId == null && tmdbMovieId != null) {
-                    imdbId = resolveViaStoreOrProvider(
-                        sourceId = tmdbMovieSourceId(tmdbMovieId),
-                        provider = MetadataPrimaryProvider.IMDB,
-                        operation = "tmdbMovieToImdb",
-                        target = "IMDB",
-                        evidence = evidence
-                    ) { lookup.tmdbMovieToImdb(tmdbMovieId) }
+
+                    ContentType.SERIES,
+                    ContentType.TV -> {
+                        tmdbTvId = known.tmdb.presentStableId()
+                        if (imdbId == null && tmdbTvId != null) {
+                            imdbId = resolveViaStoreOrProvider(
+                                sourceId = tmdbTvSourceId(tmdbTvId),
+                                provider = MetadataPrimaryProvider.IMDB,
+                                operation = "tmdbTvToImdb",
+                                target = "IMDB",
+                                evidence = evidence
+                            ) { lookup.tmdbTvToImdb(tmdbTvId) }
+                        }
+                    }
+
+                    ContentType.CHANNEL,
+                    ContentType.PERSON,
+                    ContentType.UNKNOWN -> Unit
                 }
             }
 
             MetadataPrimaryProvider.TVDB -> {
+                tmdbTvId = known.tmdb.presentStableId()
                 tvdbSeriesId = known.tvdb.presentStableId()
                     ?: imdbId?.let { imdb ->
                         resolveViaStoreOrProvider(
@@ -75,22 +99,22 @@ class StableIdBundleResolver @Inject constructor(
                     }
 
                 if (tvdbSeriesId == null) {
-                    val tmdbTvId = known.tmdb.presentStableId()
-                    if (tmdbTvId != null) {
+                    val knownTmdbTvId = tmdbTvId
+                    if (knownTmdbTvId != null) {
                         tvdbSeriesId = resolveViaStoreOrProvider(
-                            sourceId = tmdbTvSourceId(tmdbTvId),
+                            sourceId = tmdbTvSourceId(knownTmdbTvId),
                             provider = MetadataPrimaryProvider.TVDB,
                             operation = "tmdbTvToTvdb",
                             target = "TVDB",
                             evidence = evidence
-                        ) { lookup.tmdbTvToTvdb(tmdbTvId) }
+                        ) { lookup.tmdbTvToTvdb(knownTmdbTvId) }
                         val bridgeImdb = if (imdbId == null || tvdbSeriesId == null) resolveViaStoreOrProvider(
-                            sourceId = tmdbTvSourceId(tmdbTvId),
+                            sourceId = tmdbTvSourceId(knownTmdbTvId),
                             provider = MetadataPrimaryProvider.IMDB,
                             operation = "tmdbTvToImdb",
                             target = "IMDB",
                             evidence = evidence
-                        ) { lookup.tmdbTvToImdb(tmdbTvId) } else null
+                        ) { lookup.tmdbTvToImdb(knownTmdbTvId) } else null
                         imdbId = imdbId ?: bridgeImdb
                         tvdbSeriesId = tvdbSeriesId ?: bridgeImdb?.let { imdb ->
                             resolveViaStoreOrProvider(
@@ -138,6 +162,7 @@ class StableIdBundleResolver @Inject constructor(
             itemType = request.itemType,
             canonical = CanonicalStableIds(
                 tmdbMovieId = tmdbMovieId.presentStableId(),
+                tmdbTvId = tmdbTvId.presentStableId(),
                 tvdbSeriesId = tvdbSeriesId.presentStableId(),
                 kitsuAnimeId = kitsuAnimeId.presentStableId()
             ),

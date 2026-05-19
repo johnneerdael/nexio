@@ -91,6 +91,7 @@ class StableIdBundleResolverTest {
         )
 
         assertEquals("121361", bundle.canonical.tvdbSeriesId)
+        assertEquals("1399", bundle.canonical.tmdbTvId)
         assertEquals("tt0944947", bundle.sidecars.imdbId)
         assertEquals(listOf("tmdbTvToTvdb:1399", "tmdbTvToImdb:1399"), lookup.calls)
         assertEquals(
@@ -238,6 +239,44 @@ class StableIdBundleResolverTest {
         assertEquals("550", bundle.canonical.tmdbMovieId)
         assertEquals("tt0137523", bundle.sidecars.imdbId)
         assertEquals(listOf("tmdbMovieToImdb:550"), lookup.calls)
+    }
+
+    @Test
+    fun `tmdb route for series stores known tmdb id as tv canonical id`() = runTest {
+        val lookup = RecordingLookup()
+        val resolver = resolver(lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TMDB,
+                knownIds = ProviderIds(tmdb = "71446", imdb = "tt0903747")
+            )
+        )
+
+        assertEquals("71446", bundle.canonical.tmdbTvId)
+        assertNull(bundle.canonical.tmdbMovieId)
+        assertEquals("tt0903747", bundle.sidecars.imdbId)
+        assertEquals(0, lookup.callCount)
+    }
+
+    @Test
+    fun `tmdb route for movie stores known tmdb id as movie canonical id`() = runTest {
+        val lookup = RecordingLookup()
+        val resolver = resolver(lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.MOVIE,
+                routeProvider = MetadataPrimaryProvider.TMDB,
+                knownIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
+            )
+        )
+
+        assertEquals("550", bundle.canonical.tmdbMovieId)
+        assertNull(bundle.canonical.tmdbTvId)
+        assertEquals("tt0137523", bundle.sidecars.imdbId)
+        assertEquals(0, lookup.callCount)
     }
 
     @Test

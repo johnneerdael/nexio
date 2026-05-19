@@ -32,7 +32,7 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("tvdb:81189", meta.id)
+        assertEquals("tmdb:1396", meta.id)
         assertEquals(ContentType.SERIES, meta.type)
         assertEquals("Breaking Bad", meta.name)
         assertEquals("2008", meta.releaseInfo)
@@ -152,7 +152,7 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `mdblist series preview uses tvdb routeable meta id instead of provider source id`() {
+    fun `mdblist series preview uses tmdb routeable meta id instead of provider source id`() {
         val preview = RailItemPreview(
             railId = "mdblist_top_shows",
             railSource = RailSource.BUILT_IN_MDBLIST,
@@ -171,12 +171,12 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("tvdb:81189", meta.id)
+        assertEquals("tmdb:1396", meta.id)
         assertEquals("Breaking Bad", meta.name)
     }
 
     @Test
-    fun `series preview falls back to source item id when no routeable stable id exists`() {
+    fun `series preview uses tmdb routeable meta id`() {
         val preview = RailItemPreview(
             railId = "mdblist_top_shows",
             railSource = RailSource.BUILT_IN_MDBLIST,
@@ -196,7 +196,7 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("mdblist:list:top-shows:item:2", meta.id)
+        assertEquals("tmdb:999", meta.id)
         assertEquals("Provider Only", meta.name)
     }
 
@@ -284,14 +284,14 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `best supported routing id uses series tvdb id`() {
+    fun `best supported routing id uses series tmdb id`() {
         val preview = railItemPreview(
             itemType = ContentType.SERIES,
             stableIds = ProviderIds(tmdb = "99", tvdb = "11", imdb = "tt99"),
             sourceItemId = "source:series:1"
         )
 
-        assertEquals("tvdb:11", preview.bestSupportedRoutingId())
+        assertEquals("tmdb:99", preview.bestSupportedRoutingId())
     }
 
     @Test
@@ -326,7 +326,7 @@ class RailItemPreviewTest {
         val meta = preview.toMetaPreview()
         val resolution = preview.display.toPreviewRating(fallbackProvider = preview.sourceProvider)
 
-        assertEquals("mdblist:show:1", meta.id)
+        assertEquals("tmdb:1396", meta.id)
         assertNull(meta.imdbRating)
         assertNull(meta.ratingSource)
         assertNull(resolution.rating)

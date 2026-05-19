@@ -18,12 +18,27 @@ data class StableIdBundle(
 
 data class CanonicalStableIds(
     val tmdbMovieId: String? = null,
+    val tmdbTvId: String? = null,
     val tvdbSeriesId: String? = null,
     val kitsuAnimeId: String? = null
 ) {
+    fun hasCanonicalId(): Boolean =
+        tmdbMovieId.isPresentStableId() ||
+            tmdbTvId.isPresentStableId() ||
+            tvdbSeriesId.isPresentStableId() ||
+            kitsuAnimeId.isPresentStableId()
+
     fun providerNativeIdFor(provider: MetadataPrimaryProvider): String? =
         when (provider) {
-            MetadataPrimaryProvider.TMDB -> tmdbMovieId.toPresentStableId()
+            MetadataPrimaryProvider.TMDB -> {
+                val movieId = tmdbMovieId.toPresentStableId()
+                val tvId = tmdbTvId.toPresentStableId()
+                when {
+                    movieId != null && tvId == null -> movieId
+                    tvId != null && movieId == null -> tvId
+                    else -> null
+                }
+            }
             MetadataPrimaryProvider.TVDB -> tvdbSeriesId.toPresentStableId()
             MetadataPrimaryProvider.KITSU -> kitsuAnimeId.toPresentStableId()
             MetadataPrimaryProvider.IMDB,
@@ -91,10 +106,7 @@ private fun resolveStableIdBundleStatus(
     canonical: CanonicalStableIds,
     sidecars: SidecarStableIds
 ): StableIdBundleStatus {
-    val hasCanonical = canonical.tmdbMovieId.isPresentStableId() ||
-        canonical.tvdbSeriesId.isPresentStableId() ||
-        canonical.kitsuAnimeId.isPresentStableId()
-    if (!hasCanonical) return StableIdBundleStatus.UNRESOLVED
+    if (!canonical.hasCanonicalId()) return StableIdBundleStatus.UNRESOLVED
     return if (sidecars.imdbId.isPresentStableId()) {
         StableIdBundleStatus.CANONICAL_AND_RATING_READY
     } else {

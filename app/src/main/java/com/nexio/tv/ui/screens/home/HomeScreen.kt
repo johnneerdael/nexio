@@ -421,6 +421,11 @@ fun HomeScreen(
     }
 
     val selectedPoster = posterOptionsTarget
+    var posterTvEpisodeOrderAction by remember { mutableStateOf<HomeTvEpisodeOrderMenuAction?>(null) }
+    LaunchedEffect(selectedPoster) {
+        posterTvEpisodeOrderAction = null
+        posterTvEpisodeOrderAction = selectedPoster?.let { viewModel.resolveHomeTvEpisodeOrderMenuAction(it.item) }
+    }
     if (selectedPoster != null) {
         val item = selectedPoster.item
         val statusKey = homeItemStatusKey(item.id, item.apiType)
@@ -456,6 +461,7 @@ fun HomeScreen(
             isWatched = uiState.movieWatchedStatus[statusKey] == true,
             isWatchedPending = statusKey in uiState.movieWatchedPending,
             showPlayTrailer = hasTrailerAction,
+            tvEpisodeOrderActionLabelRes = posterTvEpisodeOrderAction?.labelRes,
             onDismiss = { posterOptionsTarget = null },
             onPlayWithManualStreamSelection = {
                 onPlayWithManualStreamSelection(item)
@@ -496,6 +502,10 @@ fun HomeScreen(
             },
             onToggleWatched = {
                 viewModel.togglePosterMovieWatched(item)
+                posterOptionsTarget = null
+            },
+            onToggleTvEpisodeOrderProvider = {
+                posterTvEpisodeOrderAction?.let(viewModel::toggleHomeTvEpisodeOrderProvider)
                 posterOptionsTarget = null
             },
             showHideRecommendation = selectedPoster.recommendationRef != null,
@@ -714,6 +724,12 @@ private fun ClassicHomeRoute(
         onToggleContinueWatchingLibrary = { item ->
             viewModel.toggleContinueWatchingLibrary(item)
         },
+        resolveContinueWatchingTvEpisodeOrderAction = { item ->
+            viewModel.resolveHomeTvEpisodeOrderMenuAction(item)
+        },
+        onToggleTvEpisodeOrderProvider = { action ->
+            viewModel.toggleHomeTvEpisodeOrderProvider(action)
+        },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onRequestTrailerPreview = requestTrailerPreview,
@@ -769,6 +785,12 @@ private fun GridHomeRoute(
         cwWatchlistMembership = uiState.posterLibraryMembership,
         onToggleContinueWatchingLibrary = { item ->
             viewModel.toggleContinueWatchingLibrary(item)
+        },
+        resolveContinueWatchingTvEpisodeOrderAction = { item ->
+            viewModel.resolveHomeTvEpisodeOrderMenuAction(item)
+        },
+        onToggleTvEpisodeOrderProvider = { action ->
+            viewModel.toggleHomeTvEpisodeOrderProvider(action)
         },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
@@ -891,6 +913,12 @@ private fun ModernHomeRoute(
     val toggleContinueWatchingLibrary = remember(viewModel) {
         { item: ContinueWatchingItem -> viewModel.toggleContinueWatchingLibrary(item) }
     }
+    val resolveContinueWatchingTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = remember(viewModel) {
+        { item: ContinueWatchingResolvedDisplayItem -> viewModel.resolveHomeTvEpisodeOrderMenuAction(item) }
+    }
+    val toggleTvEpisodeOrderProvider = remember(viewModel) {
+        { action: HomeTvEpisodeOrderMenuAction -> viewModel.toggleHomeTvEpisodeOrderProvider(action) }
+    }
     val saveModernFocusState = remember(viewModel) {
         { vi: Int, vo: Int, ri: Int, ii: Int, m: Map<String, Int> ->
             viewModel.saveFocusState(vi, vo, ri, ii, m)
@@ -938,6 +966,8 @@ private fun ModernHomeRoute(
         onCheckInContinueWatching = checkInContinueWatching,
         cwWatchlistMembership = uiState.posterLibraryMembership,
         onToggleContinueWatchingLibrary = toggleContinueWatchingLibrary,
+        resolveContinueWatchingTvEpisodeOrderAction = resolveContinueWatchingTvEpisodeOrderAction,
+        onToggleTvEpisodeOrderProvider = toggleTvEpisodeOrderProvider,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },
@@ -964,12 +994,14 @@ private fun HomePosterOptionsDialog(
     isWatched: Boolean,
     isWatchedPending: Boolean,
     showPlayTrailer: Boolean,
+    tvEpisodeOrderActionLabelRes: Int? = null,
     onDismiss: () -> Unit,
     onPlayWithManualStreamSelection: () -> Unit,
     onDetails: () -> Unit,
     onPlayTrailer: () -> Unit,
     onToggleLibrary: () -> Unit,
     onToggleWatched: () -> Unit,
+    onToggleTvEpisodeOrderProvider: () -> Unit = {},
     showHideRecommendation: Boolean = false,
     onHideRecommendation: () -> Unit = {}
 ) {
@@ -1014,6 +1046,19 @@ private fun HomePosterOptionsDialog(
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
+        }
+
+        if (tvEpisodeOrderActionLabelRes != null) {
+            Button(
+                onClick = onToggleTvEpisodeOrderProvider,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(tvEpisodeOrderActionLabelRes))
+            }
         }
 
         if (showPlayTrailer) {

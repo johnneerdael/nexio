@@ -8,13 +8,14 @@ import org.junit.Test
 /**
  * UX-02 static guard: no TVDB-specific advanced or timing toggles.
  *
- * This test reads TvdbSettingsScreen.kt and strings.xml to verify that no
+ * This test reads SettingsScreen.kt and strings.xml to verify that no
  * provider-specific advanced metadata or exact-timing toggles have been added.
  * Per decisions D-13 and D-14, provider routing decides the source, not
  * user-facing toggles.
  *
  * It also verifies that the provider precedence copy remains present so users
- * understand TVDB is used for TV metadata when configured.
+ * understand TMDB is the default movies and standard TV metadata authority, while TVDB is
+ * limited to show-level season numbering when streams follow TVDB order.
  *
  * This test must remain green throughout Phase 9 execution.
  */
@@ -32,7 +33,13 @@ class TvdbSettingsNoAdvancedToggleTest {
             "Exact air-time toggle",
             "provider-specific timing",
             "Advanced TVDB surfaces",
-            "Enable TVDB trailers"
+            "Enable TVDB trailers",
+            "TVDB metadata provider toggle",
+            "Use TVDB as metadata provider",
+            "TVDB is used for TV metadata",
+            "TVDB metadata is included by default",
+            "TVDB is active by default for TV metadata",
+            "TVDB is ready for TV metadata"
         )
 
         /**
@@ -63,16 +70,9 @@ class TvdbSettingsNoAdvancedToggleTest {
     fun `does not add tvdb advanced or exact timing toggle`() {
         val projectRoot = findProjectRoot()
 
-        // Read TvdbSettingsScreen.kt
-        val settingsScreenFile = projectRoot.resolve(
-            "app/src/main/java/com/nexio/tv/ui/screens/settings/TvdbSettingsScreen.kt"
-        )
-        val settingsScreenContent = if (settingsScreenFile.exists()) {
-            settingsScreenFile.readText()
-        } else {
-            // If file doesn't exist, the guard still holds (no toggles possible)
-            ""
-        }
+        val settingsScreenContent = projectRoot.resolve(
+            "app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt"
+        ).readText()
 
         // Read strings.xml
         val stringsFile = projectRoot.resolve("app/src/main/res/values/strings.xml")
@@ -87,7 +87,7 @@ class TvdbSettingsNoAdvancedToggleTest {
         // Assert none of the forbidden phrases appear (case-insensitive).
         for (phrase in FORBIDDEN_PHRASES) {
             assertFalse(
-                "TvdbSettingsScreen.kt or strings.xml must not contain '$phrase' " +
+                "SettingsScreen.kt or strings.xml must not contain '$phrase' " +
                     "(violates UX-02: no provider-specific advanced/timing toggles). " +
                     "Provider routing decides the source per D-13/D-14.",
                 combinedContent.contains(phrase, ignoreCase = true)
@@ -96,26 +96,9 @@ class TvdbSettingsNoAdvancedToggleTest {
     }
 
     @Test
-    fun `provider precedence copy is present in settings screen`() {
+    fun `visible tmdb settings copy states tmdb tv default policy`() {
         val projectRoot = findProjectRoot()
 
-        // Settings screen must reference provider_precedence_summary
-        val settingsScreenFile = projectRoot.resolve(
-            "app/src/main/java/com/nexio/tv/ui/screens/settings/TvdbSettingsScreen.kt"
-        )
-        val settingsScreenContent = if (settingsScreenFile.exists()) {
-            settingsScreenFile.readText()
-        } else {
-            ""
-        }
-
-        assertTrue(
-            "TvdbSettingsScreen.kt must reference provider_precedence_summary " +
-                "so users understand TVDB is used for TV metadata when configured.",
-            settingsScreenContent.contains("provider_precedence_summary")
-        )
-
-        // strings.xml must contain the actual provider precedence text
         val stringsFile = projectRoot.resolve("app/src/main/res/values/strings.xml")
         val stringsContent = if (stringsFile.exists()) {
             stringsFile.readText()
@@ -124,9 +107,29 @@ class TvdbSettingsNoAdvancedToggleTest {
         }
 
         assertTrue(
-            "strings.xml must contain 'TVDB is used for TV metadata when configured' " +
-                "in the provider_precedence_summary string.",
-            stringsContent.contains("TVDB is used for TV metadata when configured")
+            "settings_tmdb_subtitle must contain the TMDB movies and standard TV metadata policy.",
+            visibleTmdbSubtitle(stringsContent).contains("TMDB is used for movies and standard TV metadata")
+        )
+        assertFalse(
+            "settings_tmdb_subtitle must not use broader movie and TV metadata wording.",
+            visibleTmdbSubtitle(stringsContent).contains("TMDB is used for movie and TV metadata")
+        )
+        assertTrue(
+            "settings_tmdb_subtitle must explain show-level TheTVDB season numbering.",
+            visibleTmdbSubtitle(stringsContent).contains(
+                "TheTVDB season numbering can be enabled per show when streams follow TVDB order"
+            )
+        )
+        assertFalse(
+            "settings_tmdb_subtitle must not describe TVDB as the global TV metadata authority.",
+            visibleTmdbSubtitle(stringsContent).contains("TVDB is used for TV metadata")
         )
     }
+
+    private fun visibleTmdbSubtitle(stringsContent: String): String =
+        Regex("""<string name="settings_tmdb_subtitle">([^<]+)</string>""")
+            .find(stringsContent)
+            ?.groupValues
+            ?.get(1)
+            .orEmpty()
 }

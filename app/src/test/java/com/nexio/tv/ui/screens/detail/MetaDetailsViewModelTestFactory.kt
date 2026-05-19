@@ -30,8 +30,14 @@ import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.TvEpisodeOrderResolution
+import com.nexio.tv.data.repository.TvEpisodeOrderResolver
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Meta
@@ -86,7 +92,9 @@ fun buildMetaDetailsViewModel(
     mdbListRepository: MDBListRepository = mockk(relaxed = true),
     titleRatingOverrideRepository: TitleRatingOverrideRepository = defaultTitleRatingOverrideRepository(),
     episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository = mockk(relaxed = true),
-    animeSeasonDetailRepository: AnimeSeasonDetailRepository = mockk(relaxed = true)
+    animeSeasonDetailRepository: AnimeSeasonDetailRepository = mockk(relaxed = true),
+    tvEpisodeOrderResolver: TvEpisodeOrderResolver = defaultTvEpisodeOrderResolver(),
+    tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = defaultTvEpisodeOrderOverrideRepository()
 ): MetaDetailsViewModel {
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
@@ -154,6 +162,8 @@ fun buildMetaDetailsViewModel(
         playerSettingsDataStore = playerSettingsDataStore,
         animeSeasonDetailRepository = animeSeasonDetailRepository,
         resolvedDisplaySurfaceRepository = mockk(relaxed = true),
+        tvEpisodeOrderResolver = tvEpisodeOrderResolver,
+        tvEpisodeOrderOverrideRepository = tvEpisodeOrderOverrideRepository,
         savedStateHandle = SavedStateHandle(
             mapOf(
                 "itemId" to itemId,
@@ -260,5 +270,55 @@ fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
     return mockk<TitleRatingOverrideRepository>().also { repository ->
         coEvery { repository.titleRatingCandidates(any<MetaPreview>(), any(), any()) } returns emptyList()
         coEvery { repository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
+    }
+}
+
+fun defaultTvEpisodeOrderResolver(): TvEpisodeOrderResolver {
+    return object : TvEpisodeOrderResolver {
+        override suspend fun resolve(
+            tmdbTvId: String?,
+            providerIds: ProviderIds
+        ): TvEpisodeOrderResolution {
+            val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId).orEmpty()
+            return TvEpisodeOrderResolution(
+                provider = TvEpisodeOrderProvider.TMDB_DEFAULT,
+                tmdbTvId = key,
+                tvdbSeriesId = providerIds.tvdb,
+                reason = "test default"
+            )
+        }
+    }
+}
+
+fun defaultTvEpisodeOrderOverrideRepository(): TvEpisodeOrderOverrideRepository {
+    return object : TvEpisodeOrderOverrideRepository {
+        private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
+
+        override fun observeOrders(): kotlinx.coroutines.flow.Flow<Map<String, TvEpisodeOrderProvider>> =
+            kotlinx.coroutines.flow.flowOf(overrides.toMap())
+
+        override fun observeOrder(tmdbTvId: String): kotlinx.coroutines.flow.Flow<TvEpisodeOrderProvider> =
+            kotlinx.coroutines.flow.flowOf(
+                overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+            )
+
+        override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider =
+            overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+
+        override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) {
+            val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return
+            if (provider == TvEpisodeOrderProvider.TMDB_DEFAULT) {
+                overrides.remove(key)
+            } else {
+                overrides[key] = provider
+            }
+        }
+
+        override suspend fun clearOrder(tmdbTvId: String) {
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::remove)
+        }
+
+        override suspend fun hasOverride(tmdbTvId: String): Boolean =
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::containsKey) == true
     }
 }

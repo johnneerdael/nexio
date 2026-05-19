@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.HomeTvEpisodeOrderMenuAction
 import com.nexio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -45,11 +46,18 @@ fun GridContinueWatchingSection(
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     showManualStreamSelection: (ContinueWatchingItem) -> Boolean = { false },
     onPlayWithManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
+    resolveTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = { null },
+    onToggleTvEpisodeOrderProvider: (HomeTvEpisodeOrderMenuAction) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1
 ) {
     if (items.isEmpty()) return
     var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
+    var tvEpisodeOrderAction by remember { mutableStateOf<HomeTvEpisodeOrderMenuAction?>(null) }
+    LaunchedEffect(optionsItem) {
+        tvEpisodeOrderAction = null
+        tvEpisodeOrderAction = optionsItem?.let { resolveTvEpisodeOrderAction(it) }
+    }
     val focusRequesters = remember(items.size) { List(items.size) { FocusRequester() } }
     var lastFocusedIndex by remember { mutableIntStateOf(-1) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
@@ -167,6 +175,11 @@ fun GridContinueWatchingSection(
                     callback(menuLegacy)
                     optionsItem = null
                 }
+            },
+            tvEpisodeOrderActionLabelRes = tvEpisodeOrderAction?.labelRes,
+            onToggleTvEpisodeOrderProvider = {
+                tvEpisodeOrderAction?.let(onToggleTvEpisodeOrderProvider)
+                optionsItem = null
             },
             onStartFromBeginning = {
                 onStartFromBeginning(menuLegacy)

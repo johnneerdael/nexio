@@ -38,14 +38,7 @@ class MetadataRouter @Inject constructor(
             AnimeIdScheme.ANILIST,
             AnimeIdScheme.ANIDB -> animePrefixMapped(normalized, parsedId, trace)
             AnimeIdScheme.IMDB -> imdbMappedOrFallback(normalized, parsedId, trace)
-            AnimeIdScheme.TMDB -> providerNativeOrConflict(
-                normalized = normalized,
-                parsedId = parsedId,
-                nativeType = ContentType.MOVIE,
-                nativeProvider = MetadataPrimaryProvider.TMDB,
-                conflictFallbackProvider = MetadataPrimaryProvider.TVDB,
-                trace = trace
-            )
+            AnimeIdScheme.TMDB -> tmdbProviderNative(normalized, parsedId, trace)
             AnimeIdScheme.TVDB -> providerNativeOrConflict(
                 normalized = normalized,
                 parsedId = parsedId,
@@ -265,6 +258,43 @@ class MetadataRouter @Inject constructor(
         return fallbackByItemType(normalized, trace)
     }
 
+    private suspend fun tmdbProviderNative(
+        normalized: NormalizedMetadataRequest,
+        parsedId: ParsedMetadataId,
+        trace: MutableList<MetadataRouteTrace>
+    ): MetadataRoute {
+        val mediaKind = when (normalized.contentType) {
+            ContentType.MOVIE -> MetadataMediaKind.MOVIE
+            ContentType.SERIES,
+            ContentType.TV -> MetadataMediaKind.SERIES
+            else -> null
+        }
+        if (mediaKind == null) {
+            trace += MetadataRouteTrace(
+                MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT,
+                "Provider-native id ${parsedId.raw} conflicts with ${normalized.contentType}"
+            )
+            return fallbackByItemType(
+                normalized = normalized,
+                trace = trace,
+                conflictFallbackProvider = MetadataPrimaryProvider.TVDB,
+                requiresIdentityResolution = true
+            )
+        }
+        trace += MetadataRouteTrace(
+            MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            "Provider-native id ${parsedId.raw} routes to TMDB as $mediaKind for ${normalized.contentType}"
+        )
+        return route(
+            normalized = normalized,
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = mediaKind,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            targetId = normalized.parentId,
+            trace = trace
+        )
+    }
+
     private suspend fun providerNativeOrConflict(
         normalized: NormalizedMetadataRequest,
         parsedId: ParsedMetadataId,
@@ -321,10 +351,10 @@ class MetadataRouter @Inject constructor(
             }
             ContentType.SERIES,
             ContentType.TV -> {
-                trace += MetadataRouteTrace(MetadataDecisionReason.ITEM_TYPE_SERIES, "Series item type routes to TVDB for ${normalized.parentId}")
+                trace += MetadataRouteTrace(MetadataDecisionReason.ITEM_TYPE_SERIES, "Series item type routes to TMDB for ${normalized.parentId}")
                 route(
                     normalized = normalized,
-                    provider = MetadataPrimaryProvider.TVDB,
+                    provider = MetadataPrimaryProvider.TMDB,
                     mediaKind = MetadataMediaKind.SERIES,
                     reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
                     targetId = normalized.parentId,
@@ -417,7 +447,8 @@ class MetadataRouter @Inject constructor(
             AnimeIdScheme.TVDB -> builder.putIfAbsent(MetadataPrimaryProvider.TVDB, "tvdb:${targetParsed.value}")
             AnimeIdScheme.KITSU -> builder.putIfAbsent(MetadataPrimaryProvider.KITSU, "kitsu:${targetParsed.value}")
             AnimeIdScheme.IMDB -> builder.putIfAbsent(MetadataPrimaryProvider.IMDB, targetParsed.value.canonicalImdbTarget() ?: targetParsed.value)
-            else -> builder.putIfAbsent(provider, targetId)
+            AnimeIdScheme.UNKNOWN -> builder.putIfAbsent(provider, targetId)
+            else -> Unit
         }
 
         val originalParsed = MetadataIdParser.parse(normalized.originalContentId)
@@ -461,10 +492,10 @@ class MetadataRouter @Inject constructor(
         }
 
         val providerHasNativeTarget = when (provider) {
-            MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TMDB)
-            MetadataPrimaryProvider.TVDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
-            MetadataPrimaryProvider.KITSU -> builder.containsKey(MetadataPrimaryProvider.KITSU)
-            MetadataPrimaryProvider.IMDB -> builder.containsKey(MetadataPrimaryProvider.IMDB)
+            MetadataPrimaryProvider.TMDB -> builder[MetadataPrimaryProvider.TMDB].hasNativeScheme(AnimeIdScheme.TMDB)
+            MetadataPrimaryProvider.TVDB -> builder[MetadataPrimaryProvider.TVDB].hasNativeScheme(AnimeIdScheme.TVDB)
+            MetadataPrimaryProvider.KITSU -> builder[MetadataPrimaryProvider.KITSU].hasNativeScheme(AnimeIdScheme.KITSU)
+            MetadataPrimaryProvider.IMDB -> builder[MetadataPrimaryProvider.IMDB].hasNativeScheme(AnimeIdScheme.IMDB)
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL -> builder.containsKey(provider)
             // RPDB and TOP_POSTERS are artwork-only providers — not used in metadata routing target resolution.
@@ -477,12 +508,19 @@ class MetadataRouter @Inject constructor(
             MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
             else -> false
         }
+        val tmdbSeriesRouteMissingNativeTarget = provider == MetadataPrimaryProvider.TMDB &&
+            (normalized.contentType == ContentType.SERIES || normalized.contentType == ContentType.TV) &&
+            !providerHasNativeTarget
 
         return TargetIdBuildResult(
             targetIds = builder.toMap(),
-            requiresIdentityResolution = !providerHasNativeTarget && canResolveThroughKnownCrossProviderTarget
+            requiresIdentityResolution = !providerHasNativeTarget &&
+                (canResolveThroughKnownCrossProviderTarget || tmdbSeriesRouteMissingNativeTarget)
         )
     }
+
+    private fun String?.hasNativeScheme(scheme: AnimeIdScheme): Boolean =
+        this?.let { MetadataIdParser.parse(it).scheme == scheme } == true
 
     private fun String.numericProviderTarget(prefix: String): String? {
         val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
