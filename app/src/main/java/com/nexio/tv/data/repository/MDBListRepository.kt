@@ -74,6 +74,7 @@ class MDBListRepository @Inject constructor(
     private enum class ProviderType(val apiValue: String) {
         TRAKT("trakt"),
         IMDB("imdb"),
+        MAL("mal"),
         TMDB("tmdb"),
         LETTERBOXD("letterboxd"),
         TOMATOES("tomatoes"),
@@ -109,7 +110,7 @@ class MDBListRepository @Inject constructor(
         val apiKey = settings.apiKey.trim()
         if (apiKey.isBlank()) return null
 
-        val enabledProviders = enabledProviders(settings)
+        val enabledProviders = enabledProviders(settings, meta, fallbackItemType)
         if (enabledProviders.isEmpty()) return null
 
         return getRatingsForMeta(
@@ -396,12 +397,18 @@ class MDBListRepository @Inject constructor(
         return deferred.await()
     }
 
-    private fun enabledProviders(settings: MDBListSettings): List<ProviderType> = buildList {
+    private fun enabledProviders(settings: MDBListSettings, meta: Meta, fallbackItemType: String): List<ProviderType> = buildList {
+        if (isAnime(meta, fallbackItemType)) add(ProviderType.MAL)
         if (settings.showTmdb) add(ProviderType.TMDB)
         if (settings.showLetterboxd) add(ProviderType.LETTERBOXD)
         if (settings.showTomatoes) add(ProviderType.TOMATOES)
         if (settings.showMetacritic) add(ProviderType.METACRITIC)
     }
+
+    private fun isAnime(meta: Meta, fallbackItemType: String): Boolean =
+        fallbackItemType.equals("anime", ignoreCase = true) ||
+            meta.rawType.equals("anime", ignoreCase = true) ||
+            meta.apiType.equals("anime", ignoreCase = true)
 
     private suspend fun resolveRatingLookupIdentity(
         meta: Meta,
@@ -410,7 +417,7 @@ class MDBListRepository @Inject constructor(
         mediaType: String,
         imdbIdOverride: String?
     ): RatingLookupIdentity? {
-        if (fallbackItemType.equals("anime", ignoreCase = true) || meta.apiType.equals("anime", ignoreCase = true)) {
+        if (isAnime(meta, fallbackItemType)) {
             val imdbId = extractCanonicalImdbId(imdbIdOverride)
                 ?: extractCanonicalImdbId(meta.id)
                 ?: extractCanonicalImdbId(fallbackItemId)
@@ -513,6 +520,7 @@ class MDBListRepository @Inject constructor(
 
 private val MDBLIST_ALLOWED_TITLE_RATING_SOURCES = setOf(
     "tmdb",
+    "mal",
     "letterboxd",
     "tomatoes",
     "metacritic"
@@ -524,6 +532,7 @@ private fun com.nexio.tv.domain.model.MDBListRatings.withSource(
 ): com.nexio.tv.domain.model.MDBListRatings {
     return when (source) {
         "tmdb" -> copy(tmdb = rating)
+        "mal" -> copy(mal = rating)
         "letterboxd" -> copy(letterboxd = rating)
         "tomatoes" -> copy(tomatoes = rating)
         "metacritic" -> copy(metacritic = rating)

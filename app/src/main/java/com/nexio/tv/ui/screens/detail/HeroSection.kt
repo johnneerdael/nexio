@@ -58,6 +58,9 @@ import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.RatingDisplayFormatter
+import com.nexio.tv.domain.model.RatingValueValidator
+import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
@@ -72,6 +75,13 @@ import com.nexio.tv.core.artwork.toCoilModelOrNull
 import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 
 private const val HERO_DESCRIPTION_MAX_LINES = 6
+
+internal data class HeroRatingRowItem(
+    val provider: String,
+    val logoRes: Int,
+    val rating: Double,
+    val wideLogo: Boolean = false
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -286,8 +296,19 @@ internal fun HeroContentSection(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                if (mdbListRatings?.isEmpty() == false) {
-                    MDBListRatingsRow(ratings = mdbListRatings)
+                val groupedImdbRating = remember(resolvedDetail?.rating, meta.imdbRating, meta.ratingSource) {
+                    resolveGroupedHeroImdbRating(
+                        resolvedRating = resolvedDetail?.rating,
+                        fallbackRating = meta.imdbRating,
+                        fallbackSource = meta.ratingSource
+                    )
+                }
+                val hasGroupedRatings = groupedImdbRating != null || mdbListRatings?.isEmpty() == false
+                if (hasGroupedRatings) {
+                    MDBListRatingsRow(
+                        ratings = mdbListRatings,
+                        imdbRating = groupedImdbRating
+                    )
                     Spacer(modifier = Modifier.height(14.dp))
                 }
 
@@ -312,7 +333,11 @@ internal fun HeroContentSection(
                     )
                 }
 
-                MetaInfoRow(meta = meta, resolvedDetail = resolvedDetail, hideImdbRating = hideMetaInfoImdb)
+                MetaInfoRow(
+                    meta = meta,
+                    resolvedDetail = resolvedDetail,
+                    hideImdbRating = hideMetaInfoImdb || groupedImdbRating != null
+                )
             }
         }
     }
@@ -832,49 +857,49 @@ private fun MetaInfoRow(
 }
 
 @Composable
-private fun MDBListRatingsRow(ratings: MDBListRatings) {
+private fun MDBListRatingsRow(
+    ratings: MDBListRatings?,
+    imdbRating: Double?
+) {
     val context = LocalContext.current
-    val items = remember(ratings) {
-        listOf(
-            Triple("trakt", com.nexio.tv.R.raw.mdblist_trakt, ratings.trakt),
-            Triple("imdb", com.nexio.tv.R.raw.imdb_logo_2016, ratings.imdb),
-            Triple("tmdb", com.nexio.tv.R.raw.mdblist_tmdb, ratings.tmdb),
-            Triple("letterboxd", com.nexio.tv.R.raw.mdblist_letterboxd, ratings.letterboxd),
-            Triple("tomatoes", com.nexio.tv.R.raw.mdblist_tomatoes, ratings.tomatoes)
-        ).filter { it.third != null }
+    val items = remember(ratings, imdbRating) {
+        resolveHeroRatingsRowItems(ratings = ratings, imdbRating = imdbRating)
     }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        items.forEach { (provider, logoRes, rating) ->
-            val resolvedRating = rating ?: return@forEach
+        items.forEach { item ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val model = remember(context, logoRes) {
+                val model = remember(context, item.logoRes) {
                     ImageRequest.Builder(context)
-                        .data(logoRes)
+                        .data(item.logoRes)
                         .decoderFactory(SvgDecoder.Factory())
                         .build()
                 }
                 AsyncImage(
                     model = model,
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
+                    modifier = if (item.wideLogo) {
+                        Modifier.width(50.dp).height(24.dp)
+                    } else {
+                        Modifier.size(24.dp)
+                    },
                     contentScale = ContentScale.Fit
                 )
                 Text(
-                    text = formatMDBListRating(provider, resolvedRating),
+                    text = formatMDBListRating(item.provider, item.rating),
                     style = MaterialTheme.typography.labelMedium,
                     color = NexioTheme.extendedColors.textSecondary
                 )
             }
         }
 
-        ratings.audience?.let { rating ->
+        ratings?.audience?.let { rating ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -892,7 +917,7 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
             }
         }
 
-        ratings.metacritic?.let { rating ->
+        ratings?.metacritic?.let { rating ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -912,9 +937,47 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
     }
 }
 
+internal fun resolveHeroRatingsRowItems(
+    ratings: MDBListRatings?,
+    imdbRating: Double?
+): List<HeroRatingRowItem> {
+    return listOfNotNull(
+        (imdbRating ?: ratings?.imdb)?.let {
+            HeroRatingRowItem("imdb", com.nexio.tv.R.raw.imdb_logo_2016, it, wideLogo = true)
+        },
+        ratings?.mal?.let {
+            HeroRatingRowItem("mal", com.nexio.tv.R.raw.mal_logo, it, wideLogo = true)
+        },
+        ratings?.trakt?.let {
+            HeroRatingRowItem("trakt", com.nexio.tv.R.raw.mdblist_trakt, it)
+        },
+        ratings?.tmdb?.let {
+            HeroRatingRowItem("tmdb", com.nexio.tv.R.raw.mdblist_tmdb, it)
+        },
+        ratings?.letterboxd?.let {
+            HeroRatingRowItem("letterboxd", com.nexio.tv.R.raw.mdblist_letterboxd, it)
+        },
+        ratings?.tomatoes?.let {
+            HeroRatingRowItem("tomatoes", com.nexio.tv.R.raw.mdblist_tomatoes, it)
+        }
+    )
+}
+
+internal fun resolveGroupedHeroImdbRating(
+    resolvedRating: TitleRating?,
+    fallbackRating: Float?,
+    fallbackSource: TitleRatingSource?
+): Double? {
+    val rating = resolvedRating ?: fallbackRating?.let {
+        TitleRating(value = it.toDouble(), source = fallbackSource.orDefault())
+    }
+    if (rating?.source != TitleRatingSource.IMDB) return null
+    return RatingValueValidator.sanitizeTitleRating(rating.value)
+}
+
 private fun formatMDBListRating(provider: String, rating: Double): String {
     return when (provider) {
-        "imdb", "tmdb", "letterboxd" -> RatingDisplayFormatter.formatTitleRating(rating)
+        "imdb", "mal", "tmdb", "letterboxd" -> RatingDisplayFormatter.formatTitleRating(rating)
         else -> RatingDisplayFormatter.formatPercentRating(rating)
     }
 }

@@ -99,6 +99,47 @@ class MDBListTitleRatingsTest {
     }
 
     @Test
+    fun `getRatingsForMeta requests and maps MAL for anime detail`() = runTest {
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
+        val request = slot<com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto>()
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showMetacritic = false
+            )
+        )
+        coEvery {
+            api.getRating("show", "mal", "mdb-key", capture(request))
+        } returns Response.success(
+            MDBListRatingResponseDto(
+                ratings = listOf(MDBListRatingItemDto(id = "tt12343534", rating = 8.7))
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("tt12343534", ContentType.SERIES).copy(rawType = "anime"),
+            fallbackItemId = "tt12343534",
+            fallbackItemType = "anime"
+        )
+
+        assertEquals(8.7, result?.ratings?.mal ?: 0.0, 0.0)
+        assertEquals(listOf("tt12343534"), request.captured.ids)
+        assertEquals("imdb", request.captured.provider)
+    }
+
+    @Test
     fun `enrichPreview only applies MDBList tomatoes and keeps IMDb rating untouched`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()

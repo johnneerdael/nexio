@@ -206,6 +206,7 @@ class MDBListIntegrationProvider @Inject constructor(
                 val ratings = MDBListRatings(
                     trakt = ratingsByProvider["trakt"],
                     imdb = ratingsByProvider["imdb"],
+                    mal = ratingsByProvider["mal"],
                     tmdb = ratingsByProvider["tmdb"],
                     letterboxd = ratingsByProvider["letterboxd"],
                     tomatoes = ratingsByProvider["tomatoes"],
