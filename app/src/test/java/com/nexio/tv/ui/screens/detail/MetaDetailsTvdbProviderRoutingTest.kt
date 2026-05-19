@@ -381,7 +381,7 @@ class MetaDetailsTvdbProviderRoutingTest {
             titleRatingOverrideRepository.titleRatingCandidates(any<Meta>(), "tt0944947", "series", any(), any())
         }
         coVerify {
-            mdbListRepository.getRatingsForMeta(any(), "tt0944947", "series")
+            mdbListRepository.getRatingsForMeta(any(), "tmdb:1399", "series")
         }
         coVerify {
             episodeRatingsSelectionRepository.episodeRatingCandidates(any(), "tt0944947", "series", mapOf(1 to setOf(1)))

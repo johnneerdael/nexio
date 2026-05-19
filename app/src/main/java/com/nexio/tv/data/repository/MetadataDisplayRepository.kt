@@ -161,6 +161,12 @@ class MetadataDisplayRepository @Inject constructor(
         }
     }
 
+    suspend fun resolveDetailRatings(
+        context: DetailRatingDisplayContext,
+        identity: ContentIdentity
+    ): ResolvedDetailRatingDisplay =
+        resolveRatings(context, identity) ?: context.toFallbackRatingDisplay()
+
     private fun MetadataResolutionResult.toContentIdentity(): ContentIdentity {
         val (provider, id) = resolvedDocument.canonicalId.parseCanonicalIdentity()
 

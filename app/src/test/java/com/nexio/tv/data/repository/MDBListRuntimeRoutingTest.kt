@@ -70,7 +70,10 @@ class MDBListRuntimeRoutingTest {
     @Test
     fun `mdblist repository uses integration provider runtime keys for ratings`() = runTest {
         val runtime = RecordingIntegrationRuntime(
-            successValue = mapOf("550" to 8.8)
+            successValue = MDBListRatingsResult(
+                ratings = MDBListRatings(tmdb = 8.8),
+                hasImdbRating = false
+            )
         )
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()
@@ -99,7 +102,7 @@ class MDBListRuntimeRoutingTest {
         )
 
         assertEquals(8.8, result?.ratings?.tmdb ?: 0.0, 0.0)
-        assertTrue(runtime.callSpecs.any { it.operationKey.startsWith("mdblist.rating_batch:movie:tmdb:tmdb:") })
+        assertTrue(runtime.specs.any { it.cacheKey.orEmpty().startsWith("mdblist:movie:tmdb:550:") })
         coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
     }
 

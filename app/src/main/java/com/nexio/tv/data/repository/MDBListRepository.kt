@@ -156,23 +156,13 @@ class MDBListRepository @Inject constructor(
         val deferred = inFlightMutex.withLock {
             inFlight[cacheKey] ?: scope.async {
                 try {
-                    val result = getTitleRatings(
-                        requests = listOf(
-                            MDBListTitleRatingRequest(
-                                stableId = ratingIdentity.id.toString(),
-                                mediaType = mediaType,
-                                requestProvider = ratingIdentity.provider,
-                                ratingSources = providers.map { it.apiValue }
-                            )
-                        ),
+                    val result = integrationProvider.fetchRatings(
+                        ratingId = ratingIdentity.id,
+                        requestProvider = ratingIdentity.provider,
+                        mediaType = mediaType,
                         apiKey = apiKey,
-                        cacheOnly = false
-                    ).values.firstOrNull()?.let { ratings ->
-                        MDBListRatingsResult(
-                            ratings = ratings,
-                            hasImdbRating = false
-                        )
-                    }
+                        providers = providers.map { it.apiValue }
+                    )
                     result.also {
                         cache[cacheKey] = CacheEntry(
                             result = it,

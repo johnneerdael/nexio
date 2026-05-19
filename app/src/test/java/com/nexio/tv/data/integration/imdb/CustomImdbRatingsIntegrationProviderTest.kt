@@ -2,10 +2,12 @@ package com.nexio.tv.data.integration.imdb
 
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
+import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.RecordingIntegrationRuntime
 import com.nexio.tv.data.integration.imdb.transport.CustomImdbRatingsTransport
 import com.nexio.tv.data.integration.imdb.transport.CustomImdbTransportResult
 import io.mockk.coEvery
@@ -14,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -21,6 +24,32 @@ import org.junit.Test
 import java.io.IOException
 
 class CustomImdbRatingsIntegrationProviderTest {
+
+    @Test
+    fun `execute caches episode bulk requests for seven days`() = runTest {
+        val runtime = RecordingIntegrationRuntime(successValue = """{"results":[]}""")
+        val transport = mockk<CustomImdbRatingsTransport>(relaxed = true)
+        val request = Request.Builder()
+            .url("https://ratings.example.com/v1/ratings/bulk?episodes=true")
+            .post("""{"items":[{"imdbId":"tt0944947"}]}""".toRequestBody())
+            .build()
+
+        val provider = CustomImdbRatingsIntegrationProvider(runtime, transport)
+        val result = provider.execute(baseUrl = "https://ratings.example.com", request = request)
+
+        assertTrue(result is IntegrationCallResult.Success)
+        assertEquals("""{"results":[]}""", (result as IntegrationCallResult.Success).value.body)
+        assertTrue(runtime.callSpecs.isEmpty())
+        val spec = runtime.specs.single()
+        assertEquals(IntegrationProvider.CUSTOM_IMDB, spec.provider)
+        assertTrue(spec.cacheKey.orEmpty().startsWith("custom-imdb:episode-ratings:"))
+        val cachePolicy = spec.cachePolicy
+        assertTrue(cachePolicy is IntegrationCachePolicy.CacheFirst)
+        cachePolicy as IntegrationCachePolicy.CacheFirst
+        assertEquals(7L * 24L * 60L * 60L * 1000L, cachePolicy.ttlMs)
+        assertEquals(cachePolicy.ttlMs, cachePolicy.staleAfterExpiryMs)
+        coVerify(exactly = 0) { transport.execute(any()) }
+    }
 
     @Test
     fun `execute runs OkHttp inside runtime call and maps success payload`() = runTest {

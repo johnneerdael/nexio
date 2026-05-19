@@ -1109,6 +1109,9 @@ class MetaDetailsViewModel @Inject constructor(
             )
             enrichment = enrichment.copy(meta = episodeHydratedMeta)
         }
+        enrichment = enrichment.copy(
+            ratingDisplay = resolveDetailOpenRatingDisplay(enrichment)
+        )
         enrichment.resolvedDetail?.let(::applyResolvedDetailState)
         applyMeta(enrichment.meta)
         applyRatingDisplay(enrichment.meta.id, enrichment.ratingDisplay)
@@ -1139,6 +1142,42 @@ class MetaDetailsViewModel @Inject constructor(
         if (!blockedForMandatoryEpisodes) {
             loadEpisodeMetadataAsync(enrichment)
         }
+    }
+
+    private suspend fun resolveDetailOpenRatingDisplay(
+        enrichment: DetailMetadataEnrichment
+    ): ResolvedDetailRatingDisplay {
+        val identity = enrichment.resolvedDetail?.identity ?: return enrichment.ratingDisplay
+        val episodesBySeason = enrichment.meta.episodesBySeason()
+        if (episodesBySeason.isEmpty()) return enrichment.ratingDisplay
+
+        val resolved = runCatching {
+            metadataDisplayRepository.resolveDetailRatings(
+                context = DetailRatingDisplayContext(
+                    meta = enrichment.meta,
+                    fallbackItemId = resolveRatingsFallbackItemId(enrichment.meta, enrichment.tvEnrichment),
+                    fallbackItemType = itemType.ifBlank { enrichment.tmdbContentType.toApiString() },
+                    episodesBySeason = episodesBySeason
+                ),
+                identity = identity
+            )
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            Log.w(TAG, "Failed to resolve detail-open ratings for ${enrichment.meta.id}: ${error.message}", error)
+            return enrichment.ratingDisplay
+        }
+
+        return resolved.copy(
+            titleRating = resolved.titleRating ?: enrichment.ratingDisplay.titleRating,
+            mdbListRatings = resolved.mdbListRatings ?: enrichment.ratingDisplay.mdbListRatings,
+            showMdbListImdb = resolved.showMdbListImdb || enrichment.ratingDisplay.showMdbListImdb,
+            episodeRatings = if (resolved.episodeRatings.isNotEmpty()) {
+                resolved.episodeRatings
+            } else {
+                enrichment.ratingDisplay.episodeRatings
+            },
+            episodeRatingsError = resolved.episodeRatingsError ?: enrichment.ratingDisplay.episodeRatingsError
+        )
     }
 
     private fun shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment: DetailMetadataEnrichment): Boolean =

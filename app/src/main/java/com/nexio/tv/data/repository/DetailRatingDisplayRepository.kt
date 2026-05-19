@@ -80,7 +80,9 @@ class DetailRatingDisplayRepository private constructor(
             runOptional {
                 availableDeps.mdbListRepository.getRatingsForMeta(
                     meta = meta,
-                    fallbackItemId = ratingFallbackItemId,
+                    fallbackItemId = providerIds.tmdb?.takeIf { it.isNotBlank() }?.let { "tmdb:$it" }
+                        ?: providerIds.imdb?.takeIf { it.isNotBlank() }?.let { "imdb:$it" }
+                        ?: ratingFallbackItemId,
                     fallbackItemType = fallbackItemType
                 )
             }
