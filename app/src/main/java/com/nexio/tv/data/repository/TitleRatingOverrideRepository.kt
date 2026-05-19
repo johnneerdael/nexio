@@ -17,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class TitleRatingOverrideRepository @Inject constructor(
     private val customImdbTitleRatingsRepository: CustomImdbTitleRatingsRepository,
+    @Suppress("UNUSED_PARAMETER")
     private val mdbListRepository: MDBListRepository
 ) {
     suspend fun titleRatingCandidates(
@@ -37,16 +38,6 @@ class TitleRatingOverrideRepository @Inject constructor(
                 )
         }
         customRating?.toRatingCandidate(SourceRole.CUSTOM_IMDB, "IMDB")?.let(candidates::add)
-
-        val mdblistRating = runOptional {
-            mdbListRepository.getRatingsForMeta(
-                meta = preview.toRatingsMeta(),
-                fallbackItemId = preview.id,
-                fallbackItemType = preview.apiType,
-                imdbIdOverride = imdbId
-            )?.ratings?.imdb
-        }
-        mdblistRating?.toRatingCandidate(SourceRole.MDBLIST, "MDBLIST")?.let(candidates::add)
 
         return candidates
     }
@@ -71,16 +62,6 @@ class TitleRatingOverrideRepository @Inject constructor(
                 )
         }
         customRating?.toRatingCandidate(SourceRole.CUSTOM_IMDB, "IMDB")?.let(candidates::add)
-
-        val mdblistRating = runOptional {
-            mdbListRepository.getRatingsForMeta(
-                meta = meta,
-                fallbackItemId = fallbackItemId,
-                fallbackItemType = fallbackItemType,
-                imdbIdOverride = imdbId
-            )?.ratings?.imdb
-        }
-        mdblistRating?.toRatingCandidate(SourceRole.MDBLIST, "MDBLIST")?.let(candidates::add)
 
         return candidates
     }

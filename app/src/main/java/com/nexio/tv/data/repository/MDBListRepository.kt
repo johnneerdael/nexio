@@ -11,26 +11,21 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.Video
-import com.nexio.tv.domain.model.orDefault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 internal const val EPISODE_RATINGS_COMPLETE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 internal const val EPISODE_RATINGS_RETRY_TTL_MS = 30L * 60L * 1000L
+internal const val MDBLIST_TITLE_RATINGS_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 
 @Singleton
 class MDBListRepository @Inject constructor(
@@ -58,7 +53,13 @@ class MDBListRepository @Inject constructor(
         METACRITIC("metacritic")
     }
 
-    private val cacheTtlMs = 30L * 60L * 1000L
+    private data class RatingLookupIdentity(
+        val provider: String,
+        val id: Any,
+        val cacheToken: String
+    )
+
+    private val cacheTtlMs = MDBLIST_TITLE_RATINGS_TTL_MS
     private val cache = ConcurrentHashMap<String, CacheEntry>()
     private val inFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<MDBListRatingsResult?>>()
     private val inFlightMutex = Mutex()
@@ -103,12 +104,17 @@ class MDBListRepository @Inject constructor(
         if (providers.isEmpty()) return null
 
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
-        val imdbId = extractCanonicalImdbId(imdbIdOverride)
-            ?: resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType)
+        val ratingIdentity = resolveRatingLookupIdentity(
+            meta = meta,
+            fallbackItemId = fallbackItemId,
+            fallbackItemType = fallbackItemType,
+            mediaType = mediaType,
+            imdbIdOverride = imdbIdOverride
+        )
             ?: return null
 
         val providerHash = providers.map { it.apiValue }.sorted().joinToString(",")
-        val cacheKey = "$mediaType:$imdbId:$providerHash:${apiKey.hashCode()}"
+        val cacheKey = "$mediaType:${ratingIdentity.cacheToken}:$providerHash:${apiKey.hashCode()}"
         val now = System.currentTimeMillis()
 
         cache[cacheKey]?.let { cached ->
@@ -122,7 +128,8 @@ class MDBListRepository @Inject constructor(
             inFlight[cacheKey] ?: scope.async {
                 try {
                     integrationProvider.fetchRatings(
-                        imdbId = imdbId,
+                        ratingId = ratingIdentity.id,
+                        requestProvider = ratingIdentity.provider,
                         mediaType = mediaType,
                         apiKey = apiKey,
                         providers = providers.map { it.apiValue }
@@ -152,9 +159,8 @@ class MDBListRepository @Inject constructor(
         val apiKey = settings.apiKey.trim()
         if (apiKey.isBlank()) return preview
 
-        val needsImdb = settings.showImdb
         val needsTomatoes = preview.tomatoesRating == null && settings.showTomatoes
-        if (!needsImdb && !needsTomatoes) return preview
+        if (!needsTomatoes) return preview
 
         val result = getRatingsForMeta(
             meta = preview.toRatingsMeta(),
@@ -162,15 +168,12 @@ class MDBListRepository @Inject constructor(
             fallbackItemType = preview.apiType,
             apiKey = apiKey,
             providers = buildList {
-                if (needsImdb) add(ProviderType.IMDB)
                 if (needsTomatoes) add(ProviderType.TOMATOES)
             },
             imdbIdOverride = imdbIdOverride
         ) ?: return preview
 
         return preview.copy(
-            imdbRating = result.ratings.imdb?.toFloat() ?: preview.imdbRating,
-            ratingSource = if (result.ratings.imdb != null) TitleRatingSource.IMDB else preview.ratingSource.orDefault(),
             tomatoesRating = result.ratings.tomatoes ?: preview.tomatoesRating
         )
     }
@@ -181,37 +184,7 @@ class MDBListRepository @Inject constructor(
         fallbackItemType: String,
         episodeTmdbIds: Map<Pair<Int, Int>, Int>
     ): Map<Pair<Int, Int>, Double> {
-        if (episodeTmdbIds.isEmpty()) return emptyMap()
-
-        val settings = settingsDataStore.settings.first()
-        if (!settings.enabled) return emptyMap()
-
-        val apiKey = settings.apiKey.trim()
-        if (apiKey.isBlank()) return emptyMap()
-
-        val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
-        if (mediaType != "show") return emptyMap()
-        val cacheNamespace = episodeRatingsCacheNamespace(meta, fallbackItemId)
-        val semaphore = Semaphore(3)
-
-        return coroutineScope {
-            episodeTmdbIds.entries
-                .groupBy(keySelector = { it.key.first }, valueTransform = { it.key to it.value })
-                .map { (season, entries) ->
-                    async {
-                        semaphore.withPermit {
-                            getEpisodeRatingsForSeason(
-                                cacheNamespace = cacheNamespace,
-                                season = season,
-                                apiKey = apiKey,
-                                episodeTmdbIds = entries.toMap()
-                            )
-                        }
-                    }
-                }
-                .awaitAll()
-                .fold(emptyMap<Pair<Int, Int>, Double>()) { acc, seasonRatings -> acc + seasonRatings }
-        }
+        return emptyMap()
     }
 
     private suspend fun getEpisodeRatingsForSeason(
@@ -262,13 +235,34 @@ class MDBListRepository @Inject constructor(
     }
 
     private fun enabledProviders(settings: MDBListSettings): List<ProviderType> = buildList {
-        if (settings.showTrakt) add(ProviderType.TRAKT)
-        if (settings.showImdb) add(ProviderType.IMDB)
         if (settings.showTmdb) add(ProviderType.TMDB)
         if (settings.showLetterboxd) add(ProviderType.LETTERBOXD)
         if (settings.showTomatoes) add(ProviderType.TOMATOES)
-        if (settings.showAudience) add(ProviderType.AUDIENCE)
         if (settings.showMetacritic) add(ProviderType.METACRITIC)
+    }
+
+    private suspend fun resolveRatingLookupIdentity(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        mediaType: String,
+        imdbIdOverride: String?
+    ): RatingLookupIdentity? {
+        if (fallbackItemType.equals("anime", ignoreCase = true) || meta.apiType.equals("anime", ignoreCase = true)) {
+            val imdbId = extractCanonicalImdbId(imdbIdOverride)
+                ?: extractCanonicalImdbId(meta.id)
+                ?: extractCanonicalImdbId(fallbackItemId)
+                ?: return null
+            return RatingLookupIdentity(provider = "imdb", id = imdbId, cacheToken = "imdb:$imdbId")
+        }
+
+        val tmdbId = extractTmdbId(meta.id)
+            ?: extractTmdbId(fallbackItemId)
+            ?: meta.id.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
+            ?: fallbackItemId.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
+            ?: return null
+
+        return RatingLookupIdentity(provider = "tmdb", id = tmdbId, cacheToken = "tmdb:$tmdbId")
     }
 
     private suspend fun resolveImdbId(

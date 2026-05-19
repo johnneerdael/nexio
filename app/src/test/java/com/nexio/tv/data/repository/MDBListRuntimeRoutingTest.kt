@@ -71,8 +71,8 @@ class MDBListRuntimeRoutingTest {
     fun `mdblist repository uses integration provider runtime keys for ratings`() = runTest {
         val runtime = RecordingIntegrationRuntime(
             successValue = MDBListRatingsResult(
-                ratings = MDBListRatings(imdb = 8.8),
-                hasImdbRating = true
+                ratings = MDBListRatings(tmdb = 8.8),
+                hasImdbRating = false
             )
         )
         val api = mockk<MDBListApi>()
@@ -87,7 +87,7 @@ class MDBListRuntimeRoutingTest {
                 apiKey = "mdb-key",
                 showTrakt = false,
                 showImdb = true,
-                showTmdb = false,
+                showTmdb = true,
                 showLetterboxd = false,
                 showTomatoes = false,
                 showAudience = false,
@@ -96,53 +96,35 @@ class MDBListRuntimeRoutingTest {
         )
 
         val result = repository.getRatingsForMeta(
-            meta = stubMeta("tt0137523", ContentType.MOVIE),
-            fallbackItemId = "tt0137523",
+            meta = stubMeta("tmdb:550", ContentType.MOVIE),
+            fallbackItemId = "tmdb:550",
             fallbackItemType = "movie"
         )
 
-        assertEquals(8.8, result?.ratings?.imdb ?: 0.0, 0.0)
-        assertTrue(runtime.keys.any { it.startsWith("mdblist:movie:tt0137523:") })
+        assertEquals(8.8, result?.ratings?.tmdb ?: 0.0, 0.0)
+        assertTrue(runtime.keys.any { it.startsWith("mdblist:movie:tmdb:550:") })
         assertEquals(
-            IntegrationCacheOwnership.Media("movie:imdb:tt0137523"),
+            IntegrationCacheOwnership.Media("movie:tmdb:550"),
             runtime.specs.single().ownership
         )
         coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `episode ratings survive real runtime cache round trip`() = runTest {
+    fun `episode ratings are disabled because custom imdb owns episode ratings`() = runTest {
         val fixture = byteArrayRuntimeFixture()
         val api = mockk<MDBListApi>()
         val provider = MDBListIntegrationProvider(fixture.runtime, api)
 
-        coEvery {
-            api.getRating("show", "imdb", "mdb-key", any())
-        } returns Response.success(
-            MDBListRatingResponseDto(
-                ratings = listOf(
-                    MDBListRatingItemDto(id = "101", rating = 8.1),
-                    MDBListRatingItemDto(id = "102", rating = 7.9)
-                )
-            )
-        )
-
-        val first = provider.fetchEpisodeRatingsForSeason(
-            cacheNamespace = "tmdb:42",
-            season = 1,
-            apiKey = "mdb-key",
-            episodeTmdbIds = mapOf((1 to 1) to 101, (1 to 2) to 102)
-        )
-        val second = provider.fetchEpisodeRatingsForSeason(
+        val result = provider.fetchEpisodeRatingsForSeason(
             cacheNamespace = "tmdb:42",
             season = 1,
             apiKey = "mdb-key",
             episodeTmdbIds = mapOf((1 to 1) to 101, (1 to 2) to 102)
         )
 
-        assertEquals(mapOf((1 to 1) to 8.1, (1 to 2) to 7.9), first)
-        assertEquals(first, second)
-        coVerify(exactly = 1) { api.getRating("show", "imdb", "mdb-key", any()) }
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), result)
+        coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
     }
 
     @Test
@@ -151,24 +133,25 @@ class MDBListRuntimeRoutingTest {
         val provider = MDBListIntegrationProvider(com.nexio.tv.core.integration.passThroughTestRuntime(), api)
 
         coEvery {
-            api.getRating("movie", "imdb", "mdb-key", any())
-        } throws java.io.IOException("imdb unavailable")
+            api.getRating("movie", "letterboxd", "mdb-key", any())
+        } throws java.io.IOException("letterboxd unavailable")
         coEvery {
             api.getRating("movie", "tmdb", "mdb-key", any())
         } returns Response.success(
             MDBListRatingResponseDto(
-                ratings = listOf(MDBListRatingItemDto(id = "tt0137523", rating = 8.4))
+                ratings = listOf(MDBListRatingItemDto(id = 550, rating = 8.4))
             )
         )
 
         val result = provider.fetchRatings(
-            imdbId = "tt0137523",
+            ratingId = 550,
+            requestProvider = "tmdb",
             mediaType = "movie",
             apiKey = "mdb-key",
-            providers = listOf("imdb", "tmdb")
+            providers = listOf("letterboxd", "tmdb")
         )
 
-        assertEquals(null, result?.ratings?.imdb)
+        assertEquals(null, result?.ratings?.letterboxd)
         assertEquals(8.4, result?.ratings?.tmdb ?: 0.0, 0.0)
     }
 

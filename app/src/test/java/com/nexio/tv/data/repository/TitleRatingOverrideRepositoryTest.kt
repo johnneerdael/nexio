@@ -8,8 +8,6 @@ import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
 import com.nexio.tv.core.metadata.router.resolver.RatingResolver
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.MDBListRatings
-import com.nexio.tv.domain.model.MDBListRatingsResult
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
@@ -27,7 +25,7 @@ import org.junit.Test
 
 class TitleRatingOverrideRepositoryTest {
     @Test
-    fun `preview candidate source emits custom imdb and mdblist without selecting a winner`() = runTest {
+    fun `preview candidate source emits custom imdb without querying mdblist`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
         val repository = TitleRatingOverrideRepository(custom, mdb)
@@ -36,18 +34,15 @@ class TitleRatingOverrideRepositoryTest {
         coEvery {
             custom.getTitleRating("tt0944947", "tt0944947", ContentType.SERIES, "series")
         } returns 9.2
-        coEvery {
-            mdb.getRatingsForMeta(any(), "tt0944947", "series", imdbIdOverride = null)
-        } returns MDBListRatingsResult(MDBListRatings(imdb = 8.8), hasImdbRating = true)
-
         val candidates = repository.titleRatingCandidates(preview)
 
-        assertEquals(listOf(SourceRole.CUSTOM_IMDB, SourceRole.MDBLIST), candidates.map { it.sourceRole })
-        assertEquals(listOf(9.2, 8.8), candidates.map { it.value })
+        assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
+        assertEquals(listOf(9.2), candidates.map { it.value })
+        coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `preview candidate source uses stable bundle imdb before inference and passes it to mdblist`() = runTest {
+    fun `preview candidate source uses stable bundle imdb before inference`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
         val repository = TitleRatingOverrideRepository(custom, mdb)
@@ -55,23 +50,18 @@ class TitleRatingOverrideRepositoryTest {
         val stableIds = stableIdBundle(imdbId = "tt0944947")
 
         coEvery { custom.getTitleRatingByImdbId("tt0944947") } returns 8.8
-        coEvery {
-            mdb.getRatingsForMeta(any(), "tmdb:1399", "series", imdbIdOverride = "tt0944947")
-        } returns MDBListRatingsResult(MDBListRatings(imdb = 8.7), hasImdbRating = true)
 
         val candidates = repository.titleRatingCandidates(preview, stableIds)
 
-        assertEquals(listOf(SourceRole.CUSTOM_IMDB, SourceRole.MDBLIST), candidates.map { it.sourceRole })
-        assertEquals(listOf(8.8, 8.7), candidates.map { it.value })
+        assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
+        assertEquals(listOf(8.8), candidates.map { it.value })
         coVerify(exactly = 1) { custom.getTitleRatingByImdbId("tt0944947") }
         coVerify(exactly = 0) { custom.getTitleRating(any(), any(), any(), any()) }
-        coVerify(exactly = 1) {
-            mdb.getRatingsForMeta(any(), "tmdb:1399", "series", imdbIdOverride = "tt0944947")
-        }
+        coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `custom imdb title candidate survives mdblist failure`() = runTest {
+    fun `custom imdb title candidate does not depend on mdblist`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
         val repository = TitleRatingOverrideRepository(custom, mdb)
@@ -80,14 +70,11 @@ class TitleRatingOverrideRepositoryTest {
         coEvery {
             custom.getTitleRating("tt0944947", "tt0944947", ContentType.SERIES, "series")
         } returns 9.2
-        coEvery {
-            mdb.getRatingsForMeta(any(), "tt0944947", "series", imdbIdOverride = null)
-        } throws IllegalStateException("mdblist unavailable")
-
         val candidates = repository.titleRatingCandidates(preview)
 
         assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
         assertEquals(listOf(9.2), candidates.map { it.value })
+        coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
     }
 
     @Test
@@ -101,9 +88,6 @@ class TitleRatingOverrideRepositoryTest {
         coEvery {
             custom.getTitleRating("tmdb:1399", "tt0944947", ContentType.SERIES, "series")
         } returns 8.4
-        coEvery {
-            mdb.getRatingsForMeta(meta, "tt0944947", "series", imdbIdOverride = "tt0944947")
-        } returns MDBListRatingsResult(MDBListRatings(imdb = 8.7), hasImdbRating = true)
 
         val candidates = repository.titleRatingCandidates(
             meta = meta,
@@ -112,12 +96,13 @@ class TitleRatingOverrideRepositoryTest {
             providerIds = ProviderIds(imdb = "tt0944947")
         )
 
-        assertEquals(listOf(SourceRole.CUSTOM_IMDB, SourceRole.MDBLIST), candidates.map { it.sourceRole })
-        assertEquals(listOf(8.4, 8.7), candidates.map { it.value })
+        assertEquals(listOf(SourceRole.CUSTOM_IMDB), candidates.map { it.sourceRole })
+        assertEquals(listOf(8.4), candidates.map { it.value })
+        coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `resolver selects mdblist candidate over preview fallback`() = runTest {
+    fun `resolver selects custom imdb candidate over preview fallback`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
         val repository = TitleRatingOverrideRepository(custom, mdb)
@@ -125,10 +110,7 @@ class TitleRatingOverrideRepositoryTest {
 
         coEvery {
             custom.getTitleRating("tt0944947", "tt0944947", ContentType.SERIES, "series")
-        } returns null
-        coEvery {
-            mdb.getRatingsForMeta(any(), "tt0944947", "series", imdbIdOverride = null)
-        } returns MDBListRatingsResult(MDBListRatings(imdb = 8.9), hasImdbRating = true)
+        } returns 8.9
 
         val resolved = RatingResolver.resolveTitleRating(
             repository.titleRatingCandidates(preview) + RatingCandidate(
@@ -140,7 +122,8 @@ class TitleRatingOverrideRepositoryTest {
         )
 
         assertEquals(8.9, resolved?.value ?: 0.0, 0.0)
-        assertEquals(SourceRole.MDBLIST, resolved?.sourceRole)
+        assertEquals(SourceRole.CUSTOM_IMDB, resolved?.sourceRole)
+        coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
     }
 
     private fun preview(

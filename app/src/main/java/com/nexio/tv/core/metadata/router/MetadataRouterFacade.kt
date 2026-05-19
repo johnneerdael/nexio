@@ -1123,8 +1123,9 @@ class MetadataRouterFacade(
      * TVDB-canonical SERIES rating of `null` over a perfectly-good TMDB rail-preview
      * rating, so home rows showed `imdbRating = null` despite TMDB carrying a value.
      *
-     * MDBList/OMDb/CUSTOM_IMDB ingestion is a follow-up — those candidates are only
-     * available on the detail-screen path today via [DetailRatingDisplayRepository].
+     * MDBList/OMDb/CUSTOM_IMDB ingestion stays on the detail-screen path via
+     * DetailRatingDisplayRepository. Home/catalog metadata hydration must not call
+     * rating integrations.
      */
     private suspend fun applyRatingResolverSelection(
         document: ResolvedMetadataDocument,
@@ -1133,45 +1134,6 @@ class MetadataRouterFacade(
         request: MetadataRequest
     ): ResolvedMetadataDocument {
         val candidates = buildList {
-            // CUSTOM_IMDB candidates from the bulk-IMDB integration.
-            // RatingResolver's precedence ordering is CUSTOM_IMDB → MDBLIST → OMDB →
-            // PRIMARY_PROVIDER → PREVIEW_FALLBACK, so a successful IMDB lookup wins
-            // over an empty TVDB primary or a preview rating from a less-trusted source.
-            // The repository handles the bulk-IMDB API call and response caching;
-            // the imdbId lookup falls through to providerIds.imdb when no
-            // stable-id bundle is in scope.
-            val ratingRepo = titleRatingOverrideRepository
-            val imdbId = request.sourceContext.previewStableIds.imdb
-                ?.takeIf { it.isNotBlank() }
-                ?: (primary?.fields?.get(ResolvedField.REMOTE_IDS)?.value as? Map<*, *>)
-                    ?.get("imdb")
-                    ?.let { it as? Iterable<*> }
-                    ?.firstNotNullOfOrNull { (it as? String)?.trim()?.takeIf(String::isNotBlank) }
-            if (ratingRepo != null && !imdbId.isNullOrBlank()) {
-                runCatching {
-                    val syntheticPreview = MetaPreview(
-                        id = request.contentId,
-                        type = request.contentType,
-                        name = request.sourceContext.addonMetadata?.title ?: request.contentId,
-                        poster = null,
-                        posterShape = com.nexio.tv.domain.model.PosterShape.POSTER,
-                        background = null,
-                        logo = null,
-                        description = null,
-                        releaseInfo = null,
-                        imdbRating = null,
-                        genres = emptyList(),
-                        firstPaintStableIds = request.sourceContext.previewStableIds
-                    )
-                    addAll(
-                        ratingRepo.titleRatingCandidates(
-                            preview = syntheticPreview,
-                            stableIdBundle = null,
-                            providerIds = request.sourceContext.previewStableIds.copy(imdb = imdbId)
-                        )
-                    )
-                }.onFailure { /* tolerate IMDB-API outages; primary/preview candidates still feed the resolver */ }
-            }
             primary?.fields?.get(ResolvedField.RATING)?.value?.toRatingCandidate(
                 sourceRole = com.nexio.tv.core.metadata.router.resolver.SourceRole.PRIMARY_PROVIDER,
                 sourceProvider = primary.provider.name

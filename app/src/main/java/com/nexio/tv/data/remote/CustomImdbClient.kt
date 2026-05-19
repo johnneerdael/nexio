@@ -38,6 +38,7 @@ class OkHttpCustomImdbClient @Inject constructor(
     moshi: Moshi
 ) : CustomImdbClient {
     private val ratingWithEpisodesAdapter = moshi.adapter(RatingWithEpisodes::class.java)
+    private val bulkEpisodeRatingsResponseAdapter = moshi.adapter(BulkEpisodeRatingsResponse::class.java)
     private val bulkRatingsRequestAdapter = moshi.adapter(BulkRatingsRequest::class.java)
     private val bulkRatingsResponseAdapter = moshi.adapter(BulkRatingsResponse::class.java)
     internal var delayMs: suspend (Long) -> Unit = { delay(it) }
@@ -78,10 +79,12 @@ class OkHttpCustomImdbClient @Inject constructor(
         val normalizedTconst = tconst.trim()
         if (baseUrl.isBlank() || apiKey.isBlank() || normalizedTconst.isBlank()) return emptyMap()
 
+        val bodyJson = bulkRatingsRequestAdapter
+            .toJson(BulkRatingsRequest(listOf(normalizedTconst)))
         val request = CustomImdbRatingsRequests.episodeRatings(
             baseUrl = baseUrl,
             apiKey = apiKey,
-            tconst = normalizedTconst
+            bodyJson = bodyJson
         )
 
         return executeWithRateLimitRetry(
@@ -97,7 +100,10 @@ class OkHttpCustomImdbClient @Inject constructor(
             onNetworkError = { emptyMap() },
             onMissing = { emptyMap() }
         ) { response ->
-            val parsed = response.body.parseOrNull(ratingWithEpisodesAdapter)
+            val parsed = response.body.parseOrNull(bulkEpisodeRatingsResponseAdapter)
+                ?.results
+                ?.firstOrNull { it.requestTconst == normalizedTconst || it.episodesParentTconst == normalizedTconst }
+                ?: response.body.parseOrNull(ratingWithEpisodesAdapter)
                 ?: return@executeWithRateLimitRetry emptyMap()
             parsed.episodes.mapNotNull { episode ->
                 val seasonNumber = episode.seasonNumber ?: return@mapNotNull null
@@ -219,6 +225,12 @@ data class BulkRatingsRequest(
 @JsonClass(generateAdapter = true)
 data class BulkRatingsResponse(
     val results: List<RatingDto> = emptyList(),
+    val missing: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class BulkEpisodeRatingsResponse(
+    val results: List<RatingWithEpisodes> = emptyList(),
     val missing: List<String> = emptyList()
 )
 

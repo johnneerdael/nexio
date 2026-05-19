@@ -80,10 +80,13 @@ class CustomImdbClientTest {
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
         assertEquals("https://ratings.example.com/custom", baseUrlSlot.captured)
-        assertEquals("/custom/v1/ratings/tt27444205", requestSlot.captured.url.encodedPath)
+        assertEquals("/custom/v1/ratings/bulk", requestSlot.captured.url.encodedPath)
         assertEquals("true", requestSlot.captured.url.queryParameter("episodes"))
-        assertEquals("GET", requestSlot.captured.method)
-        assertNull(requestSlot.captured.body)
+        assertEquals("POST", requestSlot.captured.method)
+        assertEquals(
+            """{"identifiers":["tt27444205"]}""",
+            requestSlot.captured.body?.readUtf8()
+        )
         assertEquals("secret-key", requestSlot.captured.header("X-API-Key"))
         assertEquals(
             mapOf(
@@ -136,6 +139,46 @@ class CustomImdbClientTest {
             ),
             result
         )
+    }
+
+    @Test
+    fun `fetchEpisodeRatings maps bulk response wrapper with episodes`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://ratings.example.com/custom",
+            apiKey = "secret-key"
+        )
+        coEvery { provider.execute(any(), any()) } returns IntegrationCallResult.Success(
+            CustomImdbPayload(
+                """
+                {
+                  "results": [
+                    {
+                      "requestTconst": "tt27444205",
+                      "rating": { "tconst": "tt27444205", "averageRating": 8.8, "numVotes": 1200 },
+                      "episodesParentTconst": "tt27444205",
+                      "episodes": [
+                        {
+                          "tconst": "tt1000001",
+                          "parentTconst": "tt27444205",
+                          "seasonNumber": 1,
+                          "episodeNumber": 1,
+                          "averageRating": 8.3,
+                          "numVotes": 200
+                        }
+                      ]
+                    }
+                  ],
+                  "missing": []
+                }
+                """.trimIndent()
+            )
+        )
+
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
+
+        assertEquals(mapOf((1 to 1) to 8.3), result)
     }
 
     @Test
@@ -239,7 +282,8 @@ class CustomImdbClientTest {
 
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
-        assertEquals("/custom/v1/ratings/tt27444205", requestSlot.captured.url.encodedPath)
+        assertEquals("/custom/v1/ratings/bulk", requestSlot.captured.url.encodedPath)
+        assertEquals("true", requestSlot.captured.url.queryParameter("episodes"))
         assertEquals(mapOf((1 to 1) to 8.3), result)
     }
 

@@ -12,6 +12,7 @@ import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.dto.MetaResponseDto
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 
 @Singleton
@@ -23,6 +24,9 @@ class AddonMetaIntegrationProvider @Inject constructor(
         addonId: String,
         metaUrl: String
     ): NetworkResult<MetaResponseDto> {
+        if (metaUrl.isProviderApiHost()) {
+            return NetworkResult.Error("Provider API host is not an addon metadata endpoint")
+        }
         return when (
             val result = runtime.call(
                 IntegrationCallSpec(
@@ -66,4 +70,18 @@ class AddonMetaIntegrationProvider @Inject constructor(
             )
         }
     }
+}
+
+private fun String.isProviderApiHost(): Boolean {
+    val host = runCatching { URI(this).host?.lowercase() }.getOrNull() ?: return false
+    return host in setOf(
+        "api.trakt.tv",
+        "api.mdblist.com",
+        "api.themoviedb.org",
+        "api4.thetvdb.com",
+        "api.thetvdb.com",
+        "kitsu.io",
+        "data.simkl.in",
+        "api.simkl.com"
+    )
 }

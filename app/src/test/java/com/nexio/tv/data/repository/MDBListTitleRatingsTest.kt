@@ -25,55 +25,12 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
 class MDBListTitleRatingsTest {
     @Test
-    fun `getRatingsForMeta requests imdb when showImdb is enabled`() = runTest {
-        val api = mockk<MDBListApi>()
-        val settings = mockk<MDBListSettingsDataStore>()
-        val tmdbService = mockk<TmdbService>(relaxed = true)
-        val repository = MDBListRepository(
-            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
-            settingsDataStore = settings,
-            tmdbService = tmdbService
-        )
-
-        every { settings.settings } returns flowOf(
-            MDBListSettings(
-                enabled = true,
-                apiKey = "mdb-key",
-                showTrakt = false,
-                showImdb = true,
-                showTmdb = false,
-                showLetterboxd = false,
-                showTomatoes = false,
-                showAudience = false,
-                showMetacritic = false
-            )
-        )
-        coEvery {
-            api.getRating("show", "imdb", "mdb-key", any())
-        } returns Response.success(
-            MDBListRatingResponseDto(
-                ratings = listOf(MDBListRatingItemDto(id = "tt0944947", rating = 9.2))
-            )
-        )
-
-        val result = repository.getRatingsForMeta(
-            meta = stubMeta("tt0944947", ContentType.SERIES),
-            fallbackItemId = "tt0944947",
-            fallbackItemType = "series"
-        )
-
-        assertEquals(9.2, result?.ratings?.imdb ?: 0.0, 0.0)
-        assertTrue(result?.hasImdbRating == true)
-    }
-
-    @Test
-    fun `getRatingsForMeta uses imdb override before resolving metadata ids`() = runTest {
+    fun `getRatingsForMeta requests MDBList show ratings by TMDB id and never asks MDBList for IMDb`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
@@ -88,81 +45,61 @@ class MDBListTitleRatingsTest {
             MDBListSettings(
                 enabled = true,
                 apiKey = "mdb-key",
-                showTrakt = false,
+                showTrakt = true,
                 showImdb = true,
-                showTmdb = false,
+                showTmdb = true,
                 showLetterboxd = false,
-                showTomatoes = false,
-                showAudience = false,
-                showMetacritic = false
+                showTomatoes = true,
+                showAudience = true,
+                showMetacritic = true
             )
         )
         coEvery {
-            api.getRating("show", "imdb", "mdb-key", capture(request))
+            api.getRating("show", "tmdb", "mdb-key", capture(request))
         } returns Response.success(
             MDBListRatingResponseDto(
-                ratings = listOf(MDBListRatingItemDto(id = "tt0944947", rating = 8.8))
+                ratings = listOf(MDBListRatingItemDto(id = 1399, rating = 8.4))
+            )
+        )
+        coEvery {
+            api.getRating("show", "tomatoes", "mdb-key", any())
+        } returns Response.success(
+            MDBListRatingResponseDto(
+                ratings = listOf(MDBListRatingItemDto(id = 1399, rating = 91.0))
+            )
+        )
+        coEvery {
+            api.getRating("show", "metacritic", "mdb-key", any())
+        } returns Response.success(
+            MDBListRatingResponseDto(
+                ratings = listOf(MDBListRatingItemDto(id = 1399, rating = 86.0))
             )
         )
 
         val result = repository.getRatingsForMeta(
             meta = stubMeta("tmdb:1399", ContentType.SERIES),
             fallbackItemId = "tmdb:1399",
-            fallbackItemType = "series",
-            imdbIdOverride = " tt0944947/foo "
+            fallbackItemType = "series"
         )
 
-        assertEquals(8.8, result?.ratings?.imdb ?: 0.0, 0.0)
-        assertEquals(listOf("tt0944947"), request.captured.ids)
-        coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+        assertEquals(8.4, result?.ratings?.tmdb ?: 0.0, 0.0)
+        assertEquals(91.0, result?.ratings?.tomatoes ?: 0.0, 0.0)
+        assertEquals(86.0, result?.ratings?.metacritic ?: 0.0, 0.0)
+        assertEquals(listOf(1399), request.captured.ids)
+        assertEquals("tmdb", request.captured.provider)
+        coVerify(exactly = 0) {
+            api.getRating(any(), "imdb", any(), any())
+        }
+        coVerify(exactly = 0) {
+            api.getRating(any(), "trakt", any(), any())
+        }
+        coVerify(exactly = 0) {
+            api.getRating(any(), "audience", any(), any())
+        }
     }
 
     @Test
-    fun `getRatingsForMeta ignores invalid imdb override and falls back to inferred imdb id`() = runTest {
-        val api = mockk<MDBListApi>()
-        val settings = mockk<MDBListSettingsDataStore>()
-        val tmdbService = mockk<TmdbService>(relaxed = true)
-        val repository = MDBListRepository(
-            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
-            settingsDataStore = settings,
-            tmdbService = tmdbService
-        )
-        val request = slot<com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto>()
-
-        every { settings.settings } returns flowOf(
-            MDBListSettings(
-                enabled = true,
-                apiKey = "mdb-key",
-                showTrakt = false,
-                showImdb = true,
-                showTmdb = false,
-                showLetterboxd = false,
-                showTomatoes = false,
-                showAudience = false,
-                showMetacritic = false
-            )
-        )
-        coEvery {
-            api.getRating("show", "imdb", "mdb-key", capture(request))
-        } returns Response.success(
-            MDBListRatingResponseDto(
-                ratings = listOf(MDBListRatingItemDto(id = "tt0944947", rating = 8.8))
-            )
-        )
-
-        val result = repository.getRatingsForMeta(
-            meta = stubMeta("tt0944947", ContentType.SERIES),
-            fallbackItemId = "tt0944947",
-            fallbackItemType = "series",
-            imdbIdOverride = "ttbad"
-        )
-
-        assertEquals(8.8, result?.ratings?.imdb ?: 0.0, 0.0)
-        assertEquals(listOf("tt0944947"), request.captured.ids)
-    }
-
-    @Test
-    fun `enrichPreview replaces tmdb score with mdblist imdb rating`() = runTest {
+    fun `enrichPreview only applies MDBList tomatoes and keeps IMDb rating untouched`() = runTest {
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
@@ -180,21 +117,21 @@ class MDBListTitleRatingsTest {
                 showImdb = true,
                 showTmdb = false,
                 showLetterboxd = false,
-                showTomatoes = false,
+                showTomatoes = true,
                 showAudience = false,
                 showMetacritic = false
             )
         )
         coEvery {
-            api.getRating("movie", "imdb", "mdb-key", any())
+            api.getRating("movie", "tomatoes", "mdb-key", any())
         } returns Response.success(
             MDBListRatingResponseDto(
-                ratings = listOf(MDBListRatingItemDto(id = "tt1375666", rating = 8.8))
+                ratings = listOf(MDBListRatingItemDto(id = 27205, rating = 87.0))
             )
         )
 
         val preview = MetaPreview(
-            id = "tt1375666",
+            id = "tmdb:27205",
             type = ContentType.MOVIE,
             name = "Inception",
             poster = null,
@@ -210,8 +147,12 @@ class MDBListTitleRatingsTest {
 
         val enriched = repository.enrichPreview(preview)
 
-        assertEquals(8.8f, enriched.imdbRating ?: 0f, 0.0f)
-        assertEquals(TitleRatingSource.IMDB, enriched.ratingSource)
+        assertEquals(8.3f, enriched.imdbRating ?: 0f, 0.0f)
+        assertEquals(TitleRatingSource.TMDB, enriched.ratingSource)
+        assertEquals(87.0, enriched.tomatoesRating ?: 0.0, 0.0)
+        coVerify(exactly = 0) {
+            api.getRating(any(), "imdb", any(), any())
+        }
     }
 
     @Test

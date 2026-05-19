@@ -1,49 +1,29 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
-import com.nexio.tv.core.metadata.router.resolver.Confidence
-import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
-import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderIds
-import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Verifies that [MetadataRouterFacade.applyRatingResolverSelection] falls back to
- * the canonical REMOTE_IDS imdb entry from the primary candidate when
- * [MetadataSourceContext.previewStableIds].imdb is null/blank.
+ * Verifies that [MetadataRouterFacade.applyRatingResolverSelection] does not
+ * call title-rating override repositories from the metadata hydration path.
+ * Detail ratings are resolved by DetailRatingDisplayRepository.
  */
 class MetadataRouterFacadeRatingFallbackTest {
 
     @Test
-    fun `applyRatingResolverSelection uses primary REMOTE_IDS imdb when previewStableIds imdb is null`() = runTest {
+    fun `applyRatingResolverSelection does not call custom imdb from remote ids during metadata hydration`() = runTest {
         val imdbId = "tt0137523"
-        val expectedRating = 8.8
 
         val ratingRepo = mockk<TitleRatingOverrideRepository>()
-        // Stub returns a CUSTOM_IMDB candidate when called with a providerIds that has the imdb from REMOTE_IDS
-        coEvery {
-            ratingRepo.titleRatingCandidates(
-                preview = any(),
-                stableIdBundle = null,
-                providerIds = ProviderIds(imdb = imdbId)
-            )
-        } returns listOf(
-            RatingCandidate(
-                value = expectedRating,
-                sourceRole = SourceRole.CUSTOM_IMDB,
-                sourceProvider = "IMDB",
-                confidence = Confidence.HIGH
-            )
-        )
 
         val adapter = RemoteIdsMetadataProviderAdapter(
             provider = MetadataPrimaryProvider.TVDB,
@@ -68,40 +48,16 @@ class MetadataRouterFacadeRatingFallbackTest {
             )
         )
 
-        // The rating from CUSTOM_IMDB (via REMOTE_IDS fallback) should be selected.
-        assertEquals(expectedRating, result.resolvedDocument.rating)
-
-        // Verify the repository was called with the imdb id recovered from REMOTE_IDS.
-        coVerify {
-            ratingRepo.titleRatingCandidates(
-                preview = any(),
-                stableIdBundle = null,
-                providerIds = ProviderIds(imdb = imdbId)
-            )
-        }
+        assertNull(result.resolvedDocument.rating)
+        coVerify(exactly = 0) { ratingRepo.titleRatingCandidates(any<MetaPreview>(), any(), any()) }
     }
 
     @Test
-    fun `applyRatingResolverSelection does NOT use REMOTE_IDS fallback when previewStableIds imdb is non-blank`() = runTest {
+    fun `applyRatingResolverSelection does not call custom imdb when previewStableIds imdb is non-blank`() = runTest {
         val previewImdbId = "tt9999999"
         val remoteIdsImdbId = "tt0137523"
 
         val ratingRepo = mockk<TitleRatingOverrideRepository>()
-        // Only stub the preview imdb id path; REMOTE_IDS id should not be used.
-        coEvery {
-            ratingRepo.titleRatingCandidates(
-                preview = any(),
-                stableIdBundle = null,
-                providerIds = ProviderIds(imdb = previewImdbId)
-            )
-        } returns listOf(
-            RatingCandidate(
-                value = 7.5,
-                sourceRole = SourceRole.CUSTOM_IMDB,
-                sourceProvider = "IMDB",
-                confidence = Confidence.HIGH
-            )
-        )
 
         val adapter = RemoteIdsMetadataProviderAdapter(
             provider = MetadataPrimaryProvider.TVDB,
@@ -124,16 +80,8 @@ class MetadataRouterFacadeRatingFallbackTest {
             )
         )
 
-        assertEquals(7.5, result.resolvedDocument.rating)
-
-        // REMOTE_IDS imdb id must NOT have been used.
-        coVerify(exactly = 0) {
-            ratingRepo.titleRatingCandidates(
-                preview = any(),
-                stableIdBundle = null,
-                providerIds = ProviderIds(imdb = remoteIdsImdbId)
-            )
-        }
+        assertNull(result.resolvedDocument.rating)
+        coVerify(exactly = 0) { ratingRepo.titleRatingCandidates(any<MetaPreview>(), any(), any()) }
     }
 
     @Test

@@ -23,8 +23,8 @@ object CustomImdbRatingsRequests {
             .build()
     }
 
-    fun episodeRatings(baseUrl: String, apiKey: String, tconst: String): Request {
-        val endpoint = buildCustomImdbUrl(baseUrl, "ratings/${tconst.trim()}")
+    fun episodeRatings(baseUrl: String, apiKey: String, bodyJson: String): Request {
+        val endpoint = buildCustomImdbUrl(baseUrl, "ratings/bulk")
             .toHttpUrl()
             .newBuilder()
             .addQueryParameter("episodes", "true")
@@ -33,7 +33,7 @@ object CustomImdbRatingsRequests {
         return Request.Builder()
             .url(endpoint)
             .header("X-API-Key", apiKey.trim())
-            .get()
+            .post(bodyJson.toRequestBody("application/json".toMediaType()))
             .build()
     }
 

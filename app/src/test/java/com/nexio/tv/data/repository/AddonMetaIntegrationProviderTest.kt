@@ -99,4 +99,26 @@ class AddonMetaIntegrationProviderTest {
             addonApi.getMeta(any())
         }
     }
+
+    @Test
+    fun `addon meta provider rejects provider api hosts before runtime`() = runTest {
+        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val addonApi = mockk<AddonApi>(relaxed = true)
+        val provider = AddonMetaIntegrationProvider(runtime, addonApi)
+
+        val result = provider.getMeta(
+            addonId = "https://api.trakt.tv",
+            metaUrl = "https://api.trakt.tv/meta/series/tmdb%3A124364.json"
+        )
+
+        assertTrue(result is NetworkResult.Error)
+        assertEquals(
+            "Provider API host is not an addon metadata endpoint",
+            (result as NetworkResult.Error).message
+        )
+        coVerify(exactly = 0) {
+            runtime.call(any<IntegrationCallSpec<MetaResponseDto>>())
+            addonApi.getMeta(any())
+        }
+    }
 }

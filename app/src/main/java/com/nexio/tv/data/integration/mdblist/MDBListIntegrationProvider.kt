@@ -22,13 +22,8 @@ import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.MDBListRatingsResult
-import com.nexio.tv.data.repository.mapEpisodeRatings
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private data class EpisodeRatingsCacheDto(
-    val ratings: Map<String, Double>
-)
 
 private const val MDBLIST_RAIL_APPEND_TO_RESPONSE = "genres,poster,description,ratings"
 
@@ -154,7 +149,8 @@ class MDBListIntegrationProvider @Inject constructor(
     }
 
     suspend fun fetchRatings(
-        imdbId: String,
+        ratingId: Any,
+        requestProvider: String,
         mediaType: String,
         apiKey: String,
         providers: List<String>
@@ -165,26 +161,27 @@ class MDBListIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.MDBLIST,
             apiShapeId = MDBListApiShapes.RATING_BATCH,
             operationKey = "mdblist.fetch_ratings",
-            cacheKey = "mdblist:$mediaType:$imdbId:$providerHash:credentialHash:$credentialHash",
+            cacheKey = "mdblist:$mediaType:$requestProvider:$ratingId:$providerHash:credentialHash:$credentialHash",
             codec = gsonCodec<MDBListRatingsResult>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
-                ttlMs = 30L * 60L * 1000L,
-                staleAfterExpiryMs = 30L * 60L * 1000L
+                ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
             ),
             ownership = ownershipFactory.media(
                 mediaType = mediaType,
-                rawId = imdbId,
-                imdbId = imdbId
+                rawId = "$requestProvider:$ratingId",
+                imdbId = ratingId.toString().takeIf { requestProvider == "imdb" && it.startsWith("tt", ignoreCase = true) },
+                tmdbId = ratingId.toString().takeIf { requestProvider == "tmdb" }
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
                 val requestBody = MDBListRatingRequestDto(
-                    ids = listOf(imdbId),
-                    provider = "imdb"
+                    ids = listOf(ratingId),
+                    provider = requestProvider
                 )
                 val ratingsByProvider = mutableMapOf<String, Double?>()
                 var firstFailure: Throwable? = null
-                providers.forEach { provider ->
+                for (provider in providers) {
                     val response = runCatching {
                         mdbListApi.getRating(
                             mediaType = mediaType,
@@ -195,7 +192,7 @@ class MDBListIntegrationProvider @Inject constructor(
                     }.getOrElse { error ->
                         firstFailure = firstFailure ?: error
                         ratingsByProvider[provider] = null
-                        return@forEach
+                        continue
                     }
 
                     if (!response.isSuccessful) {
@@ -222,7 +219,7 @@ class MDBListIntegrationProvider @Inject constructor(
                 IntegrationLoadResult.Success(
                     MDBListRatingsResult(
                         ratings = ratings,
-                        hasImdbRating = ratings.imdb != null
+                        hasImdbRating = false
                     )
                 )
             }
@@ -236,56 +233,7 @@ class MDBListIntegrationProvider @Inject constructor(
         apiKey: String,
         episodeTmdbIds: Map<Pair<Int, Int>, Int>
     ): Map<Pair<Int, Int>, Double> {
-        val credentialHash = credentialHash(IntegrationProvider.MDBLIST, apiKey)
-        val spec = IntegrationSpec(
-            provider = IntegrationProvider.MDBLIST,
-            apiShapeId = MDBListApiShapes.RATING_BATCH,
-            operationKey = "mdblist.fetch_episode_ratings_for_season",
-            cacheKey = "mdblist:episodes:$cacheNamespace:season:$season:credentialHash:$credentialHash",
-            codec = gsonCodec<EpisodeRatingsCacheDto>(),
-            cachePolicy = IntegrationCachePolicy.CacheFirst(
-                ttlMs = 30L * 60L * 1000L,
-                staleAfterExpiryMs = 30L * 60L * 1000L
-            ),
-            ownership = ownershipFactory.media(
-                mediaType = "series",
-                rawId = cacheNamespace,
-                imdbId = cacheNamespace.takeIf { it.startsWith("tt", ignoreCase = true) },
-                tmdbId = cacheNamespace.removePrefix("tmdb:")
-                    .takeIf { cacheNamespace.startsWith("tmdb:", ignoreCase = true) }
-            ),
-            workClass = IntegrationWorkClass.USER_VISIBLE,
-            load = {
-                val response = runCatching {
-                    mdbListApi.getRating(
-                        mediaType = "show",
-                        ratingType = "imdb",
-                        apiKey = apiKey,
-                        body = MDBListRatingRequestDto(
-                            ids = episodeTmdbIds.values.distinct(),
-                            provider = "tmdb"
-                        )
-                    )
-                }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
-
-                if (!response.isSuccessful) {
-                    return@IntegrationSpec IntegrationLoadResult.HttpError(
-                        response.code(),
-                        reason = "mdblist_episode_ratings_failed"
-                    )
-                }
-
-                IntegrationLoadResult.Success(
-                    EpisodeRatingsCacheDto(
-                        ratings = mapEpisodeRatings(
-                            ratingItems = response.body()?.ratings.orEmpty(),
-                            episodeIdsByKey = episodeTmdbIds
-                        ).toEpisodeRatingCache()
-                    )
-                )
-            }
-        )
-        return runtime.get(spec).valueOrNull()?.ratings.toEpisodeRatingMap()
+        return emptyMap()
     }
 
     suspend fun validateApiKey(apiKey: String): Boolean {
@@ -309,17 +257,6 @@ class MDBListIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()?.toBoolean() == true
     }
 }
-
-private fun Map<Pair<Int, Int>, Double>.toEpisodeRatingCache(): Map<String, Double> =
-    mapKeys { (key, _) -> "${key.first}:${key.second}" }
-
-private fun Map<String, Double>?.toEpisodeRatingMap(): Map<Pair<Int, Int>, Double> =
-    orEmpty().mapNotNull { (key, rating) ->
-        val parts = key.split(':', limit = 2)
-        val season = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
-        val episode = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
-        (season to episode) to rating
-    }.toMap()
 
 internal fun withRailAppendToResponse(query: Map<String, String>): Map<String, String> {
     val existingTokens = query["append_to_response"]
