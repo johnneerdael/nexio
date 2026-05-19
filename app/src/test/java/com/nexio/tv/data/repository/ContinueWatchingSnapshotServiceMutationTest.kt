@@ -356,7 +356,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             } returns StableIdBundle(
                 itemKey = "series:tvdb:413033",
                 itemType = ContentType.SERIES,
-                canonical = CanonicalStableIds(tvdbSeriesId = "413033"),
+                canonical = CanonicalStableIds(tmdbTvId = "308014", tvdbSeriesId = "413033"),
                 sidecars = SidecarStableIds(imdbId = "tt16288804"),
                 source = SourceStableIds(
                     sourceProvider = ProviderId.TVDB,
@@ -393,7 +393,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val metadata = hydrated.displayMetadataByItemKey.getValue("series:tvdb:413033")
             assertEquals("tt16288804", metadata.imdbId)
             val record = hydrated.records.single()
+            assertEquals("308014", record.displayIdentity?.providerIds?.tmdb)
             assertEquals("tt16288804", record.displayIdentity?.providerIds?.imdb)
+            assertEquals("308014", record.idBundle.tmdb)
             assertEquals("tt16288804", record.idBundle.imdb)
             assertEquals("tt16288804", record.streamFetchIdentity?.contentId)
             assertEquals("tt16288804:2:2", record.streamFetchIdentity?.videoId)
@@ -1023,6 +1025,92 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("addon:unknown", unresolvedRecord.parentId)
             assertTrue(unresolvedRecord.identityWarnings.single().contains("unresolved"))
         }
+
+    @Test
+    fun `hydrated display imdb bridges retained local episode with newer remote tmdb episode`() {
+        val service = buildService()
+        val staleLocal = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:393268",
+            contentId = "series:tvdb:393268:s2e1",
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = 2_414_311L,
+            durationMs = 2_958_656L,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(season = 2, number = 1),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.LOCAL,
+            updatedAt = 1_000L,
+            displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TVDB,
+                canonicalId = "393268",
+                providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+            ),
+            resumeIdentities = listOf(
+                resume(
+                    contentId = "tvdb:393268",
+                    videoId = "tvdb:393268:2:1",
+                    season = 2,
+                    episode = 1,
+                    lastWatched = 1_000L
+                ).toSafeResumeIdentity()
+            ),
+            idBundle = ContinueWatchingIdBundle(
+                imdb = "tt9794044",
+                tvdb = "393268",
+                season = 2,
+                episode = 1
+            )
+        )
+        val newerRemote = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tmdb:114922",
+            contentId = "series:tmdb:114922:s2e2",
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = 0L,
+            durationMs = 0L,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(season = 2, number = 2),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = 2_000L,
+            displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "114922",
+                providerIds = ProviderIds(tmdb = "114922", trakt = "171028")
+            ),
+            resumeIdentities = listOf(
+                resume(
+                    contentId = "tmdb:114922",
+                    videoId = "tmdb:114922:2:2",
+                    season = 2,
+                    episode = 2,
+                    lastWatched = 2_000L,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                ).toSafeResumeIdentity()
+            ),
+            idBundle = ContinueWatchingIdBundle(
+                tmdb = "114922",
+                trakt = "171028",
+                season = 2,
+                episode = 2
+            )
+        )
+
+        val merged = service.mergeRecordsWithHydratedDisplayIds(
+            records = listOf(newerRemote, staleLocal),
+            displayMetadataByItemKey = mapOf(
+                "series:tmdb:114922" to HomeDisplayMetadata(
+                    title = "Citadel",
+                    imdbId = "tt9794044"
+                )
+            )
+        )
+
+        assertEquals(1, merged.size)
+        assertEquals("series:tmdb:114922:s2e2", merged.single().contentId)
+        assertEquals("tt9794044", merged.single().idBundle.imdb)
+    }
 
     @Test
     fun `observeContinueWatching emits canonical resume records plus synthetic next-up records`() =

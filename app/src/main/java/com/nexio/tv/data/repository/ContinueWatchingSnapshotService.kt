@@ -1460,7 +1460,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
         route: MetadataRoute,
         entry: TrackingNextUpEntry
     ): ProviderIds {
-        if (!tvdb.isNullOrBlank()) return this
         val request = nextUpMetadataRequest(entry = entry, providerIds = this)
         val bundle = runCatching {
             facade.resolveStableIdBundle(
@@ -2567,7 +2566,52 @@ class ContinueWatchingSnapshotService @Inject constructor(
             }
         }
 
-        return routeUpgradedSnapshot.copy(displayMetadataByItemKey = hydratedMetadata)
+        val hydratedSnapshot = routeUpgradedSnapshot.copy(displayMetadataByItemKey = hydratedMetadata)
+        return hydratedSnapshot.copy(
+            records = mergeRecordsWithHydratedDisplayIds(
+                records = hydratedSnapshot.records,
+                displayMetadataByItemKey = hydratedMetadata
+            )
+        )
+    }
+
+    internal fun mergeRecordsWithHydratedDisplayIds(
+        records: List<ContinueWatchingRecord>,
+        displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+    ): List<ContinueWatchingRecord> {
+        if (records.size <= 1 || displayMetadataByItemKey.isEmpty()) return records
+        var changed = false
+        val strengthened = ArrayList<ContinueWatchingRecord>(records.size)
+        for (i in records.indices) {
+            val record = records[i]
+            val metadata = displayMetadataForRecord(record, displayMetadataByItemKey)
+            val imdbId = metadata?.imdbId
+                ?.trim()
+                ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+            if (imdbId == null || record.idBundle.imdb.equals(imdbId, ignoreCase = true)) {
+                strengthened += record
+                continue
+            }
+            changed = true
+            strengthened += record.copy(
+                idBundle = record.idBundle.copy(imdb = imdbId)
+            )
+        }
+        return if (changed) ContinueWatchingMerger.merge(strengthened) else records
+    }
+
+    private fun displayMetadataForRecord(
+        record: ContinueWatchingRecord,
+        displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+    ): HomeDisplayMetadata? {
+        displayMetadataByItemKey[record.parentId]?.let { return it }
+        val contentType = when {
+            record.parentId.startsWith("movie:", ignoreCase = true) -> "movie"
+            record.parentId.startsWith("series:", ignoreCase = true) -> "series"
+            record.episodeContext != null -> "series"
+            else -> "movie"
+        }
+        return displayMetadataByItemKey[homeDisplayItemKey(contentType, record.parentId)]
     }
 
     internal suspend fun fetchHomeDisplayMetadata(
@@ -2746,8 +2790,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val seriesImdbId = bundle.sidecars.imdbId
             ?.trim()
             ?.takeIf { it.matches(Regex("^tt\\d+$")) }
-            ?: return providerIds
-        return providerIds.copy(imdb = seriesImdbId)
+        val tmdbTvId = bundle.canonical.tmdbTvId
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        return providerIds.copy(
+            imdb = seriesImdbId ?: providerIds.imdb,
+            tmdb = providerIds.tmdb ?: tmdbTvId
+        )
     }
 
     private fun HomeDisplayMetadata?.mergeResolvedDisplay(
