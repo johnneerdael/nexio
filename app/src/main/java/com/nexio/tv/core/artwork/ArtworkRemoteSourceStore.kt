@@ -12,6 +12,10 @@ import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.util.SortedMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 interface ArtworkRemoteSourceStore {
     fun put(
@@ -33,46 +37,75 @@ object NoopArtworkRemoteSourceStore : ArtworkRemoteSourceStore {
 
 class FileBackedArtworkRemoteSourceStore(
     private val file: File,
-    private val gson: Gson
+    private val gson: Gson,
+    private val writeDebounceMs: Long = 0L
 ) : ArtworkRemoteSourceStore {
     private val lock = Any()
+    private val loadLock = Any()
+    @Volatile
     private var loaded = false
     private var sourcesByHash: MutableMap<String, String> = mutableMapOf()
+    private val flushExecutor: ScheduledExecutorService? =
+        if (writeDebounceMs > 0L) {
+            Executors.newSingleThreadScheduledExecutor { runnable ->
+                Thread(runnable, "ArtworkRemoteSourceFlush").apply { isDaemon = true }
+            }
+        } else {
+            null
+        }
+    private var pendingFlush: ScheduledFuture<*>? = null
+    private var dirty = false
 
     override fun put(
         normalizedUrlHash: String,
         source: SensitiveArtworkUrl
     ) {
         if (normalizedUrlHash.isBlank()) return
-        synchronized(lock) {
-            ensureLoaded()
+        ensureLoaded()?.let(::writeSnapshotToFile)
+        val snapshotToWrite = synchronized(lock) {
             if (source.value.isPremiumProviderRawUrl()) {
                 sourcesByHash.remove(normalizedUrlHash)
             } else {
                 sourcesByHash[normalizedUrlHash] = source.value
             }
-            flush()
+            schedulePersistLocked()
         }
+        snapshotToWrite?.let(::writeSnapshotToFile)
     }
 
-    override fun get(normalizedUrlHash: String): SensitiveArtworkUrl? =
-        synchronized(lock) {
-            ensureLoaded()
+    override fun get(normalizedUrlHash: String): SensitiveArtworkUrl? {
+        ensureLoaded()?.let(::writeSnapshotToFile)
+        return synchronized(lock) {
             sourcesByHash[normalizedUrlHash]
                 ?.takeUnless { it.isPremiumProviderRawUrl() }
                 ?.let(SensitiveArtworkUrl::of)
         }
+    }
 
-    private fun ensureLoaded() {
-        if (loaded) return
-        sourcesByHash = runCatching {
+    private fun ensureLoaded(): Map<String, String>? {
+        if (loaded) return null
+        return synchronized(loadLock) {
+            if (loaded) return@synchronized null
+            val loadedSources = loadSourcesFromFile()
+            synchronized(lock) {
+                sourcesByHash = loadedSources.sources
+                loaded = true
+                if (loadedSources.cleanedInvalidEntries) {
+                    schedulePersistLocked()
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
+    private fun loadSourcesFromFile(): LoadedSources =
+        runCatching {
             if (!file.exists()) {
-                mutableMapOf()
+                LoadedSources(mutableMapOf(), cleanedInvalidEntries = false)
             } else {
-                // CLAUDE.md hard rule #3: streaming read, no file.readText() +
-                // gson.fromJson(String, type). The previous overload wrapped the
-                // entire file as a String (and a StringReader pinning it for the
-                // parse) every time the cache loaded.
+                // CLAUDE.md hard rule #3: stream JSON from disk; do not
+                // materialize the whole cache as a String while playback is live.
                 val type = object : TypeToken<Map<String, String>>() {}.type
                 val restored: Map<String, String> = FileInputStream(file).use { fis ->
                     BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
@@ -85,20 +118,54 @@ class FileBackedArtworkRemoteSourceStore(
                     .filterKeys { it.isNotBlank() }
                     .filterValues { !it.isPremiumProviderRawUrl() }
                     .toMutableMap()
-                if (filtered.size != restored.size) {
-                    sourcesByHash = filtered
-                    flush()
-                }
-                filtered
+                LoadedSources(
+                    sources = filtered,
+                    cleanedInvalidEntries = filtered.size != restored.size
+                )
             }
-        }.getOrDefault(mutableMapOf())
-        loaded = true
+        }.getOrDefault(LoadedSources(mutableMapOf(), cleanedInvalidEntries = false))
+
+    internal fun flushPendingWritesForTest() {
+        val snapshotToWrite = synchronized(lock) {
+            pendingFlush?.cancel(false)
+            pendingFlush = null
+            if (!dirty) return
+            dirty = false
+            sourcesByHash.toMap()
+        }
+        writeSnapshotToFile(snapshotToWrite)
     }
 
-    private fun flush() {
+    private fun schedulePersistLocked(): Map<String, String>? {
+        dirty = true
+        if (writeDebounceMs <= 0L) {
+            dirty = false
+            return sourcesByHash.toMap()
+        }
+        val currentFlush = pendingFlush
+        if (currentFlush != null && !currentFlush.isDone && !currentFlush.isCancelled) return null
+        pendingFlush = flushExecutor?.schedule(
+            ::executeScheduledFlush,
+            writeDebounceMs,
+            TimeUnit.MILLISECONDS
+        )
+        return null
+    }
+
+    private fun executeScheduledFlush() {
+        val snapshotToWrite = synchronized(lock) {
+            pendingFlush = null
+            if (!dirty) return
+            dirty = false
+            sourcesByHash.toMap()
+        }
+        writeSnapshotToFile(snapshotToWrite)
+    }
+
+    private fun writeSnapshotToFile(snapshot: Map<String, String>) {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile ?: File("."), "${file.name}.tmp")
-        val sorted: SortedMap<String, String> = sourcesByHash.toSortedMap()
+        val sorted: SortedMap<String, String> = snapshot.toSortedMap()
         FileOutputStream(tmp).use { fos ->
             BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                 JsonWriter(bw).use { writer ->
@@ -116,6 +183,11 @@ class FileBackedArtworkRemoteSourceStore(
         private val REMOTE_SOURCE_MAP_TYPE =
             object : TypeToken<SortedMap<String, String>>() {}.type
     }
+
+    private data class LoadedSources(
+        val sources: MutableMap<String, String>,
+        val cleanedInvalidEntries: Boolean
+    )
 }
 
 internal fun String.isPremiumProviderRawUrl(): Boolean =

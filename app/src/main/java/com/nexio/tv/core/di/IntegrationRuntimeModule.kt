@@ -149,7 +149,8 @@ object IntegrationRuntimeModule {
     ): ArtworkRemoteSourceStore =
         FileBackedArtworkRemoteSourceStore(
             file = File(context.filesDir, "artwork-remote-sources-v1.json"),
-            gson = gson
+            gson = gson,
+            writeDebounceMs = 1_500L
         )
 
     @Provides
