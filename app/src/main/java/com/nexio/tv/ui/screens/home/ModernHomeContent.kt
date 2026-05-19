@@ -370,6 +370,8 @@ internal fun ModernHomeContent(
     onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
     cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
     onToggleContinueWatchingLibrary: ((ContinueWatchingItem) -> Unit)? = null,
+    resolveContinueWatchingTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = { null },
+    onToggleTvEpisodeOrderProvider: (HomeTvEpisodeOrderMenuAction) -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
@@ -440,6 +442,12 @@ internal fun ModernHomeContent(
     var displayedHeroItemKey by remember { mutableStateOf<String?>(null) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
+    var continueWatchingTvEpisodeOrderAction by remember { mutableStateOf<HomeTvEpisodeOrderMenuAction?>(null) }
+    LaunchedEffect(optionsItem) {
+        continueWatchingTvEpisodeOrderAction = null
+        continueWatchingTvEpisodeOrderAction =
+            optionsItem?.let { resolveContinueWatchingTvEpisodeOrderAction(it) }
+    }
     val lastFocusedContinueWatchingIndexRef = remember { AtomicInteger(-1) }
     val lastKeyRepeatDispatchRef = remember { AtomicLong(0L) }
     val lastHeroNavigationAtMsRef = remember { AtomicLong(0L) }
@@ -1512,6 +1520,11 @@ internal fun ModernHomeContent(
                     callback(selectedLegacy)
                     optionsItem = null
                 }
+            },
+            tvEpisodeOrderActionLabelRes = continueWatchingTvEpisodeOrderAction?.labelRes,
+            onToggleTvEpisodeOrderProvider = {
+                continueWatchingTvEpisodeOrderAction?.let(onToggleTvEpisodeOrderProvider)
+                optionsItem = null
             },
             onStartFromBeginning = {
                 onContinueWatchingStartFromBeginning(selectedLegacy)

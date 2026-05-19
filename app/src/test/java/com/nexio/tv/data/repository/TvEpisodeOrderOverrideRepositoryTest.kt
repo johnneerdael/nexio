@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +31,23 @@ class TvEpisodeOrderOverrideRepositoryTest {
         repository.clearOrder("71446")
         assertEquals(TvEpisodeOrderProvider.TMDB_DEFAULT, repository.getOrder("71446"))
         assertFalse(repository.hasOverride("71446"))
+    }
+
+    @Test
+    fun `observe orders emits after override changes`() = runTest {
+        val repository = repository()
+        val orders = repository.observeOrders()
+
+        repository.setOrder("71446", TvEpisodeOrderProvider.TVDB_DEFAULT)
+
+        assertEquals(
+            mapOf("tmdb:tv:71446" to TvEpisodeOrderProvider.TVDB_DEFAULT),
+            orders.first()
+        )
+
+        repository.clearOrder("71446")
+
+        assertEquals(emptyMap<String, TvEpisodeOrderProvider>(), orders.first())
     }
 
     @Test

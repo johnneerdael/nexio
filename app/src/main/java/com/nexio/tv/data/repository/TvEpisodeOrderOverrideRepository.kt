@@ -20,10 +20,17 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 interface TvEpisodeOrderOverrideRepository {
+    fun observeOrders(): Flow<Map<String, TvEpisodeOrderProvider>>
+
+    fun observeOrder(tmdbTvId: String): Flow<TvEpisodeOrderProvider>
+
     suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider
 
     suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider)
@@ -46,6 +53,22 @@ class FileTvEpisodeOrderOverrideRepository(
     private val mutex = Mutex()
     private var loaded = false
     private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
+    private val overrideState = MutableStateFlow<Map<String, TvEpisodeOrderProvider>>(emptyMap())
+
+    init {
+        ensureLoadedForObservation()
+    }
+
+    override fun observeOrders(): Flow<Map<String, TvEpisodeOrderProvider>> {
+        ensureLoadedForObservation()
+        return overrideState
+    }
+
+    override fun observeOrder(tmdbTvId: String): Flow<TvEpisodeOrderProvider> {
+        val key = toTmdbTvOrderKey(tmdbTvId)
+        ensureLoadedForObservation()
+        return overrideState.map { it[key] ?: TvEpisodeOrderProvider.TMDB_DEFAULT }
+    }
 
     override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = mutex.withLock {
         val key = toTmdbTvOrderKey(tmdbTvId)
@@ -65,6 +88,7 @@ class FileTvEpisodeOrderOverrideRepository(
                 candidate[key] = provider
             }
             writeAndSwapLocked(candidate)
+            overrideState.value = candidate.toMap()
         }
     }
 
@@ -77,6 +101,7 @@ class FileTvEpisodeOrderOverrideRepository(
             candidate.putAll(overrides)
             candidate.remove(key)
             writeAndSwapLocked(candidate)
+            overrideState.value = candidate.toMap()
         }
     }
 
@@ -103,6 +128,30 @@ class FileTvEpisodeOrderOverrideRepository(
             }
         }
         loaded = true
+        overrideState.value = overrides.toMap()
+    }
+
+    private fun ensureLoadedForObservation() {
+        if (loaded) return
+        synchronized(this) {
+            if (loaded) return
+            overrides.clear()
+            if (file.exists()) {
+                try {
+                    readFileLocked()
+                } catch (_: IOException) {
+                    overrides.clear()
+                } catch (_: JsonIOException) {
+                    overrides.clear()
+                } catch (_: JsonParseException) {
+                    overrides.clear()
+                } catch (_: IllegalStateException) {
+                    overrides.clear()
+                }
+            }
+            loaded = true
+            overrideState.value = overrides.toMap()
+        }
     }
 
     private fun readFileLocked() {

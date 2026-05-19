@@ -81,6 +81,8 @@ fun GridHomeContent(
     onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
     cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
     onToggleContinueWatchingLibrary: ((ContinueWatchingItem) -> Unit)? = null,
+    resolveContinueWatchingTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = { null },
+    onToggleTvEpisodeOrderProvider: (HomeTvEpisodeOrderMenuAction) -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -259,6 +261,8 @@ fun GridHomeContent(
                                     onCheckIn = onCheckInContinueWatching,
                                     cwWatchlistMembership = cwWatchlistMembership,
                                     onToggleLibrary = onToggleContinueWatchingLibrary,
+                                    resolveTvEpisodeOrderAction = resolveContinueWatchingTvEpisodeOrderAction,
+                                    onToggleTvEpisodeOrderProvider = onToggleTvEpisodeOrderProvider,
                                     onDetailsClick = { item ->
                                         onNavigateToDetail(
                                             when (item) {
@@ -421,6 +425,8 @@ fun GridHomeContent(
                         onCheckIn = onCheckInContinueWatching,
                         cwWatchlistMembership = cwWatchlistMembership,
                         onToggleLibrary = onToggleContinueWatchingLibrary,
+                        resolveTvEpisodeOrderAction = resolveContinueWatchingTvEpisodeOrderAction,
+                        onToggleTvEpisodeOrderProvider = onToggleTvEpisodeOrderProvider,
                         onDetailsClick = { item ->
                             onNavigateToDetail(
                                 when (item) {

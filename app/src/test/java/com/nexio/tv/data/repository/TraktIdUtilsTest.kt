@@ -26,26 +26,27 @@ class TraktIdUtilsTest {
     @Test
     fun parseContentIds_still_recognises_existing_prefixes() {
         assertEquals(272, parseContentIds("tmdb:272").tmdb)
+        assertEquals(1396, parseContentIds("tmdb:tv:1396").tmdb)
         assertEquals("tt0903747", parseContentIds("tt0903747").imdb)
         assertEquals(1, parseContentIds("trakt:1").trakt)
         assertEquals(1, parseContentIds("1").trakt)
     }
 
     @Test
-    fun normalizeContentId_show_kind_prefers_tvdb() {
+    fun normalizeContentId_show_kind_prefers_tmdb() {
         val ids = TraktIdsDto(
             trakt = 1, slug = "breaking-bad",
             imdb = "tt0903747", tmdb = 1396, tvdb = 81189
         )
-        assertEquals("tvdb:81189", normalizeContentId(ids, MediaKind.SHOW))
+        assertEquals("tmdb:1396", normalizeContentId(ids, MediaKind.SHOW))
     }
 
     @Test
-    fun normalizeContentId_show_falls_back_to_tmdb_when_tvdb_missing() {
+    fun normalizeContentId_show_falls_back_to_tvdb_when_tmdb_missing() {
         val ids = TraktIdsDto(
-            trakt = 1, slug = "x", imdb = "tt1", tmdb = 99, tvdb = null
+            trakt = 1, slug = "x", imdb = "tt1", tmdb = null, tvdb = 99
         )
-        assertEquals("tmdb:99", normalizeContentId(ids, MediaKind.SHOW))
+        assertEquals("tvdb:99", normalizeContentId(ids, MediaKind.SHOW))
     }
 
     @Test

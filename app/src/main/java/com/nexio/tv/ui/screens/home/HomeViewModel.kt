@@ -17,6 +17,9 @@ import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.NoOpIntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.AnimeIdScheme
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.ParsedMetadataId
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -59,6 +62,9 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.ArtworkProviderSettings
@@ -86,6 +92,7 @@ import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -100,6 +107,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
@@ -111,6 +119,16 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.Mutex
 import java.util.Collections
 import javax.inject.Inject
+
+private object DefaultHomeTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+    override fun observeOrders(): Flow<Map<String, TvEpisodeOrderProvider>> = flowOf(emptyMap())
+    override fun observeOrder(tmdbTvId: String): Flow<TvEpisodeOrderProvider> =
+        flowOf(TvEpisodeOrderProvider.TMDB_DEFAULT)
+    override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
+    override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) = Unit
+    override suspend fun clearOrder(tmdbTvId: String) = Unit
+    override suspend fun hasOverride(tmdbTvId: String): Boolean = false
+}
 
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
@@ -175,6 +193,7 @@ class HomeViewModel @Inject constructor(
     internal val catalogRowMemo: CatalogRowMemo,
     internal val artworkProviderResolver: ArtworkProviderResolver,
     internal val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
+    private val tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = DefaultHomeTvEpisodeOrderOverrideRepository,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -224,6 +243,97 @@ class HomeViewModel @Inject constructor(
 
     internal val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    suspend fun resolveHomeTvEpisodeOrderMenuAction(item: MetaPreview): HomeTvEpisodeOrderMenuAction? {
+        if (!isSeriesType(item.apiType)) return null
+        val ids = item.firstPaintStableIds.withMissingEpisodeOrderIds(providerIdsFromContinueWatchingContentId(item.id))
+        return resolveHomeTvEpisodeOrderMenuAction(ids)
+    }
+
+    suspend fun resolveHomeTvEpisodeOrderMenuAction(
+        item: ContinueWatchingResolvedDisplayItem
+    ): HomeTvEpisodeOrderMenuAction? {
+        val legacy = item.toContinueWatchingItem()
+        if (!isSeriesType(legacy.contentType())) return null
+        val ids = item.stableIds.withMissingEpisodeOrderIds(providerIdsFromContinueWatchingContentId(legacy.contentId()))
+        return resolveHomeTvEpisodeOrderMenuAction(ids)
+    }
+
+    fun toggleHomeTvEpisodeOrderProvider(action: HomeTvEpisodeOrderMenuAction) {
+        viewModelScope.launch {
+            if (action.provider == TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                tvEpisodeOrderOverrideRepository.clearOrder(action.tmdbTvOrderKey)
+            } else {
+                tvEpisodeOrderOverrideRepository.setOrder(
+                    tmdbTvId = action.tmdbTvOrderKey,
+                    provider = TvEpisodeOrderProvider.TVDB_DEFAULT
+                )
+            }
+            runCatching {
+                continueWatchingSnapshotService.reprojectEpisodeOrderForTmdbShow(
+                    tmdbTvId = action.tmdbTvOrderKey,
+                    profileId = profileManager.activeProfileSession.value.profileId
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to reproject home TV episode order for ${action.tmdbTvOrderKey}: ${error.message}", error)
+            }
+        }
+    }
+
+    private suspend fun resolveHomeTvEpisodeOrderMenuAction(
+        providerIds: ProviderIds
+    ): HomeTvEpisodeOrderMenuAction? {
+        val tmdbTvOrderKey = normalizeTmdbTvEpisodeOrderKey(providerIds.tmdb)
+            ?: lookupTmdbTvIdForTvdb(providerIds.tvdb)
+            ?: return null
+        val selectedProvider = try {
+            tvEpisodeOrderOverrideRepository.getOrder(tmdbTvOrderKey)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to read home TV episode order override for tmdb=$tmdbTvOrderKey: ${error.message}", error)
+            TvEpisodeOrderProvider.TMDB_DEFAULT
+        }
+        return resolveHomeTvEpisodeOrderMenuAction(
+            provider = selectedProvider,
+            tmdbTvOrderKey = tmdbTvOrderKey
+        )
+    }
+
+    private suspend fun lookupTmdbTvIdForTvdb(tvdbSeriesId: String?): String? {
+        val tvdb = tvdbSeriesId.normalizedProviderId("tvdb") ?: return null
+        val sourceId = ParsedMetadataId(
+            scheme = AnimeIdScheme.TVDB,
+            value = tvdb,
+            raw = "tvdb:$tvdb"
+        )
+        return idMappingStore.lookup(MetadataPrimaryProvider.TMDB, sourceId)
+            ?.providerId
+            ?.let(::normalizeTmdbTvEpisodeOrderKey)
+    }
+
+    private fun ProviderIds.withMissingEpisodeOrderIds(fallback: ProviderIds): ProviderIds =
+        copy(
+            imdb = imdb.presentOr(fallback.imdb),
+            tmdb = tmdb.presentOr(fallback.tmdb),
+            tvdb = tvdb.presentOr(fallback.tvdb),
+            trakt = trakt.presentOr(fallback.trakt),
+            simkl = simkl.presentOr(fallback.simkl),
+            kitsu = kitsu.presentOr(fallback.kitsu),
+            slug = slug.presentOr(fallback.slug),
+            mal = mal.presentOr(fallback.mal),
+            anilist = anilist.presentOr(fallback.anilist),
+            anidb = anidb.presentOr(fallback.anidb)
+        )
+
+    private fun String?.presentOr(fallback: String?): String? =
+        this?.trim()?.takeIf { it.isNotEmpty() } ?: fallback?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun String?.normalizedProviderId(prefix: String): String? {
+        val raw = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return raw.removePrefix("$prefix:").trim().takeIf { it.isNotEmpty() }
+    }
+
     // Post-truncation/layout-adjusted catalog rows. INTERNAL-ONLY: this flow is the
     // producer-side source of MetaPreview content for hydration, playback-gate
     // observers, and the presentation pipelines (Modern + Classic builders read

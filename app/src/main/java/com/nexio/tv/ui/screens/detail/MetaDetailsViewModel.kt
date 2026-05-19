@@ -130,6 +130,12 @@ private object DefaultDetailTvEpisodeOrderResolver : TvEpisodeOrderResolver {
 }
 
 private object DefaultDetailTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+    override fun observeOrders(): kotlinx.coroutines.flow.Flow<Map<String, TvEpisodeOrderProvider>> =
+        kotlinx.coroutines.flow.flowOf(emptyMap())
+
+    override fun observeOrder(tmdbTvId: String): kotlinx.coroutines.flow.Flow<TvEpisodeOrderProvider> =
+        kotlinx.coroutines.flow.flowOf(TvEpisodeOrderProvider.TMDB_DEFAULT)
+
     override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
 
     override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) = Unit

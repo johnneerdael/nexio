@@ -301,6 +301,14 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     private class RecordingTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
         private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
 
+        override fun observeOrders(): kotlinx.coroutines.flow.Flow<Map<String, TvEpisodeOrderProvider>> =
+            kotlinx.coroutines.flow.flowOf(overrides.toMap())
+
+        override fun observeOrder(tmdbTvId: String): kotlinx.coroutines.flow.Flow<TvEpisodeOrderProvider> =
+            kotlinx.coroutines.flow.flowOf(
+                overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+            )
+
         override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider =
             overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
 

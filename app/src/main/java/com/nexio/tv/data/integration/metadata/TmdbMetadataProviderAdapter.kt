@@ -216,7 +216,7 @@ class TmdbMetadataProviderAdapter @Inject constructor(
                     episodeNumber = number,
                     title = title?.value,
                     overview = overview?.value,
-                    thumbnail = episode.stillPath,
+                    thumbnail = episode.stillPath.toTmdbStillImageUrl(),
                     airDate = episode.airDate,
                     runtimeMinutes = episode.runtime
                 )
@@ -246,6 +246,20 @@ class TmdbMetadataProviderAdapter @Inject constructor(
     )
 
     private companion object {
+        private const val TMDB_STILL_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
+        private fun String?.toTmdbStillImageUrl(): String? {
+            val path = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            if (path.startsWith("http://", ignoreCase = true) || path.startsWith("https://", ignoreCase = true)) {
+                return path
+            }
+            return if (path.startsWith("/")) {
+                "$TMDB_STILL_BASE_URL$path"
+            } else {
+                "$TMDB_STILL_BASE_URL/$path"
+            }
+        }
+
         val tmdbShapes = setOf(
             TmdbApiShapes.MOVIE_CORE,
             TmdbApiShapes.TV_CORE,

@@ -1559,6 +1559,97 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `reprojectEpisodeOrderForTmdbShow republishes existing next-up rows with TVDB coordinates`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery {
+                facade.routeRequest(any())
+            } returns MetadataRoute(
+                provider = MetadataPrimaryProvider.TMDB,
+                parentId = "tmdb:10957",
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(itemType = "series"),
+                targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:10957"),
+                trace = emptyList()
+            )
+            coEvery {
+                facade.resolveStableIdBundle(any<MetadataRequest>(), any(), any())
+            } returns StableIdBundle(
+                itemKey = "series:tmdb:10957",
+                itemType = ContentType.SERIES,
+                canonical = CanonicalStableIds(tmdbTvId = "10957", tvdbSeriesId = "303904"),
+                sidecars = SidecarStableIds(imdbId = "tt6103712"),
+                source = SourceStableIds(
+                    sourceProvider = ProviderId.TMDB,
+                    sourceItemId = "tmdb:10957",
+                    railId = null,
+                    observedIds = ProviderIds(tmdb = "10957")
+                ),
+                evidence = emptyList(),
+                resolvedAtMs = 1L
+            )
+            coEvery {
+                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (12 to 20) to TvEpisodeMetadata(
+                        seasonNumber = 12,
+                        episodeNumber = 20,
+                        title = "TMDB Coordinate",
+                        airDate = "2025-03-31"
+                    ),
+                    (14 to 20) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 20,
+                        title = "Maggots",
+                        airDate = "2026-04-06"
+                    )
+                )
+            )
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:10957",
+                    tvdbSeriesId = "303904"
+                )
+            )
+            setPublishedSnapshot(
+                service = service,
+                profileId = 1,
+                snapshot = ContinueWatchingSnapshot(
+                    nextUpItems = listOf(
+                        nextUp(
+                            contentId = "tmdb:10957",
+                            firstAiredMs = 1L,
+                            firstAired = "2025-03-31",
+                            episode = 20
+                        ).copy(
+                            name = "Australian Survivor",
+                            season = 12,
+                            episodeTitle = "TMDB Coordinate",
+                            videoId = "tmdb:10957:12:20",
+                            activityAtMs = java.time.Instant.parse("2026-04-18T21:32:00Z").toEpochMilli()
+                        )
+                    ),
+                    updatedAtMs = 100L
+                )
+            )
+
+            service.reprojectEpisodeOrderForTmdbShow("tmdb:tv:10957", profileId = 1)
+
+            val item = rawSnapshot(service).nextUpItems.single()
+            assertEquals("tmdb:10957", item.contentId)
+            assertEquals(14, item.season)
+            assertEquals(20, item.episode)
+            assertEquals("Maggots", item.episodeTitle)
+            assertEquals("tmdb:10957:14:20", item.videoId)
+            assertEquals("2026-04-06", item.firstAired)
+        }
+
+    @Test
     fun `buildRawSnapshot projects non-anime next-up rows to TVDB coordinates`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)

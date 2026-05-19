@@ -59,6 +59,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.HomeTvEpisodeOrderMenuAction
 import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.ui.theme.NexioColors
@@ -87,6 +88,8 @@ fun ContinueWatchingSection(
     cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
     onToggleLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    resolveTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = { null },
+    onToggleTvEpisodeOrderProvider: (HomeTvEpisodeOrderMenuAction) -> Unit = {},
     showManualStreamSelection: (ContinueWatchingItem) -> Boolean = { false },
     onPlayWithManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -100,6 +103,11 @@ fun ContinueWatchingSection(
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingResolvedDisplayItem?>(null) }
+    var tvEpisodeOrderAction by remember { mutableStateOf<HomeTvEpisodeOrderMenuAction?>(null) }
+    LaunchedEffect(optionsItem) {
+        tvEpisodeOrderAction = null
+        tvEpisodeOrderAction = optionsItem?.let { resolveTvEpisodeOrderAction(it) }
+    }
 
     val listState = rememberLazyListState()
 
@@ -216,6 +224,11 @@ fun ContinueWatchingSection(
                     callback(menuLegacy)
                     optionsItem = null
                 }
+            },
+            tvEpisodeOrderActionLabelRes = tvEpisodeOrderAction?.labelRes,
+            onToggleTvEpisodeOrderProvider = {
+                tvEpisodeOrderAction?.let(onToggleTvEpisodeOrderProvider)
+                optionsItem = null
             },
             onStartFromBeginning = {
                 onStartFromBeginning(menuLegacy)
@@ -525,6 +538,8 @@ fun ContinueWatchingOptionsDialog(
     onCheckIn: (() -> Unit)? = null,
     isInWatchlist: Boolean = false,
     onToggleLibrary: (() -> Unit)? = null,
+    tvEpisodeOrderActionLabelRes: Int? = null,
+    onToggleTvEpisodeOrderProvider: () -> Unit = {},
     onStartFromBeginning: () -> Unit = {}
 ) {
     val title = when (item) {
@@ -573,6 +588,19 @@ fun ContinueWatchingOptionsDialog(
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
+        }
+
+        if (tvEpisodeOrderActionLabelRes != null) {
+            Button(
+                onClick = onToggleTvEpisodeOrderProvider,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(tvEpisodeOrderActionLabelRes))
+            }
         }
 
         if (item is ContinueWatchingResolvedDisplayItem.InProgress) {

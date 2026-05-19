@@ -6,12 +6,14 @@ import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
+import com.nexio.tv.ui.screens.home.providerIdsFromContinueWatchingContentId
 
 /**
  * Per-surface projection for Continue Watching rows. Two variants mirror
@@ -38,6 +40,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
     abstract val backdropRef: ArtworkDisplayRef?
     abstract val logoRef: ArtworkDisplayRef?
     abstract val rating: TitleRating?
+    abstract val stableIds: ProviderIds
 
     /**
      * Resume row. [source] carries CW-specific fields not on [ResolvedDisplayItem]
@@ -53,6 +56,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val backdropRef: ArtworkDisplayRef?,
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
+        override val stableIds: ProviderIds,
         val source: ContinueWatchingItem.InProgress
     ) : ContinueWatchingResolvedDisplayItem() {
         val progress: WatchProgress get() = source.progress
@@ -68,6 +72,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val backdropRef: ArtworkDisplayRef?,
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
+        override val stableIds: ProviderIds,
         val source: ContinueWatchingItem.NextUp
     ) : ContinueWatchingResolvedDisplayItem() {
         val info: NextUpInfo get() = source.info
@@ -100,6 +105,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = resolved.artwork.backdrop,
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
+            stableIds = resolved.stableIds,
             source = source.withResolvedDisplayMetadata(resolved)
         )
 
@@ -114,6 +120,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = resolved.artwork.backdrop,
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
+            stableIds = resolved.stableIds,
             source = source.withResolvedDisplayMetadata(resolved)
         )
 
@@ -139,6 +146,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = source.progress.backdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
             logoRef = source.progress.logo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
             rating = null,
+            stableIds = providerIdsFromContinueWatchingContentId(source.progress.contentId),
             source = source
         )
 
@@ -159,6 +167,7 @@ sealed class ContinueWatchingResolvedDisplayItem {
             backdropRef = source.info.displayBackdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
             logoRef = source.info.displayLogo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
             rating = null,
+            stableIds = providerIdsFromContinueWatchingContentId(source.info.contentId),
             source = source
         )
     }
