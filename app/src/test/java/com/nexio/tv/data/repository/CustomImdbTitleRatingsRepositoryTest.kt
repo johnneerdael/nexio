@@ -13,6 +13,55 @@ import org.junit.Test
 
 class CustomImdbTitleRatingsRepositoryTest {
     @Test
+    fun `custom imdb bulk ratings batches 50 ids into one call`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+        val ids = (1..50).map { "tt${it.toString().padStart(7, '0')}" }
+
+        coEvery { client.fetchTitleRatings(ids) } returns ids.associateWith { 8.0 }
+
+        val ratings = repository.getTitleRatingsByImdbIds(ids, cacheOnly = false)
+
+        assertEquals(50, ratings.size)
+        coVerify(exactly = 1) { client.fetchTitleRatings(ids) }
+    }
+
+    @Test
+    fun `custom imdb bulk not called for preview boot when cache empty`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        val ratings = repository.getTitleRatingsByImdbIds(
+            imdbIds = listOf("tt0944947"),
+            cacheOnly = true
+        )
+
+        assertEquals(emptyMap<String, Double>(), ratings)
+        coVerify(exactly = 0) { client.fetchTitleRatings(any()) }
+    }
+
+    @Test
+    fun `custom imdb bulk cache hit suppresses network`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        coEvery { client.fetchTitleRatings(listOf("tt0944947")) } returns mapOf("tt0944947" to 9.2)
+
+        assertEquals(
+            mapOf("tt0944947" to 9.2),
+            repository.getTitleRatingsByImdbIds(listOf("tt0944947"), cacheOnly = false)
+        )
+        assertEquals(
+            mapOf("tt0944947" to 9.2),
+            repository.getTitleRatingsByImdbIds(listOf("tt0944947"), cacheOnly = false)
+        )
+        coVerify(exactly = 1) { client.fetchTitleRatings(listOf("tt0944947")) }
+    }
+
+    @Test
     fun `fetches configured imdb title rating by imdb id`() = runTest {
         val client = mockk<CustomImdbClient>()
         val tmdbService = mockk<TmdbService>(relaxed = true)

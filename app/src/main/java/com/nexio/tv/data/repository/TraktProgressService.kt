@@ -102,6 +102,12 @@ class TraktProgressService @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val animeIdMappingService: AnimeIdMappingService = AnimeIdMappingService { com.nexio.tv.core.anime.AnimeIdMapAsset(schemaVersion = 0) }
 ) {
+    private enum class TraktProgressRefreshMode {
+        BOOT_CRITICAL,
+        BACKGROUND_ACCOUNT_SYNC,
+        VISIBLE_ITEM
+    }
+
     data class NextUpEntry(
         val contentId: String,
         val contentType: String = "series",
@@ -1198,8 +1204,13 @@ class TraktProgressService @Inject constructor(
             getHiddenProgressSnapshot(forceRefresh = true)
         }
 
+        val refreshMode = if (!hasLoadedRemoteProgress.value && !force) {
+            TraktProgressRefreshMode.BOOT_CRITICAL
+        } else {
+            TraktProgressRefreshMode.BACKGROUND_ACCOUNT_SYNC
+        }
         val baseProgressSnapshot = if (activityChanged) {
-            fetchAllProgressSnapshot(force = force)
+            fetchAllProgressSnapshot(force = force, mode = refreshMode)
         } else {
             remoteProgress.value
         }
@@ -1219,7 +1230,7 @@ class TraktProgressService @Inject constructor(
         val allNextUpSnapshot = deriveNextUpFromWatchedShows(
             watchedShows = watchedShows,
             hiddenProgress = hiddenProgress,
-            forceValidation = activityChanged
+            forceValidation = activityChanged && refreshMode != TraktProgressRefreshMode.BOOT_CRITICAL
         )
         hydrateMetadata(
             progressList = progressSnapshot +
@@ -2043,8 +2054,16 @@ class TraktProgressService @Inject constructor(
         )
     }
 
-    private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {
-        val recentCompletedEpisodes = fetchRecentEpisodeHistorySnapshot()
+    private suspend fun fetchAllProgressSnapshot(
+        force: Boolean = false,
+        mode: TraktProgressRefreshMode = TraktProgressRefreshMode.BACKGROUND_ACCOUNT_SYNC
+    ): List<WatchProgress> {
+        val recentCompletedEpisodes =
+            if (mode == TraktProgressRefreshMode.BOOT_CRITICAL) {
+                emptyList()
+            } else {
+                fetchRecentEpisodeHistorySnapshot()
+            }
         val inProgressMovies = getPlayback("movies", force = force).mapNotNull { mapPlaybackMovie(it) }
         val inProgressEpisodes = getPlayback("episodes", force = force).mapNotNull { mapPlaybackEpisode(it) }
 

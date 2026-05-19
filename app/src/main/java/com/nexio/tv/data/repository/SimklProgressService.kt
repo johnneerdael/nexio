@@ -31,7 +31,8 @@ import javax.inject.Singleton
 class SimklProgressService @Inject constructor(
     private val transport: SimklProgressTransport,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val syncStateStore: SimklProgressSyncStateStore
+    private val syncStateStore: SimklProgressSyncStateStore,
+    private val accountSingleFlight: SimklAccountSyncSingleFlight = SimklAccountSyncSingleFlight()
 ) {
     private class SimklProgressRuntimeState(
         persisted: SimklProgressSyncState = SimklProgressSyncState()
@@ -574,7 +575,9 @@ class SimklProgressService @Inject constructor(
         accessToken: String,
         method: String = "GET"
     ): JsonObject? {
-        val text = transport.executeRequest(url = url, accessToken = accessToken, method = method) ?: return null
+        val text = accountSingleFlight.run("simkl:raw:$method:$url:${accessToken.hashCode()}") {
+            transport.executeRequest(url = url, accessToken = accessToken, method = method).orEmpty()
+        }.takeIf(String::isNotEmpty) ?: return null
         return runCatching { gson.fromJson(text, JsonObject::class.java) }
             .onFailure { Log.w("SimklProgress", "Failed to parse object for $url", it) }
             .getOrNull()
@@ -584,7 +587,9 @@ class SimklProgressService @Inject constructor(
         url: String,
         accessToken: String
     ): JsonArray? {
-        val text = transport.executeRequest(url = url, accessToken = accessToken) ?: return null
+        val text = accountSingleFlight.run("simkl:raw:GET:$url:${accessToken.hashCode()}") {
+            transport.executeRequest(url = url, accessToken = accessToken).orEmpty()
+        }.takeIf(String::isNotEmpty) ?: return null
         return runCatching { gson.fromJson(text, JsonArray::class.java) }
             .onFailure { Log.w("SimklProgress", "Failed to parse array for $url", it) }
             .getOrNull()

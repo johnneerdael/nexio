@@ -61,24 +61,52 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
         return getTitleRatingForResolvedImdbId(clean)
     }
 
-    private suspend fun getTitleRatingForResolvedImdbId(imdbId: String): Double? {
-        val cacheKey = imdbId
-        val now = nowMsProvider()
-        cache[cacheKey]?.takeIf { it.expiresAtMs > now }?.let { return it.rating }
+    suspend fun getTitleRatingsByImdbIds(
+        imdbIds: List<String>,
+        cacheOnly: Boolean = false
+    ): Map<String, Double> {
+        val cleanIds = imdbIds.mapNotNull(::extractCanonicalImdbId).distinct()
+        if (cleanIds.isEmpty()) return emptyMap()
 
-        val rating = runCatching {
-            customImdbClient.fetchTitleRatings(listOf(imdbId))[imdbId]
-        }.getOrElse { error ->
-            Log.w(CUSTOM_IMDB_TITLE_TAG, "Failed custom IMDb title rating for $imdbId: ${error.message}", error)
-            null
+        val now = nowMsProvider()
+        val out = linkedMapOf<String, Double>()
+        val missing = mutableListOf<String>()
+
+        for (i in cleanIds.indices) {
+            val imdbId = cleanIds[i]
+            val cached = cache[imdbId]?.takeIf { it.expiresAtMs > now }
+            if (cached != null) {
+                cached.rating?.let { out[imdbId] = it }
+            } else {
+                missing += imdbId
+            }
         }
 
-        cache[cacheKey] = CacheEntry(
-            rating = rating,
-            expiresAtMs = nowMsProvider() + CUSTOM_IMDB_TITLE_RATINGS_TTL_MS
-        )
-        return rating
+        if (cacheOnly || missing.isEmpty()) return out
+
+        val fetched = runCatching {
+            customImdbClient.fetchTitleRatings(missing)
+        }.getOrElse { error ->
+            Log.w(CUSTOM_IMDB_TITLE_TAG, "Failed custom IMDb title rating batch: ${error.message}", error)
+            emptyMap()
+        }
+
+        val expiresAt = nowMsProvider() + CUSTOM_IMDB_TITLE_RATINGS_TTL_MS
+        for (i in missing.indices) {
+            val imdbId = missing[i]
+            val rating = fetched[imdbId]
+            cache[imdbId] = CacheEntry(
+                rating = rating,
+                expiresAtMs = expiresAt
+            )
+            rating?.let { out[imdbId] = it }
+        }
+
+        return out
     }
+
+    private suspend fun getTitleRatingForResolvedImdbId(imdbId: String): Double? =
+        getTitleRatingsByImdbIds(listOf(imdbId), cacheOnly = false)[imdbId]
 
     private suspend fun resolveImdbId(
         contentId: String,

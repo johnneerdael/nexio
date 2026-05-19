@@ -10,6 +10,7 @@ import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.ActiveRailTracker
+import com.nexio.tv.core.integration.BootNetworkGovernor
 import com.nexio.tv.core.integration.IntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.locale.AppLocaleResolver
@@ -194,6 +195,7 @@ class HomeViewModel @Inject constructor(
     internal val artworkProviderResolver: ArtworkProviderResolver,
     internal val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = DefaultHomeTvEpisodeOrderOverrideRepository,
+    private val bootNetworkGovernor: BootNetworkGovernor = BootNetworkGovernor(),
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -208,6 +210,7 @@ class HomeViewModel @Inject constructor(
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
+        internal const val BOOT_NETWORK_WINDOW_MS = 30_000L
         // Breathing room between back-to-back serialized home refresh
         // iterations. 2026-05-10 ANR investigation showed that multiple
         // discovery sources (trakt/simkl/tmdb/mdblist/account_sync) fire
@@ -977,6 +980,7 @@ class HomeViewModel @Inject constructor(
         get() = trailerSelectedFallbackYtIdsState
 
     init {
+        beginBootNetworkWindow()
         emitInitialHomeProfileSessionStarted()
         observeStartupPerfTelemetry()
         observePlaybackWorkGate()
@@ -1019,6 +1023,14 @@ class HomeViewModel @Inject constructor(
         observeResolvedContinueWatchingItems()
         observeContinueWatchingSnapshotHydrationFromResolvedSurface()
         startCrossIdResolutionObserverPipeline()
+    }
+
+    private fun beginBootNetworkWindow() {
+        bootNetworkGovernor.beginBootWindow()
+        viewModelScope.launch {
+            delay(BOOT_NETWORK_WINDOW_MS)
+            bootNetworkGovernor.endBootWindow()
+        }
     }
 
     private fun observeResolvedRailRows() {
@@ -1839,6 +1851,7 @@ class HomeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        bootNetworkGovernor.endBootWindow()
         posterStatusReconcileJob?.cancel()
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()

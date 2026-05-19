@@ -22,7 +22,8 @@ class DefaultIntegrationRuntime @Inject constructor(
     private val playbackGate: IntegrationPlaybackGate,
     private val registry: IntegrationPolicyRegistry,
     private val auditSink: IntegrationAuditSink,
-    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink,
+    private val bootNetworkGovernor: BootNetworkGovernor = BootNetworkGovernor()
 ) : IntegrationRuntime {
 
     private val nextOpId = AtomicLong(0L)
@@ -266,6 +267,10 @@ class DefaultIntegrationRuntime @Inject constructor(
         }
         if (backoffManager.isBlocked(spec.provider, spec.scope)) {
             record(spec, traceId, IntegrationAuditPhase.BACKOFF_BLOCKED, IntegrationOutcome.MISSING)
+            return IntegrationCallResult.Missing
+        }
+        if (!bootNetworkGovernor.allow(spec)) {
+            record(spec, traceId, IntegrationAuditPhase.MISSING, IntegrationOutcome.MISSING)
             return IntegrationCallResult.Missing
         }
 
@@ -606,6 +611,24 @@ class DefaultIntegrationRuntime @Inject constructor(
         }
         if (backoffManager.isBlocked(spec.provider, spec.scope)) {
             record(spec, traceId, IntegrationAuditPhase.BACKOFF_BLOCKED, IntegrationOutcome.MISSING)
+            return IntegrationFetchResult.Missing
+        }
+        if (!bootNetworkGovernor.allow(spec)) {
+            cacheStore.readStale(spec)?.let {
+                record(spec, traceId, IntegrationAuditPhase.STALE_CACHE_HIT, IntegrationOutcome.SUCCESS)
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.STALE_HIT,
+                    mapOf("reason" to "stale-cache-hit-boot-budget", "networkSuppressed" to true)
+                )
+                return IntegrationFetchResult.Stale(it)
+            }
+            record(spec, traceId, IntegrationAuditPhase.MISSING, IntegrationOutcome.MISSING)
+            emitCacheDecision(
+                traceContext,
+                TraceCacheDecision.EXPIRED_MISS,
+                mapOf("reason" to "boot-budget-blocked", "networkSuppressed" to true)
+            )
             return IntegrationFetchResult.Missing
         }
 

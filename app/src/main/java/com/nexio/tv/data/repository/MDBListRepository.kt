@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingItemDto
@@ -26,6 +27,14 @@ import javax.inject.Singleton
 internal const val EPISODE_RATINGS_COMPLETE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 internal const val EPISODE_RATINGS_RETRY_TTL_MS = 30L * 60L * 1000L
 internal const val MDBLIST_TITLE_RATINGS_TTL_MS = 7L * 24L * 60L * 60L * 1000L
+internal const val MDBLIST_TITLE_RATINGS_NEGATIVE_TTL_MS = 6L * 60L * 60L * 1000L
+
+data class MDBListTitleRatingRequest(
+    val stableId: String,
+    val mediaType: String,
+    val requestProvider: String,
+    val ratingSources: List<String>
+)
 
 @Singleton
 class MDBListRepository @Inject constructor(
@@ -41,6 +50,25 @@ class MDBListRepository @Inject constructor(
     private data class EpisodeRatingsCacheEntry(
         val result: Map<Pair<Int, Int>, Double>,
         val expiresAtMs: Long
+    )
+
+    private data class SourceCacheKey(
+        val mediaType: String,
+        val requestProvider: String,
+        val ratingSource: String,
+        val stableId: String,
+        val apiKeyHash: Int
+    )
+
+    private data class SourceCacheEntry(
+        val rating: Double?,
+        val expiresAtMs: Long
+    )
+
+    private data class BatchGroup(
+        val mediaType: String,
+        val requestProvider: String,
+        val ratingSource: String
     )
 
     private enum class ProviderType(val apiValue: String) {
@@ -66,6 +94,7 @@ class MDBListRepository @Inject constructor(
     private val episodeRatingsCache = ConcurrentHashMap<String, EpisodeRatingsCacheEntry>()
     private val episodeRatingsInFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<Map<Pair<Int, Int>, Double>>>()
     private val episodeRatingsInFlightMutex = Mutex()
+    private val sourceRatingCache = ConcurrentHashMap<SourceCacheKey, SourceCacheEntry>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun getRatingsForMeta(
@@ -127,15 +156,26 @@ class MDBListRepository @Inject constructor(
         val deferred = inFlightMutex.withLock {
             inFlight[cacheKey] ?: scope.async {
                 try {
-                    integrationProvider.fetchRatings(
-                        ratingId = ratingIdentity.id,
-                        requestProvider = ratingIdentity.provider,
-                        mediaType = mediaType,
+                    val result = getTitleRatings(
+                        requests = listOf(
+                            MDBListTitleRatingRequest(
+                                stableId = ratingIdentity.id.toString(),
+                                mediaType = mediaType,
+                                requestProvider = ratingIdentity.provider,
+                                ratingSources = providers.map { it.apiValue }
+                            )
+                        ),
                         apiKey = apiKey,
-                        providers = providers.map { it.apiValue }
-                    ).also { result ->
+                        cacheOnly = false
+                    ).values.firstOrNull()?.let { ratings ->
+                        MDBListRatingsResult(
+                            ratings = ratings,
+                            hasImdbRating = false
+                        )
+                    }
+                    result.also {
                         cache[cacheKey] = CacheEntry(
-                            result = result,
+                            result = it,
                             expiresAtMs = System.currentTimeMillis() + cacheTtlMs
                         )
                     }
@@ -150,6 +190,138 @@ class MDBListRepository @Inject constructor(
         }
 
         return deferred.await()
+    }
+
+    suspend fun getTitleRatings(
+        requests: List<MDBListTitleRatingRequest>,
+        cacheOnly: Boolean
+    ): Map<MDBListTitleRatingRequest, com.nexio.tv.domain.model.MDBListRatings> {
+        val settings = settingsDataStore.settings.first()
+        if (!settings.enabled) return emptyMap()
+        val apiKey = settings.apiKey.trim()
+        if (apiKey.isBlank()) return emptyMap()
+        return getTitleRatings(requests, apiKey, cacheOnly)
+    }
+
+    private suspend fun getTitleRatings(
+        requests: List<MDBListTitleRatingRequest>,
+        apiKey: String,
+        cacheOnly: Boolean
+    ): Map<MDBListTitleRatingRequest, com.nexio.tv.domain.model.MDBListRatings> {
+        val normalizedRequests = requests.mapNotNull { request ->
+            val stableId = request.stableId.trim().takeIf(String::isNotEmpty) ?: return@mapNotNull null
+            val mediaType = normalizeMediaType(request.mediaType)
+            val requestProvider = request.requestProvider.trim().lowercase().takeIf(String::isNotEmpty) ?: return@mapNotNull null
+            val sources = request.ratingSources
+                .map { it.trim().lowercase() }
+                .filter { source -> ProviderType.entries.any { it.apiValue == source } }
+                .filter { it in MDBLIST_ALLOWED_TITLE_RATING_SOURCES }
+                .distinct()
+            if (sources.isEmpty()) return@mapNotNull null
+            request.copy(
+                stableId = stableId,
+                mediaType = mediaType,
+                requestProvider = requestProvider,
+                ratingSources = sources
+            )
+        }
+        if (normalizedRequests.isEmpty()) return emptyMap()
+
+        val apiKeyHash = apiKey.hashCode()
+        val now = System.currentTimeMillis()
+        val missingByGroup = linkedMapOf<BatchGroup, MutableList<String>>()
+
+        for (i in normalizedRequests.indices) {
+            val request = normalizedRequests[i]
+            for (sourceIndex in request.ratingSources.indices) {
+                val source = request.ratingSources[sourceIndex]
+                val key = SourceCacheKey(
+                    mediaType = request.mediaType,
+                    requestProvider = request.requestProvider,
+                    ratingSource = source,
+                    stableId = request.stableId,
+                    apiKeyHash = apiKeyHash
+                )
+                if (sourceRatingCache[key]?.expiresAtMs?.let { it > now } == true) continue
+                if (!cacheOnly) {
+                    missingByGroup.getOrPut(
+                        BatchGroup(request.mediaType, request.requestProvider, source)
+                    ) { mutableListOf() } += request.stableId
+                }
+            }
+        }
+
+        if (!cacheOnly) {
+            hydrateMissingTitleRatings(missingByGroup, apiKey, apiKeyHash)
+        }
+
+        return buildTitleRatingResults(normalizedRequests, apiKeyHash)
+    }
+
+    private suspend fun hydrateMissingTitleRatings(
+        missingByGroup: Map<BatchGroup, List<String>>,
+        apiKey: String,
+        apiKeyHash: Int
+    ) {
+        for ((group, rawIds) in missingByGroup) {
+            val ids = rawIds.distinct()
+            if (ids.isEmpty()) continue
+            when (val result = integrationProvider.fetchRatingBatch(
+                mediaType = group.mediaType,
+                ratingType = group.ratingSource,
+                requestProvider = group.requestProvider,
+                ids = ids,
+                apiKey = apiKey
+            )) {
+                is IntegrationCallResult.Success -> {
+                    val expiresAt = System.currentTimeMillis() + MDBLIST_TITLE_RATINGS_TTL_MS
+                    val negativeExpiresAt = System.currentTimeMillis() + MDBLIST_TITLE_RATINGS_NEGATIVE_TTL_MS
+                    for (i in ids.indices) {
+                        val id = ids[i]
+                        val rating = result.value[id]
+                        sourceRatingCache[SourceCacheKey(
+                            mediaType = group.mediaType,
+                            requestProvider = group.requestProvider,
+                            ratingSource = group.ratingSource,
+                            stableId = id,
+                            apiKeyHash = apiKeyHash
+                        )] = SourceCacheEntry(
+                            rating = rating,
+                            expiresAtMs = if (rating == null) negativeExpiresAt else expiresAt
+                        )
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun buildTitleRatingResults(
+        requests: List<MDBListTitleRatingRequest>,
+        apiKeyHash: Int
+    ): Map<MDBListTitleRatingRequest, com.nexio.tv.domain.model.MDBListRatings> {
+        val out = linkedMapOf<MDBListTitleRatingRequest, com.nexio.tv.domain.model.MDBListRatings>()
+        val now = System.currentTimeMillis()
+        for (i in requests.indices) {
+            val request = requests[i]
+            var ratings = com.nexio.tv.domain.model.MDBListRatings()
+            for (sourceIndex in request.ratingSources.indices) {
+                val source = request.ratingSources[sourceIndex]
+                val key = SourceCacheKey(
+                    mediaType = request.mediaType,
+                    requestProvider = request.requestProvider,
+                    ratingSource = source,
+                    stableId = request.stableId,
+                    apiKeyHash = apiKeyHash
+                )
+                val rating = sourceRatingCache[key]?.takeIf { it.expiresAtMs > now }?.rating ?: continue
+                ratings = ratings.withSource(source, rating)
+            }
+            if (!ratings.isEmpty()) {
+                out[request] = ratings
+            }
+        }
+        return out
     }
 
     suspend fun enrichPreview(preview: MetaPreview, imdbIdOverride: String? = null): MetaPreview {
@@ -346,6 +518,26 @@ class MDBListRepository @Inject constructor(
             links = emptyList<MetaLink>(),
             trailerYtIds = trailerYtIds
         )
+    }
+}
+
+private val MDBLIST_ALLOWED_TITLE_RATING_SOURCES = setOf(
+    "tmdb",
+    "letterboxd",
+    "tomatoes",
+    "metacritic"
+)
+
+private fun com.nexio.tv.domain.model.MDBListRatings.withSource(
+    source: String,
+    rating: Double
+): com.nexio.tv.domain.model.MDBListRatings {
+    return when (source) {
+        "tmdb" -> copy(tmdb = rating)
+        "letterboxd" -> copy(letterboxd = rating)
+        "tomatoes" -> copy(tomatoes = rating)
+        "metacritic" -> copy(metacritic = rating)
+        else -> this
     }
 }
 

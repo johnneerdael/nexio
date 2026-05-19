@@ -19,6 +19,7 @@ import com.nexio.tv.core.integration.credentialHash
 import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.valueOrNull
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingItemDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.MDBListRatingsResult
@@ -227,6 +228,59 @@ class MDBListIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    suspend fun fetchRatingBatch(
+        mediaType: String,
+        ratingType: String,
+        requestProvider: String,
+        ids: List<String>,
+        apiKey: String
+    ): IntegrationCallResult<Map<String, Double>> {
+        val cleanIds = ids.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.distinct()
+        if (cleanIds.isEmpty()) return IntegrationCallResult.Success(emptyMap())
+
+        val credentialHash = credentialHash(IntegrationProvider.MDBLIST, apiKey)
+        return runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.MDBLIST,
+                apiShapeId = MDBListApiShapes.RATING_BATCH,
+                operationKey = "mdblist.rating_batch:$mediaType:$ratingType:$requestProvider:${cleanIds.joinToString("|").hashCode()}:$credentialHash",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.ProviderConfig("mdblist:$credentialHash"),
+                coalesceConcurrent = true,
+                call = {
+                    runCatching {
+                        mdbListApi.getRating(
+                            mediaType = mediaType,
+                            ratingType = ratingType,
+                            apiKey = apiKey,
+                            body = MDBListRatingRequestDto(
+                                ids = cleanIds.map { id -> id.toIntOrNull() ?: id },
+                                provider = requestProvider
+                            )
+                        )
+                    }.fold(
+                        onSuccess = { response ->
+                            if (!response.isSuccessful) {
+                                return@IntegrationCallSpec IntegrationCallResult.HttpError(
+                                    statusCode = response.code(),
+                                    retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                                    reason = "mdblist_rating_${response.code()}"
+                                )
+                            }
+                            IntegrationCallResult.Success(
+                                response.body()
+                                    ?.ratings
+                                    .orEmpty()
+                                    .associateRatingItems()
+                            )
+                        },
+                        onFailure = { error -> IntegrationCallResult.NetworkError(error) }
+                    )
+                }
+            )
+        )
+    }
+
     suspend fun fetchEpisodeRatingsForSeason(
         cacheNamespace: String,
         season: Int,
@@ -255,6 +309,29 @@ class MDBListIntegrationProvider @Inject constructor(
             }
         )
         return runtime.get(spec).valueOrNull()?.toBoolean() == true
+    }
+}
+
+private fun List<MDBListRatingItemDto>.associateRatingItems(): Map<String, Double> {
+    val out = linkedMapOf<String, Double>()
+    for (i in indices) {
+        val item = this[i]
+        val id = item.id.toRatingIdKey() ?: continue
+        val rating = item.rating ?: continue
+        out[id] = rating
+    }
+    return out
+}
+
+private fun Any?.toRatingIdKey(): String? {
+    return when (this) {
+        null -> null
+        is Int -> toString()
+        is Long -> toString()
+        is Double -> toLong().takeIf { it.toDouble() == this }?.toString() ?: toString()
+        is Float -> toLong().takeIf { it.toFloat() == this }?.toString() ?: toString()
+        is String -> trim().takeIf(String::isNotEmpty)
+        else -> toString().trim().takeIf(String::isNotEmpty)
     }
 }
 

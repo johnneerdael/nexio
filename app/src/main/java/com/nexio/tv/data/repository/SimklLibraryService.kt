@@ -55,7 +55,8 @@ class SimklLibraryService @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val profileManager: ProfileManager? = null,
     private val ownershipService: IntegrationOwnershipService? = null,
-    private val accountScopeProvider: TrackingAccountScopeProvider
+    private val accountScopeProvider: TrackingAccountScopeProvider,
+    private val accountSingleFlight: SimklAccountSyncSingleFlight = SimklAccountSyncSingleFlight()
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -279,7 +280,9 @@ class SimklLibraryService @Inject constructor(
             val activeAtStart = profileId == activeProfileId()
             if (activeAtStart) refreshingState.value = true
             runCatching {
-                val activitiesResponse = remote.getLastActivities(session)
+                val activitiesResponse = accountSingleFlight.run("simkl:last_activities:${session.profileId}") {
+                    remote.getLastActivities(session)
+                }
                 if (!activitiesResponse.isSuccessful) {
                     Log.w("SimklLibraryService", "Failed to fetch SIMKL activities (${activitiesResponse.code()}), skipping sync")
                     return@runCatching
@@ -362,7 +365,9 @@ class SimklLibraryService @Inject constructor(
 
     private suspend fun fetchInitialSnapshot(session: TrackingAuthSession): Snapshot? {
         // Spec: first sync uses GET /sync/all-items/ with no type filter and no date_from
-        val response = remote.getAllItems(dateFrom = null, extended = "full", session = session)
+        val response = accountSingleFlight.run("simkl:all_items:initial:${session.profileId}") {
+            remote.getAllItems(dateFrom = null, extended = "full", session = session)
+        }
         if (!response.isSuccessful) {
             Log.w("SimklLibraryService", "Failed to fetch initial SIMKL all-items (${response.code()})")
             return null
@@ -399,12 +404,14 @@ class SimklLibraryService @Inject constructor(
         var merged = baseSnapshot
         for (tc in types) {
             if (tc.currentAll == tc.savedAll) continue  // no changes for this type
-            val response = remote.getAllItemsByType(
-                type = tc.type,
-                dateFrom = tc.savedAll,
-                extended = tc.extended,
-                session = session
-            )
+            val response = accountSingleFlight.run("simkl:all_items:${tc.type}:${session.profileId}:${tc.savedAll.orEmpty()}") {
+                remote.getAllItemsByType(
+                    type = tc.type,
+                    dateFrom = tc.savedAll,
+                    extended = tc.extended,
+                    session = session
+                )
+            }
             if (!response.isSuccessful) {
                 Log.w("SimklLibraryService", "Failed to fetch SIMKL ${tc.type} delta (${response.code()})")
                 continue

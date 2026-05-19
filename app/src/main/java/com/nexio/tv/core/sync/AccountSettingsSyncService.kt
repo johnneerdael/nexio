@@ -123,6 +123,7 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -587,6 +588,7 @@ class AccountSettingsSyncService @Inject constructor(
     private var lastAppliedRemoteRevision: Long = 0L
     @Volatile
     private var lastSyncedAccountSecretSnapshot: AccountSecretPushSnapshot? = null
+    private val sameBootMissingSecretResolveKeys = ConcurrentHashMap.newKeySet<String>()
     private val homeCatalogRailsSyncCache = AccountHomeCatalogRailsSyncCache()
     private var lastRemoteTraktPinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
     private var lastRemoteMDBListPinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList()
@@ -2244,6 +2246,17 @@ class AccountSettingsSyncService @Inject constructor(
      * when the server authoritatively responded.
      */
     private suspend fun resolveApiKeySecretOrNull(secretType: String, secretRef: String): String? {
+        val payload = resolveAccountSecretPayloadOrNull<AccountSecretApiKeyPayload>(secretType, secretRef)
+            ?: return null
+        return payload.apiKey?.trim().orEmpty()
+    }
+
+    private suspend inline fun <reified T : Any> resolveAccountSecretPayloadOrNull(
+        secretType: String,
+        secretRef: String
+    ): T? {
+        val resolveKey = "$secretType:$secretRef"
+        if (sameBootMissingSecretResolveKeys.contains(resolveKey)) return null
         val result = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -2253,48 +2266,44 @@ class AccountSettingsSyncService @Inject constructor(
                         put("p_secret_ref", secretRef)
                         put("p_source", "app")
                     }
-                ).decodeAs<AccountSecretApiKeyPayload>()
+                ).decodeAs<T>()
             }
         }
-        if (result.isFailure) return null
-        return result.getOrNull()?.apiKey?.trim().orEmpty()
+        result.exceptionOrNull()?.let { error ->
+            if (error.isSameBootMissingSecretResolveFailure()) {
+                sameBootMissingSecretResolveKeys += resolveKey
+            }
+        }
+        return result.getOrNull()
+    }
+
+    private fun Throwable.isSameBootMissingSecretResolveFailure(): Boolean {
+        val text = sequenceOf(message, cause?.message)
+            .filterNotNull()
+            .joinToString(" ")
+            .lowercase()
+        return "404" in text ||
+            "not found" in text ||
+            "could not find" in text ||
+            ("function" in text && "schema cache" in text)
     }
 
     private suspend fun resolveRemoteTraktSecrets(remote: TraktAuthSyncSettings): ResolvedRemoteTraktSecrets? {
-        val accessResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", TRAKT_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountTraktAccessSecretPayload>()
-            }
-        }
-
-        val refreshResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
-                        put("p_secret_ref", TRAKT_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountTraktRefreshSecretPayload>()
-            }
-        }
+        val accessPayload = resolveAccountSecretPayloadOrNull<AccountTraktAccessSecretPayload>(
+            TRAKT_ACCESS_SECRET_TYPE,
+            TRAKT_SECRET_REF
+        )
+        val refreshPayload = resolveAccountSecretPayloadOrNull<AccountTraktRefreshSecretPayload>(
+            TRAKT_REFRESH_SECRET_TYPE,
+            TRAKT_SECRET_REF
+        )
 
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
         // Clearing on transient failure is what was logging the user out on every upgrade.
-        if (accessResult.isFailure || refreshResult.isFailure) {
+        if (accessPayload == null || refreshPayload == null) {
             return null
         }
 
-        val accessPayload = accessResult.getOrNull()
-        val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         if (accessToken.isBlank() || refreshToken.isBlank()) {
@@ -2389,24 +2398,10 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun resolveRemoteSimklSecrets(remote: SimklAuthSyncSettings): ResolvedRemoteSimklSecrets? {
-        val accessResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", SIMKL_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountSimklAccessSecretPayload>()
-            }
-        }
-
-        if (accessResult.isFailure) {
-            return null
-        }
-
-        val accessPayload = accessResult.getOrNull()
+        val accessPayload = resolveAccountSecretPayloadOrNull<AccountSimklAccessSecretPayload>(
+            SIMKL_ACCESS_SECRET_TYPE,
+            SIMKL_SECRET_REF
+        ) ?: return null
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val localState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val preserveLocalTokens = accessToken.isBlank() &&
@@ -2455,38 +2450,19 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun resolveRemoteKitsuSecrets(remote: KitsuAuthSyncSettings): ResolvedRemoteKitsuSecrets? {
-        val accessResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", KITSU_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", KITSU_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountKitsuAccessSecretPayload>()
-            }
-        }
+        val accessPayload = resolveAccountSecretPayloadOrNull<AccountKitsuAccessSecretPayload>(
+            KITSU_ACCESS_SECRET_TYPE,
+            KITSU_SECRET_REF
+        )
+        val refreshPayload = resolveAccountSecretPayloadOrNull<AccountKitsuRefreshSecretPayload>(
+            KITSU_REFRESH_SECRET_TYPE,
+            KITSU_SECRET_REF
+        )
 
-        val refreshResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", KITSU_REFRESH_SECRET_TYPE)
-                        put("p_secret_ref", KITSU_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountKitsuRefreshSecretPayload>()
-            }
-        }
-
-        if (accessResult.isFailure || refreshResult.isFailure) {
+        if (accessPayload == null || refreshPayload == null) {
             return null
         }
 
-        val accessPayload = accessResult.getOrNull()
-        val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         val remoteExpiresAt = accessPayload?.expiresAtEpochSeconds ?: remote.expiresAtEpochSeconds ?: 0L
@@ -2558,40 +2534,21 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun resolveRemoteRealDebridSecrets(remote: RealDebridSyncSettings): ResolvedRemoteRealDebridSecrets? {
-        val accessResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
-                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountRealDebridAccessSecretPayload>()
-            }
-        }
-
-        val refreshResult = runCatching {
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_resolve_account_secret",
-                    buildJsonObject {
-                        put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
-                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
-                        put("p_source", "app")
-                    }
-                ).decodeAs<AccountRealDebridRefreshSecretPayload>()
-            }
-        }
+        val accessPayload = resolveAccountSecretPayloadOrNull<AccountRealDebridAccessSecretPayload>(
+            REAL_DEBRID_ACCESS_SECRET_TYPE,
+            REAL_DEBRID_SECRET_REF
+        )
+        val refreshPayload = resolveAccountSecretPayloadOrNull<AccountRealDebridRefreshSecretPayload>(
+            REAL_DEBRID_REFRESH_SECRET_TYPE,
+            REAL_DEBRID_SECRET_REF
+        )
 
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
         // Same upgrade-time logout class of bug as the Trakt path used to have.
-        if (accessResult.isFailure || refreshResult.isFailure) {
+        if (accessPayload == null || refreshPayload == null) {
             return null
         }
 
-        val accessPayload = accessResult.getOrNull()
-        val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         val userClientId = accessPayload?.userClientId?.trim().orEmpty()
@@ -2677,16 +2634,12 @@ class AccountSettingsSyncService @Inject constructor(
     private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
         return runCatching {
             if (addon.transportSchemaVersion == 2 && !addon.transportSecretRef.isNullOrBlank()) {
-                val transportPayload = withJwtRefreshRetry {
-                    postgrest.rpc(
-                        "sync_resolve_account_secret",
-                        buildJsonObject {
-                            put("p_secret_type", "addon_credential")
-                            put("p_secret_ref", addon.transportSecretRef)
-                            put("p_source", "app")
-                        }
-                    ).decodeAs<AccountAddonSecretPayload>()
-                }.requireValidV2Transport(
+                val transportPayload = (
+                    resolveAccountSecretPayloadOrNull<AccountAddonSecretPayload>(
+                        "addon_credential",
+                        addon.transportSecretRef
+                    ) ?: throw IllegalStateException("Missing addon transport secret ${addon.transportSecretRef}")
+                    ).requireValidV2Transport(
                     secretRef = addon.transportSecretRef,
                     addonUrl = addon.url
                 )
@@ -2701,16 +2654,12 @@ class AccountSettingsSyncService @Inject constructor(
             val secretPayload = addon.secretRef
                 ?.takeIf { it.isNotBlank() }
                 ?.let { secretRef ->
-                    withJwtRefreshRetry {
-                        postgrest.rpc(
-                            "sync_resolve_account_secret",
-                            buildJsonObject {
-                                put("p_secret_type", "addon_credential")
-                                put("p_secret_ref", secretRef)
-                                put("p_source", "app")
-                            }
-                        ).decodeAs<AccountAddonSecretPayload>()
-                    }.requireValidV1Secret(
+                    (
+                        resolveAccountSecretPayloadOrNull<AccountAddonSecretPayload>(
+                            "addon_credential",
+                            secretRef
+                        ) ?: throw IllegalStateException("Missing addon credential secret $secretRef")
+                        ).requireValidV1Secret(
                         secretRef = secretRef,
                         addonUrl = addon.url
                     )
