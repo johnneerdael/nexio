@@ -18,6 +18,7 @@ import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -247,6 +248,8 @@ class SubtitleTranslationService @Inject constructor(
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
+    private val cueTranslationInFlightLock = Any()
+    private val cueTranslationInFlight = mutableMapOf<String, CompletableDeferred<Result<String>>>()
 
     suspend fun translateSubtitle(
         sourceSubtitle: Subtitle,
@@ -399,16 +402,62 @@ class SubtitleTranslationService @Inject constructor(
             }
 
             if (missing.isNotEmpty()) {
-                val translated = translateMissingCueTexts(
-                    texts = missing,
-                    targetLanguageCode = normalizedTarget,
-                    sourceLanguageCode = normalizedSource,
-                    settings = normalizedSettings,
-                    chunkConfig = chunkConfig
-                )
-                translated.forEach { (source, value) ->
-                    cueTranslationCache[subtitleTranslationCueCacheKey(source, normalizedTarget, normalizedSettings, normalizedSource)] = value
-                    resolved[source] = value
+                val owned = mutableListOf<CueTranslationInFlightOwner>()
+                val awaiters = mutableListOf<CueTranslationInFlightAwaiter>()
+                synchronized(cueTranslationInFlightLock) {
+                    for (text in missing) {
+                        val key = subtitleTranslationCueCacheKey(text, normalizedTarget, normalizedSettings, normalizedSource)
+                        val existing = cueTranslationInFlight[key]
+                        if (existing != null) {
+                            awaiters += CueTranslationInFlightAwaiter(text, existing)
+                        } else {
+                            val deferred = CompletableDeferred<Result<String>>()
+                            cueTranslationInFlight[key] = deferred
+                            owned += CueTranslationInFlightOwner(text, key, deferred)
+                        }
+                    }
+                }
+                for (awaiter in awaiters) {
+                    val awaited = awaiter.deferred.await()
+                    awaited.getOrNull()?.let { translated ->
+                        resolved[awaiter.text] = translated
+                    }
+                    val failure = awaited.exceptionOrNull()
+                    if (failure != null && failure !is NoSuchElementException) {
+                        throw failure
+                    }
+                }
+
+                try {
+                    val ownedTexts = owned.map { it.text }
+                    val translated = translateMissingCueTexts(
+                        texts = ownedTexts,
+                        targetLanguageCode = normalizedTarget,
+                        sourceLanguageCode = normalizedSource,
+                        settings = normalizedSettings,
+                        chunkConfig = chunkConfig
+                    )
+                    for (owner in owned) {
+                        val translatedText = translated[owner.text]
+                        if (translatedText != null) {
+                            cueTranslationCache[owner.key] = translatedText
+                            resolved[owner.text] = translatedText
+                            owner.deferred.complete(Result.success(translatedText))
+                        } else {
+                            owner.deferred.complete(Result.failure(NoSuchElementException("Cue translation missing.")))
+                        }
+                    }
+                } catch (error: Throwable) {
+                    for (owner in owned) {
+                        owner.deferred.complete(Result.failure(error))
+                    }
+                    throw error
+                } finally {
+                    synchronized(cueTranslationInFlightLock) {
+                        for (owner in owned) {
+                            cueTranslationInFlight.remove(owner.key, owner.deferred)
+                        }
+                    }
                 }
             }
 
@@ -2084,6 +2133,17 @@ class SubtitleTranslationService @Inject constructor(
 typealias GeminiSubtitleTranslationService = SubtitleTranslationService
 typealias GeminiTranslatedSubtitleAsset = TranslatedSubtitleAsset
 typealias GeminiTranslationChunkConfig = SubtitleTranslationChunkConfig
+
+private data class CueTranslationInFlightOwner(
+    val text: String,
+    val key: String,
+    val deferred: CompletableDeferred<Result<String>>
+)
+
+private data class CueTranslationInFlightAwaiter(
+    val text: String,
+    val deferred: CompletableDeferred<Result<String>>
+)
 
 private fun rawSubRipSourceClause(
     targetLanguageName: String,

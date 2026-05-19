@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player
 
+import androidx.media3.common.Format
 import com.nexio.tv.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -29,6 +30,71 @@ internal fun PlayerRuntimeController.shouldUseBuiltInAiTranslation(): Boolean {
         selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null,
         selectedSubtitleTrackIndex = state.selectedSubtitleTrackIndex
     )
+}
+
+internal fun PlayerRuntimeController.shouldAllowBuiltInCueTranslation(): Boolean {
+    val state = _uiState.value
+    return shouldAllowBuiltInCueTranslationForState(
+        aiSubtitlesEnabled = state.aiSubtitlesEnabled,
+        selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null
+    )
+}
+
+internal fun shouldAllowBuiltInCueTranslationForState(
+    aiSubtitlesEnabled: Boolean,
+    selectedAddonSubtitlePresent: Boolean
+): Boolean {
+    return aiSubtitlesEnabled && !selectedAddonSubtitlePresent
+}
+
+internal fun PlayerRuntimeController.shouldAllowParserAheadCueTranslation(format: Format): Boolean {
+    val state = _uiState.value
+    val selectedTrack = state.subtitleTracks.getOrNull(state.selectedSubtitleTrackIndex)
+    return shouldAllowParserAheadCueTranslationForState(
+        aiSubtitlesEnabled = state.aiSubtitlesEnabled,
+        selectedAddonSubtitlePresent = state.selectedAddonSubtitle != null,
+        selectedSubtitleTrack = selectedTrack,
+        formatId = format.id,
+        formatLanguage = format.language,
+        formatMimeType = format.sampleMimeType
+    )
+}
+
+internal fun shouldAllowParserAheadCueTranslationForState(
+    aiSubtitlesEnabled: Boolean,
+    selectedAddonSubtitlePresent: Boolean,
+    selectedSubtitleTrack: TrackInfo?,
+    formatId: String?,
+    formatLanguage: String?,
+    formatMimeType: String?
+): Boolean {
+    if (!shouldAllowBuiltInCueTranslationForState(aiSubtitlesEnabled, selectedAddonSubtitlePresent)) {
+        return false
+    }
+    val selectedTrack = selectedSubtitleTrack ?: return false
+    val selectedTrackId = selectedTrack.trackId?.takeIf(String::isNotBlank)
+    val parserTrackId = formatId?.takeIf(String::isNotBlank)
+    if (selectedTrackId != null && parserTrackId != null) {
+        return selectedTrackId == parserTrackId
+    }
+
+    val selectedLanguage = selectedTrack.language?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+        ?.takeIf(String::isNotBlank)
+    val parserLanguage = formatLanguage?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+        ?.takeIf(String::isNotBlank)
+    if (selectedLanguage != null && parserLanguage != null && selectedLanguage != parserLanguage) {
+        return false
+    }
+
+    val selectedMimeType = selectedTrack.mimeType?.takeIf(String::isNotBlank)
+    val parserMimeType = formatMimeType?.takeIf(String::isNotBlank)
+    if (selectedMimeType != null && parserMimeType != null && selectedMimeType != parserMimeType) {
+        return false
+    }
+
+    return parserTrackId != null ||
+        parserLanguage != null ||
+        (selectedMimeType != null && parserMimeType != null)
 }
 
 internal fun shouldUseBuiltInAiTranslationForState(
