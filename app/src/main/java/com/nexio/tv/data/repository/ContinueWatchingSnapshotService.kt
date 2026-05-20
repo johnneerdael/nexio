@@ -1341,7 +1341,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 contentId = entry.contentId,
                 fallbackContentId = entry.videoId
             ) {
-                facade.fetchTvEpisodeEnrichment(
+                facade.fetchTvEpisodeProjection(
                     metadataRequest = MetadataRequest(
                         contentId = entry.contentId,
                         contentType = ContentType.SERIES,
@@ -1538,7 +1538,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 contentId = seed.contentId,
                 fallbackContentId = seed.videoId
             ) {
-                facade.fetchTvEpisodeEnrichment(
+                facade.fetchTvEpisodeProjection(
                     metadataRequest = MetadataRequest(
                         contentId = seed.contentId,
                         contentType = contentType,
@@ -1632,13 +1632,18 @@ class ContinueWatchingSnapshotService @Inject constructor(
     ): List<WatchProgress> {
         if (previous.isEmpty()) return candidate
         val byKey = LinkedHashMap<String, WatchProgress>(candidate.size + previous.size)
-        candidate.forEach { progress ->
+        val seenAliases = linkedSetOf<String>()
+        for (i in candidate.indices) {
+            val progress = candidate[i]
             byKey[resumeRetentionKey(progress)] = progress
+            seenAliases += resumeRetentionAliases(progress)
         }
         var retainedAny = false
-        previous.forEach { progress ->
+        for (i in previous.indices) {
+            val progress = previous[i]
             val key = resumeRetentionKey(progress)
-            if (key in byKey) return@forEach
+            val aliases = resumeRetentionAliases(progress)
+            if (key in byKey || aliases.any { alias -> alias in seenAliases }) continue
             if (
                 isSuppressedByCompletionAnchor(
                     progress = progress,
@@ -1646,12 +1651,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     requireNewerCoordinate = isRemoteTvPlaybackResume(progress)
                 )
             ) {
-                return@forEach
+                continue
             }
             if (isResumeSuppressedByWatchedAnchors(progress, watchedAnchors)) {
-                return@forEach
+                continue
             }
             byKey[key] = progress
+            seenAliases += aliases
             retainedAny = true
         }
         if (!retainedAny) return candidate
@@ -1731,6 +1737,100 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun resumeRetentionKey(progress: WatchProgress): String =
         "${progress.contentId}|${progress.videoId}|${progress.season ?: -1}|${progress.episode ?: -1}"
+
+    private fun resumeRetentionAliases(progress: WatchProgress): Set<String> {
+        val aliases = linkedSetOf<String>()
+        val season = progress.season
+        val episode = progress.episode
+        val episodeSuffix = if (season != null && episode != null) ":s${season}e${episode}" else ""
+
+        fun add(raw: String?) {
+            val value = raw?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return
+            aliases += value
+            stripTypedMediaPrefix(value)?.let { aliases += it }
+            stripEpisodeSuffix(value)?.let { aliases += it }
+        }
+
+        add(resumeRetentionKey(progress))
+        add(progress.contentId)
+        add(progress.videoId)
+
+        providerIdsFromRawContinueWatchingContentId(progress.contentId)
+            .addResumeRetentionProviderAliases(aliases, episodeSuffix)
+        providerIdsFromRawContinueWatchingContentId(progress.videoId)
+            .addResumeRetentionProviderAliases(aliases, episodeSuffix)
+
+        progress.traktShowId?.takeIf { it > 0 }?.let { showId ->
+            aliases += "trakt:show:$showId$episodeSuffix"
+            aliases += "trakt:$showId$episodeSuffix"
+        }
+        progress.traktEpisodeId?.takeIf { it > 0 }?.let { episodeId ->
+            aliases += "trakt:episode:$episodeId"
+        }
+        progress.traktMovieId?.takeIf { it > 0 }?.let { movieId ->
+            aliases += "trakt:movie:$movieId"
+            aliases += "trakt:$movieId"
+        }
+
+        val artworkKeys = linkedSetOf<String>()
+        addArtworkCanonicalLookupKeys(progress.poster, artworkKeys)
+        addArtworkCanonicalLookupKeys(progress.backdrop, artworkKeys)
+        addArtworkCanonicalLookupKeys(progress.logo, artworkKeys)
+        for (key in artworkKeys) {
+            add(key + episodeSuffix)
+        }
+
+        if (season != null && episode != null) {
+            val normalizedTitle = progress.name
+                .trim()
+                .lowercase(Locale.ROOT)
+                .replace(NEXT_UP_SERIES_TITLE_TOKEN, " ")
+                .trim()
+                .replace(NEXT_UP_SERIES_WHITESPACE, " ")
+            if (normalizedTitle.isNotBlank()) {
+                aliases += "series-title:$normalizedTitle:s${season}e${episode}"
+            }
+        }
+
+        return aliases
+    }
+
+    private fun ProviderIds.addResumeRetentionProviderAliases(
+        aliases: MutableSet<String>,
+        episodeSuffix: String
+    ) {
+        imdb?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }?.let { id ->
+            aliases += "imdb:$id$episodeSuffix"
+            aliases += id + episodeSuffix
+            aliases += "series:imdb:$id$episodeSuffix"
+        }
+        tmdb?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }?.let { id ->
+            aliases += "tmdb:$id$episodeSuffix"
+            aliases += "series:tmdb:$id$episodeSuffix"
+        }
+        tvdb?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }?.let { id ->
+            aliases += "tvdb:$id$episodeSuffix"
+            aliases += "series:tvdb:$id$episodeSuffix"
+        }
+        trakt?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }?.let { id ->
+            aliases += "trakt:$id$episodeSuffix"
+            aliases += "series:trakt:$id$episodeSuffix"
+        }
+    }
+
+    private fun dedupeResumeItemsByAliases(items: List<WatchProgress>): List<WatchProgress> {
+        if (items.size <= 1) return items
+        val seenAliases = linkedSetOf<String>()
+        val out = ArrayList<WatchProgress>(items.size)
+        for (i in items.indices) {
+            val item = items[i]
+            val aliases = resumeRetentionAliases(item)
+            if (aliases.any { alias -> alias in seenAliases }) continue
+            out += item
+            seenAliases += aliases
+        }
+        return out
+    }
 
     private fun nextUpRetentionKey(entry: TrackingNextUpEntry): String =
         "${entry.contentId}|${entry.season}|${entry.episode}"
@@ -1836,6 +1936,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .sortedByDescending { it.lastWatched }
             .distinctBy { it.contentId }
             .toList()
+            .let(::dedupeResumeItemsByAliases)
     }
 
     private fun completionAnchorsByContent(
@@ -1960,6 +2061,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .mapNotNull(::normalizeResumeItem)
             .sortedByDescending { it.lastWatched }
             .distinctBy { it.contentId }
+            .let(::dedupeResumeItemsByAliases)
         val nextUpItems = snapshot.nextUpItems
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }

@@ -6,6 +6,7 @@ import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
@@ -856,13 +857,61 @@ class MetadataRouterFacade(
         )
     }
 
+    suspend fun fetchTvEpisodeProjection(
+        metadataRequest: MetadataRequest,
+        tvRequest: TvMetadataRequest
+    ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
+        val projectionContentId = tvRequest.contentId
+            .takeIf { it.startsWith("tvdb:", ignoreCase = true) }
+            ?: metadataRequest.contentId
+        val projectionRequest = metadataRequest.copy(
+            contentId = projectionContentId,
+            language = null,
+            depth = MetadataDepth.SEASON,
+            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
+        )
+        val baseRoute = router.route(projectionRequest)
+        val resolvedBaseRoute = identityResolver.resolve(baseRoute).copy(language = null)
+        val episodeMetadata = fetchEpisodeMetadataForRoute(
+            route = resolvedBaseRoute,
+            seasonNumbers = tvRequest.seasonNumbers,
+            metadataSeasonNumber = projectionRequest.seasonNumber,
+            projectionOnly = true
+        )
+        return TvMetadataDecision(
+            provider = resolvedBaseRoute.provider.toTvProvider(),
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = episodeMetadata,
+            diagnostics = emptyList()
+        )
+    }
+
     private suspend fun fetchEpisodeMetadataForRoute(
         route: MetadataRoute,
         seasonNumbers: List<Int>,
-        metadataSeasonNumber: Int?
+        metadataSeasonNumber: Int?,
+        projectionOnly: Boolean = false
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        fun planFor(seasonRoute: MetadataRoute): ProviderExecutionPlan =
+            if (projectionOnly && seasonRoute.provider == MetadataPrimaryProvider.TVDB) {
+                ProviderExecutionPlan(
+                    route = seasonRoute.copy(language = null),
+                    depth = MetadataDepth.SEASON,
+                    steps = listOf(
+                        ProviderPlanStep(
+                            apiShapeId = TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
+                            provider = MetadataPrimaryProvider.TVDB,
+                            role = ProviderPlanRole.SEASON,
+                            required = true
+                        )
+                    )
+                )
+            } else {
+                providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
+            }
+
         val effectiveSeasons = seasonNumbers.ifEmpty { listOfNotNull(metadataSeasonNumber) }
-        return if (effectiveSeasons.isEmpty()) {
+        val episodeMetadata = if (effectiveSeasons.isEmpty()) {
             if (route.provider == MetadataPrimaryProvider.KITSU) {
                 // Kitsu returns all episodes when seasonNumber is null; use an unconstrained route
                 // so the provider adapter passes an empty season filter through to the Kitsu backend,
@@ -870,13 +919,13 @@ class MetadataRouterFacade(
                 // Last-write-wins on duplicate (season, episode) keys from multiple step results —
                 // acceptable because providers are expected to return disjoint episode ranges.
                 val unconstrainedRoute = route.copy(seasonNumber = null)
-                val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
+                val plan = planFor(unconstrainedRoute)
                 providerPlanRunner.run(plan).stepResults
                     .flatMap { stepResult -> stepResult.episodeMetadata.entries }
                     .associate { it.toPair() }
             } else if (route.provider == MetadataPrimaryProvider.TVDB) {
                 val unconstrainedRoute = route.copy(seasonNumber = null)
-                val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
+                val plan = planFor(unconstrainedRoute)
                 providerPlanRunner.run(plan).stepResults
                     .flatMap { stepResult -> stepResult.episodeMetadata.entries }
                     .associate { it.toPair() }
@@ -885,7 +934,7 @@ class MetadataRouterFacade(
                 // TV shows where the caller did not specify which season to hydrate.
                 // Last-write-wins on duplicate (season, episode) keys — acceptable here too.
                 val season1Route = route.copy(seasonNumber = 1)
-                val plan = providerPlanExecutor.buildPlan(season1Route, MetadataDepth.SEASON)
+                val plan = planFor(season1Route)
                 providerPlanRunner.run(plan).stepResults
                     .flatMap { stepResult -> stepResult.episodeMetadata.entries }
                     .associate { it.toPair() }
@@ -896,13 +945,18 @@ class MetadataRouterFacade(
             // are expected to return disjoint episode ranges.
             effectiveSeasons.flatMap { seasonNumber ->
                 val seasonRoute = route.copy(seasonNumber = seasonNumber)
-                val plan = providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
+                val plan = planFor(seasonRoute)
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
             }
             .associate { it.toPair() }
-        }.withRoutedEpisodeThumbnailArtwork(route)
+        }
+        return if (projectionOnly) {
+            episodeMetadata
+        } else {
+            episodeMetadata.withRoutedEpisodeThumbnailArtwork(route)
+        }
     }
 
     private suspend fun fallbackRouteForDistinctContentId(

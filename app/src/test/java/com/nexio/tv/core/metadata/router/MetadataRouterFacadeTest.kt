@@ -12,6 +12,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -597,6 +598,34 @@ class MetadataRouterFacadeTest {
         assertEquals("Runtime episode", result.value?.get(1 to 1)?.title)
         assertEquals(listOf("tvdb:1399"), adapter.executedRoutes.map { route -> route.parentId }.distinct())
         assertTrue(identityLookup.calls.isEmpty())
+    }
+
+    @Test
+    fun `episode projection uses non localized tvdb season episode shape`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).fetchTvEpisodeProjection(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:303904",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                language = "nld",
+                seasonNumber = 14,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "tvdb:303904",
+                contentType = ContentType.SERIES,
+                language = "nld",
+                seasonNumbers = listOf(14)
+            )
+        )
+
+        assertEquals(TvProvider.TVDB, result.provider)
+        assertEquals("Runtime episode", result.value?.get(14 to 1)?.title)
+        assertTrue(adapter.apiShapeIds.contains(TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE))
+        assertFalse(adapter.apiShapeIds.contains(TvdbApiShapes.SERIES_EPISODES_LANGUAGE))
+        assertTrue(adapter.executedRoutes.all { route -> route.language == null })
     }
 
     @Test

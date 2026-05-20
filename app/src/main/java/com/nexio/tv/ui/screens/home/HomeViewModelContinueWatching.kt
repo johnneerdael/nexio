@@ -718,13 +718,19 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         is ContinueWatchingItem.NextUp -> item.info.contentId
     }
     val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+    val isTvdbContent = contentId.startsWith("tvdb:", ignoreCase = true)
     return try {
-        val localizedPreview = overlayProviderLocalizedMetadataForHome(
-            item = item.toContinueWatchingProviderPreview(),
-            fallbackContentId = item.providerFallbackContentId(),
-            providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
-            profileBoundary = profileBoundary
-        )
+        val providerPreview = item.toContinueWatchingProviderPreview()
+        val localizedPreview = if (isTvdbContent) {
+            providerPreview
+        } else {
+            overlayProviderLocalizedMetadataForHome(
+                item = providerPreview,
+                fallbackContentId = item.providerFallbackContentId(),
+                providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
+                profileBoundary = profileBoundary
+            )
+        }
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
             metadataRouterFacade = metadataRouterFacade,
             item = item,
@@ -922,6 +928,7 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
+    if (item.contentId().startsWith("tvdb:", ignoreCase = true)) return null
 
     return metadataRouterFacade.fetchTvEpisodeEnrichment(
         metadataRequest = MetadataRequest(

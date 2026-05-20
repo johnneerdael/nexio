@@ -164,6 +164,18 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     localizationPayloads = localizationPayloads
                 )
             }
+            TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE -> {
+                val episodes = integrationProvider.fetchSeriesEpisodes(
+                    tvdbId = tvdbId,
+                    seasonType = "default",
+                    season = route.seasonNumber
+                )
+                return ProviderStepResult(
+                    step = step,
+                    candidate = emptyCandidate(this.provider),
+                    episodeMetadata = TvdbEpisodeLocalization.mapBaseEpisodes(episodes?.episodes.orEmpty())
+                )
+            }
             else -> emptyCandidate(this.provider)
         }
         return ProviderStepResult(
@@ -200,6 +212,7 @@ class TvdbMetadataProviderAdapter @Inject constructor(
     private companion object {
         val tvdbShapes = setOf(
             TvdbApiShapes.SERIES_EXTENDED,
+            TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE
         )
     }

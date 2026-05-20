@@ -9,6 +9,19 @@ import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 
 internal object TvdbEpisodeLocalization {
+    fun mapBaseEpisodes(episodes: List<TvdbEpisodeRecord>): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        return episodes
+            .mapNotNull { episode ->
+                val season = episode.seasonNumber ?: return@mapNotNull null
+                val number = episode.number ?: return@mapNotNull null
+                (season to number) to episode.toMetadata(
+                    title = episode.name.cleanLocalizedValue(),
+                    overview = episode.overview.cleanLocalizedValue()
+                )
+            }
+            .toMap()
+    }
+
     fun mergeEnglishBase(
         policy: LocalizationPolicy = LocalizationPolicy.tvdb(requestedLanguage = null),
         englishEpisodes: List<TvdbEpisodeRecord>,

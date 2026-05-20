@@ -25,26 +25,48 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
 
     if (isSeriesType(contentType)) {
         val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+        val isTvdbContent = contentId.startsWith("tvdb:", ignoreCase = true)
         if (season != null && episode != null) {
-            val episodeRuntime = metadataRouterFacade.fetchTvEpisodeEnrichment(
-                metadataRequest = MetadataRequest(
-                    contentId = contentId,
-                    contentType = parseContinueWatchingContentType(contentType),
-                    sourceContext = MetadataSourceContext(itemType = contentType),
-                    language = tvdbLanguage,
-                    seasonNumber = season,
-                    depth = MetadataDepth.SEASON
-                ),
-                tvRequest = TvMetadataRequest(
-                    contentId = contentId,
-                    fallbackContentId = item.videoId(),
-                    contentType = parseContinueWatchingContentType(contentType),
-                    language = tvdbLanguage,
-                    seasonNumbers = listOf(season)
+            val contentTypeValue = parseContinueWatchingContentType(contentType)
+            val episodeRuntime = if (isTvdbContent) {
+                metadataRouterFacade.fetchTvEpisodeProjection(
+                    metadataRequest = MetadataRequest(
+                        contentId = contentId,
+                        contentType = contentTypeValue,
+                        sourceContext = MetadataSourceContext(itemType = contentType),
+                        language = null,
+                        seasonNumber = season,
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = contentId,
+                        fallbackContentId = item.videoId(),
+                        contentType = contentTypeValue,
+                        language = null,
+                        seasonNumbers = listOf(season)
+                    )
                 )
-            ).value?.get(season to episode)?.runtimeMinutes
+            } else {
+                metadataRouterFacade.fetchTvEpisodeEnrichment(
+                    metadataRequest = MetadataRequest(
+                        contentId = contentId,
+                        contentType = contentTypeValue,
+                        sourceContext = MetadataSourceContext(itemType = contentType),
+                        language = tvdbLanguage,
+                        seasonNumber = season,
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = contentId,
+                        fallbackContentId = item.videoId(),
+                        contentType = contentTypeValue,
+                        language = tvdbLanguage,
+                        seasonNumbers = listOf(season)
+                    )
+                )
+            }.value?.get(season to episode)?.runtimeMinutes
             if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
-        } else {
+        } else if (!isTvdbContent) {
             val enrichment = metadataRouterFacade.fetchTvEnrichment(
                 metadataRequest = MetadataRequest(
                     contentId = contentId,

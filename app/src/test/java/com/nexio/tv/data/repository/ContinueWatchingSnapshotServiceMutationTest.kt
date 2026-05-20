@@ -522,6 +522,52 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `retained resume aliases collapse same episode across tvdb and tmdb ids`() {
+        val service = buildService()
+        val newerTvdbResume = resume(
+            contentId = "tvdb:355567",
+            videoId = "tvdb:355567:5:8",
+            season = 5,
+            episode = 8,
+            lastWatched = 200_000L,
+            progressPercent = 17.2f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(
+            name = "The Boys",
+            poster = "nexio-artwork://decision/artwork-decision:poster:canonical:imdb:tt1190634:provider:RPDB:premium:true"
+        )
+        val olderTmdbResume = resume(
+            contentId = "tmdb:76479",
+            videoId = "tmdb:76479:5:8",
+            season = 5,
+            episode = 8,
+            lastWatched = 100_000L,
+            progressPercent = 2.1f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(
+            name = "The Boys",
+            poster = "nexio-artwork://decision/artwork-decision:poster:canonical:imdb:tt1190634:provider:RPDB:premium:true",
+            traktShowId = 139960,
+            traktEpisodeId = 12138436,
+            traktPlaybackId = 1757904689
+        )
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(
+                resumeItems = listOf(newerTvdbResume),
+                updatedAtMs = 200_000L
+            ),
+            previous = ContinueWatchingSnapshot(
+                resumeItems = listOf(olderTmdbResume),
+                updatedAtMs = 100_000L
+            ),
+            completedProgress = emptyList()
+        )
+
+        assertEquals(listOf(newerTvdbResume), retained.resumeItems)
+    }
+
+    @Test
     fun `retained next up rows are suppressed by completed watched alias anchors`() {
         val service = buildService()
         val staleNightAgentNextUp = TrackingNextUpEntry(
@@ -1534,7 +1580,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 trace = emptyList()
             )
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -1575,7 +1621,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(1, item.episode)
             assertEquals("tmdb:71446:2:1", item.videoId)
             coVerify(exactly = 0) {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             }
         }
 
@@ -1599,7 +1645,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 trace = emptyList()
             )
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = capture(requestSlot), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = capture(requestSlot), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -1678,7 +1724,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 resolvedAtMs = 1L
             )
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -1743,7 +1789,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -1984,7 +2030,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2039,7 +2085,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2080,12 +2126,12 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot shares TVDB episode enrichment across duplicate next-up rows`() =
+    fun `buildRawSnapshot shares TVDB episode projection across duplicate next-up rows`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2125,7 +2171,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(1, snapshot.nextUpItems.size)
             assertEquals(1, snapshot.traktUpNextItems.size)
             coVerify(exactly = 1) {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             }
         }
 
@@ -2209,7 +2255,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2249,8 +2295,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val localNextUp = snapshot.nextUpItems.single()
             assertEquals(13, localNextUp.season)
             assertEquals(2, localNextUp.episode)
-            coVerify(exactly = 2) {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+            coVerify(exactly = 1) {
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             }
         }
 
@@ -2260,7 +2306,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } throws IllegalStateException("tvdb unavailable")
             val service = buildServiceWithMetadataFacade(facade)
             val providerCoordinate = nextUp(
@@ -2304,7 +2350,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 trace = emptyList()
             )
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2347,7 +2393,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } throws CancellationException("cancelled")
             val service = buildServiceWithMetadataFacade(facade)
             val providerCoordinate = nextUp(
@@ -2383,7 +2429,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2429,7 +2475,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             coEvery {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -2464,7 +2510,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             assertEquals(listOf(animeNextUp), snapshot.nextUpItems)
             coVerify(exactly = 0) {
-                facade.fetchTvEpisodeEnrichment(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
             }
         }
 
