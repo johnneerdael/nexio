@@ -658,6 +658,88 @@ class MetadataDisplayRepositoryTest {
     }
 
     @Test
+    fun `resolveDetailDisplay treats anime routes as anime for MAL ratings`() = runTest {
+        val routerFacade = mockRouterFacade()
+        val ratingRepository = mockk<DetailRatingDisplayRepository>()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = ratingRepository
+        )
+        val request = MetadataRequest(
+            contentId = "kitsu:7442",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+        val ratings = ResolvedDetailRatingDisplay(
+            titleRating = TitleRating(9.0, TitleRatingSource.IMDB),
+            mdbListRatings = MDBListRatings(mal = 9.0)
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.KITSU,
+                parentId = "kitsu:7442",
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.KITSU_PREFIX_DIRECT,
+                sourceContext = request.sourceContext,
+                language = "en",
+                targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:7442"),
+                targetIdRequiresIdentityResolution = false,
+                trace = emptyList()
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "kitsu:7442",
+                title = "Frieren: Beyond Journey's End",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                remoteIds = mapOf("kitsu" to setOf("7442")),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Frieren: Beyond Journey's End"),
+            trace = emptyList()
+        )
+        coEvery {
+            ratingRepository.resolve(
+                meta = match { it.id == "7442" && it.rawType == "anime" },
+                fallbackItemId = "7442",
+                fallbackItemType = "anime",
+                providerIds = match { it.kitsu == "7442" },
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRatingCandidate = null,
+                previewFallbackTitleRatingCandidate = null
+            )
+        } returns ratings
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals(ratings, document.ratings)
+        coVerify(exactly = 1) {
+            ratingRepository.resolve(
+                meta = match { it.id == "7442" && it.rawType == "anime" },
+                fallbackItemId = "7442",
+                fallbackItemType = "anime",
+                providerIds = match { it.kitsu == "7442" },
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRatingCandidate = null,
+                previewFallbackTitleRatingCandidate = null
+            )
+        }
+    }
+
+    @Test
     fun `resolveDetailDisplay keeps primary rating when optional rating display fails`() = runTest {
         val routerFacade = mockRouterFacade()
         val ratingRepository = mockk<DetailRatingDisplayRepository>()

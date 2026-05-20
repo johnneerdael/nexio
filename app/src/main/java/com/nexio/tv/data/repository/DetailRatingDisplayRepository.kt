@@ -77,13 +77,18 @@ class DetailRatingDisplayRepository private constructor(
             ?.toTitleRating()
 
         val mdbListResult = dependencies?.let { availableDeps ->
+            val imdbId = providerIds.imdb?.takeIf { it.isNotBlank() }
             runOptional {
                 availableDeps.mdbListRepository.getRatingsForMeta(
                     meta = meta,
-                    fallbackItemId = providerIds.tmdb?.takeIf { it.isNotBlank() }?.let { "tmdb:$it" }
-                        ?: providerIds.imdb?.takeIf { it.isNotBlank() }?.let { "imdb:$it" }
-                        ?: ratingFallbackItemId,
-                    fallbackItemType = fallbackItemType
+                    fallbackItemId = mdbListFallbackItemId(
+                        meta = meta,
+                        fallbackItemType = fallbackItemType,
+                        providerIds = providerIds,
+                        ratingFallbackItemId = ratingFallbackItemId
+                    ),
+                    fallbackItemType = fallbackItemType,
+                    imdbIdOverride = imdbId
                 )
             }
         }
@@ -132,6 +137,27 @@ class DetailRatingDisplayRepository private constructor(
             DetailRatingDisplayRepository(deps = null)
     }
 }
+
+private fun mdbListFallbackItemId(
+    meta: Meta,
+    fallbackItemType: String,
+    providerIds: ProviderIds,
+    ratingFallbackItemId: String
+): String {
+    val imdbId = providerIds.imdb?.takeIf { it.isNotBlank() }?.let { "imdb:$it" }
+    if (meta.isAnime(fallbackItemType)) {
+        return imdbId ?: ratingFallbackItemId
+    }
+
+    return providerIds.tmdb?.takeIf { it.isNotBlank() }?.let { "tmdb:$it" }
+        ?: imdbId
+        ?: ratingFallbackItemId
+}
+
+private fun Meta.isAnime(fallbackItemType: String): Boolean =
+    rawType.equals("anime", ignoreCase = true) ||
+        apiType.equals("anime", ignoreCase = true) ||
+        fallbackItemType.equals("anime", ignoreCase = true)
 
 private inline fun <T> runOptional(block: () -> T): T? =
     try {

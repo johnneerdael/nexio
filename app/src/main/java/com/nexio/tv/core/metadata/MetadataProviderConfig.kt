@@ -39,7 +39,7 @@ object MetadataProviderConfig {
         builtInApiKey: String,
         pin: String = ""
     ): MetadataProviderCredential {
-        val custom = customApiKey.trim()
+        val custom = sanitizeCustomApiKey(customApiKey)
         if (custom.isNotBlank()) {
             return MetadataProviderCredential(
                 apiKey = custom,
@@ -62,5 +62,17 @@ object MetadataProviderConfig {
             pin = "",
             source = MetadataCredentialSource.MISSING
         )
+    }
+
+    fun sanitizeCustomApiKey(value: String): String =
+        value.trim().takeUnless(::isMaskedSecretPreview).orEmpty()
+
+    private fun isMaskedSecretPreview(value: String): Boolean {
+        if (value.isBlank()) return false
+        val normalized = value.trim()
+        return normalized.startsWith("* ") ||
+            normalized.startsWith("Stored ") ||
+            normalized.startsWith("Connected ") ||
+            normalized.contains("••••")
     }
 }

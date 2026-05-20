@@ -54,6 +54,26 @@ class MetadataApiKeyResolverTest {
     }
 
     @Test
+    fun `tmdb falls back to builtin key when custom key is masked preview`() = runTest {
+        val tmdbStore = mockk<TmdbSettingsDataStore>()
+        val tvdbStore = mockk<TvdbSettingsDataStore>()
+        every { tmdbStore.settings } returns flowOf(TmdbSettings(apiKey = "* 247a618b5c86fbccab0d19ce3709bbef"))
+        every { tvdbStore.settings } returns flowOf(TvdbSettings())
+
+        val resolver = MetadataApiKeyResolver(
+            tmdbSettingsDataStore = tmdbStore,
+            tvdbSettingsDataStore = tvdbStore,
+            builtInTmdbKey = { "builtin-tmdb" },
+            builtInTvdbKey = { "builtin-tvdb" }
+        )
+
+        val credential = resolver.tmdbCredential()
+
+        assertEquals("builtin-tmdb", credential.apiKey)
+        assertEquals(MetadataCredentialSource.BUILT_IN, credential.source)
+    }
+
+    @Test
     fun `tvdb custom key overrides builtin key and keeps pin`() = runTest {
         val tmdbStore = mockk<TmdbSettingsDataStore>()
         val tvdbStore = mockk<TvdbSettingsDataStore>()

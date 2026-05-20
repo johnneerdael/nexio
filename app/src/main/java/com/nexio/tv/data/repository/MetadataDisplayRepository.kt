@@ -20,6 +20,7 @@ import com.nexio.tv.core.metadata.router.ProviderPlanRunResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ReviewsPage
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
 import com.nexio.tv.core.metadata.router.resolver.RatingResolution
@@ -87,14 +88,16 @@ class MetadataDisplayRepository @Inject constructor(
         val resolvedDocument = result.resolvedDocument
         val identity = result.toContentIdentity()
         val primaryTitleRatingCandidate = result.toPrimaryProviderRatingCandidate()
+        val ratingFallbackItemType = request.ratingFallbackItemType(result.route)
         val effectiveRatingContext = if (ratingContext != null) {
             ratingContext.copy(
+                fallbackItemType = ratingFallbackItemType,
                 primaryProviderTitleRatingCandidate = ratingContext.primaryProviderTitleRatingCandidate ?: primaryTitleRatingCandidate,
                 previewFallbackTitleRatingCandidate = ratingContext.previewFallbackTitleRatingCandidate
                     ?: ratingContext.meta.toPreviewFallbackRatingCandidate()
             )
         } else {
-            resolvedDocument.toRatingDisplayContext(request, identity)
+            resolvedDocument.toRatingDisplayContext(request, identity, ratingFallbackItemType)
                 ?.copy(primaryProviderTitleRatingCandidate = primaryTitleRatingCandidate)
         }
         val ratings = resolveRatings(effectiveRatingContext, identity)
@@ -343,25 +346,31 @@ class MetadataDisplayRepository @Inject constructor(
 
     private fun ResolvedMetadataDocument.toRatingDisplayContext(
         request: MetadataRequest,
-        identity: ContentIdentity
+        identity: ContentIdentity,
+        fallbackItemType: String
     ): DetailRatingDisplayContext? {
         val fallbackItemId = identity.providerIds.imdb
             ?: identity.canonicalId
             ?: request.contentId.trim().takeIf { it.isNotBlank() }
             ?: return null
-        val itemType = request.sourceContext.itemType
-            ?: request.contentType.toApiString()
         return DetailRatingDisplayContext(
             meta = toRatingMeta(
                 id = fallbackItemId,
                 contentType = request.contentType,
-                itemType = itemType
+                itemType = fallbackItemType
             ),
             fallbackItemId = fallbackItemId,
-            fallbackItemType = itemType,
+            fallbackItemType = fallbackItemType,
             episodesBySeason = emptyMap()
         )
     }
+
+    private fun MetadataRequest.ratingFallbackItemType(route: MetadataRoute?): String =
+        if (route?.mediaKind == MetadataMediaKind.ANIME) {
+            "anime"
+        } else {
+            sourceContext.itemType ?: contentType.toApiString()
+        }
 
     private fun ResolvedMetadataDocument.toRatingMeta(
         id: String,

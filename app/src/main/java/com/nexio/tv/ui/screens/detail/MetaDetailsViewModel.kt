@@ -822,7 +822,7 @@ class MetaDetailsViewModel @Inject constructor(
                 contentId = contentId,
                 contentType = contentType,
                 sourceContext = MetadataSourceContext(
-                    itemType = contentType.toApiString(),
+                    itemType = detailMetadataItemType(contentId, contentType),
                     addonMetadata = previewMeta?.toHomeDisplayMetadata(),
                     previewSourceItemId = contentId
                 ),
@@ -844,6 +844,20 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
         )
+
+    private fun detailMetadataItemType(contentId: String, contentType: ContentType): String {
+        val normalized = contentId.trim().lowercase()
+        return if (
+            normalized.startsWith("kitsu:") ||
+            normalized.startsWith("mal:") ||
+            normalized.startsWith("anilist:") ||
+            normalized.startsWith("anidb:")
+        ) {
+            "anime"
+        } else {
+            contentType.toApiString()
+        }
+    }
 
     private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
         if (!shouldUseStreamOnlyFallback(errorMessage)) return false

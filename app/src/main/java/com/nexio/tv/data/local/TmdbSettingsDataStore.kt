@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.domain.model.TmdbSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -41,7 +42,7 @@ class TmdbSettingsDataStore @Inject constructor(
     val settings: Flow<TmdbSettings> = dataStore.data.map { prefs ->
         TmdbSettings(
             enabled = prefs[enabledKey] ?: true,
-            apiKey = prefs[apiKeyKey] ?: "",
+            apiKey = MetadataProviderConfig.sanitizeCustomApiKey(prefs[apiKeyKey] ?: ""),
             useArtwork = prefs[useArtworkKey] ?: true,
             useBasicInfo = prefs[useBasicInfoKey] ?: true,
             useDetails = prefs[useDetailsKey] ?: true,
@@ -60,7 +61,14 @@ class TmdbSettingsDataStore @Inject constructor(
     }
 
     suspend fun setApiKey(apiKey: String) {
-        store().edit { it[apiKeyKey] = apiKey.trim() }
+        store().edit { prefs ->
+            val sanitized = MetadataProviderConfig.sanitizeCustomApiKey(apiKey)
+            if (sanitized.isBlank()) {
+                prefs.remove(apiKeyKey)
+            } else {
+                prefs[apiKeyKey] = sanitized
+            }
+        }
     }
 
     suspend fun setUseArtwork(enabled: Boolean) {
