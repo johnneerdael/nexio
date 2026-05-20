@@ -51,6 +51,21 @@ import retrofit2.Response
 
 private const val TVDB_MAX_EPISODE_PAGES = 25
 
+private data class TvdbTranslationCacheEntry(
+    val found: Boolean,
+    val record: TvdbTranslationRecord? = null
+) {
+    fun valueOrNull(): TvdbTranslationRecord? = if (found) record else null
+
+    companion object {
+        fun found(record: TvdbTranslationRecord): TvdbTranslationCacheEntry =
+            TvdbTranslationCacheEntry(found = true, record = record)
+
+        fun missing(): TvdbTranslationCacheEntry =
+            TvdbTranslationCacheEntry(found = false)
+    }
+}
+
 @Singleton
 class TvdbIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
@@ -370,7 +385,7 @@ class TvdbIntegrationProvider @Inject constructor(
             apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
             operationKey = "tvdb.series.translation:$tvdbId:$language:policy:$localizationPolicyVersion",
             cacheKey = tvdbSeriesTranslationCacheKey(tvdbId, language, localizationPolicyVersion),
-            codec = gsonCodec<TvdbTranslationRecord>(),
+            codec = gsonCodec<TvdbTranslationCacheEntry>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
@@ -388,15 +403,19 @@ class TvdbIntegrationProvider @Inject constructor(
                     return@IntegrationSpec IntegrationLoadResult.NetworkError(it)
                 }
                 if (!response.isSuccessful) {
-                    IntegrationLoadResult.HttpError(response.code())
+                    if (response.code() == 404) {
+                        IntegrationLoadResult.Success(TvdbTranslationCacheEntry.missing())
+                    } else {
+                        IntegrationLoadResult.HttpError(response.code())
+                    }
                 } else {
-                    response.body()?.data?.let { IntegrationLoadResult.Success(it) }
+                    response.body()?.data?.let { IntegrationLoadResult.Success(TvdbTranslationCacheEntry.found(it)) }
                         ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_series_translation_missing")
                 }
             }
         )
         val result = runtime.get(spec)
-        return result.valueOrNull().toTvdbTranslationPayloadFetch(
+        return result.valueOrNull()?.valueOrNull().toTvdbTranslationPayloadFetch(
             tvdbId = tvdbId,
             language = language,
             fallbackRole = fallbackRole,
@@ -655,7 +674,7 @@ class TvdbIntegrationProvider @Inject constructor(
             apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
             operationKey = "tvdb.episode.translation:$episodeId:$language:policy:$localizationPolicyVersion",
             cacheKey = "tvdb:episode:$episodeId:translation:$language:policy:$localizationPolicyVersion",
-            codec = gsonCodec<TvdbTranslationRecord>(),
+            codec = gsonCodec<TvdbTranslationCacheEntry>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
@@ -673,15 +692,19 @@ class TvdbIntegrationProvider @Inject constructor(
                     return@IntegrationSpec IntegrationLoadResult.NetworkError(it)
                 }
                 if (!response.isSuccessful) {
-                    IntegrationLoadResult.HttpError(response.code())
+                    if (response.code() == 404) {
+                        IntegrationLoadResult.Success(TvdbTranslationCacheEntry.missing())
+                    } else {
+                        IntegrationLoadResult.HttpError(response.code())
+                    }
                 } else {
-                    response.body()?.data?.let { IntegrationLoadResult.Success(it) }
+                    response.body()?.data?.let { IntegrationLoadResult.Success(TvdbTranslationCacheEntry.found(it)) }
                         ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_episode_translation_missing")
                 }
             }
         )
         val result = runtime.get(spec)
-        return result.valueOrNull().toTvdbEpisodeTranslationPayloadFetch(
+        return result.valueOrNull()?.valueOrNull().toTvdbEpisodeTranslationPayloadFetch(
             episodeId = episodeId,
             language = language,
             fallbackRole = fallbackRole,

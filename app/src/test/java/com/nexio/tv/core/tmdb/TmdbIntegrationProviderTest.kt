@@ -2,12 +2,17 @@ package com.nexio.tv.core.tmdb
 
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.byteArrayRuntimeFixture
 import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.remote.api.TmdbDetailsResponse
 import com.nexio.tv.data.remote.api.TmdbEpisode
+import com.nexio.tv.data.remote.api.TmdbExternalIdsResponse
+import com.nexio.tv.data.remote.api.TmdbFindResponse
+import com.nexio.tv.data.remote.api.TmdbFindResult
 import com.nexio.tv.data.remote.api.TmdbCollectionPart
 import com.nexio.tv.data.remote.api.TmdbCollectionResponse
 import com.nexio.tv.data.remote.api.TmdbRecommendationResult
@@ -26,17 +31,131 @@ import com.nexio.tv.domain.model.ContentType
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.Assert.fail
 import retrofit2.Response
 
 class TmdbIntegrationProviderTest {
+
+    @Test
+    fun `find external id is cache-first and coalesces concurrent duplicate lookups`() = runTest {
+        val fixture = byteArrayRuntimeFixture()
+        val tmdbApi = mockk<TmdbApi>()
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseRequest = CompletableDeferred<Unit>()
+        coEvery {
+            tmdbApi.findByExternalId(
+                externalId = "tt12042730",
+                apiKey = "tmdb-key",
+                externalSource = "imdb_id"
+            )
+        } coAnswers {
+            requestStarted.complete(Unit)
+            releaseRequest.await()
+            Response.success(
+                TmdbFindResponse(
+                    movieResults = listOf(TmdbFindResult(id = 1084221, title = "Project Hail Mary"))
+                )
+            )
+        }
+
+        val provider = TmdbIntegrationProvider(
+            runtime = fixture.runtime,
+            tmdbApi = tmdbApi,
+            tmdbCredentialProvider = { MetadataProviderCredential(apiKey = "tmdb-key", source = MetadataCredentialSource.CUSTOM) }
+        )
+
+        val first = async { provider.findTmdbIdByImdbId("tt12042730", "movie") }
+        val second = async { provider.findTmdbIdByImdbId("tt12042730", "movie") }
+        requestStarted.await()
+        releaseRequest.complete(Unit)
+
+        assertEquals(1084221, first.await())
+        assertEquals(1084221, second.await())
+        assertEquals(1084221, provider.findTmdbIdByImdbId("tt12042730", "movie"))
+        coVerify(exactly = 1) {
+            tmdbApi.findByExternalId("tt12042730", "tmdb-key", "imdb_id")
+        }
+    }
+
+    @Test
+    fun `find external id caches empty results as a short negative hit`() = runTest {
+        val fixture = byteArrayRuntimeFixture()
+        val tmdbApi = mockk<TmdbApi>()
+        coEvery {
+            tmdbApi.findByExternalId(
+                externalId = "tt0000000",
+                apiKey = "tmdb-key",
+                externalSource = "imdb_id"
+            )
+        } returns Response.success(TmdbFindResponse())
+
+        val provider = TmdbIntegrationProvider(
+            runtime = fixture.runtime,
+            tmdbApi = tmdbApi,
+            tmdbCredentialProvider = { MetadataProviderCredential(apiKey = "tmdb-key", source = MetadataCredentialSource.CUSTOM) }
+        )
+
+        assertNull(provider.findTmdbIdByImdbId("tt0000000", "movie"))
+        assertNull(provider.findTmdbIdByImdbId("tt0000000", "movie"))
+        coVerify(exactly = 1) {
+            tmdbApi.findByExternalId("tt0000000", "tmdb-key", "imdb_id")
+        }
+    }
+
+    @Test
+    fun `tmdb external ids detail lookup is cache-first and coalesces duplicate lookups`() = runTest {
+        val fixture = byteArrayRuntimeFixture()
+        val tmdbApi = mockk<TmdbApi>()
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseRequest = CompletableDeferred<Unit>()
+        coEvery {
+            tmdbApi.getTvDetails(
+                tvId = 273240,
+                apiKey = "tmdb-key",
+                language = null,
+                appendToResponse = "external_ids,videos,images,reviews,similar,translations",
+                includeImageLanguage = null
+            )
+        } coAnswers {
+            requestStarted.complete(Unit)
+            releaseRequest.await()
+            Response.success(
+                TmdbDetailsResponse(
+                    id = 273240,
+                    name = "Off Campus",
+                    externalIds = TmdbExternalIdsResponse(id = 273240, imdbId = "tt3213210", tvdbId = 444555)
+                )
+            )
+        }
+
+        val provider = TmdbIntegrationProvider(
+            runtime = fixture.runtime,
+            tmdbApi = tmdbApi,
+            tmdbCredentialProvider = { MetadataProviderCredential(apiKey = "tmdb-key", source = MetadataCredentialSource.CUSTOM) }
+        )
+
+        val first = async { provider.findImdbIdByTmdbId(273240, "tv") }
+        val second = async { provider.findImdbIdByTmdbId(273240, "tv") }
+        requestStarted.await()
+        releaseRequest.complete(Unit)
+
+        assertEquals("tt3213210", first.await())
+        assertEquals("tt3213210", second.await())
+        assertEquals("tt3213210", provider.findImdbIdByTmdbId(273240, "tv"))
+        coVerify(exactly = 1) {
+            tmdbApi.getTvDetails(273240, "tmdb-key", null, "external_ids,videos,images,reviews,similar,translations", null)
+        }
+    }
 
     @Test
     fun `loadTvSeasonEpisodes returns episode list from success response`() = runTest {

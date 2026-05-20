@@ -5,6 +5,7 @@ import com.nexio.tv.core.integration.IntegrationCacheOwnershipFactory
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationCodec
+import com.nexio.tv.core.integration.IntegrationFetchOptions
 import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -68,6 +69,20 @@ import kotlinx.coroutines.CancellationException
 private const val TAG = "TmdbIntegrationProvider"
 private const val TMDB_MOVIE_ENRICHMENT_APPEND = "credits,images,release_dates,external_ids"
 private const val TMDB_TV_ENRICHMENT_APPEND = "credits,images,content_ratings,external_ids"
+private const val TMDB_IDENTITY_TTL_MS = 30L * 24L * 60L * 60L * 1000L
+private const val TMDB_IDENTITY_NEGATIVE_TTL_MS = 24L * 60L * 60L * 1000L
+private const val TMDB_IDENTITY_STALE_MS = 180L * 24L * 60L * 60L * 1000L
+private const val TMDB_EXTERNAL_IDS_APPEND = "external_ids,videos,images,reviews,similar,translations"
+
+private data class TmdbFindNegativeCacheEntry(
+    val missing: Boolean = true
+)
+
+private fun TmdbFindResponse.hasFindResults(): Boolean =
+    !movieResults.isNullOrEmpty() ||
+        !tvResults.isNullOrEmpty() ||
+        !tvEpisodeResults.isNullOrEmpty() ||
+        !tvSeasonResults.isNullOrEmpty()
 
 @Singleton
 class TmdbIntegrationProvider private constructor(
@@ -556,39 +571,74 @@ class TmdbIntegrationProvider private constructor(
     ): TmdbFindResponse? {
         val credential = credential()
         if (credential.missing) return null
+        val normalizedExternalId = externalId.trim()
+        val normalizedSource = externalSource.trim().takeIf { it.isNotEmpty() } ?: "imdb_id"
+        if (normalizedExternalId.isEmpty()) return null
 
-        return when (
-            val result = runtime.call(
-                IntegrationCallSpec(
-                    provider = IntegrationProvider.TMDB,
-                    apiShapeId = TmdbApiShapes.FIND_EXTERNAL_ID,
-                    operationKey = "tmdb.find_by_external_id",
-                    workClass = IntegrationWorkClass.USER_VISIBLE,
-                    call = {
-                        val response = runCatching {
-                            tmdbApi.findByExternalId(
-                                externalId = externalId,
-                                apiKey = credential.apiKey,
-                                externalSource = externalSource
-                            )
-                        }.getOrElse { exception ->
-                            if (exception is CancellationException) throw exception
-                            return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
-                        }
-                        if (!response.isSuccessful) {
-                            IntegrationCallResult.HttpError(response.code())
-                        } else {
-                            response.body()?.let { IntegrationCallResult.Success(it) }
-                                ?: IntegrationCallResult.Missing
-                        }
-                    }
-                )
-            )
-        ) {
-            is IntegrationCallResult.Success -> result.value
-            else -> null
+        val negativeSpec = tmdbFindNegativeSpec(normalizedSource, normalizedExternalId)
+        if (runtime.get(negativeSpec, IntegrationFetchOptions(cacheOnly = true)).valueOrNull() != null) {
+            return null
         }
+
+        val result = runtime.get(
+            IntegrationSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.FIND_EXTERNAL_ID,
+                operationKey = "tmdb.find.external_id:$normalizedSource:$normalizedExternalId",
+                cacheKey = "tmdb:find:$normalizedSource:$normalizedExternalId:v1",
+                codec = gsonCodec<TmdbFindResponse>(),
+                cachePolicy = IntegrationCachePolicy.CacheFirst(
+                    ttlMs = TMDB_IDENTITY_TTL_MS,
+                    staleAfterExpiryMs = TMDB_IDENTITY_STALE_MS
+                ),
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                load = {
+                    val response = runCatching {
+                        tmdbApi.findByExternalId(
+                            externalId = normalizedExternalId,
+                            apiKey = credential.apiKey,
+                            externalSource = normalizedSource
+                        )
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationSpec IntegrationLoadResult.NetworkError(exception)
+                    }
+                    if (!response.isSuccessful) {
+                        IntegrationLoadResult.HttpError(response.code())
+                    } else {
+                        response.body()
+                            ?.takeIf { it.hasFindResults() }
+                            ?.let { IntegrationLoadResult.Success(it) }
+                            ?: IntegrationLoadResult.HttpError(404, reason = "tmdb_find_external_id_missing")
+                    }
+                }
+            )
+        ).valueOrNull()
+        if (result != null) return result
+
+        runtime.get(negativeSpec)
+        return null
     }
+
+    private fun tmdbFindNegativeSpec(
+        normalizedSource: String,
+        normalizedExternalId: String
+    ): IntegrationSpec<TmdbFindNegativeCacheEntry> =
+        IntegrationSpec(
+            provider = IntegrationProvider.TMDB,
+            apiShapeId = TmdbApiShapes.FIND_EXTERNAL_ID,
+            operationKey = "tmdb.find.external_id.negative:$normalizedSource:$normalizedExternalId",
+            cacheKey = "tmdb:find:$normalizedSource:$normalizedExternalId:negative:v1",
+            codec = gsonCodec<TmdbFindNegativeCacheEntry>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = TMDB_IDENTITY_NEGATIVE_TTL_MS,
+                staleAfterExpiryMs = 0L
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                IntegrationLoadResult.Success(TmdbFindNegativeCacheEntry())
+            }
+        )
 
     suspend fun findTmdbIdByImdbId(imdbId: String, mediaType: String): Int? {
         val body = findByExternalId(imdbId, externalSource = "imdb_id") ?: return null
@@ -628,49 +678,49 @@ class TmdbIntegrationProvider private constructor(
         // authoritative external_ids block. Falls back to the standalone endpoint
         // only if the unified call returned a response without an external_ids
         // block (defensive — should never happen with the append param set).
-        val operationKey = "tmdb.external_ids.$normalizedType"
-        return when (
-            val result = runtime.call(
-                IntegrationCallSpec(
-                    provider = IntegrationProvider.TMDB,
-                    apiShapeId = apiShapeId,
-                    operationKey = operationKey,
-                    workClass = IntegrationWorkClass.USER_VISIBLE,
-                    call = {
-                        val response = runCatching {
-                            when (normalizedType) {
-                                "tv" -> tmdbApi.getTvDetails(
-                                    tvId = tmdbId,
-                                    apiKey = credential.apiKey,
-                                    appendToResponse = "external_ids"
-                                )
-                                else -> tmdbApi.getMovieDetails(
-                                    movieId = tmdbId,
-                                    apiKey = credential.apiKey,
-                                    appendToResponse = "external_ids"
-                                )
-                            }
-                        }.getOrElse { exception ->
-                            if (exception is CancellationException) throw exception
-                            return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+        val operationKey = "tmdb.external_ids.$normalizedType:$tmdbId"
+        return runtime.get(
+            IntegrationSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = apiShapeId,
+                operationKey = operationKey,
+                cacheKey = "tmdb:$normalizedType:$tmdbId:external_ids:v2",
+                codec = gsonCodec<TmdbExternalIdsResponse>(),
+                cachePolicy = IntegrationCachePolicy.CacheFirst(
+                    ttlMs = TMDB_IDENTITY_TTL_MS,
+                    staleAfterExpiryMs = TMDB_IDENTITY_STALE_MS
+                ),
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                load = {
+                    val response = runCatching {
+                        when (normalizedType) {
+                            "tv" -> tmdbApi.getTvDetails(
+                                tvId = tmdbId,
+                                apiKey = credential.apiKey,
+                                appendToResponse = TMDB_EXTERNAL_IDS_APPEND
+                            )
+                            else -> tmdbApi.getMovieDetails(
+                                movieId = tmdbId,
+                                apiKey = credential.apiKey,
+                                appendToResponse = TMDB_EXTERNAL_IDS_APPEND
+                            )
                         }
-                        if (!response.isSuccessful) {
-                            IntegrationCallResult.HttpError(response.code())
-                        } else {
-                            // TmdbDetailsResponse carries the appended external_ids block;
-                            // pull it out so the rest of the lookup pipeline keeps its
-                            // existing TmdbExternalIdsResponse contract.
-                            val externalIds = response.body()?.externalIds
-                            externalIds?.let { IntegrationCallResult.Success(it) }
-                                ?: IntegrationCallResult.Missing
-                        }
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationSpec IntegrationLoadResult.NetworkError(exception)
                     }
-                )
+                    if (!response.isSuccessful) {
+                        IntegrationLoadResult.HttpError(response.code())
+                    } else {
+                        // TmdbDetailsResponse carries the appended external_ids block;
+                        // pull it out so the rest of the lookup pipeline keeps its
+                        // existing TmdbExternalIdsResponse contract.
+                        response.body()?.externalIds?.let { IntegrationLoadResult.Success(it) }
+                            ?: IntegrationLoadResult.HttpError(response.code(), reason = "tmdb_external_ids_missing")
+                    }
+                }
             )
-        ) {
-            is IntegrationCallResult.Success<TmdbExternalIdsResponse> -> result.value
-            else -> null
-        }
+        ).valueOrNull()
     }
 
     fun normalizeLookupMediaType(mediaType: String): String {
