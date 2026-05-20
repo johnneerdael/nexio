@@ -8,6 +8,9 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMapRecord
+import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
@@ -540,6 +543,79 @@ class MetadataDisplayRepositoryTest {
     }
 
     @Test
+    fun `resolveDetailDisplay falls back to anime movie mapping for Kitsu anime route`() = runTest {
+        val routerFacade = mockRouterFacade()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = DetailRatingDisplayRepository.noOp(),
+            animeIdMappingService = AnimeIdMappingService {
+                AnimeIdMapAsset(
+                    schemaVersion = 1,
+                    identityRecordsByKitsu = mapOf(
+                        "48323" to AnimeIdMapRecord(
+                            kitsu = "48323",
+                            mal = "57555",
+                            anilist = "171627",
+                            anidb = "18324",
+                            tmdb = "1218925",
+                            tvdb = "397934",
+                            imdb = "tt30472557",
+                            mediaType = "movie",
+                            sourceType = "MOVIE"
+                        )
+                    )
+                )
+            }
+        )
+        val request = MetadataRequest(
+            contentId = "kitsu:48323",
+            contentType = ContentType.MOVIE,
+            sourceContext = MetadataSourceContext(itemType = "anime"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.KITSU,
+                parentId = "kitsu:48323",
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.KITSU_PREFIX_DIRECT,
+                sourceContext = MetadataSourceContext(itemType = "anime"),
+                targetIds = mapOf(MetadataPrimaryProvider.KITSU to "48323"),
+                trace = emptyList()
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "kitsu:48323",
+                title = "Chainsaw Man - The Movie: Reze Arc",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                remoteIds = emptyMap(),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Chainsaw Man - The Movie: Reze Arc"),
+            trace = emptyList()
+        )
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals("tt30472557", document.identity.providerIds.imdb)
+        assertEquals("57555", document.identity.providerIds.mal)
+        assertEquals("48323", document.identity.providerIds.kitsu)
+    }
+
+    @Test
     fun `resolveDetailDisplay projects resolved string artwork into detail artwork`() = runTest {
         val routerFacade = mockRouterFacade()
         val repository = MetadataDisplayRepository(routerFacade)
@@ -732,6 +808,92 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemId = "7442",
                 fallbackItemType = "anime",
                 providerIds = match { it.kitsu == "7442" },
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRatingCandidate = null,
+                previewFallbackTitleRatingCandidate = null
+            )
+        }
+    }
+
+    @Test
+    fun `resolveDetailDisplay lets Kitsu resolved movie kind override generic anime route`() = runTest {
+        val routerFacade = mockRouterFacade()
+        val ratingRepository = mockk<DetailRatingDisplayRepository>()
+        val repository = MetadataDisplayRepository(
+            metadataRouterFacade = routerFacade,
+            detailRatingDisplayRepository = ratingRepository
+        )
+        val request = MetadataRequest(
+            contentId = "tt30472557",
+            contentType = ContentType.MOVIE,
+            sourceContext = MetadataSourceContext(itemType = "anime"),
+            language = "en",
+            depth = MetadataDepth.DETAIL_FULL
+        )
+        val ratings = ResolvedDetailRatingDisplay(
+            titleRating = TitleRating(8.3, TitleRatingSource.IMDB),
+            mdbListRatings = MDBListRatings(mal = 9.0)
+        )
+
+        coEvery { routerFacade.resolveRequest(any()) } returns MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.KITSU,
+                parentId = "kitsu:48323",
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                sourceContext = request.sourceContext,
+                language = "en",
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.KITSU to "kitsu:48323",
+                    MetadataPrimaryProvider.IMDB to "tt30472557"
+                ),
+                targetIdRequiresIdentityResolution = false,
+                trace = emptyList()
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(
+                depth = MetadataDepth.DETAIL_FULL,
+                localResolvers = emptyList(),
+                networkResolvers = emptyList()
+            ),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = "kitsu:48323",
+                mediaKind = MetadataMediaKind.MOVIE,
+                title = "Chainsaw Man - The Movie: Reze Arc",
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = 100,
+                remoteIds = mapOf("kitsu" to setOf("48323")),
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(title = "Chainsaw Man - The Movie: Reze Arc"),
+            trace = emptyList()
+        )
+        coEvery {
+            ratingRepository.resolve(
+                meta = match { it.id == "tt30472557" && it.type == ContentType.MOVIE && it.apiType == "movie" && it.rawType == "anime" },
+                fallbackItemId = "tt30472557",
+                fallbackItemType = "movie",
+                providerIds = match { it.kitsu == "48323" && it.imdb == "tt30472557" },
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRatingCandidate = null,
+                previewFallbackTitleRatingCandidate = null
+            )
+        } returns ratings
+
+        val document = repository.resolveDetailDisplay(request)
+
+        assertEquals(ratings, document.ratings)
+        coVerify(exactly = 1) {
+            ratingRepository.resolve(
+                meta = match { it.id == "tt30472557" && it.type == ContentType.MOVIE && it.apiType == "movie" && it.rawType == "anime" },
+                fallbackItemId = "tt30472557",
+                fallbackItemType = "movie",
+                providerIds = match { it.kitsu == "48323" && it.imdb == "tt30472557" },
                 episodesBySeason = emptyMap(),
                 primaryProviderTitleRatingCandidate = null,
                 previewFallbackTitleRatingCandidate = null

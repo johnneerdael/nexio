@@ -23,8 +23,10 @@ import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuAnimeStaffResource
 import com.nexio.tv.data.remote.api.KitsuCastingResource
 import com.nexio.tv.data.remote.api.KitsuCollectionResponse
+import com.nexio.tv.data.remote.api.KitsuIncludedResource
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
 import com.nexio.tv.data.remote.api.KitsuReviewResource
+import com.nexio.tv.data.remote.api.KitsuToOneRelationship
 import com.nexio.tv.data.repository.KitsuAuthService
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -136,7 +138,7 @@ class KitsuIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.KITSU,
             apiShapeId = KitsuApiShapes.CASTINGS,
             operationKey = "kitsu.anime_characters",
-            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_characters:v3",
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_characters:v4",
             codec = gsonCodec<KitsuCollectionResponse<KitsuAnimeCharacterResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = KITSU_ADVANCED_TTL_MS,
@@ -154,12 +156,75 @@ class KitsuIntegrationProvider @Inject constructor(
                 if (!response.isSuccessful) {
                     IntegrationLoadResult.HttpError(response.code())
                 } else {
-                    response.body()?.let { IntegrationLoadResult.Success(it) }
+                    val body = response.body()
+                    val enrichedBody = if (body?.data.orEmpty().isEmpty()) {
+                        fetchMediaCharacterFallback(kitsuId = kitsuId)
+                    } else {
+                        body
+                    }
+                    enrichedBody?.let { IntegrationLoadResult.Success(it) }
                         ?: IntegrationLoadResult.HttpError(404, reason = "kitsu_anime_characters_missing")
                 }
             }
         )
         return runtime.get(spec).valueOrNull()
+    }
+
+    private suspend fun fetchMediaCharacterFallback(kitsuId: String): KitsuCollectionResponse<KitsuAnimeCharacterResource>? {
+        val animeResponse = fetchPublicKitsuResponse { requestAuthorization ->
+            kitsuApi.getAnime(
+                authorization = requestAuthorization,
+                id = kitsuId,
+                include = "characters"
+            )
+        }.getOrNull()
+            ?.takeIf { it.isSuccessful }
+            ?.body()
+            ?: return null
+
+        val mediaCharacters = animeResponse.included.orEmpty()
+            .filter { included -> included.type.equals("mediaCharacters", ignoreCase = true) }
+            .take(20)
+        if (mediaCharacters.isEmpty()) return null
+
+        val characterRelations = mutableListOf<KitsuAnimeCharacterResource>()
+        val includedCharacters = mutableListOf<KitsuIncludedResource>()
+        for (i in mediaCharacters.indices) {
+            val mediaCharacter = mediaCharacters[i]
+            val mediaCharacterId = mediaCharacter.id?.takeIf { it.isNotBlank() } ?: continue
+            val detail = fetchPublicKitsuResponse { requestAuthorization ->
+                kitsuApi.getMediaCharacter(
+                    authorization = requestAuthorization,
+                    id = mediaCharacterId
+                )
+            }.getOrNull()
+                ?.takeIf { it.isSuccessful }
+                ?.body()
+                ?: continue
+            val relation = detail.data?.toAnimeCharacterResource() ?: continue
+            characterRelations += relation
+            includedCharacters += detail.included.orEmpty()
+        }
+
+        if (characterRelations.isEmpty()) return null
+        return KitsuCollectionResponse(
+            data = characterRelations,
+            included = includedCharacters.distinctBy { included -> "${included.type}:${included.id}" }
+        )
+    }
+
+    private fun KitsuIncludedResource.toAnimeCharacterResource(): KitsuAnimeCharacterResource? {
+        val character = relationships?.character ?: return null
+        return KitsuAnimeCharacterResource(
+            id = id,
+            attributes = com.nexio.tv.data.remote.api.KitsuAnimeCharacterAttributes(
+                role = attributes?.get("role")?.toString()
+            ),
+            relationships = com.nexio.tv.data.remote.api.KitsuAnimeCharacterRelationships(
+                character = KitsuToOneRelationship(character.data),
+                castings = null
+            )
+        )
     }
 
     suspend fun fetchCastings(

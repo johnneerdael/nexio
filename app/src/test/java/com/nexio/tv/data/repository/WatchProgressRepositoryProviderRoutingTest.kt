@@ -210,6 +210,26 @@ class WatchProgressRepositoryProviderRoutingTest {
     }
 
     @Test
+    fun `markAsCompleted falls back to account scopes when provider state is stale empty`() = runTest {
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(),
+            outbox = outbox,
+            accountScopeProvider = TestTrackingAccountScopeProvider()
+        )
+
+        repo.markAsCompleted(profileSession, sampleEpisodeProgress())
+
+        assertEquals(
+            setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            envelopes.map { it.provider }.toSet()
+        )
+    }
+
+    @Test
     fun `removeFromHistory routes history remove through simkl adapter when simkl is selected`() = runTest {
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopeSlot = slot<TraktMutationEnvelope>()
@@ -330,6 +350,51 @@ class WatchProgressRepositoryProviderRoutingTest {
     }
 
     @Test
+    fun `clearShowProgress fans out show history remove even without playback ids`() = runTest {
+        val trackingProgressService = mockTrackingProgressService()
+        coEvery {
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox("tt0108778", null, null)
+        } returns emptyList()
+        val outbox = mockk<TraktMutationOutboxCoordinator>()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+        coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
+
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true,
+            ),
+            trackingProgressService = trackingProgressService,
+            outbox = outbox
+        )
+
+        repo.clearShowProgress(profileSession, contentId = "tt0108778")
+
+        val historyRemoveEnvelopes = envelopes.filter { envelope ->
+            envelope.mutationKind == TraktProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE ||
+                envelope.mutationKind == SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE ||
+                envelope.mutationKind == MDBListProgressMutationAdapter.MUTATION_KIND_HISTORY_REMOVE
+        }
+        assertEquals(
+            setOf(
+                TraktProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+                SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+                MDBListProgressMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+            ),
+            historyRemoveEnvelopes.map { it.mutationKind }.toSet()
+        )
+        assertEquals(
+            setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
+            historyRemoveEnvelopes.map { it.provider }.toSet()
+        )
+        coVerify(exactly = 1) {
+            trackingProgressService.applyOptimisticRemoval("tt0108778", null, null)
+        }
+    }
+
+    @Test
     fun `markAsCompletedBatch fans out season history add to every authenticated tracker`() = runTest {
         val trackingProgressService = mockTrackingProgressService()
         coEvery {
@@ -390,7 +455,8 @@ class WatchProgressRepositoryProviderRoutingTest {
         outbox: TraktMutationOutboxCoordinator = mockk(relaxed = true),
         seasonMarkBatcher: SeasonMarkBatcher = mockk(relaxed = true),
         preferences: WatchProgressPreferences = mockk(relaxed = true),
-        profileManager: ProfileManager = testProfileManager()
+        profileManager: ProfileManager = testProfileManager(),
+        accountScopeProvider: TrackingAccountScopeProvider = TestTrackingAccountScopeProvider()
     ): WatchProgressRepositoryImpl {
         val trackingProviderStateService = mockk<TrackingProviderStateService> {
             every { state } returns flowOf(providerState)
@@ -411,7 +477,7 @@ class WatchProgressRepositoryProviderRoutingTest {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
             },
             metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true),
-            accountScopeProvider = TestTrackingAccountScopeProvider(),
+            accountScopeProvider = accountScopeProvider,
             profileManager = profileManager
         )
     }

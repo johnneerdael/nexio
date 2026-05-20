@@ -2768,15 +2768,15 @@ class ContinueWatchingSnapshotServiceMutationTest {
     // ── Test 3: forceRefreshBypassesGate ──────────────────────────────────────
 
     @Test
-    fun `forceRefreshBypassesGate - ensureFresh with force=true calls refreshNow even within throttle window`() =
+    fun `forceRefreshBypassesGate - ensureFresh with force=true bypasses local throttle without full account sync`() =
         runTest {
-            var refreshCount = 0
+            var startupRefreshCount = 0
             val traktProgressService = mockk<TrackingProgressService>(relaxed = true) {
             every { observeAllProgress() } returns flowOf(emptyList())
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-                coEvery { refreshNow() } answers { refreshCount++ }
+                coEvery { refreshOnStartup() } answers { startupRefreshCount++ }
             }
             val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
                 every { state } returns flowOf(EffectiveTrackingProviderState())
@@ -2795,23 +2795,24 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 snapshotStore = mockk(relaxed = true) { every { read(any()) } returns null }
             )
 
-            // First force=true call — must call refreshNow.
+            // First force=true call bypasses the local CW throttle but stays incremental.
             service.ensureFresh(force = true)
-            assertEquals("First force=true must call refreshNow", 1, refreshCount)
+            assertEquals("First force=true must call startup refresh", 1, startupRefreshCount)
 
-            // Second immediate force=true — must bypass the 30 s throttle.
+            // Second immediate force=true still bypasses the 30 s local CW throttle.
             service.ensureFresh(force = true)
             assertEquals(
-                "Second force=true must call refreshNow again despite throttle window",
+                "Second force=true must call startup refresh again despite throttle window",
                 2,
-                refreshCount
+                startupRefreshCount
             )
+            coVerify(exactly = 0) { traktProgressService.refreshNow() }
         }
 
     @Test
-    fun `persisted snapshot does not throttle first live refresh on observe`() =
+    fun `persisted snapshot load stays disk-only until explicit ensureFresh`() =
         runTest {
-            var refreshCount = 0
+            var startupRefreshCount = 0
             val persisted = ContinueWatchingSnapshot(
                 resumeItems = listOf(resume(contentId = "stale-show")),
                 updatedAtMs = System.currentTimeMillis()
@@ -2821,7 +2822,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-                coEvery { refreshNow() } answers { refreshCount++ }
+                coEvery { refreshOnStartup() } answers { startupRefreshCount++ }
             }
             val service = ContinueWatchingSnapshotService(
                 watchProgressRepository = mockk(relaxed = true) {
@@ -2841,7 +2842,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
             service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
             service.observeSnapshot().first()
 
-            awaitCondition { refreshCount == 1 }
+            assertEquals("Persisted snapshot observation must not trigger provider refresh", 0, startupRefreshCount)
+            service.ensureFresh(force = false)
+            assertEquals("Explicit freshness request should use startup refresh", 1, startupRefreshCount)
+            coVerify(exactly = 0) { trackingProgressService.refreshNow() }
         }
 
     // ── Test 4: collectorRaceConvergence ──────────────────────────────────────

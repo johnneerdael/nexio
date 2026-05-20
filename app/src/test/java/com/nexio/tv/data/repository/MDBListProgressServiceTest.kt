@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.local.MDBListProgressSyncState
+import com.nexio.tv.data.local.MDBListProgressSyncStateStore
 import com.nexio.tv.data.integration.mdblist.MDBListProgressService
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
@@ -10,6 +12,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchedSyncRequestDto
 import com.nexio.tv.domain.model.MDBListSettings
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,7 +92,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager())
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore())
 
         service.refreshNowImmediate()
 
@@ -129,7 +132,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager())
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore())
 
         service.refreshNowImmediate()
 
@@ -142,6 +145,48 @@ class MDBListProgressServiceTest {
         assertEquals(WatchProgress.SOURCE_MDBLIST_PLAYBACK, progress.source)
     }
 
+    @Test
+    fun `follow up watched refresh uses persisted since cursor`() = runTest {
+        val api = mockk<MDBListApi>()
+        val settings = MutableStateFlow(MDBListSettings(enabled = true, apiKey = "mdb-key"))
+        var state = MDBListProgressSyncState(lastWatchedSyncAt = "2026-05-20T20:00:00Z")
+        val syncStateStore = mockk<MDBListProgressSyncStateStore> {
+            every { read(1) } answers { state }
+            every { write(any(), 1) } answers {
+                state = firstArg()
+            }
+            every { clear(1) } answers {
+                state = MDBListProgressSyncState()
+            }
+        }
+        coEvery { api.getPlayback(apiKey = "mdb-key") } returns Response.success(MDBListPlaybackResponseDto())
+        coEvery {
+            api.getWatched(
+                apiKey = "mdb-key",
+                limit = 1000,
+                offset = 0,
+                since = "2026-05-20T20:00:00Z"
+            )
+        } returns Response.success(MDBListWatchedResponseDto())
+        val service = MDBListProgressService(
+            api,
+            flowSettingsReader(settings),
+            profileManager(),
+            syncStateStore
+        )
+
+        service.refreshNowImmediate()
+
+        coVerify(exactly = 1) {
+            api.getWatched(
+                apiKey = "mdb-key",
+                limit = 1000,
+                offset = 0,
+                since = "2026-05-20T20:00:00Z"
+            )
+        }
+    }
+
     private fun flowSettingsReader(settings: MutableStateFlow<MDBListSettings>): MDBListSettingsReader =
         object : MDBListSettingsReader {
             override val settings = settings
@@ -151,5 +196,16 @@ class MDBListProgressServiceTest {
         val manager = mockk<ProfileManager>()
         every { manager.activeProfileId } returns activeProfileId
         return manager
+    }
+
+    private fun syncStateStore(
+        initial: MDBListProgressSyncState = MDBListProgressSyncState()
+    ): MDBListProgressSyncStateStore {
+        var state = initial
+        return mockk {
+            every { read(any()) } answers { state }
+            every { write(any(), any()) } answers { state = firstArg() }
+            every { clear(any()) } answers { state = MDBListProgressSyncState() }
+        }
     }
 }

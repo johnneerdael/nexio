@@ -47,8 +47,16 @@ class StartupSyncService @Inject constructor(
     private var forceSyncRequested: Boolean = false
     @Volatile
     private var pendingResyncKey: String? = null
+    @Volatile
+    private var startedAfterProfileGate: Boolean = false
 
-    init {
+    fun startAfterProfileGate(reason: String) {
+        if (startedAfterProfileGate) return
+        synchronized(this) {
+            if (startedAfterProfileGate) return
+            startedAfterProfileGate = true
+        }
+        Log.d(TAG, "Starting profile-gated startup sync observers reason=$reason")
         scope.launch {
             combine(authManager.authState, authManager.sessionUserId) { authState, sessionUserId ->
                 authState to sessionUserId
@@ -102,9 +110,17 @@ class StartupSyncService @Inject constructor(
                 }
             }
         }
+        if (forceSyncRequested) {
+            requestSyncNow()
+        }
     }
 
     fun requestSyncNow() {
+        if (!startedAfterProfileGate) {
+            forceSyncRequested = true
+            Log.d(TAG, "Deferring startup sync request until profile gate resolves")
+            return
+        }
         if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
             Log.d(TAG, "Ignoring startup sync request without a full account session")
             return

@@ -508,11 +508,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         watchProgressPreferences.saveProgress(profileSession.profileId, completed)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
-        if (!providerState.hasAuthenticatedProvider) {
+        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
+        if (sessions.isEmpty()) {
+            Log.w(
+                TAG,
+                "Skipping mark-as-completed provider mutation: no account-scoped sessions resolved " +
+                    "for profile=${profileSession.profileId} activeProviders=${providerState.activeProviders}"
+            )
             return
         }
-        val sessions = accountSessionsForActiveProviders(providerState, profileSession)
-        if (sessions.isEmpty()) return
         runCatching {
             val envelopes = mutableListOf<TraktMutationEnvelope>()
             for (i in sessions.indices) {
@@ -713,7 +717,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
         providerState: EffectiveTrackingProviderState,
         profileSession: ActiveProfileSession
     ): List<TrackingAuthSession> {
-        val providers = providerState.activeProviders.toList()
+        val providers = providerState.activeProviders.toList().ifEmpty {
+            Log.w(
+                TAG,
+                "Provider state reported no authenticated trackers for profile=${profileSession.profileId}; " +
+                    "probing account scopes before treating mutation as local-only"
+            )
+            TrackingProvider.entries
+        }
         val sessions = mutableListOf<TrackingAuthSession>()
         for (i in providers.indices) {
             runCatching {

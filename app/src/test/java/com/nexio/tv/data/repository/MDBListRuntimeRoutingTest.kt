@@ -107,6 +107,99 @@ class MDBListRuntimeRoutingTest {
     }
 
     @Test
+    fun `anime series ratings use show media type with IMDb identity`() = runTest {
+        val runtime = RecordingIntegrationRuntime(
+            successValue = MDBListRatingsResult(
+                ratings = MDBListRatings(mal = 9.0),
+                hasImdbRating = false
+            )
+        )
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val provider = MDBListIntegrationProvider(runtime, api)
+        val repository = MDBListRepository(provider, settings, tmdbService)
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTrakt = false,
+                showImdb = false,
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showAudience = false,
+                showMetacritic = false
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("kitsu:7442", ContentType.SERIES).copy(
+                rawType = "anime",
+                videos = listOf(
+                    Video(
+                        id = "kitsu:7442:1:1",
+                        title = "Episode 1",
+                        released = null,
+                        thumbnail = null,
+                        season = 1,
+                        episode = 1,
+                        overview = null
+                    )
+                )
+            ),
+            fallbackItemId = "imdb:tt2560140",
+            fallbackItemType = "anime",
+            imdbIdOverride = "tt2560140"
+        )
+
+        assertEquals(9.0, result?.ratings?.mal ?: 0.0, 0.0)
+        assertTrue(runtime.specs.any { it.cacheKey.orEmpty().startsWith("mdblist:show:imdb:tt2560140:") })
+        coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `anime movie ratings include MAL while using movie media type with IMDb identity`() = runTest {
+        val runtime = RecordingIntegrationRuntime(
+            successValue = MDBListRatingsResult(
+                ratings = MDBListRatings(mal = 9.0),
+                hasImdbRating = false
+            )
+        )
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val provider = MDBListIntegrationProvider(runtime, api)
+        val repository = MDBListRepository(provider, settings, tmdbService)
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTrakt = false,
+                showImdb = false,
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showAudience = false,
+                showMetacritic = false
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("kitsu:48323", ContentType.MOVIE).copy(rawType = "anime"),
+            fallbackItemId = "imdb:tt30472557",
+            fallbackItemType = "movie",
+            imdbIdOverride = "tt30472557"
+        )
+
+        assertEquals(9.0, result?.ratings?.mal ?: 0.0, 0.0)
+        assertTrue(runtime.specs.any { it.cacheKey.orEmpty().startsWith("mdblist:movie:imdb:tt30472557:") })
+        coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `episode ratings are disabled because custom imdb owns episode ratings`() = runTest {
         val fixture = byteArrayRuntimeFixture()
         val api = mockk<MDBListApi>()

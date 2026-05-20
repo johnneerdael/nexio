@@ -9,6 +9,7 @@ import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
@@ -56,6 +57,7 @@ import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PeopleDisplay
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -1163,12 +1165,11 @@ class MetaDetailsViewModel @Inject constructor(
     ): ResolvedDetailRatingDisplay {
         val identity = enrichment.resolvedDetail?.identity ?: return enrichment.ratingDisplay
         val episodesBySeason = enrichment.meta.episodesBySeason()
-        if (episodesBySeason.isEmpty()) return enrichment.ratingDisplay
 
         val resolved = runCatching {
             metadataDisplayRepository.resolveDetailRatings(
                 context = DetailRatingDisplayContext(
-                    meta = enrichment.meta,
+                    meta = enrichment.detailOpenRatingMeta(),
                     fallbackItemId = resolveRatingsFallbackItemId(enrichment.meta, enrichment.tvEnrichment),
                     fallbackItemType = itemType.ifBlank { enrichment.tmdbContentType.toApiString() },
                     episodesBySeason = episodesBySeason
@@ -1183,7 +1184,7 @@ class MetaDetailsViewModel @Inject constructor(
 
         return resolved.copy(
             titleRating = resolved.titleRating ?: enrichment.ratingDisplay.titleRating,
-            mdbListRatings = resolved.mdbListRatings ?: enrichment.ratingDisplay.mdbListRatings,
+            mdbListRatings = resolved.mdbListRatings.mergeWithMissing(enrichment.ratingDisplay.mdbListRatings),
             showMdbListImdb = resolved.showMdbListImdb || enrichment.ratingDisplay.showMdbListImdb,
             episodeRatings = if (resolved.episodeRatings.isNotEmpty()) {
                 resolved.episodeRatings
@@ -1191,6 +1192,31 @@ class MetaDetailsViewModel @Inject constructor(
                 enrichment.ratingDisplay.episodeRatings
             },
             episodeRatingsError = resolved.episodeRatingsError ?: enrichment.ratingDisplay.episodeRatingsError
+        )
+    }
+
+    private fun DetailMetadataEnrichment.detailOpenRatingMeta(): Meta =
+        if (
+            resolvedDetail?.route?.mediaKind == MetadataMediaKind.ANIME &&
+            !meta.rawType.equals("anime", ignoreCase = true)
+        ) {
+            meta.copy(rawType = "anime")
+        } else {
+            meta
+        }
+
+    private fun MDBListRatings?.mergeWithMissing(fallback: MDBListRatings?): MDBListRatings? {
+        if (this == null) return fallback
+        if (fallback == null) return this
+        return copy(
+            trakt = trakt ?: fallback.trakt,
+            imdb = imdb ?: fallback.imdb,
+            mal = mal ?: fallback.mal,
+            tmdb = tmdb ?: fallback.tmdb,
+            letterboxd = letterboxd ?: fallback.letterboxd,
+            tomatoes = tomatoes ?: fallback.tomatoes,
+            audience = audience ?: fallback.audience,
+            metacritic = metacritic ?: fallback.metacritic
         )
     }
 

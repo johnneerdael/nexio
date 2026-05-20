@@ -86,18 +86,22 @@ class MetadataDisplayRepository @Inject constructor(
     ): ResolvedDetailDisplayDocument {
         val result = metadataRouterFacade.resolveRequest(request)
         val resolvedDocument = result.resolvedDocument
-        val identity = result.toContentIdentity()
+        val resolvedMediaKind = resolvedDocument.mediaKind ?: result.route?.mediaKind
+        val identity = result.toContentIdentity(resolvedMediaKind)
         val primaryTitleRatingCandidate = result.toPrimaryProviderRatingCandidate()
-        val ratingFallbackItemType = request.ratingFallbackItemType(result.route)
+        val ratingFallbackItemType = request.ratingFallbackItemType(result.route, resolvedMediaKind)
+        val ratingRawType = request.ratingRawType(result.route, ratingFallbackItemType)
+        val ratingContentType = request.contentTypeFor(resolvedMediaKind)
         val effectiveRatingContext = if (ratingContext != null) {
             ratingContext.copy(
                 fallbackItemType = ratingFallbackItemType,
+                meta = ratingContext.meta.copy(type = ratingContentType, rawType = ratingRawType),
                 primaryProviderTitleRatingCandidate = ratingContext.primaryProviderTitleRatingCandidate ?: primaryTitleRatingCandidate,
                 previewFallbackTitleRatingCandidate = ratingContext.previewFallbackTitleRatingCandidate
                     ?: ratingContext.meta.toPreviewFallbackRatingCandidate()
             )
         } else {
-            resolvedDocument.toRatingDisplayContext(request, identity, ratingFallbackItemType)
+            resolvedDocument.toRatingDisplayContext(request, identity, ratingFallbackItemType, ratingRawType, ratingContentType)
                 ?.copy(primaryProviderTitleRatingCandidate = primaryTitleRatingCandidate)
         }
         val ratings = resolveRatings(effectiveRatingContext, identity)
@@ -170,7 +174,7 @@ class MetadataDisplayRepository @Inject constructor(
     ): ResolvedDetailRatingDisplay =
         resolveRatings(context, identity) ?: context.toFallbackRatingDisplay()
 
-    private fun MetadataResolutionResult.toContentIdentity(): ContentIdentity {
+    private fun MetadataResolutionResult.toContentIdentity(resolvedMediaKind: MetadataMediaKind?): ContentIdentity {
         val (provider, id) = resolvedDocument.canonicalId.parseCanonicalIdentity()
 
         return ContentIdentity(
@@ -181,7 +185,7 @@ class MetadataDisplayRepository @Inject constructor(
                 id = id,
                 remoteIds = resolvedDocument.remoteIds,
                 targetIds = route?.targetIds.orEmpty(),
-                mediaKind = route?.mediaKind
+                mediaKind = resolvedMediaKind
             )
         )
     }
@@ -262,16 +266,35 @@ class MetadataDisplayRepository @Inject constructor(
             .trim()
             .takeIf { it.isNotBlank() }
             ?: return ProviderIds()
-        val resolvedKind = when (mediaKind) {
-            MetadataMediaKind.MOVIE -> ContentMediaKind.MOVIE
-            MetadataMediaKind.SERIES, MetadataMediaKind.ANIME -> ContentMediaKind.SERIES
-            // The asset stores both movies and series; for unknown kind fall
-            // back to SERIES (dominant shape) — resolveProviderIdsForKitsu
-            // does the final matches(mediaKind) gate inside the service.
-            MetadataMediaKind.UNKNOWN, null -> ContentMediaKind.SERIES
+        return when (mediaKind) {
+            MetadataMediaKind.MOVIE ->
+                animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, ContentMediaKind.MOVIE)
+            MetadataMediaKind.SERIES ->
+                animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, ContentMediaKind.SERIES)
+            // Router ANIME can represent either series or movies. Try the dominant
+            // series shape first, then fall back to movie when the series gate only
+            // preserves the bare Kitsu id.
+            MetadataMediaKind.ANIME,
+            MetadataMediaKind.UNKNOWN,
+            null -> {
+                val seriesIds = animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, ContentMediaKind.SERIES)
+                if (seriesIds.hasAnimeCrossIds()) {
+                    seriesIds
+                } else {
+                    val movieIds = animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, ContentMediaKind.MOVIE)
+                    if (movieIds.hasAnimeCrossIds()) movieIds else seriesIds
+                }
+            }
         }
-        return animeIdMappingService.resolveProviderIdsForKitsu(kitsuId, resolvedKind)
     }
+
+    private fun ProviderIds.hasAnimeCrossIds(): Boolean =
+        !imdb.isNullOrBlank() ||
+            !tmdb.isNullOrBlank() ||
+            !tvdb.isNullOrBlank() ||
+            !mal.isNullOrBlank() ||
+            !anilist.isNullOrBlank() ||
+            !anidb.isNullOrBlank()
 
     private fun Map<MetadataPrimaryProvider, String>.toProviderIds(): ProviderIds =
         ProviderIds(
@@ -347,7 +370,9 @@ class MetadataDisplayRepository @Inject constructor(
     private fun ResolvedMetadataDocument.toRatingDisplayContext(
         request: MetadataRequest,
         identity: ContentIdentity,
-        fallbackItemType: String
+        fallbackItemType: String,
+        rawType: String,
+        contentType: ContentType
     ): DetailRatingDisplayContext? {
         val fallbackItemId = identity.providerIds.imdb
             ?: identity.canonicalId
@@ -356,8 +381,9 @@ class MetadataDisplayRepository @Inject constructor(
         return DetailRatingDisplayContext(
             meta = toRatingMeta(
                 id = fallbackItemId,
-                contentType = request.contentType,
-                itemType = fallbackItemType
+                contentType = contentType,
+                itemType = fallbackItemType,
+                rawType = rawType
             ),
             fallbackItemId = fallbackItemId,
             fallbackItemType = fallbackItemType,
@@ -365,22 +391,41 @@ class MetadataDisplayRepository @Inject constructor(
         )
     }
 
-    private fun MetadataRequest.ratingFallbackItemType(route: MetadataRoute?): String =
-        if (route?.mediaKind == MetadataMediaKind.ANIME) {
-            "anime"
-        } else {
-            sourceContext.itemType ?: contentType.toApiString()
+    private fun MetadataRequest.ratingFallbackItemType(
+        route: MetadataRoute?,
+        resolvedMediaKind: MetadataMediaKind?
+    ): String =
+        when (resolvedMediaKind) {
+            MetadataMediaKind.MOVIE -> "movie"
+            MetadataMediaKind.SERIES -> "series"
+            MetadataMediaKind.ANIME -> "anime"
+            else -> if (route?.mediaKind == MetadataMediaKind.ANIME) {
+                "anime"
+            } else {
+                sourceContext.itemType ?: contentType.toApiString()
+            }
         }
+
+    private fun MetadataRequest.contentTypeFor(resolvedMediaKind: MetadataMediaKind?): ContentType =
+        when (resolvedMediaKind) {
+            MetadataMediaKind.MOVIE -> ContentType.MOVIE
+            MetadataMediaKind.SERIES -> ContentType.SERIES
+            else -> contentType
+        }
+
+    private fun MetadataRequest.ratingRawType(route: MetadataRoute?, fallbackItemType: String): String =
+        if (route?.mediaKind == MetadataMediaKind.ANIME) "anime" else fallbackItemType
 
     private fun ResolvedMetadataDocument.toRatingMeta(
         id: String,
         contentType: ContentType,
-        itemType: String
+        itemType: String,
+        rawType: String = itemType
     ): Meta =
         Meta(
             id = id,
             type = contentType,
-            rawType = itemType,
+            rawType = rawType,
             name = title ?: id,
             poster = poster,
             posterShape = PosterShape.POSTER,

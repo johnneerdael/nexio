@@ -73,7 +73,8 @@ class SyntheticHomeCatalogStore private constructor(
         val kitsuGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val tmdbIncludeAdult: Boolean? = null,
-        val tmdbHideUnreleasedDigital: Boolean? = null
+        val tmdbHideUnreleasedDigital: Boolean? = null,
+        val updatedAtMs: Long = 0L
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
@@ -142,6 +143,7 @@ class SyntheticHomeCatalogStore private constructor(
         var tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
         var tmdbIncludeAdult: Boolean? = null
         var tmdbHideUnreleasedDigital: Boolean? = null
+        var updatedAtMs: Long = file.lastModified().takeIf { it > 0L } ?: 0L
 
         return runCatching {
             FileInputStream(file).use { fis ->
@@ -196,6 +198,9 @@ class SyntheticHomeCatalogStore private constructor(
                                         reader.nextNull(); null
                                     } else reader.nextBoolean()
                                 }
+                                "updatedAtMs" -> {
+                                    updatedAtMs = reader.nextLong()
+                                }
                                 else -> reader.skipValue()
                             }
                         }
@@ -210,7 +215,8 @@ class SyntheticHomeCatalogStore private constructor(
                 kitsuGroups = kitsuGroups,
                 tmdbGroups = tmdbGroups,
                 tmdbIncludeAdult = tmdbIncludeAdult,
-                tmdbHideUnreleasedDigital = tmdbHideUnreleasedDigital
+                tmdbHideUnreleasedDigital = tmdbHideUnreleasedDigital,
+                updatedAtMs = updatedAtMs
             )
         }.onFailure { error ->
             Log.w(TAG, "Failed to stream-read synthetic home catalogs", error)
@@ -218,28 +224,30 @@ class SyntheticHomeCatalogStore private constructor(
     }
 
     private fun writeSnapshotToFile(snapshot: Snapshot, target: File) {
+        val snapshotToWrite = snapshot.copy(updatedAtMs = System.currentTimeMillis())
         val tempFile = File(target.parentFile, "${target.name}.tmp")
         FileOutputStream(tempFile).use { fos ->
             BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                 JsonWriter(bw).use { writer ->
                     writer.beginObject()
                     writer.name("schemaVersion").value(SCHEMA_VERSION)
+                    writer.name("updatedAtMs").value(snapshotToWrite.updatedAtMs)
                     writer.name("languageEpoch").value(metadataDiskCacheStore.currentLanguageEpoch())
                     writer.name("languageTag").value(currentLanguageTag())
 
                     writer.name("traktGroups")
-                    gson.toJson(encodeGroups(snapshot.traktGroups), JsonArray::class.java, writer)
+                    gson.toJson(encodeGroups(snapshotToWrite.traktGroups), JsonArray::class.java, writer)
                     writer.name("simklGroups")
-                    gson.toJson(encodeGroups(snapshot.simklGroups), JsonArray::class.java, writer)
+                    gson.toJson(encodeGroups(snapshotToWrite.simklGroups), JsonArray::class.java, writer)
                     writer.name("mdbListGroups")
-                    gson.toJson(encodeGroups(snapshot.mdbListGroups), JsonArray::class.java, writer)
+                    gson.toJson(encodeGroups(snapshotToWrite.mdbListGroups), JsonArray::class.java, writer)
                     writer.name("kitsuGroups")
-                    gson.toJson(encodeGroups(snapshot.kitsuGroups), JsonArray::class.java, writer)
+                    gson.toJson(encodeGroups(snapshotToWrite.kitsuGroups), JsonArray::class.java, writer)
                     writer.name("tmdbGroups")
-                    gson.toJson(encodeGroups(snapshot.tmdbGroups), JsonArray::class.java, writer)
+                    gson.toJson(encodeGroups(snapshotToWrite.tmdbGroups), JsonArray::class.java, writer)
 
-                    snapshot.tmdbIncludeAdult?.let { writer.name("tmdbIncludeAdult").value(it) }
-                    snapshot.tmdbHideUnreleasedDigital?.let { writer.name("tmdbHideUnreleasedDigital").value(it) }
+                    snapshotToWrite.tmdbIncludeAdult?.let { writer.name("tmdbIncludeAdult").value(it) }
+                    snapshotToWrite.tmdbHideUnreleasedDigital?.let { writer.name("tmdbHideUnreleasedDigital").value(it) }
                     writer.endObject()
                 }
             }
@@ -286,7 +294,8 @@ class SyntheticHomeCatalogStore private constructor(
             kitsuGroups = decodeGroups(root.getAsJsonArray("kitsuGroups")),
             tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups")),
             tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult"),
-            tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital")
+            tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital"),
+            updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
     }
 

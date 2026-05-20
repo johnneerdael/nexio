@@ -184,4 +184,52 @@ class StartupResumePolicyTest {
             )
         )
     }
+
+    @Test
+    fun `deferred startup work waits for multi profile startup gate`() {
+        assertFalse(
+            shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = true,
+                hasPassedProfileSelectionGate = false,
+                profileCount = 2
+            )
+        )
+        assertTrue(
+            shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = true,
+                hasPassedProfileSelectionGate = true,
+                profileCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun `deferred startup work can run when profile selection is not required`() {
+        assertTrue(
+            shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = true,
+                hasPassedProfileSelectionGate = false,
+                profileCount = 1
+            )
+        )
+        assertFalse(
+            shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = false,
+                hasPassedProfileSelectionGate = true,
+                profileCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun `deferred startup work waits for profiles to load before treating default profile as single profile`() {
+        assertFalse(
+            shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = true,
+                hasPassedProfileSelectionGate = false,
+                profileCount = 1,
+                profilesLoaded = false
+            )
+        )
+    }
 }

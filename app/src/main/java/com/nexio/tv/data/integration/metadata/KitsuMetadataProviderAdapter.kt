@@ -30,6 +30,7 @@ import com.nexio.tv.data.integration.kitsu.KitsuIntegrationProvider
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterResource
 import com.nexio.tv.data.remote.api.KitsuAnimeProductionResource
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
+import com.nexio.tv.data.remote.api.KitsuAnimeAttributes
 import com.nexio.tv.data.remote.api.KitsuAnimeStaffResource
 import com.nexio.tv.data.remote.api.KitsuCollectionResponse
 import com.nexio.tv.data.remote.api.KitsuIncludedResource
@@ -76,10 +77,12 @@ class KitsuMetadataProviderAdapter @Inject constructor(
         var titleField: SelectedLocalizedField? = null
         var synopsisField: SelectedLocalizedField? = null
         var animeCoreTrailerYoutubeId: String? = null
+        var animeCoreMediaKind: MetadataMediaKind? = null
         val candidate = when (step.apiShapeId) {
             KitsuApiShapes.ANIME_CORE -> {
                 val baseCandidate = integrationProvider.fetchEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
                     val attributes = resource.attributes ?: return@fetchEnrichment null
+                    animeCoreMediaKind = attributes.toMetadataMediaKind()
                     animeCoreTrailerYoutubeId = attributes.youtubeVideoId
                     val titles = attributes.titles.orEmpty()
                     titleField = selectKitsuTitleField(
@@ -121,6 +124,7 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                     )
                 )
                 baseCandidate
+                    .withKitsuMediaKind(animeCoreMediaKind)
             }
             KitsuApiShapes.ANIME_EPISODES -> {
                 // F-E-03: Kitsu does not have per-episode localization decisions like TVDB. The Kitsu API
@@ -203,6 +207,18 @@ class KitsuMetadataProviderAdapter @Inject constructor(
 
     private fun MetadataCandidate.withKitsuCanonicalId(kitsuId: String): MetadataCandidate =
         copy(fields = fields + (ResolvedField.CANONICAL_ID to FieldValue("kitsu:$kitsuId", FieldOwner.PRIMARY)))
+
+    private fun MetadataCandidate.withKitsuMediaKind(mediaKind: MetadataMediaKind?): MetadataCandidate {
+        val resolvedMediaKind = mediaKind ?: return this
+        return copy(fields = fields + (ResolvedField.CONTENT_TYPE to FieldValue(resolvedMediaKind, FieldOwner.PRIMARY)))
+    }
+
+    private fun KitsuAnimeAttributes.toMetadataMediaKind(): MetadataMediaKind {
+        val type = listOf(subtype, showType)
+            .firstOrNull { !it.isNullOrBlank() }
+            ?.lowercase()
+        return if (type == "movie") MetadataMediaKind.MOVIE else MetadataMediaKind.SERIES
+    }
 
     private fun MetadataCandidate.withKitsuTrailer(youtubeVideoId: String?): MetadataCandidate {
         val normalizedId = youtubeVideoId?.trim()?.takeIf { it.isNotBlank() } ?: return this

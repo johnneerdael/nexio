@@ -24,6 +24,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -59,50 +60,68 @@ class AndroidTvChannelPublisher @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
+    private var preferenceObserverJob: Job? = null
+    private var continueWatchingObserverJob: Job? = null
+    @Volatile
+    private var profileGateResolved: Boolean = false
     private val previewChannelHelper = PreviewChannelHelper(context)
     private val channelLogoBitmap by lazy(LazyThreadSafetyMode.NONE) {
         ContextCompat.getDrawable(context, R.drawable.app_logo)?.toBitmap()
     }
 
-    init {
-        scope.launch {
-            dataStore.preferences
-                .drop(1)
-                .collect { requestSync("preferences_changed") }
-        }
-        scope.launch {
-            // F2-G-02: use observeProfileSnapshot scoped to the active profile so CW change
-            // signals are attributed correctly and won't fire for the wrong profile's snapshot.
-            val profileScopedSnapshotFlow = profileManager.activeProfileId
-                .flatMapLatest { profileId ->
-                    profileId.takeIf { it > 0 }
-                        ?.let { continueWatchingSnapshotService.observeProfileSnapshot(it) }
-                        ?: emptyFlow()
-                }
-            combine(
-                dataStore.preferences,
-                profileScopedSnapshotFlow
-            ) { prefs, snapshot ->
-                prefs.enabled &&
-                    AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY in prefs.selectedFeedKeys &&
-                    snapshot.updatedAtMs > 0L
+    fun startProfileBoundSyncAfterProfileGate(reason: String = "profile_gate_resolved") {
+        profileGateResolved = true
+        if (preferenceObserverJob == null) {
+            preferenceObserverJob = scope.launch {
+                dataStore.preferences
+                    .drop(1)
+                    .collect { requestSync("preferences_changed") }
             }
-                .distinctUntilChanged()
-                .collect { shouldSync ->
-                    if (shouldSync) {
-                        requestSync("continue_watching_changed")
-                    }
-                }
         }
+        if (continueWatchingObserverJob == null) {
+            continueWatchingObserverJob = scope.launch {
+                // F2-G-02: use observeProfileSnapshot scoped to the active profile so CW change
+                // signals are attributed correctly and won't fire for the wrong profile's snapshot.
+                val profileScopedSnapshotFlow = profileManager.activeProfileId
+                    .flatMapLatest { profileId ->
+                        profileId.takeIf { it > 0 }
+                            ?.let { continueWatchingSnapshotService.observeProfileSnapshot(it) }
+                            ?: emptyFlow()
+                    }
+                combine(
+                    dataStore.preferences,
+                    profileScopedSnapshotFlow
+                ) { prefs, snapshot ->
+                    prefs.enabled &&
+                        AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY in prefs.selectedFeedKeys &&
+                        snapshot.updatedAtMs > 0L
+                }
+                    .distinctUntilChanged()
+                    .collect { shouldSync ->
+                        if (shouldSync) {
+                            requestSync("continue_watching_changed")
+                        }
+                    }
+            }
+        }
+        requestSync(reason)
     }
 
     fun requestSync(reason: String = "manual") {
+        if (!profileGateResolved) {
+            Log.d(TAG, "Skipping Android TV channel sync before profile gate reason=$reason")
+            return
+        }
         scope.launch {
             syncNow(reason)
         }
     }
 
     suspend fun syncNow(reason: String = "manual") {
+        if (!profileGateResolved) {
+            Log.d(TAG, "Skipping Android TV channel sync before profile gate reason=$reason")
+            return
+        }
         if (!supportsAndroidTvChannels()) return
         mutex.withLock {
             val prefs = dataStore.preferences.first()
@@ -172,7 +191,7 @@ class AndroidTvChannelPublisher @Inject constructor(
                             addonBaseUrl = row.addonBaseUrl,
                             position = position
                         )
-                }
+                    }
             }
 
             autoBrowsableChannelId?.let { channelId ->

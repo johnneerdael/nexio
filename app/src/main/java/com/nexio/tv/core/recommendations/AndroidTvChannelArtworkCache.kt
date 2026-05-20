@@ -35,11 +35,10 @@ class AndroidTvChannelArtworkCache @Inject constructor(
 
         return withContext(Dispatchers.IO) {
             runCatching {
-                fetchWithCoil(request)
-                copyCoilDiskCacheEntry(
-                    diskCacheKey = request.diskCacheKey,
-                    targetFile = targetFile
-                )
+                if (!copyCoilDiskCacheEntry(request, targetFile)) {
+                    fetchWithCoil(request)
+                    copyCoilDiskCacheEntry(request, targetFile)
+                }
                 request.localUri.takeIf { targetFile.isFile && targetFile.length() > 0L }
             }.onFailure { error ->
                 Log.w(
@@ -55,7 +54,7 @@ class AndroidTvChannelArtworkCache @Inject constructor(
         context.imageLoader.execute(
             ImageRequest.Builder(context)
                 .data(request.remoteUrl)
-                .diskCacheKey(request.diskCacheKey)
+                .diskCacheKey(request.remoteUrl)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .build()
@@ -63,14 +62,16 @@ class AndroidTvChannelArtworkCache @Inject constructor(
     }
 
     @OptIn(ExperimentalCoilApi::class)
-    private fun copyCoilDiskCacheEntry(
-        diskCacheKey: String,
-        targetFile: File
-    ) {
-        val diskCache = context.imageLoader.diskCache ?: return
-        diskCache.openSnapshot(diskCacheKey)?.use { snapshot ->
-            copyPathToFile(snapshot.data, targetFile)
+    private fun copyCoilDiskCacheEntry(request: PosterRequest, targetFile: File): Boolean {
+        val diskCache = context.imageLoader.diskCache ?: return false
+        val candidateKeys = listOf(request.diskCacheKey, request.remoteUrl).distinct()
+        for (i in candidateKeys.indices) {
+            diskCache.openSnapshot(candidateKeys[i])?.use { snapshot ->
+                copyPathToFile(snapshot.data, targetFile)
+                if (targetFile.isFile && targetFile.length() > 0L) return true
+            }
         }
+        return false
     }
 
     private fun copyPathToFile(sourcePath: Path, targetFile: File) {

@@ -142,6 +142,7 @@ class KitsuMetadataProviderAdapterTest {
         )
 
         assertEquals("Anime Movie", result.candidate?.fields?.get(ResolvedField.TITLE)?.value)
+        assertEquals(MetadataMediaKind.MOVIE, result.candidate?.fields?.get(ResolvedField.CONTENT_TYPE)?.value)
         coVerify(exactly = 1) {
             provider.fetchEnrichment(
                 rawId = "kitsu:44390",

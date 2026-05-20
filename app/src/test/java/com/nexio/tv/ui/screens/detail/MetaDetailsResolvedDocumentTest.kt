@@ -9,6 +9,7 @@ import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
+import com.nexio.tv.data.repository.DetailRatingDisplayContext
 import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
@@ -113,6 +114,60 @@ class MetaDetailsResolvedDocumentTest {
         assertFalse(state.isLoading)
     }
 
+    @Test
+    fun `kitsu anime movie keeps MAL when detail-open ratings refresh returns movie providers`() = runTest(dispatcher) {
+        val document = resolvedKitsuAnimeMovieDocument()
+        val displayRepository = mockk<MetadataDisplayRepository>()
+        coEvery {
+            displayRepository.resolveDetailDisplay(match<MetadataRequest> { request ->
+                request.contentId == "tt30472557" &&
+                    request.contentType == ContentType.MOVIE &&
+                    request.depth == MetadataDepth.DETAIL_FULL
+            })
+        } returns document
+        coEvery {
+            displayRepository.resolveDetailRatings(
+                context = match<DetailRatingDisplayContext> { context ->
+                    context.meta.id == "kitsu:48323" &&
+                        context.meta.type == ContentType.MOVIE &&
+                        context.meta.rawType == "anime" &&
+                        context.fallbackItemType == "movie"
+                },
+                identity = document.identity
+            )
+        } returns ResolvedDetailRatingDisplay(
+            mdbListRatings = MDBListRatings(tmdb = 83.0, letterboxd = 4.3, tomatoes = 96.0, metacritic = 71.0)
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = minimalMovieMeta().copy(id = "tt30472557"),
+            itemId = "tt30472557",
+            itemType = "movie",
+            addonBaseUrl = null,
+            metadataDisplayRepository = displayRepository,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                useBasicInfo = true,
+                useDetails = true,
+                useArtwork = true,
+                useCredits = true,
+                useEpisodes = true,
+                useMoreLikeThis = false,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        val ratings = viewModel.uiState.value.mdbListRatings
+        assertEquals(9.0, ratings?.mal ?: 0.0, 0.0)
+        assertEquals(83.0, ratings?.tmdb ?: 0.0, 0.0)
+        assertEquals(4.3, ratings?.letterboxd ?: 0.0, 0.0)
+        assertEquals(96.0, ratings?.tomatoes ?: 0.0, 0.0)
+        assertEquals(71.0, ratings?.metacritic ?: 0.0, 0.0)
+    }
+
     private fun resolvedDocument(): ResolvedDetailDisplayDocument =
         ResolvedDetailDisplayDocument(
             route = MetadataRoute(
@@ -162,12 +217,84 @@ class MetaDetailsResolvedDocumentTest {
             )
         )
 
+    private fun resolvedKitsuAnimeMovieDocument(): ResolvedDetailDisplayDocument =
+        ResolvedDetailDisplayDocument(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.KITSU,
+                parentId = "kitsu:48323",
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                sourceContext = MetadataSourceContext(itemType = "anime"),
+                targetIds = mapOf(
+                    MetadataPrimaryProvider.KITSU to "48323",
+                    MetadataPrimaryProvider.IMDB to "tt30472557"
+                ),
+                trace = emptyList()
+            ),
+            identity = ContentIdentity(
+                canonicalProvider = ProviderId.KITSU,
+                canonicalId = "48323",
+                providerIds = ProviderIds(kitsu = "48323", imdb = "tt30472557", mal = "57555")
+            ),
+            fields = ResolvedDisplayFields(
+                title = "Chainsaw Man - The Movie: Reze Arc",
+                originalTitle = null,
+                year = 2025,
+                releaseDate = null,
+                overview = "Movie overview",
+                genres = listOf("Action"),
+                runtimeText = "100 min"
+            ),
+            artwork = ArtworkBundle(),
+            rating = TitleRating(8.3, TitleRatingSource.IMDB),
+            trailer = TrailerDisplayState(),
+            seasons = emptyList(),
+            people = null,
+            reviews = emptyList(),
+            recommendations = emptyList(),
+            collection = emptyList(),
+            sourceTrace = emptyList(),
+            localization = LocalizationDisplayState(
+                requestedLanguage = "en",
+                selectedLanguage = "en",
+                fallbackReason = null
+            ),
+            ratings = ResolvedDetailRatingDisplay(
+                titleRating = TitleRating(8.3, TitleRatingSource.IMDB),
+                mdbListRatings = MDBListRatings(mal = 9.0, tmdb = 83.0)
+            )
+        )
+
     private fun minimalSeriesMeta(): Meta =
         Meta(
             id = "tmdb:1399",
             type = ContentType.SERIES,
             rawType = "series",
             name = "Preview title",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
+        )
+
+    private fun minimalMovieMeta(): Meta =
+        Meta(
+            id = "tt30472557",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Preview movie",
             poster = null,
             posterShape = PosterShape.POSTER,
             background = null,

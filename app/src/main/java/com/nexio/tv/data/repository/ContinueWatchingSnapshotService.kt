@@ -413,8 +413,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val liveProfilesReady = mutableSetOf<Int>()
     private val profilesAwaitingRemoteReset = mutableSetOf<Int>()
     private val profilesThatObservedRemoteReset = mutableSetOf<Int>()
-    private val persistedTvPlaybackRefreshLock = Any()
-    private var lastPersistedTvPlaybackRefreshMs = 0L
 
     init {
         synchronized(liveProfileGateLock) {
@@ -597,9 +595,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
             snapshotState.value = owned
             lastRefreshRequestMs = 0L
             handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
-            if (hasRemoteTvPlaybackResume(normalized)) {
-                requestTrackingRefreshAfterPersistedTvPlaybackRestore()
-            }
         } finally {
             persistedSnapshotReady.value = true
         }
@@ -614,12 +609,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 profileId = current.profileId.takeIf { it > 0 } ?: activeProfileId(),
                 recordCount = current.snapshot.resumeItems.size + current.snapshot.nextUpItems.size + current.snapshot.traktUpNextItems.size
             )
-            scope.launch {
-                runCatching { ensureFresh(force = false) }
-                    .onFailure { error ->
-                        Log.w("ContinueWatching", "Failed to refresh continue watching snapshot", error)
-                    }
-            }
         }
     }
 
@@ -657,7 +646,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ) {
                 return@withLock
             }
-            trackingProgressService.refreshNow()
+            trackingProgressService.refreshOnStartup()
             lastRefreshRequestMs = lockedNow
         }
     }
@@ -2131,21 +2120,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return sanitizeSnapshot(snapshot)
     }
 
-    private fun hasRemoteTvPlaybackResume(snapshot: ContinueWatchingSnapshot): Boolean {
-        val resumeItems = snapshot.resumeItems
-        for (i in resumeItems.indices) {
-            val progress = resumeItems[i]
-            if (
-                isRemotePlaybackSource(progress.source) &&
-                progress.season != null &&
-                progress.episode != null
-            ) {
-                return true
-            }
-        }
-        return false
-    }
-
     private fun isRemotePlaybackSource(source: String): Boolean =
         source == WatchProgress.SOURCE_TRAKT_PLAYBACK ||
             source == WatchProgress.SOURCE_SIMKL_PLAYBACK ||
@@ -2170,29 +2144,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
         isRemotePlaybackSource(progress.source) &&
             progress.season != null &&
             progress.episode != null
-
-    private fun requestTrackingRefreshAfterPersistedTvPlaybackRestore() {
-        val now = System.currentTimeMillis()
-        val shouldRefresh = synchronized(persistedTvPlaybackRefreshLock) {
-            if (now - lastPersistedTvPlaybackRefreshMs < minRefreshIntervalMs) {
-                false
-            } else {
-                lastPersistedTvPlaybackRefreshMs = now
-                true
-            }
-        }
-        if (!shouldRefresh) return
-        scope.launch {
-            runCatching { trackingProgressService.refreshNow() }
-                .onFailure { error ->
-                    Log.w(
-                        "ContinueWatching",
-                        "Failed to refresh tracking progress after persisted TV playback restore",
-                        error
-                    )
-                }
-        }
-    }
 
     internal suspend fun upgradeStaleRouteSnapshots(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
         val facade = metadataRouterFacade ?: return snapshot

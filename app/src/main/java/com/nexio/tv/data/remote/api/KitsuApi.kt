@@ -49,6 +49,13 @@ interface KitsuApi {
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>
 
+    @GET("media-characters/{id}")
+    suspend fun getMediaCharacter(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "character,voices.person"
+    ): Response<KitsuResourceResponse<KitsuIncludedResource>>
+
     @GET("anime/{id}/anime-staff")
     suspend fun getAnimeStaff(
         @Header("Authorization") authorization: String? = null,
@@ -222,6 +229,7 @@ data class KitsuAnimeAttributes(
     @Json(name = "synopsis") val synopsis: String? = null,
     @Json(name = "description") val description: String? = null,
     @Json(name = "subtype") val subtype: String? = null,
+    @Json(name = "showType") val showType: String? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "startDate") val startDate: String? = null,
     @Json(name = "endDate") val endDate: String? = null,

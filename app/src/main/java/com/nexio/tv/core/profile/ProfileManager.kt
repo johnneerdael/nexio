@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
@@ -77,8 +78,11 @@ class ProfileManager(
     val activeProfileSession: StateFlow<ActiveProfileSession> = _activeProfileSession.asStateFlow()
 
     private val deferralPolicy = ProfileSwitchDeferralPolicy(initialProfileId = _activeProfileId.value)
+    private val _profilesLoaded = MutableStateFlow(false)
+    val profilesLoaded: StateFlow<Boolean> = _profilesLoaded.asStateFlow()
 
     val profiles: StateFlow<List<UserProfile>> = dataStore.profilesList
+        .onEach { _profilesLoaded.value = true }
         .stateIn(
             scope, SharingStarted.Eagerly,
             listOf(UserProfile(id = 1, name = "Default", avatarColorHex = "#1E88E5"))

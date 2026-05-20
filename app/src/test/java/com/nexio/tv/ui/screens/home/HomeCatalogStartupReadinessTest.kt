@@ -859,7 +859,7 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
-    fun `serialized trakt refresh still checks stale complete discovery rails`() {
+    fun `serialized trakt refresh skips fresh complete discovery rails`() {
         val prefs = TraktCatalogPreferences(
             enabledCatalogs = setOf(TraktCatalogIds.TRENDING_SHOWS),
             catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
@@ -880,11 +880,17 @@ class HomeCatalogStartupReadinessTest {
                     genres = emptyList()
                 )
             ),
-            updatedAtMs = 123L
+            updatedAtMs = 1_000L
         )
 
         assertFalse(shouldRefreshTraktDiscoveryForState(prefs, snapshot))
-        assertTrue(shouldAttemptSerializedTraktDiscoveryRefresh(prefs))
+        assertFalse(
+            shouldRefreshTraktDiscoveryForHomeState(
+                prefs = prefs,
+                snapshot = snapshot,
+                nowMs = 1_000L + (12L * 60L * 60L * 1000L)
+            )
+        )
     }
 
     @Test

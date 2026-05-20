@@ -1013,20 +1013,39 @@ private fun nextUpDismissKey(contentId: String): String {
     return contentId.trim()
 }
 
+internal fun shouldClearShowProgressForContinueWatchingRemoval(
+    contentType: String?,
+    season: Int?,
+    episode: Int?,
+    isNextUp: Boolean
+): Boolean {
+    if (isNextUp) return true
+    if (isSeriesType(contentType)) return true
+    return contentType.isNullOrBlank() && season != null && episode != null
+}
+
 internal fun HomeViewModel.removeContinueWatchingPipeline(
     contentId: String,
     season: Int? = null,
     episode: Int? = null,
     isNextUp: Boolean = false
 ) {
-    if (isNextUp) {
+    val matchingItem = _displayContinueWatchingItems.value.firstOrNull { item ->
+        nextUpDismissKey(item.contentId()) == nextUpDismissKey(contentId) &&
+            (season == null || item.season() == season) &&
+            (episode == null || item.episode() == episode)
+    }
+    val shouldClearShow = shouldClearShowProgressForContinueWatchingRemoval(
+        contentType = matchingItem?.contentType(),
+        season = season,
+        episode = episode,
+        isNextUp = isNextUp
+    )
+
+    if (shouldClearShow) {
         val targetId = nextUpDismissKey(contentId)
         val filteredContinueWatching = _displayContinueWatchingItems.value.filterNot { item ->
-            when (item) {
-                is ContinueWatchingItem.NextUp ->
-                    nextUpDismissKey(item.info.contentId) == targetId
-                is ContinueWatchingItem.InProgress -> false
-            }
+            nextUpDismissKey(item.contentId()) == targetId
         }
         if (_displayContinueWatchingItems.value != filteredContinueWatching) {
             _displayContinueWatchingItems.value = filteredContinueWatching
@@ -1039,6 +1058,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
             )
         }
         viewModelScope.launch {
+            continueWatchingSnapshotService.removeAllForShow(targetId)
             continueWatchingSnapshotService.removeShowOptimistically(targetId)
             runCatching {
                 watchProgressRepository.clearShowProgress(profileManager.activeProfileSession.value, targetId)

@@ -126,6 +126,8 @@ import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.tvdb.TvdbUpdateCoordinator
+import com.nexio.tv.core.tvdb.TvdbUpdateTrigger
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -357,6 +359,9 @@ class MainActivity : ComponentActivity() {
     lateinit var androidTvChannelPublisher: AndroidTvChannelPublisher
 
     @Inject
+    lateinit var tvdbUpdateCoordinator: TvdbUpdateCoordinator
+
+    @Inject
     lateinit var debugSettingsDataStore: DebugSettingsDataStore
 
     @Inject
@@ -400,6 +405,7 @@ class MainActivity : ComponentActivity() {
     private var deferredStartupWorkJob: Job? = null
     private var deferredBrowsableRequestJob: Job? = null
     private var startupPerfWindowJob: Job? = null
+    private var profileBoundSurfaceObserverJob: Job? = null
     private var idleScreensaverColdBootRefreshPending: Boolean = false
     private var shouldRunDeferredStartupWorkThisStart: Boolean = false
     private val channelBrowsableLauncher = registerForActivityResult(
@@ -508,18 +514,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
         }
-        lifecycleScope.launch {
-            profileManager.activeProfileId
-                .collectLatest { profileId ->
-                    try {
-                        idleScreensaverRepository.observeResolvedSurface(profileId = profileId)
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Throwable) {
-                        Log.w("MainActivity", "Idle screensaver surface observation failed", error)
-                    }
-                }
-        }
         setContent {
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
@@ -619,6 +613,7 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(processProfileSelectionGatePassed)
                     }
                     val profiles by profileManager.profiles.collectAsState()
+                    val profilesLoaded by profileManager.profilesLoaded.collectAsState()
                     val activeProfileId by profileManager.activeProfileId.collectAsState()
                     val shouldShowProfileSelection = shouldShowStartupProfileSelection(
                         hasPassedProfileSelectionGate = hasPassedProfileSelectionGate,
@@ -650,6 +645,8 @@ class MainActivity : ComponentActivity() {
                                     val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
                                     processProfileSelectionGatePassed = true
                                     hasPassedProfileSelectionGate = true
+                                    startProfileBoundSurfaceObserverIfProfileGateResolved("profile_selected")
+                                    scheduleDeferredStartupWorkIfProfileGateResolved("profile_selected")
                                     if (beforeLocale != afterLocale) {
                                         recreate()
                                     }
@@ -657,6 +654,11 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         return@Surface
+                    }
+
+                    LaunchedEffect(hasPassedProfileSelectionGate, profiles.size, profilesLoaded) {
+                        startProfileBoundSurfaceObserverIfProfileGateResolved("profile_gate_resolved")
+                        scheduleDeferredStartupWorkIfProfileGateResolved("profile_gate_resolved")
                     }
 
                     // Restore focus to content after profile selection exits (Pitfall 1)
@@ -1498,7 +1500,7 @@ class MainActivity : ComponentActivity() {
             logStartupPerf("startup_window_closed")
         }
         if (shouldRunDeferredStartupWorkThisStart) {
-            scheduleDeferredStartupWork()
+            scheduleDeferredStartupWorkIfProfileGateResolved("on_start")
         } else {
             logStartupPerf("deferred_startup_skipped", "reason=warm_process_resume")
         }
@@ -1510,6 +1512,57 @@ class MainActivity : ComponentActivity() {
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()
         startupPerfWindowJob?.cancel()
+    }
+
+    private fun scheduleDeferredStartupWorkIfProfileGateResolved(reason: String): Boolean {
+        val profileCount = profileManager.profiles.value.size
+        if (!shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = shouldRunDeferredStartupWorkThisStart,
+                hasPassedProfileSelectionGate = processProfileSelectionGatePassed,
+                profileCount = profileCount,
+                profilesLoaded = profileManager.profilesLoaded.value
+            )
+        ) {
+            logStartupPerf(
+                "deferred_startup_waiting_profile_gate",
+                "reason=$reason profile_count=$profileCount profiles_loaded=${profileManager.profilesLoaded.value} gate_passed=$processProfileSelectionGatePassed"
+            )
+            return false
+        }
+        scheduleDeferredStartupWork()
+        return true
+    }
+
+    private fun startProfileBoundSurfaceObserverIfProfileGateResolved(reason: String) {
+        if (profileBoundSurfaceObserverJob != null) return
+        val profileCount = profileManager.profiles.value.size
+        if (!shouldRunDeferredStartupWorkAfterProfileGate(
+                shouldRunDeferredStartupWorkThisStart = true,
+                hasPassedProfileSelectionGate = processProfileSelectionGatePassed,
+                profileCount = profileCount,
+                profilesLoaded = profileManager.profilesLoaded.value
+            )
+        ) {
+            logStartupPerf(
+                "profile_bound_observers_waiting_profile_gate",
+                "reason=$reason profile_count=$profileCount profiles_loaded=${profileManager.profilesLoaded.value} gate_passed=$processProfileSelectionGatePassed"
+            )
+            return
+        }
+        androidTvChannelPublisher.startProfileBoundSyncAfterProfileGate(reason)
+        startupSyncService.startAfterProfileGate(reason)
+        profileBoundSurfaceObserverJob = lifecycleScope.launch {
+            profileManager.activeProfileId
+                .collectLatest { profileId ->
+                    try {
+                        idleScreensaverRepository.observeResolvedSurface(profileId = profileId)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        Log.w("MainActivity", "Idle screensaver surface observation failed", error)
+                    }
+                }
+        }
     }
 
     private fun scheduleDeferredStartupWork() {
@@ -1529,6 +1582,7 @@ class MainActivity : ComponentActivity() {
             if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
 
             logStartupPerf("deferred_startup_begin", "stable_frames=$reachedStableFrames")
+            startupSyncService.startAfterProfileGate("deferred_startup")
             logStartupPerf("startup_sync_request_start")
             startupSyncService.requestSyncNow()
             logStartupPerf("startup_sync_request_end")
@@ -1538,13 +1592,19 @@ class MainActivity : ComponentActivity() {
             maybeLaunchPendingBrowsableChannelRequest()
             launch {
                 logStartupPerf("tracking_refresh_start")
-                runCatching { trackingProgressService.refreshNow() }
+                runCatching { trackingProgressService.refreshOnStartup() }
                     .onFailure { error ->
                         logStartupPerf("tracking_refresh_failed", "message=${error.message ?: "unknown"}")
                         Log.w("MainActivity", "Deferred tracking startup refresh failed", error)
                     }
                     .onSuccess {
                         logStartupPerf("tracking_refresh_end")
+                    }
+            }
+            launch(Dispatchers.IO) {
+                runCatching { tvdbUpdateCoordinator.catchUpUpdates(TvdbUpdateTrigger.STARTUP) }
+                    .onFailure { error ->
+                        Log.w("MainActivity", "Deferred TVDB startup catch-up failed", error)
                     }
             }
             launch(Dispatchers.IO) {

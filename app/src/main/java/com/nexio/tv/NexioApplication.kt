@@ -20,9 +20,7 @@ import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
 import com.nexio.tv.core.image.SearchSuggestionPosterKeyer
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.IntegrationRuntime
-import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.core.tvdb.TvdbUpdateCoordinator
-import com.nexio.tv.core.tvdb.TvdbUpdateTrigger
 import com.nexio.tv.data.invalidation.ArtworkSettingsInvalidator
 import com.nexio.tv.ui.screens.player.ObsoletePlaybackCacheCleanup
 import dagger.hilt.android.HiltAndroidApp
@@ -35,7 +33,6 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provider {
-    @Inject lateinit var startupSyncService: StartupSyncService
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var tvdbUpdateCoordinator: TvdbUpdateCoordinator
     @Inject lateinit var integrationPlaybackGate: IntegrationPlaybackGate
@@ -78,11 +75,12 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             ttlWorkRequest
         )
 
-        // Schedule periodic TVDB update checks and run startup catch-up
+        // Schedule periodic TVDB update checks. Startup catch-up is profile-gated
+        // from MainActivity because provider-backed metadata refresh must not run
+        // while the profile picker is still active.
         tvdbUpdateCoordinator.schedulePeriodicUpdates(WorkManager.getInstance(this))
         appScope.launch {
             integrationPlaybackGate.setPlaybackActive(false)
-            tvdbUpdateCoordinator.catchUpUpdates(TvdbUpdateTrigger.STARTUP)
         }
 
         // Start the artwork settings invalidator. Fires markStaleAll when the user

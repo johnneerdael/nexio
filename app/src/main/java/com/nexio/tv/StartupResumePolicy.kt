@@ -49,3 +49,18 @@ internal fun shouldShowStartupProfileSelection(
 ): Boolean {
     return !hasPassedProfileSelectionGate && profileCount > 1
 }
+
+internal fun shouldRunDeferredStartupWorkAfterProfileGate(
+    shouldRunDeferredStartupWorkThisStart: Boolean,
+    hasPassedProfileSelectionGate: Boolean,
+    profileCount: Int,
+    profilesLoaded: Boolean = true
+): Boolean {
+    if (!shouldRunDeferredStartupWorkThisStart) return false
+    if (!profilesLoaded) return false
+    if (profileCount <= 0) return false
+    return !shouldShowStartupProfileSelection(
+        hasPassedProfileSelectionGate = hasPassedProfileSelectionGate,
+        profileCount = profileCount
+    )
+}

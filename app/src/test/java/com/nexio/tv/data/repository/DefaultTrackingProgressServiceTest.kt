@@ -200,6 +200,43 @@ class DefaultTrackingProgressServiceTest {
     }
 
     @Test
+    fun `startup refresh does not force Trakt full account sync`() = runTest {
+        val traktService = mockk<TraktProgressService>(relaxed = true)
+        val simklService = mockk<SimklProgressService>(relaxed = true)
+        val mdbListService = mockk<com.nexio.tv.data.integration.mdblist.MDBListProgressService>(relaxed = true)
+        val trackingProviderStateService = mockk<TrackingProviderStateService> {
+            every { state } returns flowOf(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.TRAKT,
+                    traktAuthenticated = true,
+                    simklAuthenticated = true,
+                    mdbListAuthenticated = true
+                )
+            )
+            coEvery { currentState() } returns EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true
+            )
+        }
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            mdbListProgressService = mdbListService,
+            trackingProviderStateService = trackingProviderStateService
+        )
+
+        service.refreshOnStartup()
+
+        coVerify(exactly = 1) { traktService.requestEventDrivenRefresh() }
+        coVerify(exactly = 0) { traktService.refreshNowImmediate() }
+        coVerify(exactly = 1) { simklService.refreshNow() }
+        coVerify(exactly = 0) { simklService.refreshNowImmediate() }
+        coVerify(exactly = 1) { mdbListService.refreshNowImmediate() }
+    }
+
+    @Test
     fun `unauthenticated profile does not observe Trakt progress`() = runTest {
         val traktService = mockk<TraktProgressService>(relaxed = true)
         val simklService = mockk<SimklProgressService>(relaxed = true)

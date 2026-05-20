@@ -63,6 +63,7 @@ interface TrackingProgressService {
     fun applyOptimisticRemoval(contentId: String, season: Int?, episode: Int?)
     fun clearOptimistic()
     fun invalidateLocalizedMetadata()
+    suspend fun refreshOnStartup()
     suspend fun refreshNow()
     suspend fun resolvePlaybackDeleteIdsForOutbox(
         contentId: String,
@@ -267,6 +268,18 @@ class DefaultTrackingProgressService @Inject constructor(
             when (active[i]) {
                 TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
                 TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
+                TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
+            }
+        }
+    }
+
+    override suspend fun refreshOnStartup() {
+        val state = trackingProviderStateService.currentState()
+        val active = state.activeProviders.toList()
+        for (i in active.indices) {
+            when (active[i]) {
+                TrackingProvider.SIMKL -> simklProgressService.refreshNow()
+                TrackingProvider.TRAKT -> traktProgressService.requestEventDrivenRefresh()
                 TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
             }
         }

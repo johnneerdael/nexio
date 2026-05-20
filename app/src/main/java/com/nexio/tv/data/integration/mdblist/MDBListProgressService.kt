@@ -2,6 +2,8 @@ package com.nexio.tv.data.integration.mdblist
 
 import android.util.Log
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.local.MDBListProgressSyncState
+import com.nexio.tv.data.local.MDBListProgressSyncStateStore
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto
@@ -24,14 +26,19 @@ class MDBListProgressService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
     private val profileManager: ProfileManager,
+    private val syncStateStore: MDBListProgressSyncStateStore,
 ) {
-    private class RuntimeState {
-        val allProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
-        val loaded = MutableStateFlow(false)
+    private class RuntimeState(
+        persisted: MDBListProgressSyncState = MDBListProgressSyncState()
+    ) {
+        val allProgress = MutableStateFlow(persisted.rows)
+        val loaded = MutableStateFlow(persisted.rows.isNotEmpty() || persisted.lastWatchedSyncAt != null)
+        var lastWatchedSyncAt: String? = persisted.lastWatchedSyncAt
 
         fun clear() {
             allProgress.value = emptyList()
             loaded.value = false
+            lastWatchedSyncAt = null
         }
     }
 
@@ -41,7 +48,7 @@ class MDBListProgressService @Inject constructor(
 
     private fun stateFor(profileId: Int = activeProfileId()): RuntimeState =
         synchronized(states) {
-            states.getOrPut(profileId) { RuntimeState() }
+            states.getOrPut(profileId) { RuntimeState(syncStateStore.read(profileId)) }
         }
 
     fun observeAllProgress(): Flow<List<WatchProgress>> =
@@ -78,25 +85,60 @@ class MDBListProgressService @Inject constructor(
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
             runtime.clear()
+            syncStateStore.clear(profileId)
             return
         }
 
+        val watchedSince = runtime.lastWatchedSyncAt
+        val watchedCursorForNextSync = Instant.now().toString()
         val playback = runCatching { api.getPlayback(apiKey = apiKey) }
             .onFailure { Log.w(TAG, "Failed to load MDBList playback: ${it.message}") }
             .getOrNull()
-        val watched = runCatching { api.getWatched(apiKey = apiKey, limit = 1000, offset = 0) }
+        val watched = runCatching {
+            api.getWatched(apiKey = apiKey, limit = 1000, offset = 0, since = watchedSince)
+        }
             .onFailure { Log.w(TAG, "Failed to load MDBList watched: ${it.message}") }
             .getOrNull()
 
         val playbackRows = playback?.body()?.toPlaybackProgress().orEmpty()
         val watchedRows = watched?.body()?.toWatchedProgress().orEmpty()
-        runtime.allProgress.value = (playbackRows + watchedRows).sortedByDescending { it.lastWatched }
+        val mergedWatchedRows = if (watchedSince == null) {
+            watchedRows
+        } else {
+            mergeRowsByVideoId(
+                current = runtime.allProgress.value.filter { it.source == WatchProgress.SOURCE_MDBLIST_HISTORY },
+                delta = watchedRows
+            )
+        }
+        val allRows = (playbackRows + mergedWatchedRows).sortedByDescending { it.lastWatched }
+        runtime.allProgress.value = allRows
         runtime.loaded.value = playback?.isSuccessful == true || watched?.isSuccessful == true
+        if (watched?.isSuccessful == true) {
+            runtime.lastWatchedSyncAt = watchedCursorForNextSync
+            syncStateStore.write(
+                MDBListProgressSyncState(
+                    lastWatchedSyncAt = runtime.lastWatchedSyncAt,
+                    rows = allRows
+                ),
+                profileId = profileId
+            )
+        }
     }
 
     companion object {
         private const val TAG = "MDBListProgress"
     }
+}
+
+private fun mergeRowsByVideoId(
+    current: List<WatchProgress>,
+    delta: List<WatchProgress>
+): List<WatchProgress> {
+    val merged = current.associateBy { it.videoId }.toMutableMap()
+    for (i in delta.indices) {
+        merged[delta[i].videoId] = delta[i]
+    }
+    return merged.values.toList()
 }
 
 private fun MDBListPlaybackResponseDto.toPlaybackProgress(): List<WatchProgress> {

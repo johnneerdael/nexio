@@ -133,7 +133,11 @@ class MDBListRepository @Inject constructor(
     ): MDBListRatingsResult? {
         if (providers.isEmpty()) return null
 
-        val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
+        val mediaType = normalizeMediaType(
+            rawType = meta.apiType.ifBlank { fallbackItemType },
+            meta = meta,
+            fallbackItemType = fallbackItemType
+        )
         val ratingIdentity = resolveRatingLookupIdentity(
             meta = meta,
             fallbackItemId = fallbackItemId,
@@ -478,7 +482,18 @@ class MDBListRepository @Inject constructor(
         return null
     }
 
-    private fun normalizeMediaType(rawType: String): String {
+    private fun normalizeMediaType(
+        rawType: String,
+        meta: Meta? = null,
+        fallbackItemType: String = rawType
+    ): String {
+        if (
+            meta != null &&
+            isAnime(meta, fallbackItemType) &&
+            meta.videos.any { video -> video.season != null || video.episode != null }
+        ) {
+            return "show"
+        }
         return when (rawType.lowercase()) {
             "movie", "film" -> "movie"
             "series", "tv", "show", "tvshow" -> "show"

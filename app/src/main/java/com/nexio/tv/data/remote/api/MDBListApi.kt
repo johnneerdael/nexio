@@ -117,6 +117,7 @@ interface MDBListApi {
         @Query("apikey") apiKey: String,
         @Query("limit") limit: Int = 1000,
         @Query("offset") offset: Int = 0,
+        @Query("since") since: String? = null,
     ): Response<MDBListWatchedResponseDto>
 
     @POST("sync/watched")

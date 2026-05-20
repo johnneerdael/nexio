@@ -255,6 +255,7 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
             persistedKitsuSyntheticGroups = snapshot.kitsuGroups
+            persistedSyntheticSnapshotUpdatedAtMs = snapshot.updatedAtMs
             applyPersistedTmdbSyntheticSnapshot(snapshot)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_synthetic_snapshot")
         }
@@ -280,6 +281,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     persistedSimklSyntheticGroups = emptyList()
     persistedMDBListSyntheticGroups = emptyList()
     persistedKitsuSyntheticGroups = emptyList()
+    persistedSyntheticSnapshotUpdatedAtMs = 0L
     clearPersistedTmdbSyntheticGroups()
     traktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     persistedTraktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
@@ -390,6 +392,7 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
             persistedKitsuSyntheticGroups = snapshot.kitsuGroups
+            persistedSyntheticSnapshotUpdatedAtMs = snapshot.updatedAtMs
             applyPersistedTmdbSyntheticSnapshot(snapshot)
         }
         diskState.traktSnapshot?.let { snapshot ->
@@ -1142,7 +1145,7 @@ internal fun HomeViewModel.observeKitsuCatalogPreferencesPipeline() {
             kitsuCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_prefs")
             val effectiveKitsuPrefs = prefs.includingHomeCatalogRails(homeCatalogRails)
-            if (shouldRefreshKitsuDiscoveryForState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
+            if (shouldRefreshKitsuDiscoveryForHomeState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("kitsu_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
@@ -1194,7 +1197,7 @@ internal fun HomeViewModel.observeTmdbCatalogPreferencesPipeline() {
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_tmdb_prefs")
             refreshTmdbDiscoveryForPendingCredentialChangePipeline("tmdb_credential_change")
             val effectiveTmdbPrefs = prefs.includingHomeCatalogRails(homeCatalogRails)
-            if (shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
+            if (shouldRefreshTmdbDiscoveryForHomeState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("tmdb_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
@@ -1240,7 +1243,7 @@ internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_home_catalog_rails")
             val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(rails)
-            if (shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
+            if (shouldRefreshTmdbDiscoveryForHomeState(effectiveTmdbPrefs, tmdbDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("home_catalog_rails") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
@@ -1250,7 +1253,7 @@ internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
                     }
             }
             val effectiveKitsuPrefs = kitsuCatalogPreferences.includingHomeCatalogRails(rails)
-            if (shouldRefreshKitsuDiscoveryForState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
+            if (shouldRefreshKitsuDiscoveryForHomeState(effectiveKitsuPrefs, kitsuDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("home_catalog_rails") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
@@ -1398,7 +1401,8 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
 
     val refreshedCatalogCount = AtomicInteger(0)
     val refreshTraktDiscovery = activeProfileTraktAuthenticated &&
-        shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)
+        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+            .let { snap -> shouldRefreshTraktDiscoveryForHomeState(traktCatalogPreferences, snap) }
     // The decision helpers need a full snapshot for their predicate but only briefly:
     // wrap in `let` so the snapshot has no named local and is GC-eligible the moment
     // the boolean is computed. Without `let`, the snapshot would stay in scope as
@@ -1409,7 +1413,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
         .let { snap -> shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, snap) }
     val effectiveTmdbPrefs = tmdbCatalogPreferences.includingHomeCatalogRails(homeCatalogRails)
     val refreshTmdbDiscovery = tmdbDiscoveryService.observeSnapshot().first()
-        .let { snap -> shouldRefreshTmdbDiscoveryForState(effectiveTmdbPrefs, snap) }
+        .let { snap -> shouldRefreshTmdbDiscoveryForHomeState(effectiveTmdbPrefs, snap) }
     supervisorScope {
         val refreshJobs = mutableListOf<Job>()
         refreshJobs.add(
@@ -1885,6 +1889,7 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
         persistedSimklSyntheticGroups = snapshot.simklGroups
         persistedMDBListSyntheticGroups = snapshot.mdbListGroups
         persistedKitsuSyntheticGroups = snapshot.kitsuGroups
+        persistedSyntheticSnapshotUpdatedAtMs = snapshot.updatedAtMs
         applyPersistedTmdbSyntheticSnapshot(snapshot)
     }
 }
@@ -4308,6 +4313,46 @@ internal fun shouldAttemptSerializedTraktDiscoveryRefresh(
     return prefs.enabledCatalogs.any { it != TraktCatalogIds.UP_NEXT } ||
         prefs.selectedPopularListKeys.isNotEmpty()
 }
+
+internal fun shouldRefreshTraktDiscoveryForHomeState(
+    prefs: TraktCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    nowMs: Long = System.currentTimeMillis()
+): Boolean {
+    if (shouldRefreshTraktDiscoveryForState(prefs, snapshot)) return true
+    if (!shouldAttemptSerializedTraktDiscoveryRefresh(prefs)) return false
+    val updatedAtMs = snapshot.updatedAtMs
+    if (updatedAtMs <= 0L) return true
+    return nowMs - updatedAtMs >= TRAKT_DISCOVERY_HOME_CACHE_TTL_MS
+}
+
+private const val TRAKT_DISCOVERY_HOME_CACHE_TTL_MS = 24L * 60L * 60L * 1000L
+
+private fun HomeViewModel.shouldRefreshTmdbDiscoveryForHomeState(
+    prefs: TmdbCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot
+): Boolean {
+    if (!shouldRefreshTmdbDiscoveryForState(prefs, snapshot)) return false
+    return !hasFreshPersistedSyntheticSnapshot() ||
+        persistedTmdbSyntheticGroupsMatchingPreferences(prefs).isEmpty()
+}
+
+private fun HomeViewModel.shouldRefreshKitsuDiscoveryForHomeState(
+    prefs: KitsuCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot
+): Boolean {
+    if (!shouldRefreshKitsuDiscoveryForState(prefs, snapshot)) return false
+    return !hasFreshPersistedSyntheticSnapshot() ||
+        persistedKitsuSyntheticGroupsMatchingPreferences(prefs).isEmpty()
+}
+
+private fun HomeViewModel.hasFreshPersistedSyntheticSnapshot(): Boolean {
+    val updatedAtMs = persistedSyntheticSnapshotUpdatedAtMs
+    if (updatedAtMs <= 0L) return false
+    return System.currentTimeMillis() - updatedAtMs < SYNTHETIC_DISCOVERY_BOOT_CACHE_TTL_MS
+}
+
+private const val SYNTHETIC_DISCOVERY_BOOT_CACHE_TTL_MS = 24L * 60L * 60L * 1000L
 
 internal fun shouldRefreshMDBListDiscoveryForState(
     prefs: MDBListCatalogPreferences,
