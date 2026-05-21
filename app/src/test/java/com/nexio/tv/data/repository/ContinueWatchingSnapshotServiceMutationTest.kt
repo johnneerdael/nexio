@@ -242,6 +242,66 @@ class ContinueWatchingSnapshotServiceMutationTest {
         )
     }
 
+    private fun australianSurvivorProjectionFacade(): MetadataRouterFacade {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        stubTvdbProjectionRoute(
+            facade = facade,
+            tmdbTvId = "10957",
+            tvdbSeriesId = "303904"
+        )
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.CONTINUE_WATCHING,
+                itemKey = any()
+            )
+        } returns StableIdBundle(
+            itemKey = "series:tvdb:303904",
+            itemType = ContentType.SERIES,
+            canonical = CanonicalStableIds(tmdbTvId = "10957", tvdbSeriesId = "303904"),
+            sidecars = SidecarStableIds(imdbId = "tt0310416"),
+            source = SourceStableIds(
+                sourceProvider = ProviderId.TVDB,
+                sourceItemId = "tvdb:303904",
+                railId = null,
+                observedIds = ProviderIds(tvdb = "303904")
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1778611202000L
+        )
+        coEvery {
+            facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
+        } coAnswers {
+            val request = secondArg<TvMetadataRequest>()
+            val contentId = request.contentId
+            val episodes = if (contentId.startsWith("tvdb:", ignoreCase = true)) {
+                mapOf(
+                    (14 to 24) to TvEpisodeMetadata(
+                        seasonNumber = 14,
+                        episodeNumber = 24,
+                        title = "Redemption",
+                        airDate = "2025-03-24"
+                    )
+                )
+            } else {
+                mapOf(
+                    (12 to 24) to TvEpisodeMetadata(
+                        seasonNumber = 12,
+                        episodeNumber = 24,
+                        title = "Redemption",
+                        airDate = "2025-03-24"
+                    )
+                )
+            }
+            TvMetadataDecision(
+                provider = if (contentId.startsWith("tvdb:", ignoreCase = true)) TvProvider.TVDB else TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = episodes
+            )
+        }
+        return facade
+    }
+
     private fun canonicalRecord(
         input: RawContinueWatchingInput,
         canonicalProvider: ProviderId? = input.progress.contentId.canonicalProvider(),
@@ -842,7 +902,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-        }
+        },
+        metadataRouterFacade: MetadataRouterFacade? = null,
+        tvEpisodeOrderResolver: TvEpisodeOrderResolver = tmdbDefaultOrderResolver()
     ): ContinueWatchingSnapshotService {
         val constructor = ContinueWatchingSnapshotService::class.java.declaredConstructors
             .firstOrNull { candidate ->
@@ -875,8 +937,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 ActiveRailTracker::class.java -> ActiveRailTracker()
                 RailMediaIdentityResolver::class.java -> RailMediaIdentityResolver()
                 ContinueWatchingIdentityResolver::class.java -> canonicalResolver()
-                MetadataRouterFacade::class.java -> null
-                TvEpisodeOrderResolver::class.java -> tmdbDefaultOrderResolver()
+                MetadataRouterFacade::class.java -> metadataRouterFacade
+                TvEpisodeOrderResolver::class.java -> tvEpisodeOrderResolver
                 else -> null
             }
         }.toTypedArray()
@@ -998,9 +1060,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
             val citadelKey = ContinueWatchingCanonicalKey(
                 mediaKind = MetadataMediaKind.SERIES,
                 canonicalParent = ContentIdentity(
-                    canonicalProvider = ProviderId.TVDB,
-                    canonicalId = "393268",
-                    providerIds = ProviderIds(tvdb = "393268", imdb = "tt9794044")
+                    canonicalProvider = ProviderId.TMDB,
+                    canonicalId = "114922",
+                    providerIds = ProviderIds(tmdb = "114922", tvdb = "393268", imdb = "tt9794044")
                 ),
                 season = 2,
                 episode = 1,
@@ -1010,11 +1072,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 when (input.progress.contentId) {
                     "tvdb:393268", "tt9794044" -> canonicalRecord(
                         input = input,
-                        canonicalProvider = ProviderId.TVDB,
-                        canonicalId = "393268"
+                        canonicalProvider = ProviderId.TMDB,
+                        canonicalId = "114922"
                     ).copy(
-                        parentId = "series:tvdb:393268",
-                        contentId = "series:tvdb:393268:s2e1",
+                        parentId = "series:tmdb:114922",
+                        contentId = "series:tmdb:114922:s2e1",
                         canonicalKey = citadelKey,
                         displayIdentity = citadelKey.canonicalParent
                     )
@@ -1366,8 +1428,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             val service = buildService()
             val staleLocalResume = resume(
-                contentId = "tt1520211",
-                videoId = "tt1520211:1:2",
+                contentId = "tmdb:99901",
+                videoId = "tmdb:99901:1:2",
                 season = 1,
                 episode = 2,
                 lastWatched = 1_000L,
@@ -1375,8 +1437,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 source = WatchProgress.SOURCE_LOCAL
             )
             val providerCompletedEpisode = resume(
-                contentId = "tt1520211",
-                videoId = "tt1520211:5:2",
+                contentId = "tmdb:99901",
+                videoId = "tmdb:99901:5:2",
                 season = 5,
                 episode = 2,
                 lastWatched = 200_000L,
@@ -1384,10 +1446,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 source = WatchProgress.SOURCE_TRAKT_HISTORY
             )
             val providerNextUp = nextUp(
-                contentId = "tt1520211",
+                contentId = "tmdb:99901",
                 firstAiredMs = 1L,
                 episode = 3
-            ).copy(season = 5, videoId = "tt1520211:5:3", activityAtMs = 200_000L)
+            ).copy(season = 5, videoId = "tmdb:99901:5:3", activityAtMs = 200_000L)
 
             val snapshot = invokeBuildRawSnapshot(
                 service = service,
@@ -1840,13 +1902,13 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             val service = buildService()
             val providerNextUp = nextUp(
-                contentId = "tvdb:411364",
+                contentId = "tmdb:136311",
                 firstAiredMs = 2_000L,
                 episode = 11
             ).copy(
                 name = "Shrinking",
                 season = 3,
-                videoId = "tvdb:411364:3:11",
+                videoId = "tmdb:136311:3:11",
                 activityAtMs = 20_000L
             )
             val localNextUp = nextUp(
@@ -1868,7 +1930,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val item = snapshot.nextUpItems.single()
-            assertEquals("tvdb:411364", item.contentId)
+            assertEquals("tmdb:136311", item.contentId)
             assertEquals(3, item.season)
             assertEquals(11, item.episode)
         }
@@ -1878,14 +1940,14 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             val service = buildService()
             val mainNextUp = nextUp(
-                contentId = "tvdb:303904",
+                contentId = "tmdb:10957",
                 firstAiredMs = 1L,
                 episode = 20
             ).copy(
                 name = "Australian Survivor",
                 season = 14,
                 episodeTitle = "Maggots",
-                videoId = "tvdb:303904:14:20",
+                videoId = "tmdb:10957:14:20",
                 activityAtMs = 1776547920000L
             )
             val traktNextUp = mainNextUp.copy(traktEpisodeId = 14085354)
@@ -1901,6 +1963,51 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(listOf(mainNextUp), snapshot.nextUpItems)
             assertEquals(listOf(traktNextUp), snapshot.traktUpNextItems)
         }
+
+    @Test
+    fun `sanitizeSnapshot removes orphan resume record when backing progress is gone`() {
+        val service = buildService()
+        val removedProgress = resume(
+            contentId = "tvdb:413033",
+            videoId = "tvdb:413033:2:3",
+            season = 2,
+            episode = 3,
+            lastWatched = 1779049246032L,
+            source = WatchProgress.SOURCE_LOCAL
+        )
+        val orphanRecord = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:413033",
+            contentId = "series:tvdb:413033:s2e3",
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = removedProgress.position,
+            durationMs = removedProgress.duration,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(2, 3),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.LOCAL,
+            updatedAt = removedProgress.lastWatched,
+            displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TVDB,
+                canonicalId = "413033",
+                providerIds = ProviderIds(imdb = "tt16288804", tvdb = "413033")
+            ),
+            resumeIdentities = listOf(removedProgress.toSafeResumeIdentity()),
+            idBundle = ContinueWatchingIdBundle(
+                imdb = "tt16288804",
+                tvdb = "413033",
+                season = 2,
+                episode = 3
+            )
+        )
+
+        val sanitized = invokeSanitizeSnapshot(
+            service = service,
+            snapshot = ContinueWatchingSnapshot(records = listOf(orphanRecord))
+        )
+
+        assertTrue(sanitized.records.isEmpty())
+    }
 
     @Test
     fun `buildRawSnapshot suppresses older resume when watched show anchor is newer coordinate`() = runTest {
@@ -1970,8 +2077,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot keeps remote playback resume when watched anchor is same coordinate`() = runTest {
         val service = buildService()
         val remotePlayback = resume(
-            contentId = "tvdb:79481",
-            videoId = "tvdb:79481:1:2",
+            contentId = "tmdb:13916",
+            videoId = "tmdb:13916:1:2",
             season = 1,
             episode = 2,
             lastWatched = 1778959000000L,
@@ -1979,8 +2086,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             source = WatchProgress.SOURCE_TRAKT_PLAYBACK
         ).copy(name = "Death Note")
         val sameEpisodeWatchedAnchor = resume(
-            contentId = "tvdb:79481",
-            videoId = "tvdb:79481:1:2",
+            contentId = "tmdb:13916",
+            videoId = "tmdb:13916:1:2",
             season = 1,
             episode = 2,
             lastWatched = 1778958000000L,
@@ -2001,8 +2108,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot keeps remote playback resume when same episode completion is newer`() = runTest {
         val service = buildService()
         val remotePlayback = resume(
-            contentId = "tvdb:79481",
-            videoId = "tvdb:79481:1:2",
+            contentId = "tmdb:13916",
+            videoId = "tmdb:13916:1:2",
             season = 1,
             episode = 2,
             lastWatched = 1778958000000L,
@@ -2010,8 +2117,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             source = WatchProgress.SOURCE_TRAKT_PLAYBACK
         ).copy(name = "Death Note")
         val sameEpisodeWatchedAnchor = resume(
-            contentId = "tvdb:79481",
-            videoId = "tvdb:79481:1:2",
+            contentId = "tmdb:13916",
+            videoId = "tmdb:13916:1:2",
             season = 1,
             episode = 2,
             lastWatched = 1778959000000L,
@@ -2202,6 +2309,137 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot reverse projects TVDB resume coordinates to TMDB native stream coordinates`() =
+        runTest {
+            val facade = australianSurvivorProjectionFacade()
+            val service = buildService(
+                metadataRouterFacade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:10957",
+                    tvdbSeriesId = "303904"
+                ),
+                continueWatchingIdentityResolver = canonicalResolver { input ->
+                    canonicalRecord(
+                        input = input,
+                        canonicalProvider = ProviderId.TMDB,
+                        canonicalId = "10957"
+                    ).copy(
+                        streamFetchIdentity = StreamFetchIdentity(
+                            contentId = "tt0310416",
+                            videoId = "tt0310416:${input.progress.season}:${input.progress.episode}",
+                            idScheme = StreamIdScheme.IMDB_EPISODE,
+                            confidence = IdentityConfidence.HIGH,
+                            trace = listOf("test stream identity")
+                        )
+                    )
+                }
+            )
+            val tvdbDisplayResume = resume(
+                contentId = "tvdb:303904",
+                videoId = "tvdb:303904:14:24",
+                season = 14,
+                episode = 24,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            ).copy(
+                name = "Australian Survivor",
+                episodeTitle = "Redemption"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(tvdbDisplayResume),
+                nextUpEntries = emptyList(),
+                traktUpNextEntries = emptyList()
+            )
+
+            val projectedResume = snapshot.resumeItems.single()
+            assertEquals("tmdb:10957", projectedResume.contentId)
+            assertEquals("tmdb:10957:12:24", projectedResume.videoId)
+            assertEquals(12, projectedResume.season)
+            assertEquals(24, projectedResume.episode)
+            val record = snapshot.records.single()
+            assertEquals(ContinueWatchingRecord.EpisodeContext(12, 24), record.episodeContext)
+            assertEquals("tt0310416:12:24", record.streamFetchIdentity?.videoId)
+        }
+
+    @Test
+    fun `buildRawSnapshot collapses TMDB and TVDB next-up rows for same canonical episode`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(
+                facade = facade,
+                tmdbTvId = "95557",
+                tvdbSeriesId = "368207"
+            )
+            coEvery {
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
+            } coAnswers {
+                val request = secondArg<TvMetadataRequest>()
+                val contentId = request.contentId
+                val episodes = if (contentId.startsWith("tvdb:", ignoreCase = true)) {
+                    mapOf(
+                        (4 to 6) to TvEpisodeMetadata(
+                            seasonNumber = 4,
+                            episodeNumber = 6,
+                            title = "You Look Horrible",
+                            airDate = "2020-05-21"
+                        )
+                    )
+                } else {
+                    mapOf(
+                        (4 to 6) to TvEpisodeMetadata(
+                            seasonNumber = 4,
+                            episodeNumber = 6,
+                            title = "YOU LOOK HORRIBLE",
+                            airDate = "2020-05-21"
+                        )
+                    )
+                }
+                TvMetadataDecision(
+                    provider = if (contentId.startsWith("tvdb:", ignoreCase = true)) TvProvider.TVDB else TvProvider.TMDB,
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    value = episodes
+                )
+            }
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:95557",
+                    tvdbSeriesId = "368207"
+                )
+            )
+            val tmdbRow = nextUp(
+                contentId = "tmdb:95557",
+                firstAiredMs = 1L,
+                firstAired = "2020-05-21"
+            ).copy(
+                name = "INVINCIBLE",
+                season = 4,
+                episode = 6,
+                episodeTitle = "YOU LOOK HORRIBLE",
+                videoId = "tmdb:95557:4:6",
+                activityAtMs = 1777991400000L
+            )
+            val tvdbRow = tmdbRow.copy(
+                contentId = "tvdb:368207",
+                name = "INVINCIBLE (2021)",
+                episodeTitle = "You Look Horrible",
+                videoId = "tvdb:368207:4:6"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(tmdbRow, tvdbRow),
+                traktUpNextEntries = emptyList()
+            )
+
+            val item = snapshot.nextUpItems.single()
+            assertEquals("tmdb:95557", item.contentId)
+            assertEquals("tmdb:95557:4:6", item.videoId)
+        }
+
+    @Test
     fun `buildRawSnapshot shares TVDB episode projection across duplicate next-up rows`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
@@ -2259,7 +2497,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         runTest {
             val service = buildService()
             val staleMainNextUp = nextUp(
-                contentId = "tvdb:303904",
+                contentId = "tmdb:10957",
                 firstAiredMs = 1L,
                 firstAired = "2025-03-31"
             ).copy(
@@ -2267,14 +2505,14 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 season = 12,
                 episode = 20,
                 episodeTitle = "The Reaper Is Coming",
-                videoId = "tvdb:303904:12:20",
+                videoId = "tmdb:10957:12:20",
                 activityAtMs = 1776547920000L
             )
             val correctedTraktUpNext = staleMainNextUp.copy(
                 season = 14,
                 episode = 20,
                 episodeTitle = "Maggots",
-                videoId = "tvdb:303904:14:20",
+                videoId = "tmdb:10957:14:20",
                 firstAired = "2026-04-06"
             )
 
@@ -2383,7 +2621,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot keeps original next-up row when TVDB projection fails`() =
+    fun `buildRawSnapshot withholds TVDB next-up row when TMDB projection fails`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(facade)
@@ -2409,7 +2647,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktUpNextEntries = emptyList()
             )
 
-            assertEquals(listOf(providerCoordinate), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
         }
 
     @Test
@@ -2572,7 +2810,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
             val service = buildServiceWithMetadataFacade(facade)
             val animeNextUp = nextUp(
-                contentId = "tvdb:303904",
+                contentId = "kitsu:7442",
                 firstAiredMs = 1L,
                 firstAired = "2026-02-01"
             ).copy(
@@ -2580,7 +2818,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 season = 13,
                 episode = 1,
                 episodeTitle = "The Multiverse",
-                videoId = "tvdb:303904:13:1"
+                videoId = "kitsu:7442:13:1"
             )
 
             val snapshot = invokeBuildRawSnapshot(
@@ -3192,7 +3430,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val scheduler = RecordingAirScheduler()
         val nowMs = System.currentTimeMillis()
         val staleNextUp = nextUp(
-            contentId = "tvdb:430780",
+            contentId = "tmdb:430780",
             firstAiredMs = nowMs - 60_000L,
             tvdbAvailabilityInstantMs = nowMs - 60_000L,
             episode = 7
@@ -3205,7 +3443,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val persisted = ContinueWatchingSnapshot(
             resumeItems = listOf(resume),
             nextUpItems = listOf(staleNextUp),
-            traktUpNextItems = listOf(staleNextUp.copy(contentId = "tt27444205")),
+            traktUpNextItems = listOf(staleNextUp.copy(contentId = "tmdb:27444205")),
             updatedAtMs = nowMs - 60_000L
         )
         var writtenSnapshot: ContinueWatchingSnapshot? = null
@@ -3226,7 +3464,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val restored = rawSnapshot(service)
         assertEquals(listOf(resume), restored.resumeItems)
         assertEquals(listOf(staleNextUp), restored.nextUpItems)
-        assertEquals(listOf(staleNextUp.copy(contentId = "tt27444205")), restored.traktUpNextItems)
+        assertEquals(listOf(staleNextUp.copy(contentId = "tmdb:27444205")), restored.traktUpNextItems)
         assertNull(writtenSnapshot)
     }
 
@@ -3241,8 +3479,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             source = WatchProgress.SOURCE_LOCAL
         )
         val remoteResume = resume(
-            contentId = "tvdb:386630",
-            videoId = "tvdb:386630:1:2",
+            contentId = "tmdb:386630",
+            videoId = "tmdb:386630:1:2",
             season = 1,
             episode = 2,
             lastWatched = nowMs - 1_000L,
@@ -3250,8 +3488,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             source = WatchProgress.SOURCE_TRAKT_PLAYBACK
         ).copy(name = "Mayor of Kingstown")
         val remoteMovieResume = resume(
-            contentId = "tt40898187",
-            videoId = "tt40898187",
+            contentId = "tmdb:40898187",
+            videoId = "tmdb:40898187",
             lastWatched = nowMs - 500L,
             progressPercent = 72.0997f,
             source = WatchProgress.SOURCE_TRAKT_PLAYBACK
@@ -3316,6 +3554,107 @@ class ContinueWatchingSnapshotServiceMutationTest {
         assertEquals(listOf(remoteRecord, remoteMovieRecord), writtenSnapshot?.records)
         coVerify(exactly = 0) { trackingProgressService.refreshOnStartup() }
         coVerify(exactly = 0) { trackingProgressService.refreshNow() }
+    }
+
+    @Test
+    fun `reloadPersistedSnapshotForActiveProfile repairs persisted TVDB resume coordinates to TMDB native`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        val nowMs = System.currentTimeMillis()
+        val tvdbResume = resume(
+            contentId = "tvdb:303904",
+            videoId = "tvdb:303904:14:24",
+            season = 14,
+            episode = 24,
+            lastWatched = nowMs - 1_000L,
+            progressPercent = 30f,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        ).copy(
+            name = "Australian Survivor",
+            episodeTitle = "Redemption"
+        )
+        val identity = ContentIdentity(
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "303904",
+            providerIds = ProviderIds(imdb = "tt0310416", tvdb = "303904")
+        )
+        val resumeIdentity = tvdbResume.toResumeIdentity()
+        val tvdbRecord = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tvdb:303904",
+            contentId = "series:tvdb:303904:s14e24",
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = tvdbResume.position,
+            durationMs = tvdbResume.duration,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(14, 24),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = tvdbResume.lastWatched,
+            canonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = identity,
+                season = 14,
+                episode = 24,
+                profileId = 1
+            ),
+            displayIdentity = identity,
+            streamFetchIdentity = StreamFetchIdentity(
+                contentId = "tt0310416",
+                videoId = "tt0310416:14:24",
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf("persisted bad stream identity")
+            ),
+            resumeIdentities = listOf(resumeIdentity),
+            primaryResumeLookupKey = resumeIdentity.lookupKey(),
+            identityConfidence = IdentityConfidence.HIGH,
+            languageTag = "en-US",
+            idBundle = ContinueWatchingIdBundle(
+                imdb = "tt0310416",
+                tvdb = "303904",
+                season = 14,
+                episode = 24
+            )
+        )
+        val persisted = ContinueWatchingSnapshot(
+            resumeItems = listOf(tvdbResume),
+            records = listOf(tvdbRecord),
+            updatedAtMs = nowMs - 60_000L
+        )
+        var writtenSnapshot: ContinueWatchingSnapshot? = null
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns persisted
+            every { write(any(), any()) } answers {
+                writtenSnapshot = firstArg()
+                Unit
+            }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            snapshotStore = snapshotStore,
+            metadataRouterFacade = australianSurvivorProjectionFacade(),
+            tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                tmdbTvId = "tmdb:tv:10957",
+                tvdbSeriesId = "303904"
+            )
+        )
+
+        service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+
+        val restored = rawSnapshot(service)
+        val restoredResume = restored.resumeItems.single()
+        assertEquals("tmdb:10957", restoredResume.contentId)
+        assertEquals("tmdb:10957:12:24", restoredResume.videoId)
+        assertEquals(12, restoredResume.season)
+        assertEquals(24, restoredResume.episode)
+        val restoredRecord = restored.records.single()
+        assertEquals(ContinueWatchingRecord.EpisodeContext(12, 24), restoredRecord.episodeContext)
+        assertEquals("profile:1:series:tmdb:10957:s12e24", restoredRecord.identityKey())
+        assertEquals("tt0310416:12:24", restoredRecord.streamFetchIdentity?.videoId)
+        assertEquals("10957", restoredRecord.idBundle.tmdb)
+        assertEquals(12, restoredRecord.idBundle.season)
+        assertEquals(24, restoredRecord.idBundle.episode)
+        assertEquals(restored, writtenSnapshot)
     }
 
     @Test

@@ -1143,9 +1143,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val nowMs = System.currentTimeMillis()
         val completionAnchors = completionAnchorsByContent(suppressionProgress)
         val watchedAnchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(suppressionProgress)
-        val resumeItems = selectResumeItemsForContinueWatching(allProgress)
-            .filterNot { progress -> isResumeSuppressedByWatchedAnchors(progress, watchedAnchors) }
         val projectionCache = TvdbEpisodeProjectionCache()
+        val resumeItems = projectResumeItemsToCanonicalCoordinates(
+            items = selectResumeItemsForContinueWatching(allProgress),
+            projectionCache = projectionCache
+        )
+            .filterNot { progress -> isResumeSuppressedByWatchedAnchors(progress, watchedAnchors) }
         val localNextUpEntries = deriveLocalNextUpEntries(allProgress, projectionCache)
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
@@ -1162,6 +1165,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
             )
         }
         val records = ContinueWatchingMerger.merge(resolvedRecords)
+            .filterRecordsWithPrimaryStableIds()
+        val stableResumeLookupKeys = records.flatMapTo(linkedSetOf()) { it.resumeLookupKeys }
+        val stableResumeItems = filterResumeItemsWithPrimaryStableIds(
+            items = resumeItems,
+            stableRecordResumeLookupKeys = stableResumeLookupKeys
+        )
         val normalizedProviderNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
             entries = nextUpEntries,
             completionAnchors = completionAnchors,
@@ -1187,7 +1196,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             projectionCache = projectionCache
         )
         val syntheticRailCandidates = splitNextUpCandidatesForContinueWatching(
-            resumes = resumeItems.map(::resumeRefForProgress),
+            resumes = stableResumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedTraktUpNextItems,
             nextUpRef = ::nextUpRefForEntry,
             nowMs = nowMs
@@ -1196,7 +1205,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
         val nextUpCandidateSelection = splitNextUpCandidatesForContinueWatching(
-            resumes = resumeItems.map(::resumeRefForProgress),
+            resumes = stableResumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
             nextUpRef = ::nextUpRefForEntry,
             nowMs = nowMs
@@ -1210,7 +1219,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         // three rails on a single uniform gate site. With firstAiredMs=0 and tmdbAirDate=null,
         // isAired() returns true — so this is a no-op for resumes today, but preserves the
         // contract that every rail participates in gating.
-        val gatedResumeItems = resumeItems.filter {
+        val gatedResumeItems = stableResumeItems.filter {
             AirDateGate.isAired(firstAiredMs = 0L, tmdbAirDate = null, nowMs = nowMs)
         }
 
@@ -1294,6 +1303,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
         return projectedEntries
             .asSequence()
+            .filter(::hasPrimaryStableId)
             .filterNot { entry ->
                 isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
             }
@@ -1335,6 +1345,223 @@ class ContinueWatchingSnapshotService @Inject constructor(
             }
         }
         return if (changed) projectedEntries else entries
+    }
+
+    private suspend fun projectResumeItemsToCanonicalCoordinates(
+        items: List<WatchProgress>,
+        projectionCache: TvdbEpisodeProjectionCache
+    ): List<WatchProgress> {
+        val facade = metadataRouterFacade ?: return items
+        if (items.isEmpty()) return items
+
+        val projectedItems = ArrayList<WatchProgress>(items.size)
+        var changed = false
+        for (i in items.indices) {
+            val item = items[i]
+            if (item.season == null || item.episode == null) {
+                projectedItems += item
+                continue
+            }
+            if (item.contentType.trim().equals("anime", ignoreCase = true)) {
+                projectedItems += item
+                continue
+            }
+            val projected = projectResumeItemToCanonicalCoordinate(facade, item, projectionCache)
+            if (projected != null) {
+                projectedItems += projected
+                changed = true
+            } else {
+                projectedItems += item
+            }
+        }
+        return if (changed) projectedItems else items
+    }
+
+    private suspend fun projectResumeItemToCanonicalCoordinate(
+        facade: MetadataRouterFacade,
+        progress: WatchProgress,
+        projectionCache: TvdbEpisodeProjectionCache
+    ): WatchProgress? {
+        val displaySeason = progress.season ?: return null
+        val displayEpisode = progress.episode ?: return null
+        val order = resolveResumeTvdbProjectionOrder(facade, progress) ?: return null
+        return try {
+            val tvdbContentId = "tvdb:${order.resolution.tvdbSeriesId}"
+            val tvdbEpisodes = projectionCache.getOrFetch(
+                contentType = progress.contentType,
+                contentId = tvdbContentId,
+                fallbackContentId = progress.videoId
+            ) {
+                facade.fetchTvEpisodeProjection(
+                    metadataRequest = MetadataRequest(
+                        contentId = tvdbContentId,
+                        contentType = ContentType.SERIES,
+                        sourceContext = MetadataSourceContext(
+                            itemType = progress.contentType.ifBlank { "series" },
+                            previewStableIds = order.providerIds,
+                            previewSourceProvider = ProviderId.TVDB.name,
+                            previewSourceItemId = tvdbContentId
+                        ),
+                        seasonNumber = displaySeason,
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = tvdbContentId,
+                        fallbackContentId = progress.videoId,
+                        contentType = ContentType.SERIES,
+                        seasonNumbers = emptyList()
+                    )
+                ).value.orEmpty()
+            }
+            val projectedContentId = order.resolution.tmdbTvId.toNextUpTmdbContentId()
+            val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
+                facade = facade,
+                contentType = progress.contentType,
+                tmdbContentId = projectedContentId,
+                tvdbContentId = tvdbContentId,
+                displaySeason = displaySeason,
+                displayEpisode = displayEpisode,
+                fallbackContentId = progress.videoId,
+                tvdbEpisodes = tvdbEpisodes
+            ) ?: return null
+            progress.copy(
+                contentId = projectedContentId,
+                videoId = "$projectedContentId:${nativeCoordinate.first}:${nativeCoordinate.second}",
+                season = nativeCoordinate.first,
+                episode = nativeCoordinate.second
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(
+                "ContinueWatching",
+                "resume coordinate projection failed for ${progress.contentId} s${progress.season}e${progress.episode}: ${e.message}",
+                e
+            )
+            null
+        }
+    }
+
+    private suspend fun projectPersistedRecordsToCanonicalCoordinates(
+        records: List<ContinueWatchingRecord>,
+        projectionCache: TvdbEpisodeProjectionCache
+    ): List<ContinueWatchingRecord> {
+        if (metadataRouterFacade == null || records.isEmpty()) return records
+        val projectedRecords = ArrayList<ContinueWatchingRecord>(records.size)
+        var changed = false
+        for (i in records.indices) {
+            val record = records[i]
+            val projected = projectPersistedRecordToCanonicalCoordinate(record, projectionCache)
+            if (projected != null) {
+                projectedRecords += projected
+                changed = true
+            } else {
+                projectedRecords += record
+            }
+        }
+        return if (changed) projectedRecords else records
+    }
+
+    private suspend fun projectPersistedRecordToCanonicalCoordinate(
+        record: ContinueWatchingRecord,
+        projectionCache: TvdbEpisodeProjectionCache
+    ): ContinueWatchingRecord? {
+        val episodeContext = record.episodeContext ?: return null
+        val providerIds = correctedSeriesSidecarProviderIds(
+            mediaKind = MetadataMediaKind.SERIES,
+            providerIds = record.seriesProviderIds(),
+            itemKey = record.identityKey()
+        )
+        val tmdbContentId = providerIds.tmdb.toTmdbSeriesContentId() ?: return null
+        val tvdbId = providerIds.tvdb?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val tvdbContentId = "tvdb:$tvdbId"
+        return try {
+            val tvdbEpisodes = projectionCache.getOrFetch(
+                contentType = "series",
+                contentId = tvdbContentId,
+                fallbackContentId = record.streamFetchIdentity?.videoId ?: record.contentId
+            ) {
+                metadataRouterFacade!!.fetchTvEpisodeProjection(
+                    metadataRequest = MetadataRequest(
+                        contentId = tvdbContentId,
+                        contentType = ContentType.SERIES,
+                        sourceContext = MetadataSourceContext(
+                            itemType = "series",
+                            previewStableIds = providerIds,
+                            previewSourceProvider = ProviderId.TVDB.name,
+                            previewSourceItemId = tvdbContentId
+                        ),
+                        seasonNumber = episodeContext.season,
+                        depth = MetadataDepth.SEASON
+                    ),
+                    tvRequest = TvMetadataRequest(
+                        contentId = tvdbContentId,
+                        fallbackContentId = record.streamFetchIdentity?.videoId ?: record.contentId,
+                        contentType = ContentType.SERIES,
+                        seasonNumbers = emptyList()
+                    )
+                ).value.orEmpty()
+            }
+            val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
+                facade = metadataRouterFacade!!,
+                contentType = "series",
+                tmdbContentId = tmdbContentId,
+                tvdbContentId = tvdbContentId,
+                displaySeason = episodeContext.season,
+                displayEpisode = episodeContext.number,
+                fallbackContentId = record.streamFetchIdentity?.videoId ?: record.contentId,
+                tvdbEpisodes = tvdbEpisodes
+            ) ?: return null
+            val nativeSeason = nativeCoordinate.first
+            val nativeEpisode = nativeCoordinate.second
+            val displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() },
+                providerIds = providerIds
+            )
+            val nativeEpisodeContext = ContinueWatchingRecord.EpisodeContext(nativeSeason, nativeEpisode)
+            val nativeCanonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.SERIES,
+                canonicalParent = displayIdentity,
+                season = nativeSeason,
+                episode = nativeEpisode,
+                profileId = record.profileId
+            )
+            val nativeResumeIdentities = record.resumeIdentities.projectResumeIdentitiesToNativeTmdb(
+                tmdbContentId = tmdbContentId,
+                season = nativeSeason,
+                episode = nativeEpisode
+            )
+            val streamIdentity = record.streamFetchIdentity.projectStreamIdentityToNativeCoordinate(
+                providerIds = providerIds,
+                season = nativeSeason,
+                episode = nativeEpisode
+            )
+            record.copy(
+                parentId = "series:${tmdbContentId}",
+                contentId = "series:${tmdbContentId}:s${nativeSeason}e${nativeEpisode}",
+                episodeContext = nativeEpisodeContext,
+                canonicalKey = nativeCanonicalKey,
+                displayIdentity = displayIdentity,
+                streamFetchIdentity = streamIdentity,
+                trackingIdentity = record.trackingIdentity?.copy(providerIds = providerIds),
+                resumeIdentities = nativeResumeIdentities,
+                primaryResumeLookupKey = nativeResumeIdentities.firstOrNull()?.lookupKey(),
+                idBundle = providerIds.toContinueWatchingIdBundle(
+                    season = nativeSeason,
+                    episode = nativeEpisode
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(
+                "ContinueWatching",
+                "persisted record coordinate projection failed for ${record.parentId} s${episodeContext.season}e${episodeContext.number}: ${e.message}",
+                e
+            )
+            null
+        }
     }
 
     private suspend fun projectNextUpEntryToCanonicalCoordinate(
@@ -1544,6 +1771,52 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
+    private suspend fun resolveResumeTvdbProjectionOrder(
+        facade: MetadataRouterFacade,
+        progress: WatchProgress
+    ): NextUpTvdbProjectionOrder? {
+        val observedIds = providerIdsFromRawContinueWatchingContentId(progress.contentId)
+            .mergeMissing(providerIdsFromRawContinueWatchingContentId(progress.videoId))
+        val route = runCatching {
+            facade.routeRequest(
+                resumeMetadataRequest(
+                    progress = progress,
+                    providerIds = observedIds
+                )
+            )
+        }.getOrNull() ?: return null
+        val routeProviderIds = observedIds.withRouteTargetIds(route)
+        val tmdbTvId = routeProviderIds.tmdb?.let { normalizeTmdbTvEpisodeOrderKey(it) } ?: return null
+        var providerIds = routeProviderIds
+        var resolution = tvEpisodeOrderResolver.resolve(
+            tmdbTvId = tmdbTvId,
+            providerIds = providerIds
+        )
+        if (
+            resolution.provider == TvEpisodeOrderProvider.TMDB_DEFAULT &&
+            resolution.reason == "tvdb override missing tvdb sidecar" &&
+            providerIds.tvdb.isNullOrBlank()
+        ) {
+            providerIds = routeProviderIds.withStableBundleProjectionIds(facade, route, progress)
+            resolution = tvEpisodeOrderResolver.resolve(
+                tmdbTvId = tmdbTvId,
+                providerIds = providerIds
+            )
+        }
+        if (resolution.provider != TvEpisodeOrderProvider.TVDB_DEFAULT) return null
+        val tvdbSeriesId = resolution.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return NextUpTvdbProjectionOrder(
+            resolution = resolution.copy(
+                tmdbTvId = normalizeTmdbTvEpisodeOrderKey(resolution.tmdbTvId) ?: tmdbTvId,
+                tvdbSeriesId = tvdbSeriesId
+            ),
+            providerIds = providerIds.copy(
+                tmdb = tmdbTvId.removePrefix("tmdb:tv:"),
+                tvdb = tvdbSeriesId
+            )
+        )
+    }
+
     private fun nextUpMetadataRequest(
         entry: TrackingNextUpEntry,
         providerIds: ProviderIds
@@ -1556,6 +1829,21 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 previewStableIds = providerIds
             ),
             seasonNumber = entry.season,
+            depth = MetadataDepth.SEASON
+        )
+
+    private fun resumeMetadataRequest(
+        progress: WatchProgress,
+        providerIds: ProviderIds
+    ): MetadataRequest =
+        MetadataRequest(
+            contentId = progress.contentId,
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext(
+                itemType = progress.contentType,
+                previewStableIds = providerIds
+            ),
+            seasonNumber = progress.season,
             depth = MetadataDepth.SEASON
         )
 
@@ -1580,6 +1868,27 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
+    private suspend fun ProviderIds.withStableBundleProjectionIds(
+        facade: MetadataRouterFacade,
+        route: MetadataRoute,
+        progress: WatchProgress
+    ): ProviderIds {
+        val request = resumeMetadataRequest(progress = progress, providerIds = this)
+        val bundle = runCatching {
+            facade.resolveStableIdBundle(
+                route = route,
+                request = request,
+                trigger = StableIdResolutionTrigger.CONTINUE_WATCHING,
+                itemKey = homeDisplayItemKey(progress.contentType, progress.contentId)
+            )
+        }.getOrNull() ?: return this
+        return copy(
+            imdb = imdb ?: bundle.sidecars.imdbId?.trim()?.takeIf { it.isNotEmpty() },
+            tmdb = tmdb ?: bundle.canonical.tmdbTvId?.trim()?.takeIf { it.isNotEmpty() },
+            tvdb = tvdb ?: bundle.canonical.tvdbSeriesId?.trim()?.takeIf { it.isNotEmpty() }
+        )
+    }
+
     private fun ProviderIds.withRouteTargetIds(route: MetadataRoute): ProviderIds =
         copy(
             imdb = imdb ?: route.targetIds[MetadataPrimaryProvider.IMDB].providerTargetId("imdb"),
@@ -1588,6 +1897,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
             trakt = trakt ?: route.targetIds[MetadataPrimaryProvider.TRAKT].providerTargetId("trakt"),
             simkl = simkl ?: route.targetIds[MetadataPrimaryProvider.SIMKL].providerTargetId("simkl"),
             kitsu = kitsu ?: route.targetIds[MetadataPrimaryProvider.KITSU].providerTargetId("kitsu")
+        )
+
+    private fun ProviderIds.mergeMissing(other: ProviderIds): ProviderIds =
+        copy(
+            imdb = imdb ?: other.imdb,
+            tmdb = tmdb ?: other.tmdb,
+            tvdb = tvdb ?: other.tvdb,
+            trakt = trakt ?: other.trakt,
+            simkl = simkl ?: other.simkl,
+            kitsu = kitsu ?: other.kitsu,
+            slug = slug ?: other.slug,
+            mal = mal ?: other.mal,
+            anilist = anilist ?: other.anilist,
+            anidb = anidb ?: other.anidb
         )
 
     private fun String?.providerTargetId(provider: String): String? {
@@ -1702,11 +2025,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
             watchedAnchors = watchedAnchors,
             previousDisplayMetadata = previous.displayMetadataByItemKey
         )
-        val retainedRecords = retainMissingRecords(
-            candidate = candidate.records,
-            previous = previous.records,
-            completionAnchors = completionAnchors,
-            watchedAnchors = watchedAnchors
+        val retainedRecords = filterRecordsToActiveRows(
+            records = retainMissingRecords(
+                candidate = candidate.records,
+                previous = previous.records,
+                completionAnchors = completionAnchors,
+                watchedAnchors = watchedAnchors
+            ),
+            resumeItems = retainedResumeItems,
+            nextUpItems = retainedNextUpItems,
+            traktUpNextItems = retainedTraktUpNextItems
         )
 
         if (
@@ -2194,6 +2522,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val sanitizedTraktUpNextItems = traktUpNextSelection.syntheticRailItems.filter { entry ->
             ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
+        val stableRecords = snapshot.records.filterRecordsWithPrimaryStableIds()
+        val stableResumeLookupKeys = stableRecords.flatMapTo(linkedSetOf()) { it.resumeLookupKeys }
+        val stableResumeItems = filterResumeItemsWithPrimaryStableIds(
+            items = resumeItems,
+            stableRecordResumeLookupKeys = stableResumeLookupKeys
+        )
+        val stableNextUpItems = sanitizedNextUpItems.filter(::hasPrimaryStableId)
+        val stableTraktUpNextItems = sanitizedTraktUpNextItems.filter(::hasPrimaryStableId)
         val scheduledReemitByKey = LinkedHashMap<String, TrackingNextUpEntry>()
         fun addScheduledReemit(entry: TrackingNextUpEntry) {
             val normalized = normalizeNextUpEntry(entry) ?: return
@@ -2208,22 +2544,29 @@ class ContinueWatchingSnapshotService @Inject constructor(
         (mainFeedNextUpItems.syntheticRailItems + traktUpNextSelection.syntheticRailItems)
             .forEach(::addScheduledReemit)
         val activeItemKeys = buildSet {
-            resumeItems.forEach { progress ->
+            stableResumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
-            sanitizedNextUpItems.forEach { entry ->
+            stableNextUpItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
-            sanitizedTraktUpNextItems.forEach { entry ->
+            stableTraktUpNextItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
         }
         val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else nowMs
+        val records = filterRecordsToActiveRows(
+            records = stableRecords,
+            resumeItems = stableResumeItems,
+            nextUpItems = stableNextUpItems,
+            traktUpNextItems = stableTraktUpNextItems
+        )
+
         return ContinueWatchingSnapshot(
-            resumeItems = resumeItems,
-            nextUpItems = sanitizedNextUpItems,
-            traktUpNextItems = sanitizedTraktUpNextItems,
-            records = snapshot.records,
+            resumeItems = stableResumeItems,
+            nextUpItems = stableNextUpItems,
+            traktUpNextItems = stableTraktUpNextItems,
+            records = records,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             metadataSnapshotsByItemKey = snapshot.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs,
@@ -2231,8 +2574,204 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
-    private fun sanitizePersistedSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
-        return sanitizeSnapshot(snapshot)
+    private fun filterRecordsToActiveRows(
+        records: List<ContinueWatchingRecord>,
+        resumeItems: List<WatchProgress>,
+        nextUpItems: List<TrackingNextUpEntry>,
+        traktUpNextItems: List<TrackingNextUpEntry>
+    ): List<ContinueWatchingRecord> {
+        if (records.isEmpty()) return records
+        val activeResumeKeys = resumeItems.flatMapTo(linkedSetOf()) { progress ->
+            activeResumeRecordKeys(progress)
+        }
+        val activeNextUpKeys = (nextUpItems + traktUpNextItems).flatMapTo(linkedSetOf()) { entry ->
+            activeNextUpRecordKeys(entry)
+        }
+        val filtered = records.filter { record ->
+            when (record.source) {
+                ContinueWatchingRecord.Source.LOCAL,
+                ContinueWatchingRecord.Source.REMOTE -> record.matchesActiveResumeKeys(activeResumeKeys)
+                ContinueWatchingRecord.Source.SYNTHETIC -> record.matchesActiveNextUpKeys(activeNextUpKeys)
+            }
+        }
+        return if (filtered.size == records.size) records else filtered
+    }
+
+    private fun filterResumeItemsWithPrimaryStableIds(
+        items: List<WatchProgress>,
+        stableRecordResumeLookupKeys: Set<String>
+    ): List<WatchProgress> {
+        if (items.isEmpty()) return items
+        val filtered = items.filter { progress ->
+            hasPrimaryStableId(progress) ||
+                runCatching { progress.toSafeResumeIdentity().lookupKey() in stableRecordResumeLookupKeys }
+                    .getOrDefault(false)
+        }
+        return if (filtered.size == items.size) items else filtered
+    }
+
+    private fun List<ContinueWatchingRecord>.filterRecordsWithPrimaryStableIds(): List<ContinueWatchingRecord> {
+        if (isEmpty()) return this
+        val filtered = filter { it.hasPrimaryStableId() }
+        return if (filtered.size == size) this else filtered
+    }
+
+    private fun hasPrimaryStableId(progress: WatchProgress): Boolean =
+        progress.contentId.hasTmdbPrimaryStableId() ||
+            (isContinueWatchingSeriesType(progress.contentType) && progress.contentId.hasKitsuPrimaryStableId()) ||
+            !progress.contentId.hasKnownNonPrimaryProviderId()
+
+    private fun hasPrimaryStableId(entry: TrackingNextUpEntry): Boolean =
+        entry.contentId.hasTmdbPrimaryStableId() ||
+            (isContinueWatchingSeriesType(entry.contentType) && entry.contentId.hasKitsuPrimaryStableId()) ||
+            !entry.contentId.hasKnownNonPrimaryProviderId()
+
+    private fun ContinueWatchingRecord.hasPrimaryStableId(): Boolean {
+        val identities = listOfNotNull(canonicalKey?.canonicalParent, displayIdentity)
+        if (identities.any { identity ->
+                identity.canonicalProvider == ProviderId.TMDB ||
+                    !identity.providerIds.tmdb.isNullOrBlank()
+            }
+        ) {
+            return true
+        }
+        if (identities.any { identity ->
+                identity.canonicalProvider == ProviderId.KITSU ||
+                    !identity.providerIds.kitsu.isNullOrBlank()
+            }
+        ) {
+            return true
+        }
+        if (!idBundle.tmdb.isNullOrBlank() || !idBundle.kitsu.isNullOrBlank()) {
+            return true
+        }
+        if (parentId.hasTmdbPrimaryStableId() ||
+            contentId.hasTmdbPrimaryStableId() ||
+            parentId.hasKitsuPrimaryStableId() ||
+            contentId.hasKitsuPrimaryStableId()
+        ) {
+            return true
+        }
+        return !parentId.hasKnownNonPrimaryProviderId() && !contentId.hasKnownNonPrimaryProviderId()
+    }
+
+    private fun String.hasTmdbPrimaryStableId(): Boolean {
+        val value = trim().lowercase(Locale.ROOT)
+        return value.startsWith("tmdb:") ||
+            value.startsWith("series:tmdb:") ||
+            value.startsWith("movie:tmdb:")
+    }
+
+    private fun String.hasKitsuPrimaryStableId(): Boolean {
+        val value = trim().lowercase(Locale.ROOT)
+        return value.startsWith("kitsu:") || value.startsWith("series:kitsu:")
+    }
+
+    private fun String.hasKnownNonPrimaryProviderId(): Boolean {
+        val value = trim().lowercase(Locale.ROOT)
+        return value.startsWith("tvdb:") ||
+            value.startsWith("series:tvdb:") ||
+            value.startsWith("imdb:") ||
+            value.startsWith("series:imdb:") ||
+            value.startsWith("movie:imdb:") ||
+            value.matches(Regex("^tt\\d+.*")) ||
+            value.startsWith("trakt:") ||
+            value.startsWith("series:trakt:") ||
+            value.startsWith("movie:trakt:") ||
+            value.startsWith("simkl:") ||
+            value.startsWith("series:simkl:") ||
+            value.startsWith("movie:simkl:")
+    }
+
+    private fun activeResumeRecordKeys(progress: WatchProgress): Set<String> {
+        val keys = linkedSetOf<String>()
+        fun add(raw: String?) {
+            val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            keys += value
+            stripTypedMediaPrefix(value)?.let { keys += it }
+        }
+
+        add(progress.contentId)
+        add(progress.videoId)
+        add(homeDisplayItemKey(progress.contentType, progress.contentId))
+        if (isContinueWatchingSeriesType(progress.contentType)) {
+            add("series:${progress.contentId}")
+        } else if (progress.contentType.equals("movie", ignoreCase = true)) {
+            add("movie:${progress.contentId}")
+        }
+        runCatching { add(progress.toSafeResumeIdentity().lookupKey()) }
+        val season = progress.season
+        val episode = progress.episode
+        if (season != null && episode != null) {
+            val episodeSuffix = ":s${season}e${episode}"
+            add(progress.contentId + episodeSuffix)
+            add(homeDisplayItemKey(progress.contentType, progress.contentId) + episodeSuffix)
+        }
+        return keys
+    }
+
+    private fun activeNextUpRecordKeys(entry: TrackingNextUpEntry): Set<String> {
+        val keys = linkedSetOf<String>()
+        fun add(raw: String?) {
+            val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            keys += value
+            stripTypedMediaPrefix(value)?.let { keys += it }
+        }
+
+        val episodeSuffix = ":s${entry.season}e${entry.episode}"
+        add(entry.contentId)
+        add(entry.videoId)
+        add(entry.contentId + episodeSuffix)
+        add(homeDisplayItemKey(entry.contentType, entry.contentId))
+        add(homeDisplayItemKey(entry.contentType, entry.contentId) + episodeSuffix)
+        if (isContinueWatchingSeriesType(entry.contentType)) {
+            add("series:${entry.contentId}")
+            add("series:${entry.contentId}$episodeSuffix")
+        }
+        return keys
+    }
+
+    private fun isContinueWatchingSeriesType(contentType: String): Boolean =
+        contentType.equals("series", ignoreCase = true) ||
+            contentType.equals("tv", ignoreCase = true) ||
+            contentType.equals("anime", ignoreCase = true)
+
+    private fun ContinueWatchingRecord.matchesActiveResumeKeys(activeKeys: Set<String>): Boolean {
+        if (activeKeys.isEmpty()) return false
+        if (parentId in activeKeys || contentId in activeKeys || identityKey() in activeKeys) return true
+        if (primaryResumeLookupKey != null && primaryResumeLookupKey in activeKeys) return true
+        return resumeIdentities.any { identity ->
+            identity.lookupKey() in activeKeys ||
+                identity.contentId in activeKeys ||
+                identity.videoId in activeKeys
+        }
+    }
+
+    private fun ContinueWatchingRecord.matchesActiveNextUpKeys(activeKeys: Set<String>): Boolean {
+        if (activeKeys.isEmpty()) return false
+        return parentId in activeKeys || contentId in activeKeys || identityKey() in activeKeys
+    }
+
+    private suspend fun sanitizePersistedSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
+        val projectionCache = TvdbEpisodeProjectionCache()
+        val preProjectedResumeItems = projectResumeItemsToCanonicalCoordinates(
+            items = snapshot.resumeItems,
+            projectionCache = projectionCache
+        )
+        val preProjectedRecords = projectPersistedRecordsToCanonicalCoordinates(
+            records = snapshot.records,
+            projectionCache = projectionCache
+        )
+        return sanitizeSnapshot(
+            if (preProjectedResumeItems === snapshot.resumeItems && preProjectedRecords === snapshot.records) {
+                snapshot
+            } else {
+                snapshot.copy(
+                    resumeItems = preProjectedResumeItems,
+                    records = preProjectedRecords
+                )
+            }
+        )
     }
 
     private fun isRemotePlaybackSource(source: String): Boolean =
@@ -2925,6 +3464,79 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 ProviderIds(trakt = value.substringAfter(':').takeIf { it.isNotBlank() })
             else -> ProviderIds()
         }
+    }
+
+    private fun ContinueWatchingRecord.seriesProviderIds(): ProviderIds {
+        val identityIds = displayIdentity?.providerIds ?: ProviderIds()
+        val canonicalIds = canonicalKey?.canonicalParent?.providerIds ?: ProviderIds()
+        val bundleIds = ProviderIds(
+            imdb = idBundle.imdb,
+            tmdb = idBundle.tmdb,
+            tvdb = idBundle.tvdb,
+            trakt = idBundle.trakt,
+            simkl = idBundle.simkl,
+            kitsu = idBundle.kitsu,
+            mal = idBundle.mal,
+            anilist = idBundle.anilist,
+            anidb = idBundle.anidb
+        )
+        val trackingIds = trackingIdentity?.providerIds ?: ProviderIds()
+        return providerIdsFromRawContinueWatchingContentId(parentId)
+            .mergeMissing(providerIdsFromRawContinueWatchingContentId(contentId))
+            .mergeMissing(identityIds)
+            .mergeMissing(canonicalIds)
+            .mergeMissing(bundleIds)
+            .mergeMissing(trackingIds)
+    }
+
+    private fun List<ResumeIdentity>.projectResumeIdentitiesToNativeTmdb(
+        tmdbContentId: String,
+        season: Int,
+        episode: Int
+    ): List<ResumeIdentity> {
+        if (isEmpty()) return emptyList()
+        val projected = ArrayList<ResumeIdentity>(size)
+        for (i in indices) {
+            val identity = this[i]
+            if (identity.isEpisode) {
+                projected += identity.copy(
+                    contentId = tmdbContentId,
+                    videoId = "$tmdbContentId:$season:$episode",
+                    season = season,
+                    episode = episode
+                )
+            } else {
+                projected += identity
+            }
+        }
+        return projected
+    }
+
+    private fun StreamFetchIdentity?.projectStreamIdentityToNativeCoordinate(
+        providerIds: ProviderIds,
+        season: Int,
+        episode: Int
+    ): StreamFetchIdentity? {
+        val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
+        if (imdbId != null) {
+            val existing = this
+            return StreamFetchIdentity(
+                contentId = imdbId,
+                videoId = "$imdbId:$season:$episode",
+                idScheme = StreamIdScheme.IMDB_EPISODE,
+                confidence = existing?.confidence ?: IdentityConfidence.HIGH,
+                trace = existing?.trace.orEmpty() + "projected persisted CW stream identity to provider-native TMDB coordinate"
+            )
+        }
+        val tmdbId = providerIds.tmdb?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+        val existing = this
+        return StreamFetchIdentity(
+            contentId = "tmdb:$tmdbId",
+            videoId = "tmdb:$tmdbId:$season:$episode",
+            idScheme = existing?.idScheme ?: StreamIdScheme.TVDB_EPISODE,
+            confidence = existing?.confidence ?: IdentityConfidence.MEDIUM,
+            trace = existing?.trace.orEmpty() + "projected persisted CW stream identity to provider-native TMDB coordinate"
+        )
     }
 
     private suspend fun correctedSeriesSidecarProviderIds(

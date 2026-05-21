@@ -1330,16 +1330,27 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
 ): ContinueWatchingItem.InProgress {
     val canonicalKey = identityKey()
     val contentType = contentTypeForUi()
-    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, resumeIdentity.contentId)]
+    val stableContentId = primaryStableContentId() ?: resumeIdentity.contentId
+    val stableVideoId = if (
+        stableContentId != resumeIdentity.contentId &&
+        resumeIdentity.season != null &&
+        resumeIdentity.episode != null
+    ) {
+        "$stableContentId:${resumeIdentity.season}:${resumeIdentity.episode}"
+    } else {
+        resumeIdentity.videoId
+    }
+    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, stableContentId)]
+        ?: displayMetadataByItemKey[homeDisplayItemKey(contentType, resumeIdentity.contentId)]
     val rawProgress = rawResumeByLookupKey[resumeIdentity.lookupKey()]
     val baseProgress = rawProgress ?: WatchProgress(
-        contentId = resumeIdentity.contentId,
+        contentId = stableContentId,
         contentType = contentType,
         name = displayMetadata?.title ?: parentId,
         poster = displayMetadata?.displayPoster,
         backdrop = displayMetadata?.displayBackdrop,
         logo = displayMetadata?.displayLogo,
-        videoId = resumeIdentity.videoId,
+        videoId = stableVideoId,
         season = resumeIdentity.season,
         episode = resumeIdentity.episode,
         episodeTitle = null,
@@ -1349,13 +1360,13 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
         progressPercent = resumeIdentity.progressPercent
     )
     return baseProgress.copy(
-        contentId = resumeIdentity.contentId,
+        contentId = stableContentId,
         contentType = contentType,
         name = displayMetadata?.title ?: baseProgress.name,
         poster = displayMetadata?.displayPoster ?: baseProgress.poster,
         backdrop = displayMetadata?.displayBackdrop ?: baseProgress.backdrop,
         logo = displayMetadata?.displayLogo ?: baseProgress.logo,
-        videoId = resumeIdentity.videoId,
+        videoId = stableVideoId,
         season = resumeIdentity.season,
         episode = resumeIdentity.episode,
         position = positionMs,
@@ -1366,6 +1377,20 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
         canonicalKey = canonicalKey,
         streamFetchVideoId = streamFetchIdentity?.videoId
     ).withResolvedImdb(displayIdentity?.providerIds?.imdb)
+}
+
+private fun ContinueWatchingRecord.primaryStableContentId(): String? {
+    val tmdb = displayIdentity?.providerIds?.tmdb
+        ?: canonicalKey?.canonicalParent?.providerIds?.tmdb
+        ?: idBundle.tmdb
+    if (!tmdb.isNullOrBlank()) return "tmdb:${tmdb.removePrefix("tmdb:").removePrefix("tv:")}"
+
+    val kitsu = displayIdentity?.providerIds?.kitsu
+        ?: canonicalKey?.canonicalParent?.providerIds?.kitsu
+        ?: idBundle.kitsu
+    if (!kitsu.isNullOrBlank()) return "kitsu:${kitsu.removePrefix("kitsu:")}"
+
+    return null
 }
 
 // Enrich displayMetadata.imdbId from ContinueWatchingRecord.displayIdentity.providerIds.imdb.
