@@ -73,6 +73,70 @@ import kotlinx.coroutines.delay
 
 private const val TAG = "TrailerPlayer"
 
+/**
+ * Plan: Bug B — Task B1.
+ *
+ * Pure-logic watchdog that fires [onStall] when the player has been in
+ * `Player.STATE_BUFFERING` for more than [stallTimeoutMs] without
+ * `currentPosition` advancing. Independent of first-frame rendering — catches
+ * the case where first frame never renders AND `onPlayerError` also never
+ * fires (observed on Amlogic AM6 with the `PREFER_SOFTWARE` renderer factory
+ * introduced in commit `85de1e8fd`).
+ *
+ * Caller drives the watchdog from a polling LaunchedEffect:
+ *   1. call [onPlaybackStateChanged] on every `Player.Listener` state event
+ *   2. call [onProgressTick] on every progress poll (250ms cadence)
+ *   3. call [tickWatchdog] at the end of each poll
+ *
+ * Fires [onStall] at most once per buffering session; transitioning out of
+ * `STATE_BUFFERING` resets the watchdog.
+ */
+internal class TrailerBufferingWatchdog(
+    private val stallTimeoutMs: Long,
+    private val nowMs: () -> Long = { android.os.SystemClock.elapsedRealtime() },
+    private val onStall: () -> Unit
+) {
+    private var bufferingStartedAtMs: Long = -1L
+    private var lastProgressMs: Long = -1L
+    private var stallFired: Boolean = false
+
+    fun onPlaybackStateChanged(state: Int) {
+        if (state == Player.STATE_BUFFERING) {
+            if (bufferingStartedAtMs < 0L) bufferingStartedAtMs = nowMs()
+        } else {
+            bufferingStartedAtMs = -1L
+            lastProgressMs = -1L
+            stallFired = false
+        }
+    }
+
+    fun onProgressTick(positionMs: Long) {
+        if (bufferingStartedAtMs < 0L) return
+        if (lastProgressMs < 0L) {
+            lastProgressMs = positionMs
+            return
+        }
+        if (positionMs > lastProgressMs) {
+            // Real progress — reset both the timer and stallFired so a
+            // future re-buffer can also trip.
+            bufferingStartedAtMs = nowMs()
+            lastProgressMs = positionMs
+            stallFired = false
+        }
+    }
+
+    fun tickWatchdog() {
+        if (stallFired) return
+        if (bufferingStartedAtMs < 0L) return
+        if (nowMs() - bufferingStartedAtMs >= stallTimeoutMs) {
+            stallFired = true
+            onStall()
+        }
+    }
+}
+
+private const val TRAILER_BUFFERING_STALL_TIMEOUT_MS = 10_000L
+
 internal fun shouldUseChunkedTrailerDataSource(
     trailerUrl: String?,
     trailerAudioUrl: String?
@@ -214,6 +278,11 @@ fun TrailerPlayer(
     seekDeltaMs: Long = 0L,
     onProgressChanged: (positionMs: Long, durationMs: Long) -> Unit = { _, _ -> },
     onRemoteKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean = { _, _, _ -> false },
+    // Plan: Bug B — Task B1. Fires when the player has been in
+    // STATE_BUFFERING for >10s without currentPosition advancing.
+    // IdleTrailerScreensaverOverlay wires this in Task B3 to advance to
+    // the next candidate, preventing the dead-screen OLED-burn scenario.
+    onBufferingStall: () -> Unit = {},
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
     trailerUserAgent: String? = null,
@@ -310,6 +379,7 @@ fun TrailerPlayer(
     val currentOnError by rememberUpdatedState(onError)
     val currentOnProgressChanged by rememberUpdatedState(onProgressChanged)
     val currentOnRemoteKey by rememberUpdatedState(onRemoteKey)
+    val currentOnBufferingStall by rememberUpdatedState(onBufferingStall)
     val zoomScale = if (cropToFill) overscanZoom.coerceAtLeast(1f) else 1f
     var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(false) }
     val playerAlpha by animateFloatAsState(
@@ -538,12 +608,26 @@ fun TrailerPlayer(
         player.seekTo(target)
     }
 
+    // Plan: Bug B — Task B1. Per-player watchdog instance. Created lazily so
+    // the production path uses SystemClock and the test seam (TrailerPlayer
+    // composable doesn't take a clock yet) is unaffected. Stall-callback is
+    // routed through rememberUpdatedState so subsequent recompositions
+    // don't strand the watchdog on a stale lambda.
+    val bufferingWatchdog = remember(trailerPlayer) {
+        TrailerBufferingWatchdog(
+            stallTimeoutMs = TRAILER_BUFFERING_STALL_TIMEOUT_MS,
+            onStall = { currentOnBufferingStall() }
+        )
+    }
+
     LaunchedEffect(trailerPlayer, isPlaying) {
         val player = trailerPlayer ?: return@LaunchedEffect
         while (isPlaying) {
             val position = player.currentPosition.coerceAtLeast(0L)
             val duration = player.duration.takeIf { it > 0 } ?: 0L
             currentOnProgressChanged(position, duration)
+            bufferingWatchdog.onProgressTick(position)
+            bufferingWatchdog.tickWatchdog()
             delay(250)
         }
         currentOnProgressChanged(0L, 0L)
@@ -553,6 +637,7 @@ fun TrailerPlayer(
         val player = trailerPlayer ?: return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                bufferingWatchdog.onPlaybackStateChanged(playbackState)
                 if (playbackState == Player.STATE_ENDED) {
                     currentOnEnded()
                 }
