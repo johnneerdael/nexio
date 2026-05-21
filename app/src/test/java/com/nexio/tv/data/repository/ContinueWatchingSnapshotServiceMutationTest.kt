@@ -21,6 +21,7 @@ import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentIdentity
 import com.nexio.tv.domain.model.ContentType
@@ -1629,7 +1630,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `buildRawSnapshot projects TMDB next-up coordinates only for manual TVDB order override`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
-            val requestSlot = slot<MetadataRequest>()
+            val requests = mutableListOf<MetadataRequest>()
             coEvery {
                 facade.routeRequest(any())
             } returns MetadataRoute(
@@ -1645,7 +1646,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 trace = emptyList()
             )
             coEvery {
-                facade.fetchTvEpisodeProjection(metadataRequest = capture(requestSlot), tvRequest = any())
+                facade.fetchTvEpisodeProjection(metadataRequest = capture(requests), tvRequest = any())
             } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -1688,8 +1689,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(14, item.season)
             assertEquals(10, item.episode)
             assertEquals("tmdb:12345:14:10", item.videoId)
-            assertEquals("12345", requestSlot.captured.sourceContext.previewStableIds.tmdb)
-            assertEquals("67890", requestSlot.captured.sourceContext.previewStableIds.tvdb)
+            val tvdbProjectionRequest = requests.first { request ->
+                request.sourceContext.previewStableIds.tvdb == "67890"
+            }
+            assertEquals("12345", tvdbProjectionRequest.sourceContext.previewStableIds.tmdb)
+            assertEquals("67890", tvdbProjectionRequest.sourceContext.previewStableIds.tvdb)
         }
 
     @Test
@@ -2126,6 +2130,78 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
+    fun `buildRawSnapshot reverse projects TVDB next-up coordinates to TMDB native stream coordinates`() =
+        runTest {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            stubTvdbProjectionRoute(
+                facade = facade,
+                tmdbTvId = "10957",
+                tvdbSeriesId = "303904"
+            )
+            coEvery {
+                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
+            } coAnswers {
+                val request = secondArg<TvMetadataRequest>()
+                val contentId = request.contentId
+                val episodes = if (contentId.startsWith("tvdb:", ignoreCase = true)) {
+                    mapOf(
+                        (14 to 24) to TvEpisodeMetadata(
+                            seasonNumber = 14,
+                            episodeNumber = 24,
+                            title = "You Know I've Got You",
+                            airDate = "2025-03-24"
+                        )
+                    )
+                } else {
+                    mapOf(
+                        (12 to 24) to TvEpisodeMetadata(
+                            seasonNumber = 12,
+                            episodeNumber = 24,
+                            title = "You Know I've Got You",
+                            airDate = "2025-03-24"
+                        )
+                    )
+                }
+                TvMetadataDecision(
+                    provider = if (contentId.startsWith("tvdb:", ignoreCase = true)) TvProvider.TVDB else TvProvider.TMDB,
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    value = episodes
+                )
+            }
+            val service = buildServiceWithMetadataFacade(
+                facade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:10957",
+                    tvdbSeriesId = "303904"
+                )
+            )
+            val tvdbDisplayCoordinate = nextUp(
+                contentId = "tvdb:303904",
+                firstAiredMs = 1L,
+                firstAired = "2025-03-24"
+            ).copy(
+                name = "Australian Survivor",
+                season = 14,
+                episode = 24,
+                episodeTitle = "You Know I've Got You",
+                videoId = "tvdb:303904:14:24"
+            )
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = emptyList(),
+                nextUpEntries = listOf(tvdbDisplayCoordinate),
+                traktUpNextEntries = emptyList()
+            )
+
+            val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:10957", projected.contentId)
+            assertEquals(12, projected.season)
+            assertEquals(24, projected.episode)
+            assertEquals("tmdb:10957:12:24", projected.videoId)
+        }
+
+    @Test
     fun `buildRawSnapshot shares TVDB episode projection across duplicate next-up rows`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
@@ -2171,7 +2247,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(1, snapshot.nextUpItems.size)
             assertEquals(1, snapshot.traktUpNextItems.size)
             coVerify(exactly = 1) {
-                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(
+                    metadataRequest = any(),
+                    tvRequest = match { it.contentId.startsWith("tvdb:", ignoreCase = true) }
+                )
             }
         }
 
@@ -2296,7 +2375,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(13, localNextUp.season)
             assertEquals(2, localNextUp.episode)
             coVerify(exactly = 1) {
-                facade.fetchTvEpisodeProjection(metadataRequest = any(), tvRequest = any())
+                facade.fetchTvEpisodeProjection(
+                    metadataRequest = any(),
+                    tvRequest = match { it.contentId.startsWith("tvdb:", ignoreCase = true) }
+                )
             }
         }
 
@@ -3041,7 +3123,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } answers { refreshCount++ }
+            coEvery { refreshOnStartup() } answers { refreshCount++ }
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
@@ -3090,7 +3172,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } answers { refreshCount++ }
+            coEvery { refreshOnStartup() } answers { refreshCount++ }
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
@@ -3218,7 +3300,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } returns Unit
+            coEvery { refreshOnStartup() } returns Unit
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
@@ -3232,7 +3314,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
         assertEquals(listOf(remoteRecord, remoteMovieRecord), rawSnapshot(service).records)
         assertEquals(setOf(remoteResume, remoteMovieResume, localResume), writtenSnapshot?.resumeItems?.toSet())
         assertEquals(listOf(remoteRecord, remoteMovieRecord), writtenSnapshot?.records)
-        coVerify(timeout = 1_000L, exactly = 1) { trackingProgressService.refreshNow() }
+        coVerify(exactly = 0) { trackingProgressService.refreshOnStartup() }
+        coVerify(exactly = 0) { trackingProgressService.refreshNow() }
     }
 
     @Test
@@ -3244,7 +3327,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } answers { refreshCount++ }
+            coEvery { refreshOnStartup() } answers { refreshCount++ }
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
@@ -3279,7 +3362,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } answers { refreshCount++ }
+            coEvery { refreshOnStartup() } answers { refreshCount++ }
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,
@@ -3315,7 +3398,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
-            coEvery { refreshNow() } throws failure
+            coEvery { refreshOnStartup() } throws failure
         }
         val service = buildServiceWithAirScheduler(
             airScheduler = scheduler,

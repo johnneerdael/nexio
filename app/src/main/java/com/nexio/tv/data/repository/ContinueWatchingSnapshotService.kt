@@ -78,6 +78,25 @@ import javax.inject.Singleton
 private const val REFRESH_FAILURE_RETRY_MS = 15 * 60_000L
 private val NEXT_UP_SERIES_TITLE_TOKEN = Regex("[^a-z0-9]+")
 private val NEXT_UP_SERIES_WHITESPACE = Regex("\\s+")
+private val NEXT_UP_AIR_DATE_PREFIX = Regex("\\d{4}-\\d{2}-\\d{2}")
+
+private fun String?.normalizeAirDatePrefix(): String? {
+    return this
+        ?.trim()
+        ?.takeIf { it.length >= 10 }
+        ?.take(10)
+        ?.takeIf { NEXT_UP_AIR_DATE_PREFIX.matches(it) }
+}
+
+private fun String?.toTmdbSeriesContentId(): String? {
+    val clean = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val id = clean
+        .removePrefix("tmdb:tv:")
+        .removePrefix("tmdb:")
+        .takeIf { it.isNotEmpty() }
+        ?: return null
+    return "tmdb:$id"
+}
 
 private object NoopContinueWatchingAirScheduler : ContinueWatchingAirScheduler {
     override fun scheduleSoonest(triggerAtMs: Long?) = Unit
@@ -1361,12 +1380,22 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ) ?: return null
 
             val projectedContentId = order.resolution.tmdbTvId.toNextUpTmdbContentId()
+            val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
+                facade = facade,
+                contentType = entry.contentType,
+                tmdbContentId = projectedContentId,
+                tvdbContentId = "tvdb:${order.resolution.tvdbSeriesId}",
+                displaySeason = projected.season,
+                displayEpisode = projected.episode,
+                fallbackContentId = entry.videoId,
+                tvdbEpisodes = episodes
+            ) ?: (projected.season to projected.episode)
             entry.copy(
                 contentId = projectedContentId,
-                season = projected.season,
-                episode = projected.episode,
+                season = nativeCoordinate.first,
+                episode = nativeCoordinate.second,
                 episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
-                videoId = "$projectedContentId:${projected.season}:${projected.episode}",
+                videoId = "$projectedContentId:${nativeCoordinate.first}:${nativeCoordinate.second}",
                 firstAired = projected.firstAired ?: entry.firstAired,
                 firstAiredMs = projected.firstAired
                     ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
@@ -1380,6 +1409,92 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 "next-up coordinate projection failed for ${entry.contentId} s${entry.season}e${entry.episode}: ${e.message}",
                 e
             )
+            null
+        }
+    }
+
+    private suspend fun resolveProviderNativeEpisodeCoordinate(
+        facade: MetadataRouterFacade,
+        contentType: String,
+        tmdbContentId: String,
+        tvdbContentId: String,
+        displaySeason: Int,
+        displayEpisode: Int,
+        fallbackContentId: String?,
+        tvdbEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): Pair<Int, Int>? {
+        return try {
+            if (displaySeason <= 0 || displayEpisode <= 0) return null
+            val displayEpisodeMetadata = tvdbEpisodes[displaySeason to displayEpisode] ?: return null
+            val displayAirDate = displayEpisodeMetadata.airDate.normalizeAirDatePrefix() ?: return null
+            val normalizedType = contentType.trim().lowercase(Locale.ROOT).ifBlank { "series" }
+            val tmdbEpisodes = facade.fetchTvEpisodeProjection(
+                metadataRequest = MetadataRequest(
+                    contentId = tmdbContentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = normalizedType),
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = tmdbContentId,
+                    fallbackContentId = fallbackContentId ?: tvdbContentId,
+                    contentType = ContentType.SERIES,
+                    seasonNumbers = (1..displaySeason).toList()
+                )
+            ).value.orEmpty()
+            val dateMatches = tmdbEpisodes.entries.filter { (_, metadata) ->
+                metadata.airDate.normalizeAirDatePrefix() == displayAirDate
+            }
+            if (dateMatches.size == 1) return dateMatches.single().key
+            val sameEpisodeNumberMatches = dateMatches.filter { (coordinate, _) ->
+                coordinate.second == displayEpisode
+            }
+            sameEpisodeNumberMatches.singleOrNull()?.key
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun resolveProviderNativeEpisodeCoordinate(
+        providerIds: ProviderIds,
+        displaySeason: Int,
+        displayEpisode: Int,
+        fallbackContentId: String?
+    ): Pair<Int, Int>? {
+        val facade = metadataRouterFacade ?: return null
+        val tmdbContentId = providerIds.tmdb.toTmdbSeriesContentId() ?: return null
+        val tvdbId = providerIds.tvdb?.trim()?.removePrefix("tvdb:")?.takeIf { it.isNotEmpty() } ?: return null
+        val tvdbContentId = "tvdb:$tvdbId"
+        return try {
+            val tvdbEpisodes = facade.fetchTvEpisodeProjection(
+                metadataRequest = MetadataRequest(
+                    contentId = tvdbContentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = "series"),
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = tvdbContentId,
+                    fallbackContentId = fallbackContentId,
+                    contentType = ContentType.SERIES,
+                    seasonNumbers = emptyList()
+                )
+            ).value.orEmpty()
+            resolveProviderNativeEpisodeCoordinate(
+                facade = facade,
+                contentType = "series",
+                tmdbContentId = tmdbContentId,
+                tvdbContentId = tvdbContentId,
+                displaySeason = displaySeason,
+                displayEpisode = displayEpisode,
+                fallbackContentId = fallbackContentId,
+                tvdbEpisodes = tvdbEpisodes
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
             null
         }
     }
@@ -3028,9 +3143,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
             val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
             if (imdbId != null) {
+                val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
+                    providerIds = providerIds,
+                    displaySeason = season,
+                    displayEpisode = episode,
+                    fallbackContentId = resumeVideoId
+                ) ?: (season to episode)
                 return StreamFetchIdentity(
                     contentId = imdbId,
-                    videoId = "$imdbId:$season:$episode",
+                    videoId = "$imdbId:${nativeCoordinate.first}:${nativeCoordinate.second}",
                     idScheme = StreamIdScheme.IMDB_EPISODE,
                     confidence = IdentityConfidence.HIGH,
                     trace = listOf(

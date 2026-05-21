@@ -133,6 +133,63 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     }
 
     @Test
+    fun `tvdb episode enrichment does not rewrite provider native video coordinates`() = runTest(dispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val metadataDisplayRepository = mockDisplayRepository(
+            resolvedDocument(providerIds = ProviderIds(tmdb = "1399", tvdb = "303904", imdb = "tt0310416"))
+        )
+        coEvery {
+            facade.fetchTvEpisodeEnrichment(any(), any())
+        } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf(
+                (14 to 24) to TvEpisodeMetadata(
+                    providerEpisodeId = "tvdb-episode-14-24",
+                    seasonNumber = 14,
+                    episodeNumber = 24,
+                    title = "You Know I've Got You",
+                    airDate = "2025-03-24"
+                )
+            )
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = seriesMeta(
+                id = "tmdb:1399",
+                videos = listOf(
+                    Video(
+                        id = "tt0310416:12:24",
+                        title = "You Know I've Got You",
+                        released = "2025-03-24",
+                        thumbnail = null,
+                        season = 12,
+                        episode = 24,
+                        overview = null
+                    )
+                )
+            ),
+            itemId = "tmdb:1399",
+            itemType = "series",
+            metadataRouterFacade = facade,
+            metadataDisplayRepository = metadataDisplayRepository,
+            tmdbSettings = episodeSettings(),
+            tvEpisodeOrderResolver = orderResolver(
+                provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                tvdbSeriesId = "303904"
+            )
+        )
+
+        advanceUntilIdle()
+
+        val episode = viewModel.uiState.value.meta?.videos?.single()
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
+        assertEquals("tt0310416:12:24", episode?.id)
+        assertEquals(12, episode?.season)
+        assertEquals(24, episode?.episode)
+    }
+
+    @Test
     fun `detail merges tmdb route id with tvdb only resolved identity for episode order`() = runTest(dispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         val metadataDisplayRepository = mockDisplayRepository(
@@ -359,7 +416,20 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
             useCollections = false
         )
 
-    private fun seriesMeta(id: String = "tmdb:1399"): Meta =
+    private fun seriesMeta(
+        id: String = "tmdb:1399",
+        videos: List<Video> = listOf(
+            Video(
+                id = "$id:1:1",
+                title = "Pilot",
+                released = null,
+                thumbnail = null,
+                season = 1,
+                episode = 1,
+                overview = null
+            )
+        )
+    ): Meta =
         Meta(
             id = id,
             type = ContentType.SERIES,
@@ -376,17 +446,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
             runtime = null,
             director = emptyList(),
             cast = emptyList(),
-            videos = listOf(
-                Video(
-                    id = "$id:1:1",
-                    title = "Pilot",
-                    released = null,
-                    thumbnail = null,
-                    season = 1,
-                    episode = 1,
-                    overview = null
-                )
-            ),
+            videos = videos,
             country = null,
             awards = null,
             language = null,
