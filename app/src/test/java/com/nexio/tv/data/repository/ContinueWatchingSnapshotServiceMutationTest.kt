@@ -1844,9 +1844,54 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals("tmdb:10957", item.contentId)
             assertEquals(14, item.season)
             assertEquals(20, item.episode)
-            assertEquals("Maggots", item.episodeTitle)
+            assertEquals("TMDB Coordinate", item.episodeTitle)
             assertEquals("tmdb:10957:14:20", item.videoId)
-            assertEquals("2026-04-06", item.firstAired)
+            assertEquals("2025-03-31", item.firstAired)
+        }
+
+    @Test
+    fun `persisted snapshot load reprojects existing trakt next-up rows with TVDB coordinates`() =
+        runTest {
+            val facade = australianSurvivorProjectionFacade()
+            val persisted = ContinueWatchingSnapshot(
+                traktUpNextItems = listOf(
+                    nextUp(
+                        contentId = "tmdb:10957",
+                        firstAiredMs = 1L,
+                        firstAired = "2025-03-24",
+                        episode = 24
+                    ).copy(
+                        name = "Australian Survivor",
+                        season = 12,
+                        episodeTitle = "TMDB Redemption",
+                        videoId = "tmdb:10957:12:24",
+                        activityAtMs = java.time.Instant.parse("2025-03-24T21:32:00Z").toEpochMilli()
+                    )
+                ),
+                updatedAtMs = 100L
+            )
+            val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+                every { read(1) } returns persisted
+            }
+            val service = buildServiceWithAirScheduler(
+                airScheduler = RecordingAirScheduler(),
+                snapshotStore = snapshotStore,
+                metadataRouterFacade = facade,
+                tvEpisodeOrderResolver = tvdbDefaultOrderResolver(
+                    tmdbTvId = "tmdb:tv:10957",
+                    tvdbSeriesId = "303904"
+                )
+            )
+
+            service.reloadPersistedSnapshotForActiveProfile()
+
+            val item = rawSnapshot(service).traktUpNextItems.single()
+            assertEquals("tmdb:10957", item.contentId)
+            assertEquals(14, item.season)
+            assertEquals(24, item.episode)
+            assertEquals("tmdb:10957:14:24", item.videoId)
+            assertEquals("TMDB Redemption", item.episodeTitle)
+            assertEquals("2025-03-24", item.firstAired)
         }
 
     @Test
@@ -1893,8 +1938,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(1, projected.episode)
             assertEquals("The Multiverse", projected.episodeTitle)
             assertEquals("tmdb:12345:14:1", projected.videoId)
-            assertEquals("2026-02-17", projected.firstAired)
-            assertEquals(AirDateGate.pendingTriggerMs(0L, null, "2026-02-17"), projected.firstAiredMs)
+            assertEquals("2026-02-01", projected.firstAired)
+            assertEquals(1L, projected.firstAiredMs)
         }
 
     @Test
@@ -2741,7 +2786,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot withholds projected future TVDB air date and schedules reemit`() =
+    fun `buildRawSnapshot does not withhold coordinate-only projection for future TVDB air date`() =
         runTest {
             val tomorrow = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
                 .plusDays(1)
@@ -2781,13 +2826,13 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktUpNextEntries = emptyList()
             )
 
-            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
-            val scheduled = snapshot.scheduledReemit.single()
-            assertEquals("tmdb:12345", scheduled.contentId)
-            assertEquals(14, scheduled.season)
-            assertEquals(1, scheduled.episode)
-            assertEquals(tomorrow, scheduled.firstAired)
-            assertEquals("tmdb:12345:14:1", scheduled.videoId)
+            val projected = snapshot.nextUpItems.single()
+            assertEquals("tmdb:12345", projected.contentId)
+            assertEquals(14, projected.season)
+            assertEquals(1, projected.episode)
+            assertEquals("2026-02-01", projected.firstAired)
+            assertEquals("tmdb:12345:14:1", projected.videoId)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.scheduledReemit)
         }
 
     @Test

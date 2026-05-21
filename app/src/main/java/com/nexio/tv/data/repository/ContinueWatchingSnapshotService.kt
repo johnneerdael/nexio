@@ -1611,12 +1611,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 contentId = projectedContentId,
                 season = projected.season,
                 episode = projected.episode,
-                episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
                 videoId = "$projectedContentId:${projected.season}:${projected.episode}",
-                firstAired = projected.firstAired ?: entry.firstAired,
-                firstAiredMs = projected.firstAired
-                    ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
-                    ?: entry.firstAiredMs
             )
         } catch (e: CancellationException) {
             throw e
@@ -2748,16 +2743,31 @@ class ContinueWatchingSnapshotService @Inject constructor(
             items = snapshot.resumeItems,
             projectionCache = projectionCache
         )
+        val preProjectedNextUpItems = projectNextUpEntriesToCanonicalCoordinates(
+            entries = snapshot.nextUpItems,
+            projectionCache = projectionCache
+        )
+        val preProjectedTraktUpNextItems = projectNextUpEntriesToCanonicalCoordinates(
+            entries = snapshot.traktUpNextItems,
+            projectionCache = projectionCache
+        )
         val preProjectedRecords = projectPersistedRecordsToCanonicalCoordinates(
             records = snapshot.records,
             projectionCache = projectionCache
         )
         return sanitizeSnapshot(
-            if (preProjectedResumeItems === snapshot.resumeItems && preProjectedRecords === snapshot.records) {
+            if (
+                preProjectedResumeItems === snapshot.resumeItems &&
+                preProjectedNextUpItems === snapshot.nextUpItems &&
+                preProjectedTraktUpNextItems === snapshot.traktUpNextItems &&
+                preProjectedRecords === snapshot.records
+            ) {
                 snapshot
             } else {
                 snapshot.copy(
                     resumeItems = preProjectedResumeItems,
+                    nextUpItems = preProjectedNextUpItems,
+                    traktUpNextItems = preProjectedTraktUpNextItems,
                     records = preProjectedRecords
                 )
             }
