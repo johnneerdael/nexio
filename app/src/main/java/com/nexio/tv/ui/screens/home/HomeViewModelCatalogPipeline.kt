@@ -3310,6 +3310,43 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
         selectedRefCount = resolvedItems.count { item -> item.trailer.selectedPlaybackRef != null },
         fallbackIdCount = resolvedItems.sumOf { item -> item.trailer.fallbackTrailerYtIds.size }
     )
+
+    // Plan: Bug A — Task A4. Kick off MediaClipStore warm-up so the next
+    // publish (via republishScreensaverSurfaceAfterWarm in Task A5) can
+    // attach selectedPlaybackRef per item. We publish the initial empty-
+    // trailer surface FIRST so IMAGE-mode fallback is available immediately
+    // without waiting for the warm-up. The skipIfAlreadyWarmed dedupe is a
+    // future optimization (Plan note: Task A3 step 2 placeholder); the
+    // current implementation warms unconditionally on every publish, which
+    // matches MediaClipStore's existing freshTtl/staleTtl behavior.
+    //
+    // ScreensaverWarmCandidate is constructed only for items that have at
+    // least one of (tmdbId, contentId) so the TMDB lookup has something to
+    // hit. Items missing a usable id are skipped — they couldn't have
+    // resolved anyway.
+    refreshScreensaverTrailerCachePipeline {
+        resolvedItems.mapNotNull { item -> item.toScreensaverWarmCandidate() }
+    }
+}
+
+/**
+ * Plan: Bug A — Task A4. Adapter from the typed authority record to the
+ * warmer's per-item input. Returns null if the item has neither title nor a
+ * TMDB-ish identifier that `metadataRouterFacade.fetchTrailer(...)` can
+ * dispatch on.
+ */
+private fun com.nexio.tv.domain.model.ResolvedDisplayItem.toScreensaverWarmCandidate(): com.nexio.tv.ui.screens.home.ScreensaverWarmCandidate? {
+    val title = display.title?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val tmdbId = stableIds.tmdb?.trim()?.takeIf { it.isNotBlank() }
+        ?: contentId.takeIf { it.startsWith("tmdb:") }?.removePrefix("tmdb:")?.takeIf { it.isNotBlank() }
+    return com.nexio.tv.ui.screens.home.ScreensaverWarmCandidate(
+        itemId = contentId,
+        title = title,
+        releaseInfo = display.releaseDate,
+        apiType = itemType.toApiString(),
+        tmdbId = tmdbId,
+        fallbackYtId = trailer.fallbackTrailerYtIds.firstOrNull { it.isNotBlank() }
+    )
 }
 
 private fun com.nexio.tv.domain.model.ResolvedDisplayItem.hasScreensaverTrailerResolutionPath(): Boolean =
