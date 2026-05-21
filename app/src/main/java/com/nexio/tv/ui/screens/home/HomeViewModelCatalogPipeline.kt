@@ -4,6 +4,7 @@ import android.util.Log
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
+import com.nexio.tv.core.metadata.router.resolver.TrailerSurface
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
@@ -3287,7 +3288,12 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
         overlaysByItemKey = overlaysByItemKey,
         resolver = artworkProviderResolver,
         currentSettings = currentArtworkProviderSettings.value,
-        resolveTrailer = { request -> metadataRouterFacade.resolveTrailer(request) }
+        resolveTrailer = { request -> metadataRouterFacade.resolveTrailer(request) },
+        // Plan: Bug A — Task A2. Tag the synchronous resolver call with the
+        // screensaver surface so trace events (emitTrailerSurfaceSynced,
+        // emitMediaClipCandidateSelected) and TrailerDisplayState.surface
+        // labels correctly attribute the resolution to the screensaver pool.
+        surface = TrailerSurface.SCREENSAVER
     )
     val published = resolvedDisplaySurfaceRepository.publishResolvedItems(
         surfaceKey = ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY,
