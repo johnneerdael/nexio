@@ -87,12 +87,20 @@ internal fun IdleTrailerScreensaverOverlay(
     sessionStart: IdleTrailerScreensaverSessionStart,
     onDismiss: () -> Unit,
     onOpenSlide: (IdleTrailerScreensaverCandidate) -> Unit,
+    // Plan: Bug B — Task B3. Fired when no next playback can be resolved
+    // AFTER at least one trailer played successfully. MainActivity sets
+    // idleTrailerSessionStart = null in response, which flips the
+    // presentation mode to IMAGE on next composition — IdleScreensaverOverlay
+    // takes over and rotates still images instead of camping on a frozen
+    // TextureView. Default no-op preserves test-site signatures.
+    onAllCandidatesExhausted: () -> Unit = {},
     resolvePlaybackSource: suspend (IdleTrailerScreensaverCandidate, TrailerPlaybackRef) -> com.nexio.tv.data.trailer.TrailerPlaybackSource?
 ) {
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val currentOnOpenDetails by rememberUpdatedState(onOpenSlide)
+    val currentOnExhausted by rememberUpdatedState(onAllCandidatesExhausted)
     val currentResolvePlayback by rememberUpdatedState(resolvePlaybackSource)
     var currentPlayback by remember(sessionId, sessionStart) { mutableStateOf(sessionStart.initialPlayback) }
     var preparedNextPlayback by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverPlayback?>(null) }
@@ -100,6 +108,11 @@ internal fun IdleTrailerScreensaverOverlay(
     var pendingOpen by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverCandidate?>(null) }
     var failedPlaybackKeys by remember(sessionId) { mutableStateOf<Set<String>>(emptySet()) }
     var hasRenderedFirstFrame by remember(sessionId, currentPlayback.index, currentPlayback.playbackRef) { mutableStateOf(false) }
+    // Plan: Bug B — Task B3. Tracks whether any trailer in this session has
+    // ever rendered first frame. Drives decideIdleTrailerExhaustionAction —
+    // we only fall back to IMAGE mode (vs dismiss) if there was at least
+    // one playback so the user perceives the screensaver as alive.
+    var hadAtLeastOneSuccessfulPlayback by remember(sessionId) { mutableStateOf(false) }
     var lastProgressMs by remember(sessionId, currentPlayback.index, currentPlayback.playbackRef) { mutableStateOf(-1L) }
     var advanceSignal by remember(sessionId) { mutableIntStateOf(0) }
     val brandingSpec = remember { idleTrailerBrandingPresentationSpec() }
@@ -201,6 +214,7 @@ internal fun IdleTrailerScreensaverOverlay(
             skippedPlaybackKeys = failedPlaybackKeys,
             resolvePlayback = currentResolvePlayback
         )
+        var secondAttemptResolvedAny = false
         if (nextPlayback == null && failedPlaybackKeys.isNotEmpty()) {
             failedPlaybackKeys = emptySet()
             nextPlayback = resolveNextIdleTrailerPlayback(
@@ -209,9 +223,23 @@ internal fun IdleTrailerScreensaverOverlay(
                 skippedPlaybackKeys = emptySet(),
                 resolvePlayback = currentResolvePlayback
             )
+            if (nextPlayback != null) secondAttemptResolvedAny = true
         }
         if (nextPlayback == null) {
-            currentOnDismiss()
+            // Plan: Bug B — Task B3. Pool exhausted. Route through the
+            // exhaustion decision so the IMAGE-mode fallback (still-image
+            // rotation) takes over instead of dismissing the overlay back
+            // to a potentially-stuck loop of show → exhaust → dismiss →
+            // show → ... that would camp on a frozen TextureView.
+            when (
+                decideIdleTrailerExhaustionAction(
+                    hadAtLeastOneSuccessfulPlayback = hadAtLeastOneSuccessfulPlayback,
+                    secondAttemptResolvedAny = secondAttemptResolvedAny
+                )
+            ) {
+                IdleTrailerExhaustionAction.FALLBACK_TO_IMAGE -> currentOnExhausted()
+                IdleTrailerExhaustionAction.DISMISS -> currentOnDismiss()
+            }
             return@LaunchedEffect
         }
         preparedNextPlayback = null
@@ -300,7 +328,32 @@ internal fun IdleTrailerScreensaverOverlay(
             isPlaying = true,
             muted = sessionMuted,
             onEnded = { advanceSignal += 1 },
-            onFirstFrameRendered = { hasRenderedFirstFrame = true },
+            onFirstFrameRendered = {
+                hasRenderedFirstFrame = true
+                // Plan: Bug B — Task B3. Mark the session as "ever played
+                // something" so a future exhaustion can route to IMAGE
+                // fallback instead of dismiss.
+                hadAtLeastOneSuccessfulPlayback = true
+            },
+            // Plan: Bug B — Task B3. Wire the TrailerBufferingWatchdog
+            // (added in Task B1) into the candidate-advance path. If the
+            // player parks in STATE_BUFFERING without progress for >10s
+            // (which Player.STATE_ENDED would not catch and onPlayerError
+            // also may not fire for codec init hangs), mark the playback
+            // key as failed and advance. Without this the TextureView
+            // would hold the last frame indefinitely — exactly the
+            // OLED-burn scenario this whole plan exists to prevent.
+            onBufferingStall = {
+                val playbackKey = idleTrailerPlaybackKey(
+                    candidate = currentPlayback.candidate,
+                    playbackRef = currentPlayback.playbackRef
+                )
+                if (playbackKey !in failedPlaybackKeys) {
+                    failedPlaybackKeys = failedPlaybackKeys + playbackKey
+                    preparedNextPlayback = null
+                    advanceSignal += 1
+                }
+            },
             onError = {
                 val playbackKey = idleTrailerPlaybackKey(
                     candidate = currentPlayback.candidate,

@@ -30,6 +30,44 @@ internal enum class IdleTrailerRemoteKeyAction {
     CONSUME
 }
 
+/**
+ * Plan: Bug B — Task B3.
+ *
+ * Decision shape for `IdleTrailerScreensaverOverlay` when the next-playback
+ * resolution exhausts the candidate pool. `FALLBACK_TO_IMAGE` flips the
+ * overlay to IMAGE mode (still-image rotation from `idleScreensaverSlides`)
+ * instead of dismissing — important because dismiss + idle-controller
+ * re-show would loop forever on the same broken candidates, producing the
+ * OLED-burn dead-screen scenario.
+ */
+internal enum class IdleTrailerExhaustionAction {
+    FALLBACK_TO_IMAGE,
+    DISMISS
+}
+
+/**
+ * Plan: Bug B — Task B3. Decides whether to fall back to IMAGE mode or
+ * dismiss entirely when the trailer session exhausts.
+ *
+ * - Played at least one trailer + nothing left → IMAGE rotation keeps the
+ *   user entertained without dead-screen risk.
+ * - Never played any trailer → dismiss; the trailer session was
+ *   non-functional from the start, and IMAGE mode falls out naturally from
+ *   `chooseIdleScreensaverPresentationMode` on the next show.
+ */
+internal fun decideIdleTrailerExhaustionAction(
+    hadAtLeastOneSuccessfulPlayback: Boolean,
+    @Suppress("UNUSED_PARAMETER") secondAttemptResolvedAny: Boolean
+): IdleTrailerExhaustionAction =
+    if (!hadAtLeastOneSuccessfulPlayback) {
+        IdleTrailerExhaustionAction.DISMISS
+    } else {
+        // Either the second attempt returned null (true exhaustion) OR it
+        // resolved something but we still nominate IMAGE as a safe default —
+        // never camp on a stale frame just because the resolver flickered.
+        IdleTrailerExhaustionAction.FALLBACK_TO_IMAGE
+    }
+
 private val IdleTrailerYearRegex = Regex("\\b(19|20)\\d{2}\\b")
 
 internal fun collectIdleTrailerScreensaverCandidates(

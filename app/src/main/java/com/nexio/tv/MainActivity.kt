@@ -1382,6 +1382,19 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 )
                                             },
+                                            // Plan: Bug B — Task B3. Pool
+                                            // exhausted after at least one
+                                            // playback. Drop the trailer
+                                            // session so
+                                            // chooseIdleScreensaverPresentationMode
+                                            // picks IMAGE on the next
+                                            // composition; the controller
+                                            // stays visible so the IMAGE
+                                            // overlay continues to rotate
+                                            // (no flicker, no dead-screen).
+                                            onAllCandidatesExhausted = {
+                                                idleTrailerSessionStart = null
+                                            },
                                             resolvePlaybackSource = { candidate, playbackRef ->
                                                 trailerService.resolveIdleTrailerScreensaverPlaybackSource(
                                                     trailerResolver = trailerResolver,
