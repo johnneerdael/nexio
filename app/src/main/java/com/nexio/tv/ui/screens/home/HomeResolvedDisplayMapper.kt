@@ -71,7 +71,15 @@ internal object HomeResolvedDisplayMapper {
          * full settings hashCode to avoid pinning credential text in the key.
          */
         val settingsSignature: String,
-        val customImdbRatingHash: Int
+        val customImdbRatingHash: Int,
+        /**
+         * Plan: Bug A — Task A1. Surface participates in cache identity: the same
+         * (meta, overlay) tuple resolved for SCREENSAVER vs HOME produces different
+         * `trailer.surface` labels and may select different trailer refs in the
+         * future. Treating surfaces as cache-collision peers would cause one
+         * surface to serve another's projection.
+         */
+        val surface: TrailerSurface
     )
 
     private val cache = mutableMapOf<MapperCacheKey, ResolvedDisplayItem>()
@@ -91,7 +99,12 @@ internal object HomeResolvedDisplayMapper {
         currentSettings: ArtworkProviderSettings = ArtworkProviderSettings(),
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
-        traceEvents: TraceMetadataEvents? = null
+        traceEvents: TraceMetadataEvents? = null,
+        // Plan: Bug A — Task A1. Surface label is plumbed into TrailerResolveRequest
+        // so trace events correctly attribute trailer resolutions to the calling
+        // surface (HOME vs SCREENSAVER vs DETAIL). Defaults to HOME so existing
+        // call sites compile unchanged.
+        surface: TrailerSurface = TrailerSurface.HOME
     ): List<ResolvedDisplayItem> {
         val items = rows.flatMap { row -> row.items }
         val activeKeys = HashSet<MapperCacheKey>(items.size)
@@ -104,7 +117,8 @@ internal object HomeResolvedDisplayMapper {
                 metaContentHash = item.hashCode(),
                 overlayContentHash = overlay?.hashCode() ?: 0,
                 settingsSignature = settingsSignature,
-                customImdbRatingHash = 0
+                customImdbRatingHash = 0,
+                surface = surface
             )
             activeKeys += cacheKey
             // Cache hit: skip recomputation entirely. We deliberately do NOT emit
@@ -118,7 +132,7 @@ internal object HomeResolvedDisplayMapper {
             } else {
                 val computed = item.toResolvedDisplayItem(
                     overlaysByItemKey, nowMs, resolveTrailer, traceEvents,
-                    resolver, currentSettings
+                    resolver, currentSettings, surface
                 )
                 cache[cacheKey] = computed
                 computed
@@ -159,7 +173,10 @@ internal object HomeResolvedDisplayMapper {
         nowMs: Long = System.currentTimeMillis(),
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)? = null,
         traceEvents: TraceMetadataEvents? = null,
-        resolveCustomImdbRatings: suspend (List<String>) -> Map<String, Double> = { emptyMap() }
+        resolveCustomImdbRatings: suspend (List<String>) -> Map<String, Double> = { emptyMap() },
+        // Plan: Bug A — Task A1. Surface label is plumbed into TrailerResolveRequest.
+        // Defaults to HOME for back-compat with existing tests and call sites.
+        surface: TrailerSurface = TrailerSurface.HOME
     ): List<ResolvedDisplayItem> {
         // Collect cache hits synchronously first; misses need suspend overlay lookup.
         val result = mutableListOf<ResolvedDisplayItem>()
@@ -203,7 +220,8 @@ internal object HomeResolvedDisplayMapper {
                     metaContentHash = item.hashCode(),
                     overlayContentHash = overlay?.hashCode() ?: 0,
                     settingsSignature = settingsSignature,
-                    customImdbRatingHash = customImdbRating?.hashCode() ?: 0
+                    customImdbRatingHash = customImdbRating?.hashCode() ?: 0,
+                    surface = surface
                 )
                 activeKeys += cacheKey
                 val cached = synchronized(this) { cache[cacheKey] }
@@ -212,7 +230,7 @@ internal object HomeResolvedDisplayMapper {
                 } else {
                     val computed = item.toResolvedDisplayItemWithOverlay(
                         overlay, nowMs, resolveTrailer, traceEvents,
-                        resolver, currentSettings, customImdbRating
+                        resolver, currentSettings, customImdbRating, surface
                     )
                     synchronized(this) { cache[cacheKey] = computed }
                     result += computed
@@ -229,11 +247,12 @@ internal object HomeResolvedDisplayMapper {
         resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
         traceEvents: TraceMetadataEvents? = null,
         resolver: ArtworkProviderResolver,
-        currentSettings: ArtworkProviderSettings
+        currentSettings: ArtworkProviderSettings,
+        surface: TrailerSurface = TrailerSurface.HOME
     ): ResolvedDisplayItem {
         val overlay = overlayFromMap(overlaysByItemKey)
         return toResolvedDisplayItemWithOverlay(
-            overlay, nowMs, resolveTrailer, traceEvents, resolver, currentSettings
+            overlay, nowMs, resolveTrailer, traceEvents, resolver, currentSettings, null, surface
         )
     }
 
@@ -244,7 +263,8 @@ internal object HomeResolvedDisplayMapper {
         traceEvents: TraceMetadataEvents? = null,
         resolver: ArtworkProviderResolver,
         currentSettings: ArtworkProviderSettings,
-        customImdbRating: Double? = null
+        customImdbRating: Double? = null,
+        surface: TrailerSurface = TrailerSurface.HOME
     ): ResolvedDisplayItem {
         val itemKey = homeDisplayItemKey(apiType, id)
 
@@ -279,7 +299,8 @@ internal object HomeResolvedDisplayMapper {
             fallbackYtIds = trailerYtIds,
             apiType = apiType,
             contentId = id,
-            resolveTrailer = resolveTrailer
+            resolveTrailer = resolveTrailer,
+            surface = surface
         )
 
         val isAnime = isAnimeForArtworkRouting()
@@ -373,7 +394,8 @@ internal object HomeResolvedDisplayMapper {
         fallbackYtIds: List<String>,
         apiType: String,
         contentId: String,
-        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?
+        resolveTrailer: ((TrailerResolveRequest) -> TrailerResolution)?,
+        surface: TrailerSurface
     ): TrailerDisplayState {
         val resolver = resolveTrailer ?: return TrailerDisplayState()
         val resolution = resolver(
@@ -383,20 +405,20 @@ internal object HomeResolvedDisplayMapper {
                 year = year,
                 stableIds = stableIds,
                 fallbackYtIds = fallbackYtIds,
-                surface = TrailerSurface.HOME,
+                surface = surface,
                 type = apiType,
                 contentId = contentId
             )
         )
         val selected = resolution.selected ?: return TrailerDisplayState(
             availabilityReason = resolution.availability.reason,
-            surface = TrailerSurface.HOME.name.lowercase()
+            surface = surface.name.lowercase()
         )
         return TrailerDisplayState(
             fallbackTrailerYtIds = listOfNotNull((selected as? TrailerPlaybackRef.YouTubeId)?.videoId),
             selectedPlaybackRef = selected,
             availabilityReason = resolution.availability.reason,
-            surface = TrailerSurface.HOME.name.lowercase()
+            surface = surface.name.lowercase()
         )
     }
 
