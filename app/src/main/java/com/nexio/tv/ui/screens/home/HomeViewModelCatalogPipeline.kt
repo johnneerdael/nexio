@@ -3284,6 +3284,24 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     // selectedPlaybackRef per item), but the warmer itself is NOT relaunched.
     skipWarm: Boolean = false
 ) {
+    // Plan: Bug A — Task A6.5 (regression hardening 2026-05-22).
+    //
+    // Skip the mapper entirely when sourceRows is empty. The mapper's
+    // `cache.keys.retainAll(activeKeys)` would wipe the entire shared
+    // (HOME + SCREENSAVER) memoization cache when called with empty input
+    // (activeKeys = emptySet → retainAll(emptySet) removes every entry),
+    // forcing a full re-compute on the next HOME publish.
+    //
+    // Worse, publishing empty items would clear the screensaver surface
+    // (applyNonDowngradeMergeForReplace returns empty when incoming is
+    // empty, and shouldSuppressSurfaceUpdate's size-mismatch check lets
+    // the empty publish through). That clobbered any cold-start items
+    // restored from disk.
+    //
+    // Early-return when there's nothing to publish — no need to touch
+    // either the mapper cache or the screensaver surface store.
+    if (sourceRows.isEmpty()) return
+
     // Phase 3.5: drop the redundant rowsForResolvedDisplaySurface pre-application.
     // HomeResolvedDisplayMapper.toResolvedDisplayItem already applies the overlay
     // via HomeRailProjectionReducer.reduce(firstPaint, overlay, existing, profile) —
