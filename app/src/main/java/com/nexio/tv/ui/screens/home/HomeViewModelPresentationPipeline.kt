@@ -797,12 +797,26 @@ internal fun HomeViewModel.refreshScreensaverTrailerCachePipeline(
 }
 
 /**
- * Placeholder. Filled in by Task A5 with a re-publish of the screensaver
- * surface so the newly warmed MediaClipStore entries land as
- * ResolvedDisplayItem.trailer.selectedPlaybackRef.
+ * Plan: Bug A — Task A5.
+ *
+ * Re-runs `publishTmdbTrendingScreensaverSurface(skipWarm = true)` after a
+ * warm-cycle finishes so the mapper's synchronous TrailerResolver picks up
+ * the newly cached MediaClipStore entries and attaches `selectedPlaybackRef`
+ * per item. `skipWarm = true` is required to break the
+ * publish → warm → republish → publish loop.
+ *
+ * HomeResolvedDisplayMapper memoization (CLAUDE.md rule #5) means items whose
+ * trailer state didn't change re-emit the SAME instance — downstream `===`
+ * guards short-circuit recomposition for the unchanged majority.
  */
 internal fun HomeViewModel.republishScreensaverSurfaceAfterWarm() {
-    // Implemented in Task A5.
+    val profileSession = profileManager.activeProfileSession.value
+    val overlays = hydratedHomeOverlaysByItemKey.value
+    publishTmdbTrendingScreensaverSurface(
+        profileSession = profileSession,
+        overlaysByItemKey = overlays,
+        skipWarm = true
+    )
 }
 
 private fun TrailerDisplayState.normalizedFallbackTrailerIdCount(): Int =

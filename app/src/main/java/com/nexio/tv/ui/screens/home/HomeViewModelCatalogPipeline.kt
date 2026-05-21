@@ -3276,7 +3276,13 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     sourceRows: List<CatalogRow> = tmdbTrendingScreensaverRows(
         tmdbSnapshot = tmdbDiscoverySnapshot,
         persistedTmdbGroups = persistedTmdbSyntheticGroups
-    )
+    ),
+    // Plan: Bug A — Task A5. Set true on the re-publish after a warm cycle to
+    // break the publish → warm → republish → publish loop. The mapper still
+    // re-runs (necessary — the warmer wrote into MediaClipStore and the
+    // synchronous TrailerResolver needs another mapper pass to attach
+    // selectedPlaybackRef per item), but the warmer itself is NOT relaunched.
+    skipWarm: Boolean = false
 ) {
     // Phase 3.5: drop the redundant rowsForResolvedDisplaySurface pre-application.
     // HomeResolvedDisplayMapper.toResolvedDisplayItem already applies the overlay
@@ -3320,12 +3326,17 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     // current implementation warms unconditionally on every publish, which
     // matches MediaClipStore's existing freshTtl/staleTtl behavior.
     //
+    // skipWarm short-circuits this on the re-publish path so we don't loop
+    // forever (Task A5).
+    //
     // ScreensaverWarmCandidate is constructed only for items that have at
     // least one of (tmdbId, contentId) so the TMDB lookup has something to
     // hit. Items missing a usable id are skipped — they couldn't have
     // resolved anyway.
-    refreshScreensaverTrailerCachePipeline {
-        resolvedItems.mapNotNull { item -> item.toScreensaverWarmCandidate() }
+    if (!skipWarm) {
+        refreshScreensaverTrailerCachePipeline {
+            resolvedItems.mapNotNull { item -> item.toScreensaverWarmCandidate() }
+        }
     }
 }
 
