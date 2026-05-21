@@ -364,6 +364,36 @@ class TmdbDiscoveryServiceTest {
     }
 
     @Test
+    fun `non forced full refresh preserves previous current rail when one enabled catalog returns empty`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+            )
+        )
+        val service = client.createService()
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val initial = service.refreshCatalogs(preferences, force = true)
+        client.catalogResults = mapOf(
+            TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 3, title = "New Trending"))
+        )
+
+        val refreshed = service.refreshCatalogs(preferences, force = false)
+
+        assertEquals(
+            initial.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES),
+            refreshed.rowsByCatalog[TmdbCatalogIds.POPULAR_MOVIES]
+        )
+        assertEquals(
+            setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            refreshed.catalogIdsWithCurrentPreferences
+        )
+    }
+
+    @Test
     fun `subset catalog refresh drops previously current rows when preference provenance changes`() = runTest {
         val client = FakeTmdbDiscoveryClient(
             catalogResults = mapOf(

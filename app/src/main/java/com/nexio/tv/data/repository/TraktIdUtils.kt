@@ -105,6 +105,15 @@ internal fun toTraktPathId(contentId: String): String {
     }
 }
 
+internal fun toTraktShowProgressPathIdOrNull(contentId: String): String? {
+    val parsed = parseContentIds(contentId)
+    return when {
+        !parsed.imdb.isNullOrBlank() -> parsed.imdb
+        parsed.trakt != null -> parsed.trakt.toString()
+        else -> null
+    }
+}
+
 internal fun extractYear(value: String?): Int? {
     if (value.isNullOrBlank()) return null
     return Regex("(\\d{4})").find(value)?.groupValues?.getOrNull(1)?.toIntOrNull()

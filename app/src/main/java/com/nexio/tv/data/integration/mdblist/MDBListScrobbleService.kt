@@ -52,6 +52,7 @@ class MDBListScrobbleService @Inject constructor(
         val settings = settingsReader.settingsForProfile(profileId).first()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) return
+        if (!MDBListIdMapper.hasScrobbleIdentity(item)) return
         api.scrobble(
             action = action,
             apiKey = apiKey,

@@ -32,6 +32,9 @@ data class AnimeIdentityLookup(
 interface AnimeIdentityIndex {
     suspend fun resolveKitsuId(id: ParsedMetadataId): String?
 
+    suspend fun resolveKitsuId(id: ParsedMetadataId, mediaKind: MetadataMediaKind): String? =
+        resolveKitsuId(id)
+
     /**
      * Returns true when the parsed metadata ID identifies anime content.
      *
@@ -48,10 +51,24 @@ class AssetAnimeIdentityIndex @Inject constructor(
     private val mappingService: AnimeIdMappingService
 ) : AnimeIdentityIndex {
     override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+        return resolveKitsuId(id, MetadataMediaKind.ANIME)
+    }
+
+    override suspend fun resolveKitsuId(id: ParsedMetadataId, mediaKind: MetadataMediaKind): String? {
         val source = id.scheme.toAnimeIdSource() ?: return null
         val animeId = AnimeStremioId(source = source, value = id.value)
-        return mappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
-            ?: mappingService.resolveKitsuId(animeId, ContentMediaKind.MOVIE)
+        return when (mediaKind) {
+            MetadataMediaKind.MOVIE ->
+                mappingService.resolveKitsuId(animeId, ContentMediaKind.MOVIE)
+                    ?: mappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
+            MetadataMediaKind.SERIES ->
+                mappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
+                    ?: mappingService.resolveKitsuId(animeId, ContentMediaKind.MOVIE)
+            MetadataMediaKind.ANIME,
+            MetadataMediaKind.UNKNOWN ->
+                mappingService.resolveKitsuId(animeId, ContentMediaKind.MOVIE)
+                    ?: mappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
+        }
     }
 
     private fun AnimeIdScheme.toAnimeIdSource(): AnimeIdSource? =

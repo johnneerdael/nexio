@@ -99,6 +99,8 @@ class HomeCatalogSnapshotStore private constructor(
         private const val MAX_PERSISTED_CATALOG_ROWS = 200
         private const val MAX_PERSISTED_ITEMS_PER_ROW = 100
         private const val MAX_HERO_ITEMS = 50
+        private const val HOME_CATALOG_RAIL_CACHE_TTL_MS = 24L * 60L * 60L * 1000L
+        private const val HOME_CATALOG_RAIL_STALE_GRACE_MS = 7L * 24L * 60L * 60L * 1000L
         private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
     }
 
@@ -503,8 +505,8 @@ class HomeCatalogSnapshotStore private constructor(
                     kind = rail.type.name,
                     paramsHash = "$posterProviderToken:${currentLanguageTag()}",
                     fetchedAtEpochMs = now,
-                    expiresAtEpochMs = now + 30_000L,
-                    staleUntilEpochMs = now + 3_600_000L
+                    expiresAtEpochMs = now + HOME_CATALOG_RAIL_CACHE_TTL_MS,
+                    staleUntilEpochMs = now + HOME_CATALOG_RAIL_CACHE_TTL_MS + HOME_CATALOG_RAIL_STALE_GRACE_MS
                 ),
                 items = resolvedItems.mapIndexed { index, resolved ->
                     RailItemEntity(

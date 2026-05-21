@@ -25,7 +25,7 @@ object AioStrictStreamParser {
     private val genericIndexerEmojis = listOf("🌐", "⚙️", "🔗", "🔎", "🔍", "☁️")
 
     private fun aliasRegex(alias: String): Regex {
-        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_+-])""")
+        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_+\-⚡🚀])""")
     }
 
     private val servicePatterns = linkedMapOf(
@@ -33,7 +33,7 @@ object AioStrictStreamParser {
         "PM" to listOf("premiumize", "pm"),
         "AD" to listOf("alldebrid", "all-debrid"),
         "DL" to listOf("debridlink", "debrid-link", "dlink"),
-        "TB" to listOf("torbox"),
+        "TB" to listOf("torbox", "tb"),
         "ED" to listOf("easydebrid", "easy-debrid"),
         "PK" to listOf("pikpak")
     )
@@ -263,11 +263,16 @@ object AioStrictStreamParser {
                     normalizedLine.endsWith(".avi", ignoreCase = true)
             }
             .joinToString(" ")
-        val lowered = listOfNotNull(
-            stream.name?.takeIf { it.isNotBlank() },
-            descriptionSignals.takeIf { it.isNotBlank() },
-            stream.addonName.takeIf { it.isNotBlank() }
-        ).joinToString(" ").lowercase(Locale.US)
+        return firstMatchingServiceId(stream.name)
+            ?: firstMatchingServiceId(descriptionSignals)
+            ?: firstMatchingServiceId(stream.addonName)
+    }
+
+    private fun firstMatchingServiceId(text: String?): String? {
+        val lowered = text
+            ?.takeIf { it.isNotBlank() }
+            ?.lowercase(Locale.US)
+            ?: return null
         return servicePatterns.entries.firstOrNull { (_, aliases) ->
             aliases.any { alias -> aliasRegex(alias).containsMatchIn(lowered) }
         }?.key

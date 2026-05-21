@@ -3594,6 +3594,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun clearEpisodeProgress(video: Video) {
         val season = video.season ?: return
         val episode = video.episode ?: return
+        val meta = _uiState.value.meta
         val pendingKey = episodePendingKey(video)
         if (_uiState.value.episodeWatchedPendingKeys.contains(pendingKey)) return
 
@@ -3613,12 +3614,21 @@ class MetaDetailsViewModel @Inject constructor(
             val episodeKey = season to episode
             applyEpisodeWatchOverride(setOf(episodeKey), watched = false)
             runCatching {
-                watchProgressRepository.removeFromHistory(
-                    profileManager.activeProfileSession.value,
-                    progressContentId,
-                    season,
-                    episode
-                )
+                if (meta?.apiType.equals("series", ignoreCase = true) || meta?.apiType.equals("tv", ignoreCase = true)) {
+                    continueWatchingSnapshotService.removeAllForShow(progressContentId)
+                    continueWatchingSnapshotService.removeShowOptimistically(progressContentId)
+                    watchProgressRepository.clearShowProgress(
+                        profileManager.activeProfileSession.value,
+                        progressContentId
+                    )
+                } else {
+                    watchProgressRepository.removeFromHistory(
+                        profileManager.activeProfileSession.value,
+                        progressContentId,
+                        season,
+                        episode
+                    )
+                }
                 showMessage(context.getString(R.string.cw_action_clear_progress))
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->

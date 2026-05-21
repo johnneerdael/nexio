@@ -16,9 +16,12 @@ internal fun TmdbCatalogPreferences.includingHomeCatalogRails(
         .map { it.key }
         .filter { it in TmdbCatalogIds.BUILT_IN_ORDER }
         .toSet()
-    if (railKeys.isEmpty()) return sanitized()
     val sanitized = sanitized()
-    return sanitized.copy(enabledCatalogs = sanitized.enabledCatalogs + railKeys).sanitized()
+    if (railKeys.isEmpty()) return sanitized
+    return sanitized.copy(
+        enabledCatalogs = railKeys,
+        catalogOrder = railKeys.toList() + sanitized.catalogOrder.filterNot { it in railKeys }
+    ).sanitized()
 }
 
 internal fun KitsuCatalogPreferences.includingHomeCatalogRails(
@@ -30,7 +33,10 @@ internal fun KitsuCatalogPreferences.includingHomeCatalogRails(
         .map { it.key }
         .filter { it in KitsuCatalogIds.BUILT_IN_ORDER }
         .toSet()
-    if (railKeys.isEmpty()) return sanitized()
     val sanitized = sanitized()
-    return sanitized.copy(enabledCatalogs = sanitized.enabledCatalogs + railKeys).sanitized()
+    if (railKeys.isEmpty()) return sanitized
+    return sanitized.copy(
+        enabledCatalogs = railKeys,
+        catalogOrder = railKeys.toList() + sanitized.catalogOrder.filterNot { it in railKeys }
+    ).sanitized()
 }

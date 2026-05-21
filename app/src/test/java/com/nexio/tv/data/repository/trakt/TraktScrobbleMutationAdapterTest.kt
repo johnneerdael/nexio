@@ -113,6 +113,83 @@ class TraktScrobbleMutationAdapterTest {
     }
 
     @Test
+    fun `start reconcile does not refresh trakt progress`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val controller = TraktWatchingNowStateController()
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = controller,
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "start",
+            progressPercent = 12f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+
+        adapter.reconcileSuccess(envelope)
+
+        coVerify(exactly = 0) { traktProgressService.refreshNow() }
+        coVerify(exactly = 0) { traktProgressService.refreshPlaybackOnly() }
+    }
+
+    @Test
+    fun `stop reconcile refreshes trakt playback only`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val controller = TraktWatchingNowStateController()
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = controller,
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = movieItem("Arrival"),
+            action = "stop",
+            progressPercent = 22f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+
+        adapter.reconcileSuccess(envelope)
+
+        coVerify(exactly = 0) { traktProgressService.refreshNow() }
+        coVerify(exactly = 1) { traktProgressService.refreshPlaybackOnly() }
+    }
+
+    @Test
+    fun `checkin reconcile refreshes trakt playback only`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val controller = TraktWatchingNowStateController()
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = controller,
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildCheckinEnvelope(
+            item = movieItem("Arrival"),
+            message = null,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession()
+        )
+
+        adapter.reconcileSuccess(envelope)
+
+        coVerify(exactly = 0) { traktProgressService.refreshNow() }
+        coVerify(exactly = 1) { traktProgressService.refreshPlaybackOnly() }
+    }
+
+    @Test
     fun `pause action below 80 percent stays pause`() {
         val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
             item = movieItem("Arrival"),
@@ -283,6 +360,50 @@ class TraktScrobbleMutationAdapterTest {
         assertEquals(123, scrobbleBodies.first().show?.ids?.tmdb)
         assertEquals(98765, scrobbleBodies.last().episode?.ids?.trakt)
         assertEquals(null, scrobbleBodies.last().show)
+    }
+
+    @Test
+    fun `episode 404 rescue does not search show tvdb id as episode id`() = kotlinx.coroutines.test.runTest {
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktScrobbleMutationAdapter(
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktProgressService = traktProgressService,
+            watchingNowStateController = TraktWatchingNowStateController(),
+            playerSettingsDataStore = playerSettingsStore()
+        )
+        val envelope = TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
+            item = TraktScrobbleItem.Episode(
+                showTitle = "Australian Survivor",
+                showYear = null,
+                showIds = TraktIdsDto(tvdb = 303904),
+                season = 12,
+                number = 22,
+                episodeTitle = "Build a Raft"
+            ),
+            action = "start",
+            progressPercent = 0f,
+            rollbackState = TraktWatchingNowStateController.Snapshot(),
+            optimisticVersion = 1L,
+            session = testTraktSession(profileId = 2)
+        )
+
+        coEvery {
+            traktIntegrationProvider.scrobble(any(), "start", any())
+        } returns Response.error(404, "".toResponseBody())
+
+        val result = adapter.execute(envelope)
+
+        assertTrue(result is TraktMutationExecutionResult.Failure)
+        coVerify(exactly = 0) {
+            traktIntegrationProvider.searchById(
+                session = any(),
+                idType = "tvdb",
+                id = "303904",
+                type = "episode",
+                limit = 1
+            )
+        }
     }
 
     private fun movieItem(title: String) = TraktScrobbleItem.Movie(

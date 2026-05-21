@@ -60,7 +60,8 @@ enum class ResolvedField {
     ORIGINAL_NETWORK,
     LATEST_NETWORK,
     PLATFORM_NAME,
-    REMOTE_IDS
+    REMOTE_IDS,
+    CONTENT_TYPE
 }
 
 enum class FieldOwner {
@@ -191,7 +192,8 @@ data class ResolvedMetadataDocument(
     val sourceRoles: Map<ResolvedField, SourceRole> = emptyMap(),
     val sourceProviders: Map<ResolvedField, String> = emptyMap(),
     val rejectedCandidatesByField: Map<ResolvedField, List<Map<String, Any?>>> = emptyMap(),
-    val artwork: ArtworkBundle = ArtworkBundle()
+    val artwork: ArtworkBundle = ArtworkBundle(),
+    val mediaKind: MetadataMediaKind? = null
 )
 
 data class ResolverSchedule(

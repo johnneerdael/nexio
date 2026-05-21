@@ -124,6 +124,7 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
     } else {
         null
     }
+    currentEpisodeMetadata = episodeMetadata
 
     if (enrichment != null || episodeMetadata != null) {
         _uiState.update { state ->
@@ -131,6 +132,9 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
                 enrichment = enrichment,
                 currentEpisodeMetadata = episodeMetadata
             )
+        }
+        if (!hasRequestedScrobbleStartForCurrentItem) {
+            currentScrobbleItem = buildScrobbleItem()
         }
     }
 }

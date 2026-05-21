@@ -328,17 +328,25 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? 
     }
     val effectiveSeason = mappedEpisode?.season ?: currentSeason
     val effectiveEpisode = mappedEpisode?.episode ?: currentEpisode
+    val providerNativeCoordinate = unprojectTvdbDisplayCoordinateForScrobble(
+        contentId = rawContentId,
+        displaySeason = effectiveSeason,
+        displayEpisode = effectiveEpisode,
+        episodeMetadata = currentEpisodeMetadata
+    )
+    val scrobbleSeason = providerNativeCoordinate?.first ?: effectiveSeason
+    val scrobbleEpisode = providerNativeCoordinate?.second ?: effectiveEpisode
 
     val isEpisode = normalizedType in listOf("series", "tv") &&
-        effectiveSeason != null && effectiveEpisode != null
+        scrobbleSeason != null && scrobbleEpisode != null
 
     val item = if (isEpisode) {
         TrackingScrobbleItem.Episode(
             contentId = rawContentId,
             showTitle = contentName ?: title,
             showYear = parsedYear,
-            season = effectiveSeason ?: return null,
-            number = effectiveEpisode ?: return null,
+            season = scrobbleSeason,
+            number = scrobbleEpisode,
             episodeTitle = currentEpisodeTitle
         )
     } else {
@@ -349,6 +357,21 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? 
         )
     }
     return item
+}
+
+private fun unprojectTvdbDisplayCoordinateForScrobble(
+    contentId: String,
+    displaySeason: Int?,
+    displayEpisode: Int?,
+    episodeMetadata: com.nexio.tv.core.tvdb.TvEpisodeMetadata?
+): Pair<Int, Int>? {
+    if (!contentId.startsWith("tvdb:", ignoreCase = true)) return null
+    if (displaySeason == null || displayEpisode == null) return null
+    val order = episodeMetadata?.tvdbEpisodeOrder ?: return null
+    val defaultSeason = order.defaultSeason?.takeIf { it > 0 } ?: return null
+    val defaultEpisode = order.defaultEpisode?.takeIf { it > 0 } ?: return null
+    if (defaultSeason == displaySeason && defaultEpisode == displayEpisode) return null
+    return defaultSeason to defaultEpisode
 }
 
 /**

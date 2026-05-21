@@ -230,6 +230,14 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals("movie:imdb:tt123", membership.items.single().mediaKey)
         assertEquals("movie:imdb:tt123", membership.mediaIdentities.single().mediaKey)
         assertTrue(membership.externalIds.any { it.provider == "IMDB" && it.externalId == "tt123" })
+        assertTrue(
+            "Home catalog rail cache must stay fresh for at least 24h to avoid boot-time catalog refresh fanout",
+            membership.rail.expiresAtEpochMs - membership.rail.fetchedAtEpochMs >= 24L * 60L * 60L * 1000L
+        )
+        assertTrue(
+            "Home catalog rail cache must remain usable as stale data after fresh TTL expires",
+            membership.rail.staleUntilEpochMs > membership.rail.expiresAtEpochMs
+        )
     }
 
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {

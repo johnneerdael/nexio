@@ -117,7 +117,7 @@ class MetadataRouter @Inject constructor(
             )
         }
 
-        val kitsuId = animeIdentityIndex.resolveKitsuId(imdbId)
+        val kitsuId = animeIdentityIndex.resolveKitsuId(imdbId, normalized.mediaKind)
         if (kitsuId != null) {
             idMappingStore.persist(
                 IdMapping(
@@ -183,7 +183,7 @@ class MetadataRouter @Inject constructor(
             )
         }
 
-        val kitsuId = animeIdentityIndex.resolveKitsuId(parsedId)
+        val kitsuId = animeIdentityIndex.resolveKitsuId(parsedId, normalized.mediaKind)
         if (kitsuId != null) {
             idMappingStore.persist(
                 IdMapping(
@@ -232,7 +232,7 @@ class MetadataRouter @Inject constructor(
             )
         }
 
-        val kitsuId = animeIdentityIndex.resolveKitsuId(parsedId)
+        val kitsuId = animeIdentityIndex.resolveKitsuId(parsedId, normalized.mediaKind)
         if (kitsuId != null) {
             idMappingStore.persist(
                 IdMapping(

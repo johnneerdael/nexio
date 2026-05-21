@@ -768,6 +768,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
+    currentEpisodeMetadata = null
     playbackPreparationJob?.cancel()
     playbackPreparationJob = scope.launch {
         warmTraktEpisodeMappingForCurrentPlayback()

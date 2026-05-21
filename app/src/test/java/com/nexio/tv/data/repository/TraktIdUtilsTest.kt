@@ -33,6 +33,15 @@ class TraktIdUtilsTest {
     }
 
     @Test
+    fun toTraktShowProgressPathIdOrNull_rejects_tmdb_only_ids() {
+        assertNull(toTraktShowProgressPathIdOrNull("tmdb:114922"))
+        assertNull(toTraktShowProgressPathIdOrNull("tmdb:tv:114922"))
+        assertNull(toTraktShowProgressPathIdOrNull("tvdb:393268"))
+        assertEquals("171028", toTraktShowProgressPathIdOrNull("trakt:171028"))
+        assertEquals("tt9794044", toTraktShowProgressPathIdOrNull("tt9794044"))
+    }
+
+    @Test
     fun normalizeContentId_show_kind_prefers_tmdb() {
         val ids = TraktIdsDto(
             trakt = 1, slug = "breaking-bad",

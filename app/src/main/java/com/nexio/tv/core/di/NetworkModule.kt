@@ -57,11 +57,14 @@ import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.zip.GZIPInputStream
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -81,6 +84,9 @@ private object TraktHttpTrace {
     private val requestCounter = AtomicLong(0L)
     fun nextRequestId(): Long = requestCounter.incrementAndGet()
 }
+
+private fun ByteArray.isGzip(): Boolean =
+    size >= 2 && this[0] == 0x1f.toByte() && this[1] == 0x8b.toByte()
 
 private fun OkHttpClient.Builder.addKitsuBrowserHeaders(
     includeJsonApiHeaders: Boolean
@@ -458,12 +464,39 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("tmdb")
-    fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
+    fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
+        val tmdbClient = okHttpClient.newBuilder()
+            .cache(null)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                    .newBuilder()
+                    .header("Accept-Encoding", "gzip")
+                    .build()
+                val response = chain.proceed(request)
+                val body = response.body ?: return@addInterceptor response
+                val raw = body.bytes()
+                val decoded = if (
+                    response.header("Content-Encoding").equals("gzip", ignoreCase = true) ||
+                    raw.isGzip()
+                ) {
+                    GZIPInputStream(ByteArrayInputStream(raw)).use { it.readBytes() }
+                } else {
+                    raw
+                }
+                response.newBuilder()
+                    .removeHeader("Content-Encoding")
+                    .removeHeader("Content-Length")
+                    .body(decoded.toResponseBody(body.contentType()))
+                    .build()
+            }
+            .build()
+
+        return Retrofit.Builder()
             .baseUrl(MetadataProviderConfig.tmdbBaseUrl())
-            .client(okHttpClient)
+            .client(tmdbClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
+    }
 
     @Provides
     @Singleton

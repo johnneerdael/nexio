@@ -58,18 +58,25 @@ class KitsuDiscoveryService @Inject constructor(
         }.filterValues { it != null }
             .mapValues { it.value!! }
 
+        val preservedRows = if (!force) {
+            previousCurrentRowRecords.filterKeys { key ->
+                key in enabledCatalogs && key !in refreshedRows
+            }
+        } else {
+            emptyMap()
+        }
         val rows = if (catalogIds == null) {
-            refreshedRows
+            preservedRows + refreshedRows
         } else {
-            previousCurrentRowRecords - requestedCatalogIds.orEmpty() + refreshedRows
+            val requested = requestedCatalogIds.orEmpty()
+            val preservedRequestedRows = if (!force) {
+                previousCurrentRowRecords.filterKeys { key -> key in requested && key !in refreshedRows }
+            } else {
+                emptyMap()
+            }
+            previousCurrentRowRecords - requested + preservedRequestedRows + refreshedRows
         }
-        val currentPreferenceCatalogIds = sanitized.enabledCatalogIds()
-        val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
-            currentPreferenceCatalogIds
-        } else {
-            (previous.catalogIdsWithCurrentPreferences.intersect(currentPreferenceCatalogIds) - requestedCatalogIds.orEmpty()) +
-                enabledCatalogs.toSet()
-        }
+        val catalogIdsWithCurrentPreferences = rows.keys.intersect(sanitized.enabledCatalogIds())
 
         return KitsuDiscoverySnapshot(
             rowRecordsByCatalog = rows,

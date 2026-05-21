@@ -83,14 +83,44 @@ class KitsuDiscoveryServiceTest {
     }
 
     @Test
-    fun `missing results keep rail empty but present in expected preferences`() = runTest {
+    fun `missing results keep rail empty and not current in expected preferences`() = runTest {
         val service = FakeKitsuDiscoveryClient().createService()
         val prefs = KitsuCatalogPreferences(enabledCatalogs = setOf(KitsuCatalogIds.POPULAR_COMEDY_ANIME))
 
         val snapshot = service.refreshCatalogs(prefs, force = true)
 
         assertTrue(snapshot.rowsByCatalog.isEmpty())
-        assertEquals(setOf(KitsuCatalogIds.POPULAR_COMEDY_ANIME), snapshot.catalogIdsWithCurrentPreferences)
+        assertTrue(snapshot.catalogIdsWithCurrentPreferences.isEmpty())
+    }
+
+    @Test
+    fun `non forced full refresh preserves previous current rail when one enabled catalog returns empty`() = runTest {
+        val client = FakeKitsuDiscoveryClient(
+            catalogResults = mapOf(
+                KitsuCatalogIds.TRENDING_ANIME to listOf(animeResult(id = "1", canonicalTitle = "One Piece")),
+                KitsuCatalogIds.HIGHEST_RATED_ANIME to listOf(animeResult(id = "2", canonicalTitle = "Fullmetal Alchemist"))
+            )
+        )
+        val service = client.createService()
+        val prefs = KitsuCatalogPreferences(
+            enabledCatalogs = setOf(KitsuCatalogIds.TRENDING_ANIME, KitsuCatalogIds.HIGHEST_RATED_ANIME),
+            catalogOrder = listOf(KitsuCatalogIds.TRENDING_ANIME, KitsuCatalogIds.HIGHEST_RATED_ANIME)
+        )
+        val initial = service.refreshCatalogs(prefs, force = true)
+        client.catalogResults = mapOf(
+            KitsuCatalogIds.TRENDING_ANIME to listOf(animeResult(id = "3", canonicalTitle = "Naruto"))
+        )
+
+        val refreshed = service.refreshCatalogs(prefs, force = false)
+
+        assertEquals(
+            initial.rowsByCatalog.getValue(KitsuCatalogIds.HIGHEST_RATED_ANIME),
+            refreshed.rowsByCatalog[KitsuCatalogIds.HIGHEST_RATED_ANIME]
+        )
+        assertEquals(
+            setOf(KitsuCatalogIds.TRENDING_ANIME, KitsuCatalogIds.HIGHEST_RATED_ANIME),
+            refreshed.catalogIdsWithCurrentPreferences
+        )
     }
 
     @Test
@@ -145,7 +175,7 @@ class KitsuDiscoveryServiceTest {
     }
 
     private class FakeKitsuDiscoveryClient(
-        private val catalogResults: Map<String, List<KitsuAnimeResource>> = emptyMap()
+        var catalogResults: Map<String, List<KitsuAnimeResource>> = emptyMap()
     ) : KitsuDiscoveryClient {
         override suspend fun fetchCatalog(
             catalogId: String,

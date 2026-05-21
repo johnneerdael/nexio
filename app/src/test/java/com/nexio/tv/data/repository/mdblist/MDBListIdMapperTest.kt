@@ -67,11 +67,47 @@ class MDBListIdMapperTest {
         assertNull(payload.movie)
         assertEquals("tt0944947", payload.show?.ids?.imdb)
         assertEquals(1399, payload.show?.ids?.tmdb)
-        assertEquals(121361, payload.show?.ids?.tvdb)
+        assertNull(payload.show?.ids?.tvdb)
         assertEquals(1, payload.show?.season?.number)
         assertEquals(1, payload.show?.season?.episode?.number)
         assertEquals(42.0, payload.progress, 0.001)
         assertEquals("Nexio", payload.appVersion)
+    }
+
+    @Test
+    fun `episode scrobble identity rejects tvdb only payloads`() {
+        val item = TrackingScrobbleItem.Episode(
+            contentId = "tvdb:303904",
+            showTitle = "Australian Survivor",
+            showYear = null,
+            season = 12,
+            number = 22,
+            episodeTitle = "Build a Raft",
+            hydratedIds = ProviderIds(tvdb = "303904"),
+        )
+
+        assertEquals(false, MDBListIdMapper.hasScrobbleIdentity(item))
+        val payload = MDBListIdMapper.scrobblePayloadFor(item, progressPercent = 0f)
+        assertNull(payload.show?.ids?.tvdb)
+        assertNull(payload.show?.ids?.imdb)
+        assertNull(payload.show?.ids?.tmdb)
+    }
+
+    @Test
+    fun `scrobble progress is rounded to five total digits for MDBList validator`() {
+        val item = TrackingScrobbleItem.Episode(
+            contentId = "tmdb:114922",
+            showTitle = "Citadel",
+            showYear = 2023,
+            season = 2,
+            number = 2,
+            episodeTitle = "Cold Plunge",
+            hydratedIds = ProviderIds(tmdb = "114922"),
+        )
+
+        val payload = MDBListIdMapper.scrobblePayloadFor(item, progressPercent = 20.86837387084961f)
+
+        assertEquals(20.87, payload.progress, 0.0001)
     }
 
     @Test

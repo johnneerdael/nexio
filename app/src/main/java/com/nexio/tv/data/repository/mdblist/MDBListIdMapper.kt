@@ -11,6 +11,7 @@ import com.nexio.tv.data.remote.dto.mdblist.MDBListWatchlistMutationRequestDto
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.ProviderIds
+import kotlin.math.roundToInt
 
 object MDBListIdMapper {
     fun watchlistPayloadFor(item: LibraryEntryInput): MDBListWatchlistMutationRequestDto {
@@ -26,7 +27,7 @@ object MDBListIdMapper {
     }
 
     fun scrobblePayloadFor(item: TrackingScrobbleItem, progressPercent: Float): MDBListScrobbleRequestDto {
-        val progress = progressPercent.coerceIn(0f, 100f).toDouble()
+        val progress = ((progressPercent.coerceIn(0f, 100f).toDouble() * 100.0).roundToInt() / 100.0)
         return when (item) {
             is TrackingScrobbleItem.Movie -> MDBListScrobbleRequestDto(
                 movie = MDBListScrobbleMovieDto(ids = scrobbleIdsFor(item)),
@@ -45,6 +46,11 @@ object MDBListIdMapper {
         }
     }
 
+    fun hasScrobbleIdentity(item: TrackingScrobbleItem): Boolean {
+        val ids = scrobbleIdsFor(item)
+        return ids.imdb != null || ids.tmdb != null
+    }
+
     fun idsFrom(imdb: String?, tmdb: Int?, tvdb: Int?): ProviderIds = ProviderIds(
         imdb = imdb?.takeIf { it.isNotBlank() },
         tmdb = tmdb?.toString(),
@@ -57,7 +63,7 @@ object MDBListIdMapper {
         return MDBListScrobbleIdsDto(
             tmdb = ids?.tmdb?.toIntOrNull() ?: parsed.tmdb,
             imdb = ids?.imdb?.takeIf { it.isNotBlank() } ?: parsed.imdb,
-            tvdb = ids?.tvdb?.toIntOrNull(),
+            tvdb = null,
         )
     }
 

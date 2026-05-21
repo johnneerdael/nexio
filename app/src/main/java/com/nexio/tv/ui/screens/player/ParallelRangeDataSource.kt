@@ -215,8 +215,9 @@ internal class ParallelRangeDataSource(
             val chunk = readBootstrapChunk(probeSource, bootstrapBytes)
             bootstrapChunk = chunk
             bootstrapStartPosition = position
-            // Avoid startup churn from immediate background fetches during repeated startup opens,
-            // but do not redownload the active seek chunk from its start.
+            // Keep the probe connection alive through the remainder of the active chunk. Closing
+            // it after the small bootstrap window forces playback to wait for chunk 0 to be
+            // redownloaded from byte 0, which can leave startup stuck buffering after first frame.
             bootstrapPrefetchDeferred = true
             if (position == 0L) {
                 updateBootstrapCache(
@@ -231,11 +232,10 @@ internal class ParallelRangeDataSource(
                         createdAtUptimeMs = SystemClock.uptimeMillis()
                     )
                 )
-                probeSource.close()
-            } else {
-                continuationSource = probeSource
-                continuationEndPositionExclusive = minOf((firstChunkIndex + 1L) * chunkSize, totalFileLength)
             }
+            continuationSource = probeSource
+            continuationEndPositionExclusive = minOf((firstChunkIndex + 1L) * chunkSize, totalFileLength)
+            scheduleChunks()
         } else {
             probeSource.close()
         }
@@ -668,6 +668,10 @@ internal class ParallelRangeDataSource(
                         return@ParallelRangeDataSource null
                     }
                     val cached = startupBootstrapCache ?: return@ParallelRangeDataSource null
+                    if (cached.bootstrapSize.toLong() < chunkSize) {
+                        startupBootstrapCache = null
+                        return@ParallelRangeDataSource null
+                    }
                     val isFresh = SystemClock.uptimeMillis() - cached.createdAtUptimeMs <= 15_000L
                     if (!isFresh) {
                         startupBootstrapCache = null

@@ -77,7 +77,18 @@ class SimklAuthService @Inject constructor(
                 fetchUserSettings(session)
                 stableMutationAccountMaterial(getCurrentAuthState(session))
             }
-            ?: throw IllegalStateException("SIMKL mutation scope requires provider account identity")
+        if (accountMaterial == null) {
+            val tokenMaterial = getCurrentAuthState(session).accessToken?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("SIMKL mutation scope requires provider account identity")
+            Log.w(
+                "SimklAuthService",
+                "SIMKL mutation scope missing provider account identity; using token-scoped credential hash"
+            )
+            return session.copy(
+                credentialHash = integrationCredentialHash(IntegrationProvider.SIMKL, "token:$tokenMaterial"),
+                accountIdHash = null
+            )
+        }
         return session.copy(
             credentialHash = integrationCredentialHash(IntegrationProvider.SIMKL, "account:$accountMaterial"),
             accountIdHash = integrationCredentialHash(IntegrationProvider.SIMKL, accountMaterial)

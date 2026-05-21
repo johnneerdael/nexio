@@ -642,7 +642,7 @@ object StreamPresentationEngine {
             DeduplicationMode.DISABLED -> items
             DeduplicationMode.SINGLE_RESULT -> listOf(pickBestRepresentative(items))
             DeduplicationMode.PER_SERVICE -> items
-                .groupBy { it.parsed.serviceId ?: "__missing_service__" }
+                .groupBy { providerRetentionKey(it) }
                 .values
                 .map { pickBestRepresentative(it) }
             DeduplicationMode.PER_ADDON -> items
@@ -662,6 +662,14 @@ object StreamPresentationEngine {
             StreamTransportKind.YOUTUBE -> 5
             StreamTransportKind.OTHER -> 6
         }
+    }
+
+    private fun providerRetentionKey(item: StreamCardModel): String {
+        item.parsed.serviceId
+            ?.lowercase(Locale.US)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return "service:$it" }
+        return "addon:${addonPriority(item)}"
     }
 
     private fun pickBestRepresentative(items: List<StreamCardModel>): StreamCardModel {
@@ -1119,7 +1127,7 @@ private object StreamDeduplicationDefaults {
         multiGroupBehavior = MultiGroupBehavior.CONSERVATIVE,
         cached = DeduplicationMode.PER_SERVICE,
         uncached = DeduplicationMode.PER_SERVICE,
-        p2p = DeduplicationMode.SINGLE_RESULT,
+        p2p = DeduplicationMode.PER_SERVICE,
         http = DeduplicationMode.DISABLED,
         live = DeduplicationMode.DISABLED,
         youtube = DeduplicationMode.DISABLED,
@@ -1140,7 +1148,7 @@ internal object AioStyleStreamParser {
     }
 
     private fun aliasRegex(alias: String): Regex {
-        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_-])""")
+        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_+\-⚡🚀])""")
     }
 
     private val resolutionPatterns = linkedMapOf(
@@ -1229,7 +1237,7 @@ internal object AioStyleStreamParser {
         "PM" to listOf("premiumize", "pm"),
         "AD" to listOf("alldebrid", "all-debrid"),
         "DL" to listOf("debridlink", "debrid-link", "dlink"),
-        "TB" to listOf("torbox"),
+        "TB" to listOf("torbox", "tb"),
         "ED" to listOf("easydebrid", "easy-debrid"),
         "PK" to listOf("pikpak")
     )
@@ -1391,11 +1399,16 @@ internal object AioStyleStreamParser {
                     normalizedLine.endsWith(".avi", ignoreCase = true)
             }
             .joinToString(" ")
-        val lowered = listOfNotNull(
-            stream.name?.takeIf { it.isNotBlank() },
-            descriptionSignals.takeIf { it.isNotBlank() },
-            stream.addonName.takeIf { it.isNotBlank() }
-        ).joinToString(" ").lowercase(Locale.US)
+        return firstMatchingServiceId(stream.name)
+            ?: firstMatchingServiceId(descriptionSignals)
+            ?: firstMatchingServiceId(stream.addonName)
+    }
+
+    private fun firstMatchingServiceId(text: String?): String? {
+        val lowered = text
+            ?.takeIf { it.isNotBlank() }
+            ?.lowercase(Locale.US)
+            ?: return null
         return servicePatterns.entries.firstOrNull { (_, aliases) ->
             aliases.any { alias ->
                 aliasRegex(alias).containsMatchIn(lowered)

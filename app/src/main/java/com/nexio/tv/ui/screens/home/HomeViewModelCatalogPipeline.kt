@@ -967,7 +967,7 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             traktCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_prefs")
             if (activeProfileTraktAuthenticated &&
-                shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot) &&
+                shouldRefreshTraktDiscoveryForHomeStateWithPersistedCache(prefs, traktDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("trakt_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
@@ -1402,7 +1402,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
     val refreshedCatalogCount = AtomicInteger(0)
     val refreshTraktDiscovery = activeProfileTraktAuthenticated &&
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
-            .let { snap -> shouldRefreshTraktDiscoveryForHomeState(traktCatalogPreferences, snap) }
+        .let { snap -> shouldRefreshTraktDiscoveryForHomeStateWithPersistedCache(traktCatalogPreferences, snap) }
     // The decision helpers need a full snapshot for their predicate but only briefly:
     // wrap in `let` so the snapshot has no named local and is GC-eligible the moment
     // the boolean is computed. Without `let`, the snapshot would stay in scope as
@@ -4328,13 +4328,33 @@ internal fun shouldRefreshTraktDiscoveryForHomeState(
 
 private const val TRAKT_DISCOVERY_HOME_CACHE_TTL_MS = 24L * 60L * 60L * 1000L
 
+private fun HomeViewModel.shouldRefreshTraktDiscoveryForHomeStateWithPersistedCache(
+    prefs: TraktCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    nowMs: Long = System.currentTimeMillis()
+): Boolean {
+    if (!shouldAttemptSerializedTraktDiscoveryRefresh(prefs)) return false
+    if (hasFreshPersistedSyntheticSnapshot() &&
+        persistedSyntheticGroupsCoverExpectedKeys(
+            groups = persistedTraktSyntheticGroups,
+            expectedKeys = buildExpectedConfiguredTraktOrderKeys(prefs)
+        )
+    ) {
+        return false
+    }
+    return shouldRefreshTraktDiscoveryForHomeState(prefs, snapshot, nowMs)
+}
+
 private fun HomeViewModel.shouldRefreshTmdbDiscoveryForHomeState(
     prefs: TmdbCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 ): Boolean {
     if (!shouldRefreshTmdbDiscoveryForState(prefs, snapshot)) return false
     return !hasFreshPersistedSyntheticSnapshot() ||
-        persistedTmdbSyntheticGroupsMatchingPreferences(prefs).isEmpty()
+        !persistedSyntheticGroupsCoverExpectedKeys(
+            groups = persistedTmdbSyntheticGroupsMatchingPreferences(prefs),
+            expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
+        )
 }
 
 private fun HomeViewModel.shouldRefreshKitsuDiscoveryForHomeState(
@@ -4343,7 +4363,22 @@ private fun HomeViewModel.shouldRefreshKitsuDiscoveryForHomeState(
 ): Boolean {
     if (!shouldRefreshKitsuDiscoveryForState(prefs, snapshot)) return false
     return !hasFreshPersistedSyntheticSnapshot() ||
-        persistedKitsuSyntheticGroupsMatchingPreferences(prefs).isEmpty()
+        !persistedSyntheticGroupsCoverExpectedKeys(
+            groups = persistedKitsuSyntheticGroupsMatchingPreferences(prefs),
+            expectedKeys = buildExpectedConfiguredKitsuOrderKeys(prefs)
+        )
+}
+
+private fun persistedSyntheticGroupsCoverExpectedKeys(
+    groups: List<PersistedSyntheticCatalogGroup>,
+    expectedKeys: List<String>
+): Boolean {
+    if (expectedKeys.isEmpty()) return true
+    val publishableKeys = groups.mapNotNullTo(linkedSetOf()) { group ->
+        val hasItems = group.rows.any { row -> row.catalogId == group.orderKey && row.items.isNotEmpty() }
+        if (hasItems) group.orderKey else null
+    }
+    return expectedKeys.all { key -> key in publishableKeys }
 }
 
 private fun HomeViewModel.hasFreshPersistedSyntheticSnapshot(): Boolean {

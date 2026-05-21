@@ -149,7 +149,7 @@ class SimklScrobbleService @Inject constructor(
     fun observeWatchingNowState(): StateFlow<WatchingNowState> = watchingNowState
 
     private suspend fun canMutateWatchingState(profileId: Int): Boolean =
-        trackingProviderStateService.currentState(profileId).simklAuthenticated
+        runCatching { accountSession(profileId) }.isSuccess
 
     private suspend fun submitMutation(request: SimklWatchingMutationRequest): SimklScrobbleMutationResult {
         val result = CompletableDeferred<SimklScrobbleMutationResult>()

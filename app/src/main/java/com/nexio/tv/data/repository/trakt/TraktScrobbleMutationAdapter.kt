@@ -63,8 +63,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
 
     override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
         when {
-            envelope.isCheckIn() -> traktProgressService.refreshNow()
-            envelope.scrobbleAction() == "stop" -> traktProgressService.refreshNow()
+            envelope.isCheckIn() -> traktProgressService.refreshPlaybackOnly()
+            envelope.scrobbleAction() == "stop" -> traktProgressService.refreshPlaybackOnly()
         }
         if (envelope.isCompletedStopScrobble()) {
             envelope.toUnifiedWatchlistMembershipOrNull()?.let { membership ->
@@ -428,10 +428,6 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 ?.asString
                 ?.takeIf { it.isNotBlank() }
                 ?.let { candidates += EpisodeSearchCandidate("imdb", it) }
-            payload.get(PAYLOAD_SHOW_TVDB)
-                ?.takeIf { !it.isJsonNull }
-                ?.asInt
-                ?.let { candidates += EpisodeSearchCandidate("tvdb", it.toString()) }
             return candidates
         }
 

@@ -2039,32 +2039,104 @@ private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog
         if (!livePlayer.playWhenReady || livePlayer.playbackState != Player.STATE_BUFFERING) return@launch
         val currentPosition = livePlayer.currentPosition.coerceAtLeast(0L)
         if (currentPosition > PlayerRuntimeController.POST_FIRST_FRAME_STUCK_POSITION_MS) return@launch
+        val initialBufferedPosition = livePlayer.bufferedPosition.coerceAtLeast(0L)
+        val initialTotalBufferedDuration = livePlayer.totalBufferedDuration.coerceAtLeast(0L)
 
         val diskSpoolActive = mediaSourceFactory.isDiskSpoolSessionActive()
+        if (diskSpoolActive || initialTotalBufferedDuration >=
+            PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_DELIVERY_BUFFER_MS
+        ) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "POST_FIRST_FRAME_BUFFERING: buffering still has data delivery in flight; " +
+                    "skipping audio recovery " +
+                    "delayMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS} " +
+                    "positionMs=$currentPosition " +
+                    "bufferedPositionMs=$initialBufferedPosition " +
+                    "totalBufferedDurationMs=$initialTotalBufferedDuration " +
+                    "diskSpool=$diskSpoolActive " +
+                    "host=${currentStreamUrl.safeHost()}"
+            )
+            postFirstFrameBufferingWatchdogJob = null
+            maybeSchedulePostFirstFrameBufferingWatchdog(
+                playbackSessionId = playbackSessionId,
+                kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled
+            )
+            return@launch
+        }
+
+        delay(PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_STAGNATION_OBSERVE_MS)
+
+        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+        if (!hasRenderedFirstFrame || userPausedManually) return@launch
+        val observedPlayer = _exoPlayer ?: return@launch
+        if (!observedPlayer.playWhenReady ||
+            observedPlayer.playbackState != Player.STATE_BUFFERING
+        ) {
+            return@launch
+        }
+        val observedPosition = observedPlayer.currentPosition.coerceAtLeast(0L)
+        if (observedPosition > PlayerRuntimeController.POST_FIRST_FRAME_STUCK_POSITION_MS) return@launch
+        val observedBufferedPosition = observedPlayer.bufferedPosition.coerceAtLeast(0L)
+        val observedTotalBufferedDuration = observedPlayer.totalBufferedDuration.coerceAtLeast(0L)
+        val observedDiskSpoolActive = mediaSourceFactory.isDiskSpoolSessionActive()
+        if (observedDiskSpoolActive ||
+            !postFirstFrameBufferingAppearsStagnant(
+                initialBufferedPositionMs = initialBufferedPosition,
+                initialTotalBufferedDurationMs = initialTotalBufferedDuration,
+                observedBufferedPositionMs = observedBufferedPosition,
+                observedTotalBufferedDurationMs = observedTotalBufferedDuration
+            )
+        ) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "POST_FIRST_FRAME_BUFFERING: buffering advanced during observation; " +
+                    "skipping audio recovery " +
+                    "delayMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS} " +
+                    "observeMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_STAGNATION_OBSERVE_MS} " +
+                    "positionMs=$observedPosition " +
+                    "bufferedPositionMs=$initialBufferedPosition->$observedBufferedPosition " +
+                    "totalBufferedDurationMs=$initialTotalBufferedDuration->$observedTotalBufferedDuration " +
+                    "diskSpool=$observedDiskSpoolActive " +
+                    "host=${currentStreamUrl.safeHost()}"
+            )
+            postFirstFrameBufferingWatchdogJob = null
+            maybeSchedulePostFirstFrameBufferingWatchdog(
+                playbackSessionId = playbackSessionId,
+                kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled
+            )
+            return@launch
+        }
+
         Log.w(
             PlayerRuntimeController.TAG,
             "POST_FIRST_FRAME_BUFFERING: stuck buffering after first frame " +
                 "delayMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS} " +
-                "positionMs=$currentPosition " +
+                "observeMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_STAGNATION_OBSERVE_MS} " +
+                "positionMs=$observedPosition " +
+                "bufferedPositionMs=$initialBufferedPosition->$observedBufferedPosition " +
+                "totalBufferedDurationMs=$initialTotalBufferedDuration->$observedTotalBufferedDuration " +
                 "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
                 "audioDisabled=$isAudioDisabledForCurrentPlayback " +
-                "diskSpool=$diskSpoolActive " +
+                "diskSpool=$observedDiskSpoolActive " +
                 "host=${currentStreamUrl.safeHost()}"
         )
-        if (diskSpoolActive) {
-            Log.i(
-                PlayerRuntimeController.TAG,
-                "POST_FIRST_FRAME_BUFFERING: disk spool active; buffering stall is " +
-                    "data-delivery latency, not an audio init failure — skipping safe audio recovery"
-            )
-            return@launch
-        }
         handleAudioTrackInitializationFailure(
             kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
-            fromPositionMs = currentPosition,
+            fromPositionMs = observedPosition,
             source = "post-first-frame buffering watchdog"
         )
     }
+}
+
+internal fun postFirstFrameBufferingAppearsStagnant(
+    initialBufferedPositionMs: Long,
+    initialTotalBufferedDurationMs: Long,
+    observedBufferedPositionMs: Long,
+    observedTotalBufferedDurationMs: Long
+): Boolean {
+    return observedBufferedPositionMs <= initialBufferedPositionMs &&
+        observedTotalBufferedDurationMs <= initialTotalBufferedDurationMs
 }
 
 private fun PlaybackException.isStuckPlayingNoProgress(): Boolean {

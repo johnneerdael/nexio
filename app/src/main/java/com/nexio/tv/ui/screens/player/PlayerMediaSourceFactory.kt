@@ -724,7 +724,7 @@ internal class PlayerMediaSourceFactory(
         transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
         onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> }
     ): DataSource.Factory {
-        parallelStartupPrefetchUnlocked.set(!(parallelConnectionsEnabled && !isHls && !isDash))
+        parallelStartupPrefetchUnlocked.set(true)
         activeReadBytePosition.set(0L)
         createDiskSpoolFactoryIfEligible(
             url = url,
@@ -1131,6 +1131,10 @@ internal class PlayerMediaSourceFactory(
             warmAheadEnabledForStream = false
         ).playback
         return profile.connectionCount to profile.chunkSizeMb
+    }
+
+    internal fun isParallelStartupPrefetchUnlockedForTesting(): Boolean {
+        return parallelStartupPrefetchUnlocked.get()
     }
 
     internal fun parallelProviderProfilesForTesting(

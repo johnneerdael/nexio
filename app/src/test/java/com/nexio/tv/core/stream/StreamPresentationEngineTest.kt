@@ -484,7 +484,7 @@ class StreamPresentationEngineTest {
                 ),
                 stream(
                     filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
-                    addonName = "Addon B",
+                    addonName = "Addon A",
                     infoHash = "abc123"
                 )
             ),
@@ -599,6 +599,129 @@ class StreamPresentationEngineTest {
 
         assertEquals(2, result.items.size)
         assertEquals(listOf("PM", "RD"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
+    }
+
+    @Test
+    fun `dedupe keeps one duplicate per provider when service id is missing`() {
+        val sharedHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Provider A",
+                    infoHash = sharedHash
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Provider B",
+                    infoHash = sharedHash
+                )
+            ),
+            availableAddons = listOf("Provider A", "Provider B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(listOf("Provider A", "Provider B"), result.items.map { it.stream.addonName }.sorted())
+        assertEquals(0, result.diagnostics.droppedDeduplicateCount)
+    }
+
+    @Test
+    fun `dedupe keeps one p2p duplicate per parsed service`() {
+        val sharedHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Comet",
+                    name = "PM",
+                    description = "Premiumize",
+                    infoHash = sharedHash
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Comet",
+                    name = "TB",
+                    description = "TorBox",
+                    infoHash = sharedHash
+                )
+            ),
+            availableAddons = listOf("Comet"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(listOf("PM", "TB"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
+    }
+
+    @Test
+    fun `dedupe keeps comet premiumize rows and drops same provider exact size duplicate`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "The Boys S05E08 Blood and Bone 2160p AMZN WEB-DL DDP5 1 Atmos DV HDR H 265-FLUX.mkv",
+                    name = "[PM⚡] Comet 2160p",
+                    description = "📄 The Boys S05E08 Blood and Bone 2160p AMZN WEB-DL DDP5 1 Atmos DV HDR H 265-FLUX.mkv\n💾 6.8 GB 🔎 DebridAccount|torbox",
+                    addonName = "Comet | PM",
+                    videoSizeBytes = 7_261_456_118L,
+                    url = "https://comet.feels.legal/playback/flux"
+                ),
+                stream(
+                    filename = "The.Boys.S05E08.1080p.HEVC.x265-MeGusta.mkv",
+                    name = "[PM⚡] Comet 1080p",
+                    description = "📄 The.Boys.S05E08.1080p.HEVC.x265-MeGusta.mkv\n💾 834.1 MB 🔎 DebridAccount|realdebrid",
+                    addonName = "Comet | PM",
+                    videoSizeBytes = 874_608_950L,
+                    url = "https://comet.feels.legal/playback/megusta"
+                ),
+                stream(
+                    filename = "The.Boys.S05E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv",
+                    name = "[PM⚡] Comet 1080p",
+                    description = "📄 The.Boys.S05E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv\n💾 834.1 MB 🔎 DebridAccount|realdebrid",
+                    addonName = "Comet | PM",
+                    videoSizeBytes = 874_608_950L,
+                    url = "https://comet.feels.legal/playback/megusta-eztv"
+                )
+            ),
+            availableAddons = listOf("Comet | PM"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 5, episode = 8)
+        )
+
+        assertEquals(2, result.items.size)
+        assertTrue(result.items.any { it.parsed.sizeBytes == 7_261_456_118L })
+        assertEquals(1, result.items.count { it.parsed.sizeBytes == 874_608_950L })
+        assertEquals(listOf("PM", "PM"), result.items.map { it.parsed.serviceId })
+    }
+
+    @Test
+    fun `parser recognizes torbox abbreviation badges`() {
+        val parsed = AioStrictStreamParser.parse(
+            stream(
+                filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                name = "[TB⚡] Comet 1080p",
+                description = "📄 Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                addonName = "Comet"
+            )
+        )
+
+        assertEquals("TB", parsed.serviceId)
+        assertEquals(true, parsed.isCached)
+        assertEquals(StreamTransportKind.CACHED, parsed.transportKind)
     }
 
     @Test

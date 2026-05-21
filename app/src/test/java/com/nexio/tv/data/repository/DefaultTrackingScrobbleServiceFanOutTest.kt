@@ -65,8 +65,20 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         stubState(trakt = true, simkl = true, mdblist = true)
         newService().scrobbleStart(movieItem(), 10f, owner())
 
-        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, any()) }
-        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, "session-x") }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, "session-x") }
+        coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
+    }
+
+    @Test
+    fun `scrobbleStart keeps fanout siblings alive when one provider fails before network`() = runTest {
+        stubState(trakt = true, simkl = true, mdblist = true)
+        coEvery { simklService.scrobbleStart(any(), any(), any(), any()) } throws IllegalStateException("simkl local failure")
+
+        newService().scrobbleStart(movieItem(), 10f, owner())
+
+        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, "session-x") }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, "session-x") }
         coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
     }
 
@@ -86,7 +98,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         newService().scrobbleStart(movieItem(), 10f, owner())
 
         coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, any()) }
-        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
         coVerify(exactly = 0) { mdbListService.scrobbleStart(any(), any(), any(), any()) }
     }
 
@@ -96,7 +108,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         newService().scrobbleStart(movieItem(), 10f, owner())
 
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
-        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
         coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
     }
 

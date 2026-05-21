@@ -283,6 +283,7 @@ class FieldResolver @Inject constructor(
 
         return ResolvedMetadataDocument(
             canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
+            mediaKind = fields[ResolvedField.CONTENT_TYPE] as? MetadataMediaKind,
             title = fields[ResolvedField.TITLE] as? String,
             overview = fields[ResolvedField.OVERVIEW] as? String,
             poster = artworkString(fields[ResolvedField.POSTER], posterRef),
@@ -565,6 +566,7 @@ internal fun buildDocumentFromFieldsForTest(
 ): ResolvedMetadataDocument =
     ResolvedMetadataDocument(
         canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
+        mediaKind = fields[ResolvedField.CONTENT_TYPE] as? MetadataMediaKind,
         title = fields[ResolvedField.TITLE] as? String,
         overview = null,
         poster = null,

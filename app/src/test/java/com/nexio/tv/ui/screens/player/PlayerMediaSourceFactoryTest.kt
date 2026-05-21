@@ -103,6 +103,24 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun progressivePlayback_unlocksParallelPrefetchImmediatelyForStartup() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
+        ).apply {
+            useParallelConnections = true
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertTrue(dataSourceFactory is ParallelRangeDataSource.Factory)
+        assertTrue(factory.isParallelStartupPrefetchUnlockedForTesting())
+    }
+
+    @Test
     fun progressivePlayback_usesPlainHttpDatasourceWhenParallelDisabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),

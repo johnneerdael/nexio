@@ -8,6 +8,7 @@ import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
+import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -58,6 +59,43 @@ class SimklScrobbleServiceTest {
 
         assertEquals(listOf(1, 2), envelopes.map { it.profileId })
         coVerify(exactly = 2) { coordinator.enqueueAndDrain(any()) }
+    }
+
+    @Test
+    fun `scrobbleStart enqueues when simkl account session exists even if provider state is stale`() = runTest {
+        val trackingProviderStateService = mockk<TrackingProviderStateService>()
+        val coordinator = mockk<ProviderMutationOutboxCoordinator>()
+        val controller = TraktWatchingNowStateController()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+
+        coEvery { trackingProviderStateService.currentState(any()) } returns EffectiveTrackingProviderState(
+            simklAuthenticated = false
+        )
+        coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
+
+        val profileManager = mockk<ProfileManager> {
+            every { activeProfileId } returns MutableStateFlow(1)
+            every { activeProfileSession } returns MutableStateFlow(
+                ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+            )
+        }
+        val accountScopeProvider = object : TrackingAccountScopeProvider {
+            override suspend fun accountScopedSession(provider: TrackingProvider, profileId: Int): TrackingAuthSession =
+                testSimklSession(profileId = profileId, credentialHash = "token-scoped")
+        }
+        val service = SimklScrobbleService(
+            trackingProviderStateService = trackingProviderStateService,
+            watchingNowStateController = controller,
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = profileManager,
+            traceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink, sessionId = { null }),
+            accountScopeProvider = accountScopeProvider
+        )
+
+        service.scrobbleStart(movieItem("tmdb:114922", "Citadel"), progressPercent = 23.34f, ownerProfileId = 1, ownerSessionId = "session-1")
+
+        assertEquals(1, envelopes.size)
+        assertEquals(TrackingProvider.SIMKL, envelopes.single().provider)
     }
 
     private fun movieItem(contentId: String, title: String) = TrackingScrobbleItem.Movie(

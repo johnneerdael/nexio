@@ -30,6 +30,7 @@ import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.EpisodeMappingEntry
@@ -97,6 +98,8 @@ class PlayerRuntimeController(
         internal const val SEEK_FIRST_FRAME_TIMEOUT_MS = 5_000L
         internal const val SEEK_PROGRESS_TIMEOUT_MS = 7_000L
         internal const val POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS = 8_000L
+        internal const val POST_FIRST_FRAME_BUFFERING_STAGNATION_OBSERVE_MS = 4_000L
+        internal const val POST_FIRST_FRAME_BUFFERING_DELIVERY_BUFFER_MS = 1_000L
         internal const val POST_FIRST_FRAME_STUCK_POSITION_MS = 500L
         internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
         internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "Nexio-addon-sub:"
@@ -185,6 +188,7 @@ class PlayerRuntimeController(
     internal var currentSeason: Int? = initialSeason
     internal var currentEpisode: Int? = initialEpisode
     internal var currentEpisodeTitle: String? = initialEpisodeTitle
+    internal var currentEpisodeMetadata: TvEpisodeMetadata? = null
 
     internal val _uiState = MutableStateFlow(
         PlayerUiState(

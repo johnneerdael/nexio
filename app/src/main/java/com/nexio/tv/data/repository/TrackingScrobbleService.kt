@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -90,22 +91,38 @@ class DefaultTrackingScrobbleService @Inject constructor(
 
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
         val providerState = providerState(owner)
-        coroutineScope {
+        supervisorScope {
             if (providerState.traktAuthenticated) {
                 launch {
-                    toTraktItem(item)?.let { traktItem ->
-                        traktScrobbleService.scrobbleStart(traktItem, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        toTraktItem(item)?.let { traktItem ->
+                            traktScrobbleService.scrobbleStart(
+                                traktItem,
+                                progressPercent,
+                                owner.ownerProfileId,
+                                owner.ownerSessionId
+                            )
+                        }
                     }
                 }
             }
-            if (providerState.simklAuthenticated) {
+            if (providerState.hasAuthenticatedProvider) {
                 launch {
-                    simklScrobbleService.scrobbleStart(item, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        simklScrobbleService.scrobbleStart(
+                            item,
+                            progressPercent,
+                            owner.ownerProfileId,
+                            owner.ownerSessionId
+                        )
+                    }
                 }
             }
             if (providerState.mdbListAuthenticated) {
                 launch {
-                    mdbListScrobbleService?.scrobbleStart(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    runCatching {
+                        mdbListScrobbleService?.scrobbleStart(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    }
                 }
             }
         }
@@ -113,22 +130,38 @@ class DefaultTrackingScrobbleService @Inject constructor(
 
     override suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
         val providerState = providerState(owner)
-        coroutineScope {
+        supervisorScope {
             if (providerState.traktAuthenticated) {
                 launch {
-                    toTraktItem(item)?.let { traktItem ->
-                        traktScrobbleService.scrobbleStop(traktItem, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        toTraktItem(item)?.let { traktItem ->
+                            traktScrobbleService.scrobbleStop(
+                                traktItem,
+                                progressPercent,
+                                owner.ownerProfileId,
+                                owner.ownerSessionId
+                            )
+                        }
                     }
                 }
             }
-            if (providerState.simklAuthenticated) {
+            if (providerState.hasAuthenticatedProvider) {
                 launch {
-                    simklScrobbleService.scrobbleStop(item, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        simklScrobbleService.scrobbleStop(
+                            item,
+                            progressPercent,
+                            owner.ownerProfileId,
+                            owner.ownerSessionId
+                        )
+                    }
                 }
             }
             if (providerState.mdbListAuthenticated) {
                 launch {
-                    mdbListScrobbleService?.scrobbleStop(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    runCatching {
+                        mdbListScrobbleService?.scrobbleStop(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    }
                 }
             }
         }
@@ -136,22 +169,38 @@ class DefaultTrackingScrobbleService @Inject constructor(
 
     override suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
         val providerState = providerState(owner)
-        coroutineScope {
+        supervisorScope {
             if (providerState.traktAuthenticated) {
                 launch {
-                    toTraktItem(item)?.let { traktItem ->
-                        traktScrobbleService.scrobblePause(traktItem, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        toTraktItem(item)?.let { traktItem ->
+                            traktScrobbleService.scrobblePause(
+                                traktItem,
+                                progressPercent,
+                                owner.ownerProfileId,
+                                owner.ownerSessionId
+                            )
+                        }
                     }
                 }
             }
-            if (providerState.simklAuthenticated) {
+            if (providerState.hasAuthenticatedProvider) {
                 launch {
-                    simklScrobbleService.scrobblePause(item, progressPercent, owner.ownerProfileId)
+                    runCatching {
+                        simklScrobbleService.scrobblePause(
+                            item,
+                            progressPercent,
+                            owner.ownerProfileId,
+                            owner.ownerSessionId
+                        )
+                    }
                 }
             }
             if (providerState.mdbListAuthenticated) {
                 launch {
-                    mdbListScrobbleService?.scrobblePause(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    runCatching {
+                        mdbListScrobbleService?.scrobblePause(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)
+                    }
                 }
             }
         }
