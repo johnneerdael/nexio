@@ -4,6 +4,8 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.CancellationException
@@ -51,10 +53,6 @@ internal suspend fun PlayerRuntimeController.warmTvdbScrobbleCoordinateForCurren
         clearTvdbScrobbleCoordinate()
         return
     }
-    if (!rawContentId.startsWith("tvdb:", ignoreCase = true)) {
-        clearTvdbScrobbleCoordinate()
-        return
-    }
     val normalizedType = contentType?.trim()?.lowercase()
     if (normalizedType !in listOf("series", "tv")) {
         clearTvdbScrobbleCoordinate()
@@ -75,26 +73,57 @@ internal suspend fun PlayerRuntimeController.warmTvdbScrobbleCoordinateForCurren
 
     try {
         val ids = hydratedIdsForScrobbleProjection(rawContentId)
-        val tmdbId = ids.tmdb?.trim()?.takeIf { it.isNotEmpty() } ?: run {
+        val tmdbId = ids.tmdb?.trim()?.takeIf { it.isNotEmpty() }
+            ?: rawContentId.takeIf { it.startsWith("tmdb:", ignoreCase = true) }
+                ?.removePrefix("tmdb:tv:")
+                ?.removePrefix("tmdb:")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: run {
+                clearTvdbScrobbleCoordinate()
+                return
+            }
+        val tvdbContentId = if (rawContentId.startsWith("tvdb:", ignoreCase = true)) {
+            rawContentId
+        } else {
+            val tvdbId = ids.tvdb?.trim()?.takeIf { it.isNotEmpty() } ?: run {
+                clearTvdbScrobbleCoordinate()
+                return
+            }
+            val orderResolution = tvEpisodeOrderResolver.resolve(
+                tmdbTvId = normalizeTmdbTvEpisodeOrderKey(tmdbId),
+                providerIds = ids
+            )
+            if (orderResolution.provider != TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                clearTvdbScrobbleCoordinate()
+                return
+            }
+            "tvdb:$tvdbId"
+        }
+        val normalizedTmdbId = tmdbId
+            .removePrefix("tmdb:tv:")
+            .removePrefix("tmdb:")
+            .trim()
+            .takeIf { it.isNotEmpty() } ?: run {
             clearTvdbScrobbleCoordinate()
             return
         }
         val tvdbEpisodes = metadataRouterFacade.fetchTvEpisodeProjection(
             metadataRequest = MetadataRequest(
-                contentId = rawContentId,
+                contentId = tvdbContentId,
                 contentType = ContentType.SERIES,
                 sourceContext = MetadataSourceContext(itemType = normalizedType),
                 depth = MetadataDepth.SEASON
             ),
             tvRequest = TvMetadataRequest(
-                contentId = rawContentId,
+                contentId = tvdbContentId,
                 fallbackContentId = currentVideoId,
                 contentType = ContentType.SERIES,
                 seasonNumbers = emptyList()
             )
         ).value.orEmpty()
         val tmdbEpisodes = tmdbMetadataService.fetchEpisodeEnrichment(
-            tmdbId = tmdbId,
+            tmdbId = normalizedTmdbId,
             seasonNumbers = (1..displaySeason).toList()
         )
         val coordinate = TvdbScrobbleCoordinateProjector.projectDisplayToProviderNative(

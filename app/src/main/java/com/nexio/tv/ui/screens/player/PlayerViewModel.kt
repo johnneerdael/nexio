@@ -25,6 +25,7 @@ import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TvEpisodeOrderResolver
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -72,6 +73,7 @@ class PlayerViewModel @Inject constructor(
     private val authRecoveryInterceptor: AuthRecoveryInterceptor,
     private val hyperHdrSessionStateHolder: HyperHdrSessionStateHolder,
     private val traktEpisodeMappingService: TraktEpisodeMappingService,
+    private val tvEpisodeOrderResolver: TvEpisodeOrderResolver,
     private val torBoxResumeStore: com.nexio.tv.data.local.TorBoxResumeStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -117,6 +119,7 @@ class PlayerViewModel @Inject constructor(
             egressIpFingerprint = egressIpFingerprint,
             authRecoveryInterceptor = authRecoveryInterceptor,
             traktEpisodeMappingService = traktEpisodeMappingService,
+            tvEpisodeOrderResolver = tvEpisodeOrderResolver,
             savedStateHandle = savedStateHandle,
             scope = viewModelScope
         )

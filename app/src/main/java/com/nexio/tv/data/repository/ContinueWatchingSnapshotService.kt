@@ -1607,22 +1607,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ) ?: return null
 
             val projectedContentId = order.resolution.tmdbTvId.toNextUpTmdbContentId()
-            val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
-                facade = facade,
-                contentType = entry.contentType,
-                tmdbContentId = projectedContentId,
-                tvdbContentId = "tvdb:${order.resolution.tvdbSeriesId}",
-                displaySeason = projected.season,
-                displayEpisode = projected.episode,
-                fallbackContentId = entry.videoId,
-                tvdbEpisodes = episodes
-            ) ?: (projected.season to projected.episode)
             entry.copy(
                 contentId = projectedContentId,
-                season = nativeCoordinate.first,
-                episode = nativeCoordinate.second,
+                season = projected.season,
+                episode = projected.episode,
                 episodeTitle = projected.episodeTitle ?: entry.episodeTitle,
-                videoId = "$projectedContentId:${nativeCoordinate.first}:${nativeCoordinate.second}",
+                videoId = "$projectedContentId:${projected.season}:${projected.episode}",
                 firstAired = projected.firstAired ?: entry.firstAired,
                 firstAiredMs = projected.firstAired
                     ?.let { AirDateGate.pendingTriggerMs(0L, null, it) }
@@ -3755,19 +3745,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (mediaKind == MetadataMediaKind.SERIES && season != null && episode != null) {
             val imdbId = providerIds.imdb?.takeIf { it.matches(Regex("^tt\\d+$")) }
             if (imdbId != null) {
-                val nativeCoordinate = resolveProviderNativeEpisodeCoordinate(
-                    providerIds = providerIds,
-                    displaySeason = season,
-                    displayEpisode = episode,
-                    fallbackContentId = resumeVideoId
-                ) ?: (season to episode)
                 return StreamFetchIdentity(
                     contentId = imdbId,
-                    videoId = "$imdbId:${nativeCoordinate.first}:${nativeCoordinate.second}",
+                    videoId = "$imdbId:$season:$episode",
                     idScheme = StreamIdScheme.IMDB_EPISODE,
                     confidence = IdentityConfidence.HIGH,
                     trace = listOf(
-                        "resolved home surface hydrated continue watching TVDB series IMDb episode stream id",
+                        "resolved home surface hydrated continue watching IMDb episode stream id",
                         "source mediaKind=$mediaKind canonical=${canonicalIdentity.canonicalProvider}:${canonicalIdentity.canonicalId} resumeVideoId=$resumeVideoId"
                     )
                 )

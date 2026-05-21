@@ -2237,7 +2237,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
 
     @Test
-    fun `buildRawSnapshot reverse projects TVDB next-up coordinates to TMDB native stream coordinates`() =
+    fun `buildRawSnapshot keeps TVDB next-up display coordinates while preserving TMDB identity`() =
         runTest {
             val facade = mockk<MetadataRouterFacade>(relaxed = true)
             stubTvdbProjectionRoute(
@@ -2303,9 +2303,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             val projected = snapshot.nextUpItems.single()
             assertEquals("tmdb:10957", projected.contentId)
-            assertEquals(12, projected.season)
+            assertEquals(14, projected.season)
             assertEquals(24, projected.episode)
-            assertEquals("tmdb:10957:12:24", projected.videoId)
+            assertEquals("tmdb:10957:14:24", projected.videoId)
         }
 
     @Test

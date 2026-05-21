@@ -89,6 +89,7 @@ class PlayerRuntimeController(
     internal val egressIpFingerprint: EgressIpFingerprint,
     internal val authRecoveryInterceptor: AuthRecoveryInterceptor,
     internal val traktEpisodeMappingService: TraktEpisodeMappingService,
+    internal val tvEpisodeOrderResolver: com.nexio.tv.data.repository.TvEpisodeOrderResolver,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
