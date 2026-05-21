@@ -17,7 +17,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -724,51 +728,82 @@ fun TrailerPlayer(
     }
 
     if (trailerPlayer != null) {
-        AnimatedVisibility(
-            visible = isPlaying,
-            enter = enter,
-            exit = exit
-        ) {
-            AndroidView(
-                factory = { ctx ->
-                    (LayoutInflater.from(ctx)
-                        .inflate(R.layout.exo_trailer_player_view, null, false) as PlayerView)
-                        .apply {
-                            bindTrailerPlayerView(this, trailerPlayer, subtitleStyleForView, currentOverlayCues)
-                            useController = false
-                            isFocusable = true
-                            isFocusableInTouchMode = true
-                            setOnKeyListener { _, keyCode, event ->
-                                if (shouldConsumeTrailerKey(keyCode)) return@setOnKeyListener true
-                                currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+        // Plan: Bug B — Task B2.
+        //
+        // Wrap the PlayerView in a Box so we can overlay a black scrim that
+        // covers the TextureView during teardown. TextureView retains the
+        // last decoded frame after its SurfaceTexture detaches; if the
+        // screensaver overlay dismisses (or the trailer URL is cleared
+        // mid-stream), the residual frame could linger on-screen until the
+        // next vsync and — worse — be visible again if the overlay is
+        // immediately re-shown by IdleScreensaverController. Animating the
+        // scrim to alpha=1 within 50ms beats vsync so no stale frame can
+        // survive.
+        Box(modifier = modifier) {
+            AnimatedVisibility(
+                visible = isPlaying,
+                enter = enter,
+                exit = exit
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        (LayoutInflater.from(ctx)
+                            .inflate(R.layout.exo_trailer_player_view, null, false) as PlayerView)
+                            .apply {
+                                bindTrailerPlayerView(this, trailerPlayer, subtitleStyleForView, currentOverlayCues)
+                                useController = false
+                                isFocusable = true
+                                isFocusableInTouchMode = true
+                                setOnKeyListener { _, keyCode, event ->
+                                    if (shouldConsumeTrailerKey(keyCode)) return@setOnKeyListener true
+                                    currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+                                }
+                                keepScreenOn = shouldKeepScreenOn
+                                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                resizeMode = if (cropToFill) {
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                } else {
+                                    AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                }
                             }
-                            keepScreenOn = shouldKeepScreenOn
-                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-                            resizeMode = if (cropToFill) {
-                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            } else {
-                                AspectRatioFrameLayout.RESIZE_MODE_FIT
-                            }
+                    },
+                    update = { view ->
+                        bindTrailerPlayerView(view, trailerPlayer, subtitleStyleForView, currentOverlayCues)
+                        view.keepScreenOn = shouldKeepScreenOn
+                        view.resizeMode = if (cropToFill) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            AspectRatioFrameLayout.RESIZE_MODE_FIT
                         }
-                },
-                update = { view ->
-                    bindTrailerPlayerView(view, trailerPlayer, subtitleStyleForView, currentOverlayCues)
-                    view.keepScreenOn = shouldKeepScreenOn
-                    view.resizeMode = if (cropToFill) {
-                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    } else {
-                        AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                },
-                modifier = modifier
-                    .clipToBounds()
-                    .graphicsLayer {
-                        alpha = playerAlpha
-                        scaleX = zoomScale
-                        scaleY = zoomScale
-                    }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clipToBounds()
+                        .graphicsLayer {
+                            alpha = playerAlpha
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                        }
+                )
+            }
+            // Black scrim. Activates the moment trailerUrl clears or isPlaying
+            // flips false (both true during dismiss / URL transition). 50 ms
+            // fade is short enough to beat a 16.6 ms vsync at 60 Hz with
+            // headroom for the next frame.
+            val scrimAlpha by animateFloatAsState(
+                targetValue = if (trailerUrl == null || !isPlaying) 1f else 0f,
+                animationSpec = tween(durationMillis = 50),
+                label = "trailerTeardownScrimAlpha"
             )
+            if (scrimAlpha > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = scrimAlpha }
+                        .background(Color.Black)
+                )
+            }
         }
     }
 }
