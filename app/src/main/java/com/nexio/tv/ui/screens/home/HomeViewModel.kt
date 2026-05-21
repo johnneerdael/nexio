@@ -875,6 +875,13 @@ class HomeViewModel @Inject constructor(
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
     internal var trailerPreviewJob: Job? = null
+    // Plan: Bug A — Task A3. Screensaver trailer warmer job. Iterates the
+    // screensaver candidate pool and calls metadataRouterFacade.fetchTrailer
+    // per item so MediaClipStore is populated; the subsequent re-publish in
+    // republishScreensaverSurfaceAfterWarm attaches selectedPlaybackRef to
+    // each ResolvedDisplayItem.trailer. Cancelled by HomePlaybackWorkGate
+    // when playback starts (Task A6).
+    internal var screensaverTrailerWarmJob: Job? = null
     internal var lastHomeTrailerSurfaceTraceSummary: HomeTrailerSurfaceTraceSummary? = null
     internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
