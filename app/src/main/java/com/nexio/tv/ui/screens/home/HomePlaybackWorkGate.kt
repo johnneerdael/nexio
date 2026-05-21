@@ -24,6 +24,20 @@ internal fun HomeViewModel.observePlaybackWorkGate() {
                         refreshTrailerMetadataAvailabilityPipeline(rows)
                         schedulePosterStatusReconcilePipeline(rows)
                     }
+                    // Plan: Bug A — Task A6. When playback ends, re-trigger
+                    // the screensaver publish path which re-launches the
+                    // warmer (via the publishTmdbTrendingScreensaverSurface
+                    // hookup in Task A4). Cheap if MediaClipStore was already
+                    // warmed before playback started — fetchTrailer returns
+                    // cached results without hitting TMDB again.
+                    val profileSession = profileManager.activeProfileSession.value
+                    val overlays = hydratedHomeOverlaysByItemKey.value
+                    if (overlays.isNotEmpty() || _internalCatalogRows.value.isNotEmpty()) {
+                        publishTmdbTrendingScreensaverSurface(
+                            profileSession = profileSession,
+                            overlaysByItemKey = overlays
+                        )
+                    }
                 }
             }
     }
@@ -47,6 +61,13 @@ internal fun HomeViewModel.cancelNonPlaybackHomeWorkForPlayback() {
 
     trailerPreviewJob?.cancel()
     trailerPreviewJob = null
+
+    // Plan: Bug A — Task A6. Cancel the screensaver-pool trailer warmer
+    // when playback starts so its per-item TMDB calls don't contend with
+    // stream playback. Re-triggered when playback ends via the
+    // observePlaybackWorkGate branch below.
+    screensaverTrailerWarmJob?.cancel()
+    screensaverTrailerWarmJob = null
 
     val availabilityJobs = synchronized(trailerMetadataAvailabilityJobs) {
         trailerMetadataAvailabilityJobs.toList().also { trailerMetadataAvailabilityJobs.clear() }
