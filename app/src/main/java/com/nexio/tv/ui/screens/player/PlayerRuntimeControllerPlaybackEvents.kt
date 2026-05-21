@@ -328,12 +328,8 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? 
     }
     val effectiveSeason = mappedEpisode?.season ?: currentSeason
     val effectiveEpisode = mappedEpisode?.episode ?: currentEpisode
-    val providerNativeCoordinate = unprojectTvdbDisplayCoordinateForScrobble(
-        contentId = rawContentId,
-        displaySeason = effectiveSeason,
-        displayEpisode = effectiveEpisode,
-        episodeMetadata = currentEpisodeMetadata
-    )
+    val providerNativeCoordinate = currentTvdbScrobbleCoordinate
+        ?.takeIf { currentEpisodeMappingCacheKey() == currentTvdbScrobbleCoordinateKey }
     val scrobbleSeason = providerNativeCoordinate?.first ?: effectiveSeason
     val scrobbleEpisode = providerNativeCoordinate?.second ?: effectiveEpisode
 
@@ -359,21 +355,6 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? 
     return item
 }
 
-private fun unprojectTvdbDisplayCoordinateForScrobble(
-    contentId: String,
-    displaySeason: Int?,
-    displayEpisode: Int?,
-    episodeMetadata: com.nexio.tv.core.tvdb.TvEpisodeMetadata?
-): Pair<Int, Int>? {
-    if (!contentId.startsWith("tvdb:", ignoreCase = true)) return null
-    if (displaySeason == null || displayEpisode == null) return null
-    val order = episodeMetadata?.tvdbEpisodeOrder ?: return null
-    val defaultSeason = order.defaultSeason?.takeIf { it > 0 } ?: return null
-    val defaultEpisode = order.defaultEpisode?.takeIf { it > 0 } ?: return null
-    if (defaultSeason == displaySeason && defaultEpisode == displayEpisode) return null
-    return defaultSeason to defaultEpisode
-}
-
 /**
  * Resolves the full ProviderIds bundle for the current contentId via the hydrator and caches
  * it on the controller. Called lazily from inside the scrobble-emit coroutine launches so
@@ -394,14 +375,15 @@ private suspend fun PlayerRuntimeController.prehydrateScrobbleIds(): com.nexio.t
 }
 
 internal fun PlayerRuntimeController.emitScrobbleStart() {
-    val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it }
-    if (item == null) return
     if (hasRequestedScrobbleStartForCurrentItem) return
 
     hasRequestedScrobbleStartForCurrentItem = true
     startScrobbleHeartbeat()
     val requestGeneration = ++scrobbleStartRequestGeneration
     scope.launch {
+        playbackPreparationJob?.join()
+        val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it }
+        if (item == null) return@launch
         val hydrated = prehydrateScrobbleIds()
         val progressPercent = currentPlaybackProgressPercent()
         trackingScrobbleService.scrobbleStart(

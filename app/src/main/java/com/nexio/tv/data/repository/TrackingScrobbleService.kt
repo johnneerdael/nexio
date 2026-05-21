@@ -106,7 +106,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
                     }
                 }
             }
-            if (providerState.hasAuthenticatedProvider) {
+            if (providerState.simklAuthenticated) {
                 launch {
                     runCatching {
                         simklScrobbleService.scrobbleStart(
@@ -145,7 +145,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
                     }
                 }
             }
-            if (providerState.hasAuthenticatedProvider) {
+            if (providerState.simklAuthenticated) {
                 launch {
                     runCatching {
                         simklScrobbleService.scrobbleStop(
@@ -184,7 +184,7 @@ class DefaultTrackingScrobbleService @Inject constructor(
                     }
                 }
             }
-            if (providerState.hasAuthenticatedProvider) {
+            if (providerState.simklAuthenticated) {
                 launch {
                     runCatching {
                         simklScrobbleService.scrobblePause(

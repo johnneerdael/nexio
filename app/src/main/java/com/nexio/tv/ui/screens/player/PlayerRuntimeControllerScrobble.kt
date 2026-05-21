@@ -1,5 +1,13 @@
 package com.nexio.tv.ui.screens.player
 
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.ProviderIds
+import kotlinx.coroutines.CancellationException
+
 internal fun PlayerRuntimeController.currentEpisodeMappingCacheKey(): String? {
     val resolvedContentId = contentId?.trim()?.takeIf { it.isNotBlank() } ?: return null
     val resolvedType = contentType?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
@@ -38,7 +46,90 @@ internal suspend fun PlayerRuntimeController.warmTraktEpisodeMappingForCurrentPl
     currentTraktEpisodeMappingKey = currentEpisodeMappingCacheKey()
 }
 
+internal suspend fun PlayerRuntimeController.warmTvdbScrobbleCoordinateForCurrentPlayback() {
+    val rawContentId = contentId?.trim()?.takeIf { it.isNotBlank() } ?: run {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+    if (!rawContentId.startsWith("tvdb:", ignoreCase = true)) {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+    val normalizedType = contentType?.trim()?.lowercase()
+    if (normalizedType !in listOf("series", "tv")) {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+    val displaySeason = currentSeason ?: run {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+    val displayEpisode = currentEpisode ?: run {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+    val key = currentEpisodeMappingCacheKey() ?: run {
+        clearTvdbScrobbleCoordinate()
+        return
+    }
+
+    try {
+        val ids = hydratedIdsForScrobbleProjection(rawContentId)
+        val tmdbId = ids.tmdb?.trim()?.takeIf { it.isNotEmpty() } ?: run {
+            clearTvdbScrobbleCoordinate()
+            return
+        }
+        val tvdbEpisodes = metadataRouterFacade.fetchTvEpisodeProjection(
+            metadataRequest = MetadataRequest(
+                contentId = rawContentId,
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(itemType = normalizedType),
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = rawContentId,
+                fallbackContentId = currentVideoId,
+                contentType = ContentType.SERIES,
+                seasonNumbers = emptyList()
+            )
+        ).value.orEmpty()
+        val tmdbEpisodes = tmdbMetadataService.fetchEpisodeEnrichment(
+            tmdbId = tmdbId,
+            seasonNumbers = (1..displaySeason).toList()
+        )
+        val coordinate = TvdbScrobbleCoordinateProjector.projectDisplayToProviderNative(
+            displaySeason = displaySeason,
+            displayEpisode = displayEpisode,
+            displayTitle = currentEpisodeTitle,
+            tvdbEpisodes = tvdbEpisodes,
+            tmdbEpisodes = tmdbEpisodes
+        )?.takeUnless { it.first == displaySeason && it.second == displayEpisode }
+        currentTvdbScrobbleCoordinate = coordinate
+        currentTvdbScrobbleCoordinateKey = if (coordinate == null) null else key
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        clearTvdbScrobbleCoordinate()
+    }
+}
+
 private fun PlayerRuntimeController.clearTraktEpisodeMapping() {
     currentTraktEpisodeMapping = null
     currentTraktEpisodeMappingKey = null
+}
+
+private fun PlayerRuntimeController.clearTvdbScrobbleCoordinate() {
+    currentTvdbScrobbleCoordinate = null
+    currentTvdbScrobbleCoordinateKey = null
+}
+
+private suspend fun PlayerRuntimeController.hydratedIdsForScrobbleProjection(
+    rawContentId: String
+): ProviderIds {
+    val cached = currentHydratedIds
+    if (hydratedIdsForContentId == rawContentId && cached != null) return cached
+    return scrobbleIdBundleHydrator.hydrate(rawContentId, contentType).also { ids ->
+        currentHydratedIds = ids
+        hydratedIdsForContentId = rawContentId
+    }
 }

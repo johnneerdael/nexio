@@ -22,12 +22,18 @@ class PlayerScrobbleEpisodeMappingOrderingTest {
         assertTrue("init block must exist", initStart >= 0)
         val initBody = src.substring(initStart).substringBefore("\n    }")
         val warmIdx = initBody.indexOf("warmTraktEpisodeMappingForCurrentPlayback")
+        val tvdbProjectionIdx = initBody.indexOf("warmTvdbScrobbleCoordinateForCurrentPlayback")
         val refreshIdx = initBody.indexOf("refreshScrobbleItem")
         assertTrue("warmup must appear in init: $initBody", warmIdx >= 0)
+        assertTrue("TVDB scrobble projection warmup must appear in init: $initBody", tvdbProjectionIdx >= 0)
         assertTrue("refreshScrobbleItem must appear in init: $initBody", refreshIdx >= 0)
         assertTrue(
             "warmup must precede refresh (warmIdx=$warmIdx refreshIdx=$refreshIdx)",
             warmIdx < refreshIdx
+        )
+        assertTrue(
+            "TVDB scrobble projection warmup must precede refresh (tvdbProjectionIdx=$tvdbProjectionIdx refreshIdx=$refreshIdx)",
+            tvdbProjectionIdx < refreshIdx
         )
     }
 
@@ -42,6 +48,10 @@ class PlayerScrobbleEpisodeMappingOrderingTest {
         assertTrue(
             "warmup must appear within 500 chars before refreshScrobbleItem(): window=$window",
             window.contains("warmTraktEpisodeMappingForCurrentPlayback")
+        )
+        assertTrue(
+            "TVDB scrobble projection warmup must appear within 500 chars before refreshScrobbleItem(): window=$window",
+            window.contains("warmTvdbScrobbleCoordinateForCurrentPlayback")
         )
     }
 }

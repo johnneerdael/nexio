@@ -98,7 +98,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         newService().scrobbleStart(movieItem(), 10f, owner())
 
         coVerify(exactly = 1) { traktService.scrobbleStart(any(), 10f, 1, any()) }
-        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
         coVerify(exactly = 0) { mdbListService.scrobbleStart(any(), any(), any(), any()) }
     }
 
@@ -108,7 +108,7 @@ class DefaultTrackingScrobbleServiceFanOutTest {
         newService().scrobbleStart(movieItem(), 10f, owner())
 
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
-        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 10f, 1, any()) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any(), any()) }
         coVerify(exactly = 1) { mdbListService.scrobbleStart(any(), 10f, 1, any()) }
     }
 

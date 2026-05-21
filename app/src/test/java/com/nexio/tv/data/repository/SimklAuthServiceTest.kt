@@ -20,6 +20,7 @@ import io.mockk.spyk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -144,6 +145,37 @@ class SimklAuthServiceTest {
                 account = null
             )
         )
+
+        val service = SimklAuthService(
+            simklAuthIntegrationProvider = simklAuthIntegrationProvider,
+            simklAuthDataStore = simklAuthDataStore,
+            requestGate = SimklRequestGate(),
+            profileManager = profileManager,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+        )
+
+        val scoped = service.mutationAccountScopedSession(TrackingAuthSession(TrackingProvider.SIMKL, 1))
+
+        assertNotEquals(null, scoped.credentialHash)
+        assertNull(scoped.accountIdHash)
+    }
+
+    @Test
+    fun `mutation account scope falls back to token scope when user settings refresh fails`() = runTest {
+        val simklAuthIntegrationProvider = mockk<SimklAuthIntegrationProvider>()
+        val profileManager = testProfileManager()
+        val simklAuthDataStore = SimklAuthDataStore(
+            factory = profileDataStoreFactoryForTest(),
+            profileManager = profileManager
+        )
+        simklAuthDataStore.saveAccessToken(
+            accessToken = "access-only",
+            clearAccountIdentity = true
+        )
+        coEvery {
+            simklAuthIntegrationProvider.getUserSettings(any(), any())
+        } throws IOException("offline")
 
         val service = SimklAuthService(
             simklAuthIntegrationProvider = simklAuthIntegrationProvider,

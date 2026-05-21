@@ -63,12 +63,12 @@ class PlayerScrobbleEpisodeMappingConsumerTest {
         )
         // The Episode payload must use the effective values, not the raw ones.
         assertTrue(
-            "Episode item must pass season = effectiveSeason: $fnBody",
-            fnBody.contains("season = effectiveSeason")
+            "Episode item must pass season = scrobbleSeason: $fnBody",
+            fnBody.contains("season = scrobbleSeason")
         )
         assertTrue(
-            "Episode item must pass number = effectiveEpisode: $fnBody",
-            fnBody.contains("number = effectiveEpisode")
+            "Episode item must pass number = scrobbleEpisode: $fnBody",
+            fnBody.contains("number = scrobbleEpisode")
         )
     }
 }

@@ -15,6 +15,7 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.resolver.SkipSegmentResolver
 import com.nexio.tv.core.playback.PlaybackOwnerContext
+import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
@@ -78,6 +79,7 @@ class PlayerRuntimeController(
     internal val subtitleTranslationService: SubtitleTranslationService,
     internal val subtitleSourceDownloadIntegrationProvider: SubtitleSourceDownloadIntegrationProvider,
     internal val metadataRouterFacade: MetadataRouterFacade,
+    internal val tmdbMetadataService: TmdbMetadataService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val playbackActivityTracker: PlaybackActivityTracker,
     internal val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
@@ -414,6 +416,8 @@ class PlayerRuntimeController(
     internal var episodeStreamsCacheRequestKey: String? = null
     internal var currentTraktEpisodeMapping: EpisodeMappingEntry? = null
     internal var currentTraktEpisodeMappingKey: String? = null
+    internal var currentTvdbScrobbleCoordinate: Pair<Int, Int>? = null
+    internal var currentTvdbScrobbleCoordinateKey: String? = null
     internal var playbackPreparationJob: Job? = null
     internal val streamCacheKey: String? by lazy {
         val type = contentType?.lowercase()
@@ -425,6 +429,7 @@ class PlayerRuntimeController(
         playbackIdleGateState.onPlayerSessionStarted()
         playbackPreparationJob = scope.launch {
             warmTraktEpisodeMappingForCurrentPlayback()
+            warmTvdbScrobbleCoordinateForCurrentPlayback()
             refreshScrobbleItem()
         }
         mediaSourceFactory.warmupVodCacheAsync()

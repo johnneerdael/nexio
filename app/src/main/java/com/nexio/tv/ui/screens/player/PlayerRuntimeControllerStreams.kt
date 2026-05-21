@@ -769,9 +769,12 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     currentEpisodeMetadata = null
+    currentTvdbScrobbleCoordinate = null
+    currentTvdbScrobbleCoordinateKey = null
     playbackPreparationJob?.cancel()
     playbackPreparationJob = scope.launch {
         warmTraktEpisodeMappingForCurrentPlayback()
+        warmTvdbScrobbleCoordinateForCurrentPlayback()
         refreshScrobbleItem()
     }
     lastSavedPosition = 0L

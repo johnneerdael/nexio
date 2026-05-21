@@ -12,6 +12,7 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
 import com.nexio.tv.core.player.auth.EgressIpFingerprint
 import com.nexio.tv.core.player.PlaybackActivityTracker
+import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
@@ -59,6 +60,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleTranslationService: SubtitleTranslationService,
     private val subtitleSourceDownloadIntegrationProvider: SubtitleSourceDownloadIntegrationProvider,
     private val metadataRouterFacade: MetadataRouterFacade,
+    private val tmdbMetadataService: TmdbMetadataService,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val playbackActivityTracker: PlaybackActivityTracker,
     private val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
@@ -105,6 +107,7 @@ class PlayerViewModel @Inject constructor(
             subtitleTranslationService = subtitleTranslationService,
             subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider,
             metadataRouterFacade = metadataRouterFacade,
+            tmdbMetadataService = tmdbMetadataService,
             playbackIdleGateState = playbackIdleGateState,
             playbackActivityTracker = playbackActivityTracker,
             playbackMediaSourceTransport = playbackMediaSourceTransport,

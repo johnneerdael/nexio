@@ -74,7 +74,13 @@ class SimklAuthService @Inject constructor(
         val state = getCurrentAuthState(session)
         val accountMaterial = stableMutationAccountMaterial(state)
             ?: run {
-                fetchUserSettings(session)
+                runCatching { fetchUserSettings(session) }.onFailure { error ->
+                    Log.w(
+                        "SimklAuthService",
+                        "SIMKL mutation account identity refresh failed; falling back to token-scoped mutation hash",
+                        error
+                    )
+                }
                 stableMutationAccountMaterial(getCurrentAuthState(session))
             }
         if (accountMaterial == null) {
