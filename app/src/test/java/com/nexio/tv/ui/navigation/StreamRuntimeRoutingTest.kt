@@ -629,6 +629,19 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching direct playback callback uses runtime hydration route builder`() {
+        val source = sourceFile("com/nexio/tv/ui/navigation/NexioNavHost.kt").toFile().readText()
+
+        assertTrue(
+            source.contains(
+                "val route = buildContinueWatchingStreamRouteWithHydration(\n" +
+                    "                            item = item"
+            )
+        )
+        assertTrue(source.contains("resolveRuntimeMinutes = homeViewModel::resolveContinueWatchingRuntimeMinutes"))
+    }
+
+    @Test
     fun `continue watching route still builds when runtime hydration fails`() = runTest {
         val route = buildContinueWatchingStreamRouteWithHydration(
             item = ContinueWatchingItem.NextUp(

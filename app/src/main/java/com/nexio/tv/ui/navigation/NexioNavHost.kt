@@ -179,21 +179,11 @@ fun NexioNavHost(
                     navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
                 },
                 onContinueWatchingClick = { item ->
-                    // Optimistic navigation: build the Stream route from data already on the
-                    // ContinueWatchingItem (progress, displayMetadata, idBundle-derived imdbId)
-                    // and navigate immediately. The previous *WithHydration* path resolved
-                    // runtime via metadataRouterFacade.fetchTvEpisodeEnrichment and ran
-                    // language enrichment, both of which (a) are cosmetic — stream resolution
-                    // doesn't need them — and (b) on a heavy show like Masterchef S18 (~1000
-                    // episodes) parse the whole season list + cross-reference TMDB even when
-                    // the data is fully disk-cached, pegging CPU on Main and ANRing the app
-                    // ("Input dispatching timed out, Waited 5003ms for DPAD_CENTER"). Runtime
-                    // and language can be background-hydrated by the home pipeline; the click
-                    // path must not block on them.
                     homeScope.launch {
-                        val route = buildContinueWatchingStreamRoute(
+                        val route = buildContinueWatchingStreamRouteWithHydration(
                             item = item,
-                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled
+                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                            resolveRuntimeMinutes = homeViewModel::resolveContinueWatchingRuntimeMinutes
                         )
                         navController.navigate(route)
                         launch { homeViewModel.recordContinueWatchingRouteContextForPlayback(item) }
@@ -201,10 +191,11 @@ fun NexioNavHost(
                 },
                 onContinueWatchingStartFromBeginning = { item ->
                     homeScope.launch {
-                        val route = buildContinueWatchingStreamRoute(
+                        val route = buildContinueWatchingStreamRouteWithHydration(
                             item = item,
                             deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                            startFromBeginning = true
+                            startFromBeginning = true,
+                            resolveRuntimeMinutes = homeViewModel::resolveContinueWatchingRuntimeMinutes
                         )
                         navController.navigate(route)
                         launch { homeViewModel.recordContinueWatchingRouteContextForPlayback(item) }
