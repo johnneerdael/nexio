@@ -74,7 +74,7 @@ tools/
 .omx/
 .omc/
 .agents/
-.claude/
+.claude/*
 .tmp/
 tmp/
 state/
@@ -89,7 +89,7 @@ state/
 apiblueprints/
 buildSrc/
 openspec/
-docs/
+docs/*
 review-dossier/
 review-dossier-2/
 supabase/
@@ -99,3 +99,18 @@ gradle/
 benchmarks/
 *.jks
 *.keystore
+# Added by code-review-graph
+.code-review-graph/
+
+# --- graphs.md best-practice templates (committed) ---
+!.graphifyignore
+!.code-review-graphignore
+!.mcp.example.json
+!.claude/settings.example.json
+!.claude/scripts/
+!.claude/scripts/**
+!docs/agent/
+!docs/agent/**
+# --- live graph data (still ignored) ---
+graphify-out/
+.claude/settings.local.json
