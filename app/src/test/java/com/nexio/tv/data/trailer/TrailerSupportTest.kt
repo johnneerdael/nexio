@@ -215,32 +215,6 @@ class TrailerSupportTest {
     }
 
     @Test
-    fun `selectPreferredTrailerPlaybackSource prefers adaptive split over progressive when manifest is absent`() {
-        val selected = selectPreferredTrailerPlaybackSource(
-            combinedUrl = null,
-            adaptiveVideoUrl = "https://example.com/trailer/video-1080.mp4",
-            adaptiveAudioUrl = "https://example.com/trailer/audio.m4a",
-            progressiveUrl = "https://example.com/trailer/video-360.mp4"
-        )
-
-        assertEquals("https://example.com/trailer/video-1080.mp4", selected?.videoUrl)
-        assertEquals("https://example.com/trailer/audio.m4a", selected?.audioUrl)
-    }
-
-    @Test
-    fun `selectPreferredTrailerPlaybackSource uses progressive when adaptive audio is absent`() {
-        val selected = selectPreferredTrailerPlaybackSource(
-            combinedUrl = null,
-            adaptiveVideoUrl = "https://example.com/trailer/video-1080.mp4",
-            adaptiveAudioUrl = null,
-            progressiveUrl = "https://example.com/trailer/video-360.mp4"
-        )
-
-        assertEquals("https://example.com/trailer/video-360.mp4", selected?.videoUrl)
-        assertNull(selected?.audioUrl)
-    }
-
-    @Test
     fun `rankTmdbVideoCandidates prefers official trailers before teasers and smaller videos`() {
         val ranked = rankTmdbVideoCandidates(
             listOf(
