@@ -479,16 +479,14 @@ class InAppYouTubeExtractor @Inject constructor(
         val bestProgressive = sortTrailerCandidatesForPlayback(progressive).firstOrNull()
         val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
         val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
-        val combinedUrl = selectPreferredCombinedTrailerUrl(
-            manifestUrl = bestManifest?.manifestUrl,
-            progressiveUrl = bestProgressive?.url
-        )
+        val combinedUrl = bestManifest?.manifestUrl?.takeIf { it.isNotBlank() }
         // Mirrors the priority order in selectPreferredTrailerPlaybackSource:
-        // combined first (HLS manifest or progressive), split adaptive as
-        // fallback.
+        // manifest first, split adaptive when both video/audio are available,
+        // progressive as the compatible fallback.
         val resolvedClientKey = when {
-            combinedUrl != null && combinedUrl == bestManifest?.manifestUrl -> bestManifest.client
-            combinedUrl != null && combinedUrl == bestProgressive?.url -> bestProgressive.client
+            combinedUrl != null && combinedUrl == bestManifest.manifestUrl -> bestManifest.client
+            bestVideo != null && bestAudio != null -> bestVideo.client
+            bestProgressive != null -> bestProgressive.client
             bestVideo != null -> bestVideo.client
             else -> null
         }
@@ -506,6 +504,7 @@ class InAppYouTubeExtractor @Inject constructor(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
             adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
             adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
+            progressiveUrl = bestProgressive?.url?.let { resolveReachableUrl(it) },
             userAgent = resolvedUserAgent
         )?.copy(
             captions = resolvedCaptionTracks,

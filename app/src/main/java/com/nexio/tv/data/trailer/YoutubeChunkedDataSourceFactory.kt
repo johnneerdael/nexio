@@ -39,10 +39,10 @@ private fun shouldUseYouTubeChunkedTransfer(
 }
 
 /**
- * A DataSource.Factory that wraps DefaultHttpDataSource and appends YouTube's
- * `&range=start-end` query parameter on each request. YouTube throttles (and
- * kills) connections that try to download full adaptive streams in one shot,
- * but honours chunked range-param requests at full speed.
+ * A DataSource.Factory that wraps DefaultHttpDataSource and requests YouTube
+ * media in HTTP byte-range chunks. YouTube throttles (and kills) connections
+ * that try to download full adaptive streams in one shot, but honours chunked
+ * byte-range requests at full speed.
  *
  * Only activates for googlevideo.com URLs; all other URLs pass through untouched.
  */
@@ -116,16 +116,7 @@ class YoutubeChunkedDataSourceFactory(
             }
             currentChunkEnd = end
 
-            // Append &range=start-end to the URL (YouTube's own range param, not HTTP Range header)
-            val rangedUri = spec.uri.buildUpon()
-                .appendQueryParameter("range", "$currentChunkStart-$currentChunkEnd")
-                .build()
-
-            val chunkedSpec = spec.buildUpon()
-                .setUri(rangedUri)
-                .setPosition(0)           // position within this chunk's response
-                .setLength(C.LENGTH_UNSET.toLong()) // let the server decide
-                .build()
+            val chunkedSpec = buildYouTubeChunkDataSpec(spec, currentChunkStart, currentChunkEnd)
 
             bytesReadInChunk = 0
             upstream.open(chunkedSpec)
@@ -177,4 +168,16 @@ class YoutubeChunkedDataSourceFactory(
             originalDataSpec = null
         }
     }
+}
+
+internal fun buildYouTubeChunkDataSpec(
+    original: DataSpec,
+    chunkStart: Long,
+    chunkEnd: Long
+): DataSpec {
+    return original.buildUpon()
+        .setUri(original.uri)
+        .setPosition(chunkStart)
+        .setLength(chunkEnd - chunkStart + 1)
+        .build()
 }
