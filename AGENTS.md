@@ -205,3 +205,18 @@ If a subagent prompt for a smoke test omits the profile-selection step, reject a
 ## When investigating performance issues
 
 Always: capture a heap dump first. The `analysing-heap-dumps` skill (`heaptrail` CLI, supports JAVA PROFILE 1.0.3) will identify retainer chains. Sustained allocation rate is visible in `adb logcat | grep "Background concurrent"` — death-spiral signature is GCs every <1 s with >30 MB LOS per cycle.
+
+<!-- code-review-graph + graphify trigger list -->
+## Knowledge Graph
+
+**Read `docs/agent/knowledge-graph.md` whenever you:**
+- Answer any architecture, cross-module, or "how does X work" question
+- Plan to grep, find, or glob through code files
+- Need to locate a symbol, function, class, or file by name
+- Need to trace callers / callees / importers
+- Are about to refactor or change something with unclear blast radius
+- Are reviewing a diff or PR
+
+The doc covers the 8-tool CRG MCP allow-list (set via `CRG_TOOLS` in `.mcp.json`), graphify CLI usage, the auto-update lifecycle, and how to bypass the smart-grep hook (`# --graph-tried` shell comment). Skip the graph only for `.md`/`.json`/`.yml`/`.log`/`.jsonl` content lookups.
+
+The `.code-review-graph/graph.db` is auto-refreshed by the `.claude/settings.local.json` Stop hook after each AI turn (≈0.4s). `graphify-out/graph.json` is refreshed by `.git/hooks/post-commit` and `.git/hooks/post-checkout`.
