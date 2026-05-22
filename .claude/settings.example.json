@@ -1,0 +1,49 @@
+{
+  "_comment": "Reference hook config for this repo. Copy to .claude/settings.local.json to activate. See docs/agent/knowledge-graph.md.",
+  "hooks": {
+    "PostToolUse": [],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v code-review-graph >/dev/null 2>&1 && [ -d .code-review-graph ] && { PF=/tmp/crg-claude-nexio.pid; if [ -f \"$PF\" ] && kill -0 \"$(cat \"$PF\")\" 2>/dev/null; then true; else { code-review-graph update --skip-flows 2>/dev/null && nohup code-review-graph embed >/dev/null 2>&1 & } & echo $! > \"$PF\"; fi; } || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/smart-grep-hook.sh",
+            "timeout": 6
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v code-review-graph >/dev/null 2>&1 && code-review-graph status 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f .code-review-graph/graph.db ] || [ -f graphify-out/graph.json ]; then STATS=\"\"; TOOL_LINES=\"\"; if [ -f .code-review-graph/graph.db ]; then STATS=$(python3 -c \"import sqlite3; c=sqlite3.connect('.code-review-graph/graph.db'); n=c.execute('SELECT COUNT(*) FROM nodes').fetchone()[0]; e=c.execute('SELECT COUNT(*) FROM edges').fetchone()[0]; print(f'{n} nodes, {e} edges'); c.close()\" 2>/dev/null || echo \"\"); TOOL_LINES=\"  where is X defined    → semantic_search_nodes_tool(query=X)\\n  who calls X           → query_graph_tool(pattern=callers_of, target=X)\\n  pre-refactor blast    → get_impact_radius_tool(changed_files=[...])\\n  community/cluster     → list_communities_tool()\\n  code review context   → get_review_context_tool(changed_files=[...])\"; fi; if [ -f graphify-out/graph.json ]; then GFY_STATS=$(python3 -c \"import json; g=json.load(open('graphify-out/graph.json')); nodes=g.get('nodes',[]); comms=len(set(n.get('community','') for n in nodes if n.get('community',''))); print(f'{len(nodes)} nodes, {comms} communities')\" 2>/dev/null || echo \"\"); [ -n \"$GFY_STATS\" ] && STATS=\"${STATS:+$STATS | }graphify: $GFY_STATS\"; TOOL_LINES=\"${TOOL_LINES:+$TOOL_LINES\\n}  CRG miss / explore    → graphify query '<term>' --graph graphify-out/graph.json\\n  path A→B              → graphify path '<from>' '<to>' --graph graphify-out/graph.json\"; fi; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"GRAPH QUERY CHEATSHEET (%s) — use BEFORE Read/Grep/Bash-find on code:\\n%s\\nSkip graph for: .md .json .yml .log .jsonl configs cross-repo paths.\\nOverride grep gate: append # --graph-tried to any Bash command.\"}}' \"$STATS\" \"$TOOL_LINES\"; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
