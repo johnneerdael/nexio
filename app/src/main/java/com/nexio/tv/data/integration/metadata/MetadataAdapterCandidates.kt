@@ -12,11 +12,14 @@ import com.nexio.tv.core.metadata.router.MetadataLocalizationRejectedCandidate
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tmdb.TmdbSeasonEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
+import com.nexio.tv.domain.model.SeasonDisplay
+import com.nexio.tv.domain.model.SeasonEpisodeMark
 
 internal fun TmdbEnrichment?.toMetadataCandidate(provider: MetadataPrimaryProvider): MetadataCandidate =
     MetadataCandidate(
@@ -40,6 +43,9 @@ internal fun TmdbEnrichment?.toMetadataCandidate(provider: MetadataPrimaryProvid
             }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
+            seasons.toSeasonDisplay().takeIf { it.isNotEmpty() }?.let {
+                put(ResolvedField.EPISODES, FieldValue(it, FieldOwner.PRIMARY))
             }
         }
     )
@@ -255,6 +261,21 @@ internal fun buildTvdbCoreLocalizedCandidate(
     )
 }
 
+private fun List<TmdbSeasonEnrichment>.toSeasonDisplay(): List<SeasonDisplay> =
+    map { season ->
+        SeasonDisplay(
+            seasonNumber = season.seasonNumber,
+            title = season.title,
+            overview = season.overview,
+            episodes = (1..season.episodeCount).map { episodeNumber ->
+                SeasonEpisodeMark(
+                    episodeNumber = episodeNumber,
+                    airDate = null
+                )
+            }
+        )
+    }
+
 private fun List<TvdbRemoteId>?.toRemoteIdsMap(tvdbId: Int?): Map<String, Set<String>> {
     val grouped = mutableMapOf<String, MutableSet<String>>()
     tvdbId?.let { grouped.getOrPut("tvdb") { linkedSetOf() } += it.toString() }
@@ -366,6 +387,9 @@ internal fun buildTmdbLocalizedCandidate(
             }
             if (remoteIds.isNotEmpty()) {
                 put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
+            source?.seasons.orEmpty().toSeasonDisplay().takeIf { it.isNotEmpty() }?.let {
+                put(ResolvedField.EPISODES, FieldValue(it, FieldOwner.PRIMARY))
             }
         },
         localization = buildMap {

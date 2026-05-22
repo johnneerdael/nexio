@@ -123,7 +123,7 @@ class MetadataDisplayRepository @Inject constructor(
             artwork = result.displayArtwork(),
             rating = ratings?.titleRating,
             trailer = result.toTrailerDisplayState(),
-            seasons = emptyList(),
+            seasons = resolvedDocument.seasons,
             people = PeopleDisplay(cast = cast, crew = crew)
                 .takeIf { it.cast.isNotEmpty() || it.crew.isNotEmpty() },
             reviews = reviews,

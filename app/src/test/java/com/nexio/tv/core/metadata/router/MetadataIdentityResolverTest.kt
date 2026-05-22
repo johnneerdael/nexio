@@ -59,6 +59,23 @@ class MetadataIdentityResolverTest {
     }
 
     @Test
+    fun `imdb series tmdb route resolves tmdb target before execution`() = runTest {
+        val lookup = FakeLookup(imdbToTmdb = mapOf("tt6103712" to "10957"))
+        val resolver = MetadataIdentityResolver(lookup = lookup)
+        val route = conflictRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = "tt6103712",
+            mediaKind = MetadataMediaKind.SERIES
+        )
+
+        val resolved = resolver.resolve(route)
+
+        assertFalse(resolved.targetIdRequiresIdentityResolution)
+        assertEquals("10957", resolved.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(listOf(LookupCall.ImdbToTmdb("tt6103712", "tv")), lookup.calls)
+    }
+
+    @Test
     fun `unresolved conflict remains marked unresolved`() = runTest {
         val resolver = MetadataIdentityResolver(FakeLookup())
         val route = conflictRoute(
@@ -89,12 +106,14 @@ class MetadataIdentityResolverTest {
 
     private sealed class LookupCall {
         data class TmdbToTvdb(val tmdbId: String) : LookupCall()
+        data class ImdbToTmdb(val imdbId: String, val mediaType: String) : LookupCall()
         data class ImdbToTvdb(val imdbId: String) : LookupCall()
         data class TvdbToTmdb(val tvdbId: String) : LookupCall()
     }
 
     private class FakeLookup(
         private val tmdbToTvdb: Map<String, String> = emptyMap(),
+        private val imdbToTmdb: Map<String, String> = emptyMap(),
         private val imdbToTvdb: Map<String, String> = emptyMap(),
         private val tvdbToTmdb: Map<String, String> = emptyMap()
     ) : MetadataIdentityResolver.Lookup {
@@ -103,6 +122,11 @@ class MetadataIdentityResolverTest {
         override suspend fun tmdbToTvdb(tmdbId: String): String? {
             calls += LookupCall.TmdbToTvdb(tmdbId)
             return tmdbToTvdb[tmdbId]
+        }
+
+        override suspend fun imdbToTmdb(imdbId: String, mediaType: String): String? {
+            calls += LookupCall.ImdbToTmdb(imdbId, mediaType)
+            return imdbToTmdb[imdbId]
         }
 
         override suspend fun imdbToTvdb(imdbId: String): String? {

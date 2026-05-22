@@ -2381,24 +2381,29 @@ class MetaDetailsViewModel @Inject constructor(
         } else {
             requestedCoordinate?.first
         }
-        val selectedSeason = nativeSeason
-            ?: detailSeasons.firstOrNull { it.seasonNumber > 0 }?.seasonNumber
-            ?: return emptyList()
-        val season = detailSeasons.firstOrNull { it.seasonNumber == selectedSeason } ?: return emptyList()
         val episodeLabel = context.getString(R.string.episodes_episode)
-        val out = ArrayList<Video>(season.episodes.size)
-        for (i in season.episodes.indices) {
-            val episode = season.episodes[i]
-            val episodeNumber = episode.episodeNumber ?: continue
-            out += Video(
-                id = "$seriesId:${season.seasonNumber}:$episodeNumber",
-                title = "$episodeLabel $episodeNumber",
-                released = episode.airDate,
-                thumbnail = null,
-                season = season.seasonNumber,
-                episode = episodeNumber,
-                overview = null
-            )
+        val seasons = if (nativeSeason != null) {
+            detailSeasons.filter { it.seasonNumber == nativeSeason }
+        } else {
+            detailSeasons.filter { it.seasonNumber > 0 }
+        }
+        val expectedCount = seasons.sumOf { it.episodes.size }
+        val out = ArrayList<Video>(expectedCount)
+        for (seasonIndex in seasons.indices) {
+            val season = seasons[seasonIndex]
+            for (episodeIndex in season.episodes.indices) {
+                val episode = season.episodes[episodeIndex]
+                val episodeNumber = episode.episodeNumber ?: continue
+                out += Video(
+                    id = "$seriesId:${season.seasonNumber}:$episodeNumber",
+                    title = "$episodeLabel $episodeNumber",
+                    released = episode.airDate,
+                    thumbnail = null,
+                    season = season.seasonNumber,
+                    episode = episodeNumber,
+                    overview = null
+                )
+            }
         }
         return out
     }
@@ -2418,7 +2423,8 @@ class MetaDetailsViewModel @Inject constructor(
                 val nativeCoordinate = nativeCoordinateForTvdbDisplayEpisode(
                     detailSeasons = detailSeasons,
                     displayCoordinate = coordinate,
-                    displayMetadata = metadata
+                    displayMetadata = metadata,
+                    tvdbProjectionEpisodes = tvdbProjectionEpisodes
                 )
                 Video(
                     id = "$seriesId:${coordinate.first}:${coordinate.second}",
@@ -2444,33 +2450,68 @@ class MetaDetailsViewModel @Inject constructor(
     private fun nativeCoordinateForTvdbDisplayEpisode(
         detailSeasons: List<SeasonDisplay>,
         displayCoordinate: Pair<Int, Int>,
-        displayMetadata: TvEpisodeMetadata
+        displayMetadata: TvEpisodeMetadata,
+        tvdbProjectionEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
     ): Pair<Int, Int>? {
-        val displayAirDate = displayMetadata.airDate.normalizeDatePrefix() ?: return null
-        for (i in detailSeasons.indices) {
-            val season = detailSeasons[i]
-            for (j in season.episodes.indices) {
-                val episode = season.episodes[j]
-                val episodeNumber = episode.episodeNumber ?: continue
-                if (
-                    episodeNumber == displayCoordinate.second &&
-                    episode.airDate.normalizeDatePrefix() == displayAirDate
-                ) {
-                    return season.seasonNumber to episodeNumber
+        val displayAirDate = displayMetadata.airDate.normalizeDatePrefix()
+        if (displayAirDate != null) {
+            for (i in detailSeasons.indices) {
+                val season = detailSeasons[i]
+                for (j in season.episodes.indices) {
+                    val episode = season.episodes[j]
+                    val episodeNumber = episode.episodeNumber ?: continue
+                    if (
+                        episodeNumber == displayCoordinate.second &&
+                        episode.airDate.normalizeDatePrefix() == displayAirDate
+                    ) {
+                        return season.seasonNumber to episodeNumber
+                    }
+                }
+            }
+            for (i in detailSeasons.indices) {
+                val season = detailSeasons[i]
+                for (j in season.episodes.indices) {
+                    val episode = season.episodes[j]
+                    val episodeNumber = episode.episodeNumber ?: continue
+                    if (episode.airDate.normalizeDatePrefix() == displayAirDate) {
+                        return season.seasonNumber to episodeNumber
+                    }
                 }
             }
         }
-        for (i in detailSeasons.indices) {
-            val season = detailSeasons[i]
-            for (j in season.episodes.indices) {
-                val episode = season.episodes[j]
-                val episodeNumber = episode.episodeNumber ?: continue
-                if (episode.airDate.normalizeDatePrefix() == displayAirDate) {
-                    return season.seasonNumber to episodeNumber
-                }
-            }
-        }
-        return null
+        return tailAlignedNativeCoordinateForTvdbDisplayEpisode(
+            detailSeasons = detailSeasons,
+            displayCoordinate = displayCoordinate,
+            tvdbProjectionEpisodes = tvdbProjectionEpisodes
+        )
+    }
+
+    private fun tailAlignedNativeCoordinateForTvdbDisplayEpisode(
+        detailSeasons: List<SeasonDisplay>,
+        displayCoordinate: Pair<Int, Int>,
+        tvdbProjectionEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): Pair<Int, Int>? {
+        val displaySeason = displayCoordinate.first
+        val displayEpisode = displayCoordinate.second
+        val nativeSeasons = detailSeasons
+            .map { it.seasonNumber }
+            .filter { it > 0 }
+            .distinct()
+            .sorted()
+        val maxNativeSeason = nativeSeasons.maxOrNull() ?: return null
+        val maxDisplaySeason = tvdbProjectionEpisodes.keys
+            .map { it.first }
+            .filter { it > 0 }
+            .maxOrNull() ?: return null
+        val seasonOffset = maxDisplaySeason - maxNativeSeason
+        if (seasonOffset <= 0) return null
+        val nativeSeasonNumber = displaySeason - seasonOffset
+        if (nativeSeasonNumber <= 0 || nativeSeasonNumber !in nativeSeasons) return null
+        val nativeSeason = detailSeasons.firstOrNull { it.seasonNumber == nativeSeasonNumber }
+            ?: return nativeSeasonNumber to displayEpisode
+        val episodeMarks = nativeSeason.episodes
+        if (episodeMarks.isNotEmpty() && episodeMarks.none { it.episodeNumber == displayEpisode }) return null
+        return nativeSeasonNumber to displayEpisode
     }
 
     private fun nativeSeasonForTvdbDisplayCoordinate(

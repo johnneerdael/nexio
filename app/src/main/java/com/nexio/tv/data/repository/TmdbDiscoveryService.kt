@@ -9,6 +9,8 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.RailPreviewCatalogRowRecord
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -242,8 +244,9 @@ class TmdbDiscoveryService @Inject constructor(
         val displayName = if (year != null) "$rawTitle ($year)" else rawTitle
         val poster = tmdbImageUrl(result.posterPath, "w780")
         val imdbId = imdbLookupSemaphore.withPermit { client.imdbId(result.id, contentType) }
+        val tmdbItemId = "tmdb:${result.id}"
         return MetaPreview(
-            id = imdbId ?: "tmdb:${result.id}",
+            id = tmdbItemId,
             type = contentType,
             rawType = contentType.toApiString(),
             name = displayName,
@@ -257,7 +260,13 @@ class TmdbDiscoveryService @Inject constructor(
             ratingSource = TitleRatingSource.TMDB,
             genres = emptyList(),
             language = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() },
-            originalLanguage = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() }
+            originalLanguage = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() },
+            firstPaintSourceProvider = ProviderId.TMDB,
+            firstPaintStableIds = ProviderIds(
+                tmdb = result.id.toString(),
+                imdb = imdbId?.trim()?.takeIf { it.isNotBlank() }
+            ),
+            firstPaintSourceItemId = tmdbItemId
         )
     }
 

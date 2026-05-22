@@ -241,7 +241,7 @@ class ContinueWatchingIdentityResolverTest {
     }
 
     @Test
-    fun `identity depth resolves tvdb stream identity only when order resolver selects tvdb`() = runTest {
+    fun `identity depth uses tmdb stream identity when tvdb order resolver projects coordinate`() = runTest {
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(any(), any(), any())
         } returns breakingBadBundle().copy(sidecars = SidecarStableIds())
@@ -274,8 +274,8 @@ class ContinueWatchingIdentityResolverTest {
         )
 
         assertEquals(IdentityConfidence.HIGH, record.identityConfidence)
-        assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
-        assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
+        assertEquals("tmdb:71446:2:1", record.streamFetchIdentity?.videoId)
+        assertEquals(StreamIdScheme.TMDB_EPISODE, record.streamFetchIdentity?.idScheme)
         assertEquals(emptyList<String>(), record.identityWarnings)
     }
 

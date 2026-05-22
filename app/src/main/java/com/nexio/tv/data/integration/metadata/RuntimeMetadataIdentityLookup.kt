@@ -21,6 +21,15 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
         return tmdbProvider.findTmdbIdByImdbId(normalizedImdbId, "movie")?.toString()
     }
 
+    override suspend fun imdbToTmdb(imdbId: String, mediaType: String): String? {
+        val normalizedImdbId = imdbId.trim().takeIf { it.isNotEmpty() } ?: return null
+        val normalizedType = when (mediaType.trim().lowercase()) {
+            "tv", "series", "show" -> "tv"
+            else -> "movie"
+        }
+        return tmdbProvider.findTmdbIdByImdbId(normalizedImdbId, normalizedType)?.toString()
+    }
+
     override suspend fun tmdbTvToImdb(tmdbId: String): String? =
         tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "tv")
 

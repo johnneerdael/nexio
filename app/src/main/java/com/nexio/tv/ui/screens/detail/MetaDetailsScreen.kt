@@ -731,8 +731,10 @@ fun MetaDetailsScreen(
                                     chooseNavOriginalLanguage(meta),
                                     uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                     uiState.deterministicAutoplayEnabled,
-                                    resolveImdbStreamVideoId(
+                                    resolveSeriesStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        tmdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.tmdb
+                                            ?: meta.id.takeIf { it.startsWith("tmdb:", ignoreCase = true) },
                                         season = video.season,
                                         episode = video.episode
                                     )
@@ -760,8 +762,10 @@ fun MetaDetailsScreen(
                                     chooseNavOriginalLanguage(meta),
                                     uiState.resolvedDetail?.identity?.providerIds?.imdb,
                                     uiState.deterministicAutoplayEnabled,
-                                    resolveImdbStreamVideoId(
+                                    resolveSeriesStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        tmdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.tmdb
+                                            ?: meta.id.takeIf { it.startsWith("tmdb:", ignoreCase = true) },
                                         season = null,
                                         episode = null
                                     )
@@ -790,8 +794,10 @@ fun MetaDetailsScreen(
                                     playbackRuntime,
                                     chooseNavOriginalLanguage(meta),
                                     uiState.resolvedDetail?.identity?.providerIds?.imdb,
-                                    resolveImdbStreamVideoId(
+                                    resolveSeriesStreamVideoId(
                                         imdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.imdb,
+                                        tmdbSidecarId = uiState.resolvedDetail?.identity?.providerIds?.tmdb
+                                            ?: meta.id.takeIf { it.startsWith("tmdb:", ignoreCase = true) },
                                         season = video.season,
                                         episode = video.episode
                                     )
@@ -2750,10 +2756,33 @@ internal fun resolveImdbStreamVideoId(
     }
 }
 
+internal fun resolveSeriesStreamVideoId(
+    imdbSidecarId: String?,
+    tmdbSidecarId: String?,
+    season: Int?,
+    episode: Int?
+): String? {
+    resolveImdbStreamVideoId(imdbSidecarId, season, episode)?.let { return it }
+    val tmdbId = normalizeTmdbSidecarId(tmdbSidecarId) ?: return null
+    return if (season != null && episode != null) {
+        "tmdb:$tmdbId:$season:$episode"
+    } else {
+        "tmdb:$tmdbId"
+    }
+}
+
 private fun normalizeImdbSidecarId(rawId: String?): String? {
     if (rawId.isNullOrBlank()) return null
     return Regex("""tt\d+""", RegexOption.IGNORE_CASE)
         .find(rawId.trim())
         ?.value
         ?.lowercase()
+}
+
+private fun normalizeTmdbSidecarId(rawId: String?): String? {
+    if (rawId.isNullOrBlank()) return null
+    return Regex("""(?:tmdb(?::tv)?[:/])?(\d+)""", RegexOption.IGNORE_CASE)
+        .matchEntire(rawId.trim())
+        ?.groupValues
+        ?.getOrNull(1)
 }

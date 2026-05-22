@@ -16,6 +16,7 @@ class MetadataIdentityResolver @Inject constructor(
 ) {
     interface Lookup {
         suspend fun tmdbToTvdb(tmdbId: String): String?
+        suspend fun imdbToTmdb(imdbId: String, mediaType: String): String? = null
         suspend fun imdbToTvdb(imdbId: String): String? = null
         suspend fun tvdbToTmdb(tvdbId: String): String?
     }
@@ -27,26 +28,49 @@ class MetadataIdentityResolver @Inject constructor(
         val tvdbSidecarSourceId = route.tvdbSidecarSourceId()
         val cacheSourceId = tvdbSidecarSourceId ?: parsed.identityCacheSourceId(route)
         val now = System.currentTimeMillis()
+        val lookupPlan = when {
+            tvdbSidecarSourceId != null -> IdentityLookupPlan(
+                resolverName = "TvdbToTmdbResolver",
+                apiShapeId = "identity.tvdb_to_tmdb"
+            ) { lookup.tvdbToTmdb(tvdbSidecarSourceId.value) }
+            parsed.scheme == AnimeIdScheme.TMDB && route.provider == MetadataPrimaryProvider.TVDB -> IdentityLookupPlan(
+                resolverName = "TmdbToTvdbResolver",
+                apiShapeId = "identity.tmdb_to_tvdb"
+            ) { lookup.tmdbToTvdb(parsed.value) }
+            parsed.scheme == AnimeIdScheme.IMDB && route.provider == MetadataPrimaryProvider.TVDB -> IdentityLookupPlan(
+                resolverName = "ImdbToTvdbResolver",
+                apiShapeId = "identity.imdb_to_tvdb"
+            ) { lookup.imdbToTvdb(parsed.value) }
+            parsed.scheme == AnimeIdScheme.IMDB && route.provider == MetadataPrimaryProvider.TMDB -> IdentityLookupPlan(
+                resolverName = "ImdbToTmdbResolverV2",
+                apiShapeId = "identity.imdb_to_tmdb"
+            ) { lookup.imdbToTmdb(parsed.value, route.tmdbLookupMediaType()) }
+            parsed.scheme == AnimeIdScheme.TVDB && route.provider == MetadataPrimaryProvider.TMDB -> IdentityLookupPlan(
+                resolverName = "TvdbToTmdbResolver",
+                apiShapeId = "identity.tvdb_to_tmdb"
+            ) { lookup.tvdbToTmdb(parsed.value) }
+            else -> IdentityLookupPlan(
+                resolverName = "Unknown",
+                apiShapeId = "identity.unknown"
+            ) { null }
+        }
 
-        // F-B-06: short-circuit on prior negative-cached failure
+        // F-B-06: short-circuit on prior negative-cached failure for the same resolver.
+        // Older builds persisted `Unknown` negatives for routes that now have a real resolver
+        // (e.g. IMDb series -> TMDB TV). Those must not poison the upgraded resolver path.
         if (cacheSourceId.scheme != AnimeIdScheme.UNKNOWN) {
             val existing = idMappingStore.readRaw(provider = route.provider, sourceId = cacheSourceId)
-            if (existing?.source == IdMappingSource.NEGATIVE) {
+            if (
+                existing?.source == IdMappingSource.NEGATIVE &&
+                existing.evidence.contains("via ${lookupPlan.resolverName}")
+            ) {
                 return route
             }
         }
 
-        val (resolverName, apiShapeId, lookupResult) = when {
-            tvdbSidecarSourceId != null ->
-                Triple("TvdbToTmdbResolver", "identity.tvdb_to_tmdb", lookup.tvdbToTmdb(tvdbSidecarSourceId.value))
-            parsed.scheme == AnimeIdScheme.TMDB && route.provider == MetadataPrimaryProvider.TVDB ->
-                Triple("TmdbToTvdbResolver", "identity.tmdb_to_tvdb", lookup.tmdbToTvdb(parsed.value))
-            parsed.scheme == AnimeIdScheme.IMDB && route.provider == MetadataPrimaryProvider.TVDB ->
-                Triple("ImdbToTvdbResolver", "identity.imdb_to_tvdb", lookup.imdbToTvdb(parsed.value))
-            parsed.scheme == AnimeIdScheme.TVDB && route.provider == MetadataPrimaryProvider.TMDB ->
-                Triple("TvdbToTmdbResolver", "identity.tvdb_to_tmdb", lookup.tvdbToTmdb(parsed.value))
-            else -> Triple("Unknown", "identity.unknown", null)
-        }
+        val resolverName = lookupPlan.resolverName
+        val apiShapeId = lookupPlan.apiShapeId
+        val lookupResult = lookupPlan.lookup()
 
         traceEvents.emitIdentityResolution(
             sourceId = route.parentId,
@@ -124,6 +148,18 @@ class MetadataIdentityResolver @Inject constructor(
                 )
             else -> this
         }
+
+    private fun MetadataRoute.tmdbLookupMediaType(): String =
+        when (mediaKind) {
+            MetadataMediaKind.SERIES -> "tv"
+            else -> "movie"
+        }
+
+    private class IdentityLookupPlan(
+        val resolverName: String,
+        val apiShapeId: String,
+        val lookup: suspend () -> String?
+    )
 
     private fun MetadataRoute.tvdbSidecarSourceId(): ParsedMetadataId? {
         if (provider != MetadataPrimaryProvider.TMDB) return null

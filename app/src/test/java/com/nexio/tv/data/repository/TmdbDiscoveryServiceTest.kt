@@ -8,6 +8,7 @@ import com.nexio.tv.data.remote.api.TmdbMediaResult
 import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.TitleRatingSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -24,7 +25,7 @@ import org.junit.Test
 
 class TmdbDiscoveryServiceTest {
     @Test
-    fun `search returns movies and series as one TMDB primary row with IMDb ids`() = runTest {
+    fun `search returns movies and series as one TMDB primary row with TMDB ids and IMDb sidecars`() = runTest {
         val service = FakeTmdbDiscoveryClient(
             multiSearch = listOf(
                 multiResult(
@@ -64,8 +65,12 @@ class TmdbDiscoveryServiceTest {
         assertEquals("catalog", row.rawType)
         assertFalse(row.hasMore)
         assertFalse(row.supportsSkip)
-        assertEquals("tt0133093", row.items[0].id)
+        assertEquals("tmdb:603", row.items[0].id)
         assertEquals(ContentType.MOVIE, row.items[0].type)
+        assertEquals(ProviderId.TMDB, row.items[0].firstPaintSourceProvider)
+        assertEquals("tmdb:603", row.items[0].firstPaintSourceItemId)
+        assertEquals("603", row.items[0].firstPaintStableIds.tmdb)
+        assertEquals("tt0133093", row.items[0].firstPaintStableIds.imdb)
         assertEquals("The Matrix (1999)", row.items[0].name)
         assertEquals("https://image.tmdb.org/t/p/w780/matrix-poster.jpg", row.items[0].poster)
         assertEquals(null, row.items[0].background)
@@ -73,11 +78,41 @@ class TmdbDiscoveryServiceTest {
         assertEquals(8.2f, row.items[0].imdbRating)
         assertEquals(TitleRatingSource.TMDB, row.items[0].ratingSource)
         assertEquals("en", row.items[0].language)
-        assertEquals("tt0944947", row.items[1].id)
+        assertEquals("tmdb:1399", row.items[1].id)
         assertEquals(ContentType.SERIES, row.items[1].type)
+        assertEquals(ProviderId.TMDB, row.items[1].firstPaintSourceProvider)
+        assertEquals("tmdb:1399", row.items[1].firstPaintSourceItemId)
+        assertEquals("1399", row.items[1].firstPaintStableIds.tmdb)
+        assertEquals("tt0944947", row.items[1].firstPaintStableIds.imdb)
         assertEquals("Game of Thrones (2011)", row.items[1].name)
         assertEquals("https://image.tmdb.org/t/p/w780/got-poster.jpg", row.items[1].poster)
         assertEquals(PosterShape.POSTER, row.items[1].posterShape)
+    }
+
+    @Test
+    fun `TMDB tv search keeps TMDB route id when IMDb sidecar exists`() = runTest {
+        val service = FakeTmdbDiscoveryClient(
+            multiSearch = listOf(
+                multiResult(
+                    id = 10957,
+                    mediaType = "tv",
+                    name = "Australian Survivor",
+                    firstAirDate = "2016-08-21",
+                    popularity = 10.0
+                )
+            ),
+            imdbIds = mapOf("series:10957" to "tt6103712")
+        ).createService()
+
+        val rows = service.search("australian survivor", TmdbCatalogPreferences())
+
+        val item = rows.single().items.single()
+        assertEquals("tmdb:10957", item.id)
+        assertEquals(ContentType.SERIES, item.type)
+        assertEquals(ProviderId.TMDB, item.firstPaintSourceProvider)
+        assertEquals("tmdb:10957", item.firstPaintSourceItemId)
+        assertEquals("10957", item.firstPaintStableIds.tmdb)
+        assertEquals("tt6103712", item.firstPaintStableIds.imdb)
     }
 
     @Test

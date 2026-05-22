@@ -54,7 +54,7 @@ class StreamFetchIdentityResolverTest {
     }
 
     @Test
-    fun `tvdb default stream identity requires tvdb sidecar even when canonical provider is tvdb`() = runTest {
+    fun `tvdb default stream identity uses tmdb before tvdb when imdb is absent`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TVDB,
             canonicalId = "393268",
@@ -70,11 +70,13 @@ class StreamFetchIdentityResolverTest {
             episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
         )
 
-        assertNull(result)
+        assertEquals("tmdb:71446", result?.contentId)
+        assertEquals("tmdb:71446:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.TMDB_EPISODE, result?.idScheme)
     }
 
     @Test
-    fun `tmdb default series with tmdb canonical id and tvdb sidecar does not use tvdb episode stream id`() = runTest {
+    fun `tmdb default series with tmdb canonical id and tvdb sidecar uses tmdb episode stream id`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TMDB,
             canonicalId = "71446",
@@ -90,11 +92,13 @@ class StreamFetchIdentityResolverTest {
             episodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
         )
 
-        assertNull(result)
+        assertEquals("tmdb:71446", result?.contentId)
+        assertEquals("tmdb:71446:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.TMDB_EPISODE, result?.idScheme)
     }
 
     @Test
-    fun `tvdb override series with tmdb canonical id and tvdb sidecar uses tvdb episode stream id`() = runTest {
+    fun `tvdb override series with tmdb canonical id and tvdb sidecar keeps tmdb episode stream id`() = runTest {
         val identity = ContentIdentity(
             canonicalProvider = ProviderId.TMDB,
             canonicalId = "71446",
@@ -110,9 +114,9 @@ class StreamFetchIdentityResolverTest {
             episodeOrderProvider = TvEpisodeOrderProvider.TVDB_DEFAULT
         )
 
-        assertEquals("tvdb:81189", result?.contentId)
-        assertEquals("tvdb:81189:2:1", result?.videoId)
-        assertEquals(StreamIdScheme.TVDB_EPISODE, result?.idScheme)
+        assertEquals("tmdb:71446", result?.contentId)
+        assertEquals("tmdb:71446:2:1", result?.videoId)
+        assertEquals(StreamIdScheme.TMDB_EPISODE, result?.idScheme)
     }
 
     @Test

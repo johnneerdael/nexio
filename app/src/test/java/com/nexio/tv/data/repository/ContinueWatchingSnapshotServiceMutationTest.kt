@@ -513,8 +513,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
             )
 
             val record = snapshot.records.single()
-            assertEquals("tvdb:81189:2:1", record.streamFetchIdentity?.videoId)
-            assertEquals(StreamIdScheme.TVDB_EPISODE, record.streamFetchIdentity?.idScheme)
+            assertEquals("tmdb:71446:2:1", record.streamFetchIdentity?.videoId)
+            assertEquals(StreamIdScheme.TMDB_EPISODE, record.streamFetchIdentity?.idScheme)
         }
 
     @Test

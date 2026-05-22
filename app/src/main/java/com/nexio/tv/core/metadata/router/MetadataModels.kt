@@ -186,6 +186,7 @@ data class ResolvedMetadataDocument(
     val latestNetwork: String? = null,
     val platformName: String? = null,
     val remoteIds: Map<String, Set<String>> = emptyMap(),
+    val seasons: List<com.nexio.tv.domain.model.SeasonDisplay> = emptyList(),
     val fieldOwners: Map<ResolvedField, FieldOwner>,
     val ignoredOverwrites: List<IgnoredFieldOverwrite>,
     val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),

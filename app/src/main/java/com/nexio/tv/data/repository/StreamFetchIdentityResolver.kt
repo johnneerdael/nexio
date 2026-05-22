@@ -44,6 +44,21 @@ class StreamFetchIdentityResolver @Inject constructor() {
             )
         }
 
+        val tmdbId = knownIds.tmdb?.trim()?.removePrefix("tmdb:tv:")?.removePrefix("tmdb:")?.takeIf { it.isNotBlank() }
+        if (tmdbId != null) {
+            val videoId = "tmdb:$tmdbId:$season:$episode"
+            return StreamFetchIdentity(
+                contentId = "tmdb:$tmdbId",
+                videoId = videoId,
+                idScheme = StreamIdScheme.TMDB_EPISODE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf(
+                    "phase0 default Stremio stream shape resolved series stream id from TMDB TV sidecar",
+                    sourceContext.traceDescription(canonicalIdentity)
+                )
+            )
+        }
+
         if (
             sourceContext.mediaKind == MetadataMediaKind.SERIES &&
             episodeOrderProvider == TvEpisodeOrderProvider.TVDB_DEFAULT

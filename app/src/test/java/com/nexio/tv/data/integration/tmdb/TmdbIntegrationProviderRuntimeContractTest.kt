@@ -9,12 +9,16 @@ import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbCompanySearchResponse
+import com.nexio.tv.data.remote.api.TmdbDetailsResponse
+import com.nexio.tv.data.remote.api.TmdbExternalIdsResponse
+import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.data.remote.api.TmdbMultiSearchResponse
 import com.nexio.tv.data.remote.api.TmdbPersonCreditsResponse
 import com.nexio.tv.data.remote.api.TmdbPersonResponse
 import com.nexio.tv.data.remote.api.TmdbPersonSearchResponse
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -142,6 +146,42 @@ class TmdbIntegrationProviderRuntimeContractTest {
             "expected Disabled, was ${spec.cachePolicy}",
             spec.cachePolicy is IntegrationCachePolicy.Disabled
         )
+    }
+
+    @Test
+    fun `tv external id lookup appends only external ids`() = runTest {
+        val runtime = RecordingIntegrationRuntime<TmdbExternalIdsResponse>()
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        coEvery {
+            tmdbApi.getTvDetails(
+                tvId = 10957,
+                apiKey = "tmdb-key",
+                language = null,
+                appendToResponse = "external_ids",
+                includeImageLanguage = null
+            )
+        } returns Response.success(
+            TmdbDetailsResponse(
+                id = 10957,
+                externalIds = TmdbExternalIdsResponse(id = 10957, imdbId = "tt6103712", tvdbId = 303904)
+            )
+        )
+
+        val provider = buildProvider(runtime = runtime, tmdbApi = tmdbApi)
+
+        provider.findImdbIdByTmdbId(tmdbId = 10957, mediaType = "tv")
+        val result = runtime.specs.single().load()
+
+        assertTrue(result is IntegrationLoadResult.Success)
+        coVerify(exactly = 1) {
+            tmdbApi.getTvDetails(
+                tvId = 10957,
+                apiKey = "tmdb-key",
+                language = null,
+                appendToResponse = "external_ids",
+                includeImageLanguage = null
+            )
+        }
     }
 
     private fun personDetailFixture(): TmdbPersonResponse =

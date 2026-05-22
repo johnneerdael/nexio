@@ -22,6 +22,7 @@ import com.nexio.tv.core.metadata.MetadataApiKeyResolver
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tmdb.TmdbSeasonEnrichment
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
@@ -72,7 +73,7 @@ private const val TMDB_TV_ENRICHMENT_APPEND = "credits,images,content_ratings,ex
 private const val TMDB_IDENTITY_TTL_MS = 30L * 24L * 60L * 60L * 1000L
 private const val TMDB_IDENTITY_NEGATIVE_TTL_MS = 24L * 60L * 60L * 1000L
 private const val TMDB_IDENTITY_STALE_MS = 180L * 24L * 60L * 60L * 1000L
-private const val TMDB_EXTERNAL_IDS_APPEND = "external_ids,videos,images,reviews,similar,translations"
+private const val TMDB_EXTERNAL_IDS_APPEND = "external_ids"
 
 private data class TmdbFindNegativeCacheEntry(
     val missing: Boolean = true
@@ -675,9 +676,12 @@ class TmdbIntegrationProvider private constructor(
         // cross-id resolver for 24h on titles where the details endpoint had the
         // data the whole time. Route through `getMovieDetails`/`getTvDetails` with
         // `append_to_response=external_ids` so a single network call returns the
-        // authoritative external_ids block. Falls back to the standalone endpoint
-        // only if the unified call returned a response without an external_ids
-        // block (defensive — should never happen with the append param set).
+        // authoritative external_ids block. Keep this shape identity-only:
+        // appended media payloads such as videos have different response contracts
+        // and must not poison identity resolution/backoff if their DTO changes.
+        // Falls back to the standalone endpoint only if the unified call returned
+        // a response without an external_ids block (defensive — should never
+        // happen with the append param set).
         val operationKey = "tmdb.external_ids.$normalizedType:$tmdbId"
         return runtime.get(
             IntegrationSpec(
@@ -1168,7 +1172,21 @@ class TmdbIntegrationProvider private constructor(
                     collectionId = collectionId,
                     collectionName = collectionName,
                     imdbId = details.externalIds?.imdbId?.takeIf { it.isNotBlank() },
-                    tvdbId = details.externalIds?.tvdbId
+                    tvdbId = details.externalIds?.tvdbId,
+                    seasons = details.seasons
+                        .orEmpty()
+                        .mapNotNull { season ->
+                            val seasonNumber = season.seasonNumber ?: return@mapNotNull null
+                            val episodeCount = season.episodeCount ?: 0
+                            if (seasonNumber < 0 || episodeCount <= 0) return@mapNotNull null
+                            TmdbSeasonEnrichment(
+                                seasonNumber = seasonNumber,
+                                title = null,
+                                overview = null,
+                                episodeCount = episodeCount,
+                                airDate = season.airDate?.takeIf { it.isNotBlank() }
+                            )
+                        }
                 )
             )
         } catch (exception: Exception) {

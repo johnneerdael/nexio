@@ -883,7 +883,16 @@ data class TmdbEnrichment(
     val collectionId: Int?,
     val collectionName: String?,
     val imdbId: String? = null,
-    val tvdbId: Int? = null
+    val tvdbId: Int? = null,
+    val seasons: List<TmdbSeasonEnrichment> = emptyList()
+)
+
+data class TmdbSeasonEnrichment(
+    val seasonNumber: Int,
+    val title: String?,
+    val overview: String?,
+    val episodeCount: Int,
+    val airDate: String?
 )
 
 data class TmdbEpisodeEnrichment(

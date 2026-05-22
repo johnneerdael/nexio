@@ -79,6 +79,19 @@ class MetaDetailsKitsuEpisodeSupportTest {
         )
     }
 
+    @Test
+    fun `resolveSeriesStreamVideoId falls back to tmdb display coordinate when imdb is absent`() {
+        assertEquals(
+            "tmdb:10957:14:20",
+            resolveSeriesStreamVideoId(
+                imdbSidecarId = null,
+                tmdbSidecarId = "tmdb:10957",
+                season = 14,
+                episode = 20
+            )
+        )
+    }
+
     private fun meta(
         rawType: String,
         type: ContentType,

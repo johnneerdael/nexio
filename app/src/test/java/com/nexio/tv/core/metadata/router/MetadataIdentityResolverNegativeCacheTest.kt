@@ -99,4 +99,80 @@ class MetadataIdentityResolverNegativeCacheTest {
         assertNotNull("expected NEGATIVE mapping in store after failed lookup", mapping)
         assertEquals(IdMappingSource.NEGATIVE, mapping?.source)
     }
+
+    @Test
+    fun `legacy unknown negative mapping does not block imdb to tmdb tv resolver`() = runTest {
+        val store = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = MetadataIdParser.parse("tt6103712"),
+                    provider = MetadataPrimaryProvider.TMDB,
+                    providerId = "",
+                    source = IdMappingSource.NEGATIVE,
+                    evidence = "identity lookup failed via Unknown"
+                )
+            )
+        )
+        val lookup = mockk<MetadataIdentityResolver.Lookup>()
+        coEvery { lookup.imdbToTmdb("tt6103712", "tv") } returns "10957"
+        coEvery { lookup.tmdbToTvdb(any()) } returns null
+        coEvery { lookup.imdbToTvdb(any()) } returns null
+        coEvery { lookup.tvdbToTmdb(any()) } returns null
+
+        val resolver = MetadataIdentityResolver(lookup = lookup, idMappingStore = store)
+        val resolved = resolver.resolve(
+            MetadataRoute(
+                parentId = "tt6103712",
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(),
+                targetIds = mapOf(MetadataPrimaryProvider.IMDB to "tt6103712"),
+                targetIdRequiresIdentityResolution = true,
+                trace = emptyList()
+            )
+        )
+
+        assertFalse(resolved.targetIdRequiresIdentityResolution)
+        assertEquals("10957", resolved.targetIds[MetadataPrimaryProvider.TMDB])
+        coVerify(exactly = 1) { lookup.imdbToTmdb("tt6103712", "tv") }
+    }
+
+    @Test
+    fun `legacy imdb to tmdb negative mapping does not block corrected tmdb find resolver`() = runTest {
+        val store = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = MetadataIdParser.parse("tt6103712"),
+                    provider = MetadataPrimaryProvider.TMDB,
+                    providerId = "",
+                    source = IdMappingSource.NEGATIVE,
+                    evidence = "identity lookup failed via ImdbToTmdbResolver"
+                )
+            )
+        )
+        val lookup = mockk<MetadataIdentityResolver.Lookup>()
+        coEvery { lookup.imdbToTmdb("tt6103712", "tv") } returns "10957"
+        coEvery { lookup.tmdbToTvdb(any()) } returns null
+        coEvery { lookup.imdbToTvdb(any()) } returns null
+        coEvery { lookup.tvdbToTmdb(any()) } returns null
+
+        val resolver = MetadataIdentityResolver(lookup = lookup, idMappingStore = store)
+        val resolved = resolver.resolve(
+            MetadataRoute(
+                parentId = "tt6103712",
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(),
+                targetIds = mapOf(MetadataPrimaryProvider.IMDB to "tt6103712"),
+                targetIdRequiresIdentityResolution = true,
+                trace = emptyList()
+            )
+        )
+
+        assertFalse(resolved.targetIdRequiresIdentityResolution)
+        assertEquals("10957", resolved.targetIds[MetadataPrimaryProvider.TMDB])
+        coVerify(exactly = 1) { lookup.imdbToTmdb("tt6103712", "tv") }
+    }
 }

@@ -330,6 +330,9 @@ class FieldResolver @Inject constructor(
                 }
                 ?.toMap()
                 ?: emptyMap(),
+            seasons = (fields[ResolvedField.EPISODES] as? List<*>)
+                ?.filterIsInstance<com.nexio.tv.domain.model.SeasonDisplay>()
+                ?: emptyList(),
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites,
             localization = localization,

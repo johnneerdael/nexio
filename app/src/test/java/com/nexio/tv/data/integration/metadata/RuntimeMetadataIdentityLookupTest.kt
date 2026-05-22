@@ -163,6 +163,22 @@ class RuntimeMetadataIdentityLookupTest {
     }
 
     @Test
+    fun `imdbToTmdb calls TMDB provider with tv media type for series`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>()
+        val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)
+        coEvery { tmdbProvider.findTmdbIdByImdbId("tt6103712", "tv") } returns 10957
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.imdbToTmdb("tt6103712", "tv")
+
+        assertEquals("10957", result)
+        coVerify(exactly = 1) { tmdbProvider.findTmdbIdByImdbId("tt6103712", "tv") }
+    }
+
+    @Test
     fun `imdbToTmdbMovie ignores blank IMDB id`() = runTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
         val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)

@@ -204,7 +204,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
                         title = "Season 12",
                         overview = null,
                         episodes = listOf(
-                            SeasonEpisodeMark(episodeNumber = 20, airDate = "2026-04-06")
+                            SeasonEpisodeMark(episodeNumber = 20, airDate = null)
                         )
                     )
                 )
@@ -230,7 +230,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
                     seasonNumber = 14,
                     episodeNumber = 20,
                     title = "TVDB Title Must Not Win",
-                    airDate = "2026-04-06"
+                    airDate = null
                 )
             )
         )
