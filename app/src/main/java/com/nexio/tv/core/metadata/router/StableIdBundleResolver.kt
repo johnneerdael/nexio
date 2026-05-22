@@ -68,6 +68,16 @@ class StableIdBundleResolver @Inject constructor(
                     ContentType.SERIES,
                     ContentType.TV -> {
                         tmdbTvId = known.tmdb.presentStableId()
+                        if (tmdbTvId != null) {
+                            tvdbSeriesId = known.tvdb.presentStableId()
+                                ?: resolveViaStoreOrProvider(
+                                    sourceId = tmdbTvSourceId(tmdbTvId),
+                                    provider = MetadataPrimaryProvider.TVDB,
+                                    operation = "tmdbTvToTvdb",
+                                    target = "TVDB",
+                                    evidence = evidence
+                                ) { lookup.tmdbTvToTvdb(tmdbTvId) }
+                        }
                         if (imdbId == null && tmdbTvId != null) {
                             imdbId = resolveViaStoreOrProvider(
                                 sourceId = tmdbTvSourceId(tmdbTvId),

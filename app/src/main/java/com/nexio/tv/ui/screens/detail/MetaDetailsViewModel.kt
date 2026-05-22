@@ -67,8 +67,10 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
+import com.nexio.tv.domain.model.SeasonDisplay
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TrailerDisplayState
+import com.nexio.tv.domain.model.TvdbEpisodeOrder
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.orDefault
@@ -209,7 +211,8 @@ private data class DetailMetadataEnrichment(
     val tmdbContentType: ContentType,
     val isTvContent: Boolean,
     val settings: TmdbSettings,
-    val tvEpisodeOrder: DetailTvEpisodeOrder = DetailTvEpisodeOrder()
+    val tvEpisodeOrder: DetailTvEpisodeOrder = DetailTvEpisodeOrder(),
+    val detailSeasons: List<SeasonDisplay> = emptyList()
 )
 
 private data class DetailTvEpisodeOrder(
@@ -218,15 +221,6 @@ private data class DetailTvEpisodeOrder(
     val tmdbTvOrderKey: String? = null,
     val tvdbSeriesId: String? = null
 )
-
-private fun DetailTvEpisodeOrder.episodeRequestContentId(defaultContentId: String): String {
-    if (provider != TvEpisodeOrderProvider.TVDB_DEFAULT) return defaultContentId
-    val cleanTvdbId = tvdbSeriesId?.trim()
-        ?.removePrefix("tvdb:")
-        ?.takeIf { it.isNotEmpty() }
-        ?: return defaultContentId
-    return "tvdb:$cleanTvdbId"
-}
 
 private fun DetailTvEpisodeOrder.uiProvider(): TvEpisodeOrderProvider =
     if (provider == TvEpisodeOrderProvider.TVDB_DEFAULT && !tvdbSeriesId.isNullOrBlank()) {
@@ -1098,7 +1092,8 @@ class MetaDetailsViewModel @Inject constructor(
                         tvdbLanguage = enrichment.tvdbLanguage,
                         settings = enrichment.settings,
                         isTvContent = enrichment.isTvContent,
-                        episodeOrder = enrichment.tvEpisodeOrder
+                        episodeOrder = enrichment.tvEpisodeOrder,
+                        detailSeasons = enrichment.detailSeasons
                     )
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -1258,7 +1253,8 @@ class MetaDetailsViewModel @Inject constructor(
                     tvdbLanguage = enrichment.tvdbLanguage,
                     settings = enrichment.settings,
                     isTvContent = enrichment.isTvContent,
-                    episodeOrder = enrichment.tvEpisodeOrder
+                    episodeOrder = enrichment.tvEpisodeOrder,
+                    detailSeasons = enrichment.detailSeasons
                 )
 
                 _uiState.update { state ->
@@ -1706,7 +1702,8 @@ class MetaDetailsViewModel @Inject constructor(
                 tvdbLanguage = tvdbLanguage,
                 settings = settings,
                 isTvContent = isTvContent,
-                episodeOrder = tvEpisodeOrder
+                episodeOrder = tvEpisodeOrder,
+                detailSeasons = detailDocument?.seasons.orEmpty()
             )
         }
         return DetailMetadataEnrichment(
@@ -1720,7 +1717,8 @@ class MetaDetailsViewModel @Inject constructor(
             tmdbContentType = tmdbContentType,
             isTvContent = isTvContent,
             settings = settings,
-            tvEpisodeOrder = tvEpisodeOrder
+            tvEpisodeOrder = tvEpisodeOrder,
+            detailSeasons = detailDocument?.seasons.orEmpty()
         )
     }
 
@@ -2144,25 +2142,52 @@ class MetaDetailsViewModel @Inject constructor(
         tvdbLanguage: String,
         settings: TmdbSettings,
         isTvContent: Boolean,
-        episodeOrder: DetailTvEpisodeOrder
+        episodeOrder: DetailTvEpisodeOrder,
+        detailSeasons: List<SeasonDisplay> = emptyList()
     ): Meta {
         if (!settings.useEpisodes || !isTvContent) return targetMeta
 
         val tvdbCoreEpisodes = tvEnrichment?.episodeMetadata.orEmpty()
-        val shouldRequestAllTvdbEpisodes = tvEnrichment?.seriesTvdbId != null
-        val seasonNumbers = if (shouldRequestAllTvdbEpisodes) {
-            emptyList()
+        val projectedCoordinate = parseEpisodeCoordinate(itemId)
+        val tvdbProjectionEpisodes = if (
+            episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            !episodeOrder.tvdbSeriesId.isNullOrBlank()
+        ) {
+            fetchTvdbEpisodeProjection(
+                tvdbSeriesId = episodeOrder.tvdbSeriesId,
+                fallbackContentId = targetMeta.id,
+                seasonNumbers = emptyList()
+            )
         } else {
-            targetMeta.videos
-                .mapNotNull { it.season }
-                .ifEmpty {
-                    tvdbCoreEpisodes.keys.map { it.first }
-                }
-                .distinct()
+            emptyMap()
         }
+        val seedVideosFromTvdbProjection = targetMeta.videos.isEmpty() &&
+            episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            tvdbProjectionEpisodes.isNotEmpty()
+        val seedVideos = targetMeta.videos.ifEmpty {
+            buildDetailEpisodeStubs(
+                seriesId = targetMeta.id,
+                detailSeasons = detailSeasons,
+                requestedCoordinate = projectedCoordinate,
+                tvdbProjectionEpisodes = tvdbProjectionEpisodes,
+                episodeOrder = episodeOrder
+            )
+        }
+        val seasonNumbers = seedVideos
+            .mapNotNull { video ->
+                if (episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                    video.tvdbEpisodeOrder?.defaultSeason
+                } else {
+                    video.season
+                }
+            }
+            .ifEmpty {
+                tvdbCoreEpisodes.keys.map { it.first }
+            }
+            .distinct()
 
-        val episodeRequestContentId = episodeOrder.episodeRequestContentId(targetMeta.id)
-        val episodeFallbackContentId = if (episodeRequestContentId != targetMeta.id) targetMeta.id else itemId
+        val episodeRequestContentId = targetMeta.id
+        val episodeFallbackContentId = itemId
         val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(
             metadataRequest = MetadataRequest(
                 contentId = episodeRequestContentId,
@@ -2189,18 +2214,15 @@ class MetaDetailsViewModel @Inject constructor(
             "detail.episode_enrichment_result metaId=${targetMeta.id} provider=${episodeDecision.provider} " +
                 "orderProvider=${episodeOrder.uiProvider()} requestId=$episodeRequestContentId " +
                 "coreEpisodes=${tvdbCoreEpisodes.size} fetchedEpisodes=${episodeDecision.value.orEmpty().size} " +
-                "targetVideos=${targetMeta.videos.size}"
+                "targetVideos=${targetMeta.videos.size} seedVideos=${seedVideos.size}"
         )
         if (episodeMap.isEmpty()) return targetMeta
-        val targetVideos = targetMeta.videos
+        val targetVideos = seedVideos
 
         // When the meta arrived with no pre-existing episode structure (e.g. from the canonical
         // router path which returns videos=emptyList()), build video stubs from the episode map
         // so that the enrichment results (runtimes, thumbnails, etc.) are not silently discarded.
         if (targetVideos.isEmpty()) {
-            if (episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT) {
-                return targetMeta
-            }
             Log.i(
                 TAG,
                 "detail.episode_enrichment_building_video_stubs metaId=${targetMeta.id} " +
@@ -2215,17 +2237,45 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        val existingKeys = targetVideos
+        val workingVideos = if (
+            episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            !seedVideosFromTvdbProjection
+        ) {
+            projectVideosToTvdbDisplayOrder(
+                videos = targetVideos,
+                seriesId = targetMeta.id,
+                tvdbEpisodes = tvdbProjectionEpisodes
+            )
+        } else {
+            targetVideos
+        }
+
+        val existingKeys = workingVideos
             .mapNotNull { video ->
                 val season = video.season ?: return@mapNotNull null
                 val episode = video.episode ?: return@mapNotNull null
                 season to episode
             }
             .toSet()
-        val hydratedVideos = targetVideos.map { video ->
+        val hydratedVideos = workingVideos.map { video ->
                 val season = video.season
                 val episode = video.episode
-                val key = if (season != null && episode != null) season to episode else null
+                val nativeKey = if (
+                    episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT
+                ) {
+                    video.tvdbEpisodeOrder?.let { order ->
+                        val nativeSeason = order.defaultSeason
+                        val nativeEpisode = order.defaultEpisode
+                        if (nativeSeason != null && nativeEpisode != null) nativeSeason to nativeEpisode else null
+                    }
+                } else {
+                    null
+                }
+                val key = if (episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                    nativeKey
+                } else {
+                    if (season != null && episode != null) season to episode else null
+                }
                 val ep = key?.let { episodeMap[it] }
 
                 video.copy(
@@ -2240,7 +2290,7 @@ class MetaDetailsViewModel @Inject constructor(
                     thumbnail = ep?.thumbnail ?: video.thumbnail,
                     thumbnailArtwork = ep?.thumbnailArtwork ?: video.thumbnailArtwork,
                     runtime = ep?.runtimeMinutes ?: video.runtime,
-                    tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
+                    tvdbEpisodeOrder = video.tvdbEpisodeOrder ?: ep?.tvdbEpisodeOrder
                 )
             }
         val missingVideos = if (episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT) {
@@ -2259,6 +2309,286 @@ class MetaDetailsViewModel @Inject constructor(
             videos = mergedVideos
         )
     }
+
+    private suspend fun fetchTvdbEpisodeProjection(
+        tvdbSeriesId: String?,
+        fallbackContentId: String?,
+        seasonNumbers: List<Int>
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val cleanTvdbId = tvdbSeriesId
+            ?.trim()
+            ?.removePrefix("tvdb:")
+            ?.takeIf { it.isNotEmpty() }
+            ?: return emptyMap()
+        val tvdbContentId = "tvdb:$cleanTvdbId"
+        return try {
+            metadataRouterFacade.fetchTvEpisodeProjection(
+                metadataRequest = MetadataRequest(
+                    contentId = tvdbContentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(
+                        itemType = "series",
+                        previewSourceProvider = ProviderId.TVDB.name,
+                        previewSourceItemId = tvdbContentId
+                    ),
+                    depth = MetadataDepth.SEASON,
+                    seasonNumber = seasonNumbers.firstOrNull()
+                ),
+                tvRequest = TvMetadataRequest(
+                    contentId = tvdbContentId,
+                    fallbackContentId = fallbackContentId,
+                    contentType = ContentType.SERIES,
+                    seasonNumbers = seasonNumbers
+                )
+            ).value.orEmpty()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to fetch detail TVDB projection for $tvdbContentId: ${error.message}", error)
+            emptyMap()
+        }
+    }
+
+    private fun buildDetailEpisodeStubs(
+        seriesId: String,
+        detailSeasons: List<SeasonDisplay>,
+        requestedCoordinate: Pair<Int, Int>?,
+        tvdbProjectionEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>,
+        episodeOrder: DetailTvEpisodeOrder
+    ): List<Video> {
+        if (
+            episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            tvdbProjectionEpisodes.isNotEmpty()
+        ) {
+            return buildTvdbProjectionEpisodeStubs(
+                seriesId = seriesId,
+                detailSeasons = detailSeasons,
+                tvdbProjectionEpisodes = tvdbProjectionEpisodes
+            )
+        }
+
+        if (detailSeasons.isEmpty()) return emptyList()
+        val nativeSeason = if (
+            episodeOrder.uiProvider() == TvEpisodeOrderProvider.TVDB_DEFAULT &&
+            requestedCoordinate != null &&
+            tvdbProjectionEpisodes.isNotEmpty()
+        ) {
+            nativeSeasonForTvdbDisplayCoordinate(
+                detailSeasons = detailSeasons,
+                requestedCoordinate = requestedCoordinate,
+                tvdbProjectionEpisodes = tvdbProjectionEpisodes
+            )
+        } else {
+            requestedCoordinate?.first
+        }
+        val selectedSeason = nativeSeason
+            ?: detailSeasons.firstOrNull { it.seasonNumber > 0 }?.seasonNumber
+            ?: return emptyList()
+        val season = detailSeasons.firstOrNull { it.seasonNumber == selectedSeason } ?: return emptyList()
+        val episodeLabel = context.getString(R.string.episodes_episode)
+        val out = ArrayList<Video>(season.episodes.size)
+        for (i in season.episodes.indices) {
+            val episode = season.episodes[i]
+            val episodeNumber = episode.episodeNumber ?: continue
+            out += Video(
+                id = "$seriesId:${season.seasonNumber}:$episodeNumber",
+                title = "$episodeLabel $episodeNumber",
+                released = episode.airDate,
+                thumbnail = null,
+                season = season.seasonNumber,
+                episode = episodeNumber,
+                overview = null
+            )
+        }
+        return out
+    }
+
+    private fun buildTvdbProjectionEpisodeStubs(
+        seriesId: String,
+        detailSeasons: List<SeasonDisplay>,
+        tvdbProjectionEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): List<Video> {
+        val episodeLabel = context.getString(R.string.episodes_episode)
+        return tvdbProjectionEpisodes.entries
+            .sortedWith(
+                compareBy<Map.Entry<Pair<Int, Int>, TvEpisodeMetadata>> { it.key.first }
+                    .thenBy { it.key.second }
+            )
+            .map { (coordinate, metadata) ->
+                val nativeCoordinate = nativeCoordinateForTvdbDisplayEpisode(
+                    detailSeasons = detailSeasons,
+                    displayCoordinate = coordinate,
+                    displayMetadata = metadata
+                )
+                Video(
+                    id = "$seriesId:${coordinate.first}:${coordinate.second}",
+                    title = "$episodeLabel ${coordinate.second}",
+                    released = metadata.airDate,
+                    thumbnail = null,
+                    season = coordinate.first,
+                    episode = coordinate.second,
+                    overview = null,
+                    tvdbEpisodeOrder = TvdbEpisodeOrder(
+                        defaultSeason = nativeCoordinate?.first,
+                        defaultEpisode = nativeCoordinate?.second,
+                        absoluteNumber = metadata.tvdbEpisodeOrder?.absoluteNumber,
+                        airsAfterSeason = metadata.tvdbEpisodeOrder?.airsAfterSeason,
+                        airsBeforeSeason = metadata.tvdbEpisodeOrder?.airsBeforeSeason,
+                        airsBeforeEpisode = metadata.tvdbEpisodeOrder?.airsBeforeEpisode,
+                        alternateOrderPreservedButNotApplied = metadata.tvdbEpisodeOrder?.alternateOrderPreservedButNotApplied == true
+                    )
+                )
+            }
+    }
+
+    private fun nativeCoordinateForTvdbDisplayEpisode(
+        detailSeasons: List<SeasonDisplay>,
+        displayCoordinate: Pair<Int, Int>,
+        displayMetadata: TvEpisodeMetadata
+    ): Pair<Int, Int>? {
+        val displayAirDate = displayMetadata.airDate.normalizeDatePrefix() ?: return null
+        for (i in detailSeasons.indices) {
+            val season = detailSeasons[i]
+            for (j in season.episodes.indices) {
+                val episode = season.episodes[j]
+                val episodeNumber = episode.episodeNumber ?: continue
+                if (
+                    episodeNumber == displayCoordinate.second &&
+                    episode.airDate.normalizeDatePrefix() == displayAirDate
+                ) {
+                    return season.seasonNumber to episodeNumber
+                }
+            }
+        }
+        for (i in detailSeasons.indices) {
+            val season = detailSeasons[i]
+            for (j in season.episodes.indices) {
+                val episode = season.episodes[j]
+                val episodeNumber = episode.episodeNumber ?: continue
+                if (episode.airDate.normalizeDatePrefix() == displayAirDate) {
+                    return season.seasonNumber to episodeNumber
+                }
+            }
+        }
+        return null
+    }
+
+    private fun nativeSeasonForTvdbDisplayCoordinate(
+        detailSeasons: List<SeasonDisplay>,
+        requestedCoordinate: Pair<Int, Int>,
+        tvdbProjectionEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): Int? {
+        val requestedMetadata = tvdbProjectionEpisodes[requestedCoordinate] ?: return null
+        val requestedAirDate = requestedMetadata.airDate.normalizeDatePrefix() ?: return null
+        for (i in detailSeasons.indices) {
+            val season = detailSeasons[i]
+            for (j in season.episodes.indices) {
+                val episode = season.episodes[j]
+                if (
+                    episode.episodeNumber == requestedCoordinate.second &&
+                    episode.airDate.normalizeDatePrefix() == requestedAirDate
+                ) {
+                    return season.seasonNumber
+                }
+            }
+        }
+        for (i in detailSeasons.indices) {
+            val season = detailSeasons[i]
+            for (j in season.episodes.indices) {
+                val episode = season.episodes[j]
+                if (episode.airDate.normalizeDatePrefix() == requestedAirDate) {
+                    return season.seasonNumber
+                }
+            }
+        }
+        return null
+    }
+
+    private fun projectVideosToTvdbDisplayOrder(
+        videos: List<Video>,
+        seriesId: String,
+        tvdbEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): List<Video> {
+        if (videos.isEmpty() || tvdbEpisodes.isEmpty()) return videos
+        val out = ArrayList<Video>(videos.size)
+        for (i in videos.indices) {
+            val video = videos[i]
+            val nativeSeason = video.season
+            val nativeEpisode = video.episode
+            if (nativeSeason == null || nativeEpisode == null) {
+                out += video
+                continue
+            }
+            val projected = tvdbEpisodeForNativeVideo(video, tvdbEpisodes)
+            if (projected == null) {
+                out += video
+            } else {
+                val (coordinate, metadata) = projected
+                out += video.copy(
+                    id = "$seriesId:${coordinate.first}:${coordinate.second}",
+                    season = coordinate.first,
+                    episode = coordinate.second,
+                    tvdbEpisodeOrder = TvdbEpisodeOrder(
+                        defaultSeason = nativeSeason,
+                        defaultEpisode = nativeEpisode,
+                        absoluteNumber = metadata.tvdbEpisodeOrder?.absoluteNumber,
+                        airsAfterSeason = metadata.tvdbEpisodeOrder?.airsAfterSeason,
+                        airsBeforeSeason = metadata.tvdbEpisodeOrder?.airsBeforeSeason,
+                        airsBeforeEpisode = metadata.tvdbEpisodeOrder?.airsBeforeEpisode,
+                        alternateOrderPreservedButNotApplied = metadata.tvdbEpisodeOrder?.alternateOrderPreservedButNotApplied == true
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    private fun tvdbEpisodeForNativeVideo(
+        video: Video,
+        tvdbEpisodes: Map<Pair<Int, Int>, TvEpisodeMetadata>
+    ): Pair<Pair<Int, Int>, TvEpisodeMetadata>? {
+        val airDate = video.released.normalizeDatePrefix()
+        if (airDate != null) {
+            val matches = tvdbEpisodes.entries.filter { (_, metadata) ->
+                metadata.airDate.normalizeDatePrefix() == airDate
+            }
+            matches.firstOrNull { (coordinate, _) -> coordinate.second == video.episode }?.let {
+                return it.toPair()
+            }
+            matches.singleOrNull()?.let { return it.toPair() }
+        }
+        val normalizedTitle = video.title.normalizeEpisodeTitle()
+        if (normalizedTitle != null) {
+            val matches = tvdbEpisodes.entries.filter { (_, metadata) ->
+                metadata.title.normalizeEpisodeTitle() == normalizedTitle
+            }
+            matches.firstOrNull { (coordinate, _) -> coordinate.second == video.episode }?.let {
+                return it.toPair()
+            }
+            matches.singleOrNull()?.let { return it.toPair() }
+        }
+        return null
+    }
+
+    private fun parseEpisodeCoordinate(value: String?): Pair<Int, Int>? {
+        val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val parts = raw.split(':')
+        if (parts.size < 4) return null
+        val season = parts[parts.size - 2].toIntOrNull() ?: return null
+        val episode = parts[parts.size - 1].toIntOrNull() ?: return null
+        return if (season > 0 && episode > 0) season to episode else null
+    }
+
+    private fun String?.normalizeDatePrefix(): String? =
+        this?.trim()?.takeIf { it.length >= 10 }?.take(10)?.takeIf { DETAIL_DATE_PREFIX.matches(it) }
+
+    private fun String?.normalizeEpisodeTitle(): String? =
+        this
+            ?.lowercase(Locale.ROOT)
+            ?.replace(DETAIL_NON_TITLE_TOKEN, " ")
+            ?.trim()
+            ?.replace(DETAIL_WHITESPACE, " ")
+            ?.takeIf { it.isNotEmpty() }
 
     private fun shouldSupplementTvdbDetailWithTmdb(
         tvEnrichment: TvMetadataEnrichment?,
@@ -3901,3 +4231,7 @@ internal fun mergeOriginalLanguageForTest(
     advancedOriginalLanguage: String?,
     existing: String?
 ): String? = advancedOriginalLanguage ?: existing
+
+private val DETAIL_DATE_PREFIX = Regex("\\d{4}-\\d{2}-\\d{2}")
+private val DETAIL_NON_TITLE_TOKEN = Regex("[^a-z0-9]+")
+private val DETAIL_WHITESPACE = Regex("\\s+")

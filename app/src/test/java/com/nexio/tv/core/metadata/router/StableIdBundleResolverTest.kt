@@ -134,6 +134,30 @@ class StableIdBundleResolverTest {
     }
 
     @Test
+    fun `tmdb routed tv show resolves tvdb sidecar for episode order overrides`() = runTest {
+        val lookup = RecordingLookup(
+            tmdbTvToTvdbResult = "303904",
+            tmdbTvToImdbResult = "tt6103712"
+        )
+        val resolver = resolver(lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TMDB,
+                knownIds = ProviderIds(tmdb = "10957"),
+                sourceProvider = ProviderId.TMDB,
+                sourceItemId = "tmdb:10957"
+            )
+        )
+
+        assertEquals("10957", bundle.canonical.tmdbTvId)
+        assertEquals("303904", bundle.canonical.tvdbSeriesId)
+        assertEquals("tt6103712", bundle.sidecars.imdbId)
+        assertEquals(listOf("tmdbTvToTvdb:10957", "tmdbTvToImdb:10957"), lookup.calls)
+    }
+
+    @Test
     fun `tmdb tv rail falls back through imdb when direct tvdb lookup misses`() = runTest {
         val lookup = RecordingLookup(
             tmdbTvToTvdbResult = null,
@@ -243,7 +267,7 @@ class StableIdBundleResolverTest {
 
     @Test
     fun `tmdb route for series stores known tmdb id as tv canonical id`() = runTest {
-        val lookup = RecordingLookup()
+        val lookup = RecordingLookup(tmdbTvToTvdbResult = "81189")
         val resolver = resolver(lookup = lookup)
 
         val bundle = resolver.resolve(
@@ -256,8 +280,9 @@ class StableIdBundleResolverTest {
 
         assertEquals("71446", bundle.canonical.tmdbTvId)
         assertNull(bundle.canonical.tmdbMovieId)
+        assertEquals("81189", bundle.canonical.tvdbSeriesId)
         assertEquals("tt0903747", bundle.sidecars.imdbId)
-        assertEquals(0, lookup.callCount)
+        assertEquals(listOf("tmdbTvToTvdb:71446"), lookup.calls)
     }
 
     @Test

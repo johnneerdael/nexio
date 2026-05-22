@@ -28,6 +28,8 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.SeasonDisplay
+import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.Video
@@ -97,7 +99,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     }
 
     @Test
-    fun `detail uses tvdb episode enrichment when manual override resolves tvdb order`() = runTest(dispatcher) {
+    fun `detail keeps tmdb episode enrichment when manual override resolves tvdb order`() = runTest(dispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         val metadataDisplayRepository = mockDisplayRepository(
             resolvedDocument(providerIds = ProviderIds(tmdb = "1399", tvdb = "121361", imdb = "tt0944947"))
@@ -126,8 +128,8 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
         assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
         assertTrue(viewModel.uiState.value.tvEpisodeOrderToggleAvailable)
         assertFalse(viewModel.uiState.value.tvEpisodeOrderTogglePending)
-        assertEquals("tvdb:121361", metadataRequest.captured.contentId)
-        assertEquals("tvdb:121361", request.captured.contentId)
+        assertEquals("tmdb:1399", metadataRequest.captured.contentId)
+        assertEquals("tmdb:1399", request.captured.contentId)
         assertEquals("tmdb:1399", request.captured.fallbackContentId)
         assertEquals("tmdb:1399", viewModel.uiState.value.meta?.id)
     }
@@ -190,6 +192,99 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     }
 
     @Test
+    fun `projected continue watching detail uses tmdb metadata and tvdb display coordinate`() = runTest(dispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val metadataDisplayRepository = mockDisplayRepository(
+            resolvedDocument(
+                canonicalId = "10957",
+                providerIds = ProviderIds(tmdb = "10957", tvdb = "303904", imdb = "tt6103712"),
+                seasons = listOf(
+                    SeasonDisplay(
+                        seasonNumber = 12,
+                        title = "Season 12",
+                        overview = null,
+                        episodes = listOf(
+                            SeasonEpisodeMark(episodeNumber = 20, airDate = "2026-04-06")
+                        )
+                    )
+                )
+            )
+        )
+        val enrichmentRequest = slot<TvMetadataRequest>()
+        val enrichmentMetadataRequest = slot<MetadataRequest>()
+        coEvery {
+            facade.fetchTvEpisodeProjection(any(), any())
+        } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf(
+                (1 to 1) to TvEpisodeMetadata(
+                    providerEpisodeId = "tvdb-1-1",
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    title = "TVDB Legacy Season",
+                    airDate = "2002-01-01"
+                ),
+                (14 to 20) to TvEpisodeMetadata(
+                    providerEpisodeId = "tvdb-14-20",
+                    seasonNumber = 14,
+                    episodeNumber = 20,
+                    title = "TVDB Title Must Not Win",
+                    airDate = "2026-04-06"
+                )
+            )
+        )
+        coEvery {
+            facade.fetchTvEpisodeEnrichment(capture(enrichmentMetadataRequest), capture(enrichmentRequest))
+        } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf(
+                (12 to 20) to TvEpisodeMetadata(
+                    providerEpisodeId = "tmdb-12-20",
+                    seasonNumber = 12,
+                    episodeNumber = 20,
+                    title = "Maggots",
+                    airDate = "2026-04-06",
+                    overview = "TMDB overview"
+                )
+            )
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = seriesMeta(id = "tmdb:10957", videos = emptyList()),
+            itemId = "tmdb:10957:14:20",
+            itemType = "series",
+            metadataRouterFacade = facade,
+            metadataDisplayRepository = metadataDisplayRepository,
+            tmdbSettings = episodeSettings(),
+            tvEpisodeOrderResolver = orderResolver(
+                provider = TvEpisodeOrderProvider.TVDB_DEFAULT,
+                tvdbSeriesId = "303904"
+            )
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
+        assertEquals("tmdb:10957", enrichmentMetadataRequest.captured.contentId)
+        assertEquals("tmdb:10957", enrichmentRequest.captured.contentId)
+        assertEquals(listOf(12), enrichmentRequest.captured.seasonNumbers)
+        val videos = viewModel.uiState.value.meta?.videos.orEmpty()
+        assertEquals(listOf(1, 14), videos.mapNotNull { it.season }.distinct())
+        val legacyEpisode = videos.first { it.season == 1 && it.episode == 1 }
+        assertFalse(legacyEpisode.title.contains("TVDB Legacy Season"))
+        assertEquals(null, legacyEpisode.tvdbEpisodeOrder?.defaultSeason)
+        assertEquals(null, legacyEpisode.tvdbEpisodeOrder?.defaultEpisode)
+        val projectedEpisode = videos.first { it.season == 14 && it.episode == 20 }
+        assertEquals("tmdb:10957:14:20", projectedEpisode.id)
+        assertEquals("Maggots", projectedEpisode.title)
+        assertEquals("TMDB overview", projectedEpisode.overview)
+        assertEquals(12, projectedEpisode.tvdbEpisodeOrder?.defaultSeason)
+        assertEquals(20, projectedEpisode.tvdbEpisodeOrder?.defaultEpisode)
+    }
+
+    @Test
     fun `detail merges tmdb route id with tvdb only resolved identity for episode order`() = runTest(dispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         val metadataDisplayRepository = mockDisplayRepository(
@@ -239,8 +334,8 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
         assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, viewModel.uiState.value.tvEpisodeOrderProvider)
         assertTrue(viewModel.uiState.value.tvEpisodeOrderToggleAvailable)
         assertFalse(viewModel.uiState.value.tvEpisodeOrderTogglePending)
-        assertEquals("tvdb:121361", metadataRequest.captured.contentId)
-        assertEquals("tvdb:121361", request.captured.contentId)
+        assertEquals("tmdb:1399", metadataRequest.captured.contentId)
+        assertEquals("tmdb:1399", request.captured.contentId)
         assertEquals("tmdb:1399", request.captured.fallbackContentId)
         assertEquals("tmdb:1399", viewModel.uiState.value.meta?.id)
     }
@@ -456,7 +551,8 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
     private fun resolvedDocument(
         canonicalProvider: ProviderId = ProviderId.TMDB,
         canonicalId: String = "1399",
-        providerIds: ProviderIds
+        providerIds: ProviderIds,
+        seasons: List<SeasonDisplay> = emptyList()
     ): ResolvedDetailDisplayDocument =
         ResolvedDetailDisplayDocument(
             route = MetadataRoute(
@@ -488,7 +584,7 @@ class MetaDetailsTvEpisodeOrderOverrideTest {
             artwork = ArtworkBundle(),
             rating = null,
             trailer = TrailerDisplayState(),
-            seasons = emptyList(),
+            seasons = seasons,
             people = null,
             reviews = emptyList(),
             recommendations = emptyList(),
