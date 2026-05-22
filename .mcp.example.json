@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "code-review-graph[embeddings]",
+        "code-review-graph",
+        "serve"
+      ],
+      "type": "stdio",
+      "env": {
+        "CRG_TOOLS": "semantic_search_nodes_tool,query_graph_tool,get_impact_radius_tool,traverse_graph_tool,list_communities_tool,get_community_tool,get_review_context_tool,list_graph_stats_tool"
+      }
+    }
+  }
+}
