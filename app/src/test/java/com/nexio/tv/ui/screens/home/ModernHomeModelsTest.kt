@@ -8,6 +8,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
@@ -15,6 +16,8 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -126,6 +129,103 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolved continue watching next up hero does not mix stale snapshot metadata`() {
+        val staleNextUp = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tmdb:308014",
+                contentType = "series",
+                name = "Berlin and the Lady with an Ermine",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(
+                    title = "Berlin and the Lady with an Ermine",
+                    description = "English overview",
+                    genres = listOf("Drama", "Crime"),
+                    releaseInfo = "2026-05-15",
+                    imdbRating = 7.0f,
+                    ratingSource = TitleRatingSource.IMDB
+                ),
+                videoId = "tmdb:308014:1:4",
+                season = 1,
+                episode = 4,
+                episodeTitle = "Oranges from China",
+                episodeDescription = "English overview",
+                thumbnail = null,
+                imdbRating = 7.0f,
+                genres = listOf("Drama", "Crime"),
+                releaseInfo = "2026-05-15",
+                lastWatched = 1L
+            )
+        )
+        val resolved = ContinueWatchingResolvedDisplayItem.fromNextUp(
+            resolved = resolvedDisplayItemForCw(
+                contentId = "tmdb:308014",
+                contentType = "series",
+                title = "Berlín y la dama del armiño",
+                overview = "Berlijn zint op een nieuwe overval.",
+                genres = listOf("Drama", "Misdaad"),
+                rating = TitleRating(8.04, TitleRatingSource.TMDB),
+                posterUrl = null,
+                backdropUrl = null,
+                logoUrl = null
+            ),
+            source = staleNextUp
+        )
+
+        val built = buildContinueWatchingItem(
+            resolved = resolved,
+            useLandscapePosters = true,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+
+        assertEquals("Berlín y la dama del armiño", built.heroPreview.title)
+        assertEquals("Berlijn zint op een nieuwe overval.", built.heroPreview.description)
+        assertEquals("7.0", built.heroPreview.imdbText)
+        assertEquals(TitleRatingSource.IMDB, built.heroPreview.ratingSource)
+        assertEquals(listOf("Drama", "Misdaad"), built.heroPreview.genres)
+    }
+
+    @Test
+    fun `legacy continue watching movie title rating does not render as imdb episode rating`() {
+        val movie = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tt28650488",
+                contentType = "movie",
+                name = "The Super Mario Galaxy Movie",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt28650488",
+                season = null,
+                episode = null,
+                episodeTitle = null,
+                position = 0L,
+                duration = 0L,
+                lastWatched = 1L
+            ),
+            displayMetadata = HomeDisplayMetadata(
+                title = "The Super Mario Galaxy Movie",
+                imdbRating = 7.2f,
+                ratingSource = TitleRatingSource.TMDB
+            ),
+            episodeImdbRating = 7.2f
+        )
+        val resolved = ContinueWatchingResolvedDisplayItem.fromInProgressLegacy(movie)
+
+        val built = buildContinueWatchingItem(
+            resolved = resolved,
+            useLandscapePosters = true,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+
+        assertEquals("7.2", built.heroPreview.imdbText)
+        assertEquals(TitleRatingSource.TMDB, built.heroPreview.ratingSource)
+    }
+
+    @Test
     fun `heroPreviewContentKey changes when tomatoes text changes for the active item`() {
         val withoutTomatoes = buildModernCarouselItem(tomatoesText = null)
         val withTomatoes = buildModernCarouselItem(tomatoesText = "88")
@@ -149,6 +249,97 @@ class ModernHomeModelsTest {
         )
 
         assertEquals("88", resolved?.tomatoesText)
+    }
+
+    @Test
+    fun `resolveDisplayedHeroPreview drops stale foreground when active item changes`() {
+        val previousPreview = buildModernCarouselItem(tomatoesText = "70").heroPreview.copy(
+            title = "Berlin",
+            description = "English overview",
+            textSourceRank = DisplaySourceRank.FIRST_PAINT,
+            textLanguageTag = "en-US"
+        )
+        val activePreview = buildModernCarouselItem(tomatoesText = "88").heroPreview.copy(
+            title = "Berlín y la dama del armiño",
+            description = "Nederlandse beschrijving",
+            textSourceRank = DisplaySourceRank.RESOLVED,
+            textLanguageTag = "nl-NL"
+        )
+
+        val resolved = resolveDisplayedHeroPreview(
+            displayedHeroItemKey = "previous_item",
+            activeHeroItemKey = "active_item",
+            displayedHeroPreview = previousPreview,
+            liveActiveHeroPreview = activePreview,
+            preferredLanguageTag = "nl-NL"
+        )
+
+        assertEquals("Berlín y la dama del armiño", resolved?.title)
+        assertEquals("Nederlandse beschrijving", resolved?.description)
+        assertEquals("88", resolved?.tomatoesText)
+        assertEquals("nl-NL", resolved?.textLanguageTag)
+    }
+
+    @Test
+    fun `resolveDisplayedHeroPreview keeps foreground text set when fallback metadata races later`() {
+        val localizedPreview = buildModernCarouselItem(tomatoesText = null).heroPreview.copy(
+            title = "Berlijn",
+            description = "Nederlandse beschrijving",
+            contentTypeText = "Drama",
+            yearText = "2026",
+            genres = listOf("Drama"),
+            textSourceRank = DisplaySourceRank.RESOLVED
+        )
+        val fallbackPreview = buildModernCarouselItem(tomatoesText = "88").heroPreview.copy(
+            title = "Berlin",
+            description = "English overview",
+            contentTypeText = "Series",
+            yearText = "2026",
+            genres = listOf("Crime"),
+            textSourceRank = DisplaySourceRank.FIRST_PAINT
+        )
+
+        val resolved = resolveDisplayedHeroPreview(
+            displayedHeroItemKey = "item_1",
+            activeHeroItemKey = "item_1",
+            displayedHeroPreview = localizedPreview,
+            liveActiveHeroPreview = fallbackPreview
+        )
+
+        assertEquals("Berlijn", resolved?.title)
+        assertEquals("Nederlandse beschrijving", resolved?.description)
+        assertEquals("Drama", resolved?.contentTypeText)
+        assertEquals(listOf("Drama"), resolved?.genres)
+        assertEquals("88", resolved?.tomatoesText)
+    }
+
+    @Test
+    fun `selectForegroundHeroPreview prefers requested language when equal rank metadata races`() {
+        val englishPreview = buildModernCarouselItem(tomatoesText = "70").heroPreview.copy(
+            title = "Berlin and the Lady with an Ermine",
+            description = "English overview",
+            genres = listOf("Crime"),
+            textSourceRank = DisplaySourceRank.RESOLVED,
+            textLanguageTag = "en-US"
+        )
+        val dutchPreview = buildModernCarouselItem(tomatoesText = "88").heroPreview.copy(
+            title = "Berlijn en de Dame met de Hermelijn",
+            description = "Nederlandse beschrijving",
+            genres = listOf("Misdaad"),
+            textSourceRank = DisplaySourceRank.RESOLVED,
+            textLanguageTag = "nl-NL"
+        )
+
+        val selected = selectForegroundHeroPreview(
+            current = englishPreview,
+            candidate = dutchPreview,
+            preferredLanguageTag = "nl-NL"
+        )
+
+        assertEquals("Berlijn en de Dame met de Hermelijn", selected?.title)
+        assertEquals("Nederlandse beschrijving", selected?.description)
+        assertEquals(listOf("Misdaad"), selected?.genres)
+        assertEquals("88", selected?.tomatoesText)
     }
 
     @Test
@@ -249,6 +440,9 @@ class ModernHomeModelsTest {
         contentId: String,
         contentType: String,
         title: String,
+        overview: String? = null,
+        genres: List<String> = emptyList(),
+        rating: TitleRating? = null,
         posterUrl: String?,
         backdropUrl: String?,
         logoUrl: String?
@@ -274,8 +468,8 @@ class ModernHomeModelsTest {
                 originalTitle = null,
                 year = null,
                 releaseDate = null,
-                overview = null,
-                genres = emptyList(),
+                overview = overview,
+                genres = genres,
                 runtimeText = null
             ),
             artwork = ArtworkBundle(
@@ -286,7 +480,7 @@ class ModernHomeModelsTest {
                 logo = logoUrl?.takeIf { it.isNotBlank() }
                     ?.let { ArtworkDisplayRef.LegacyString(it, ArtworkType.LOGO, ArtworkTrace.empty()) }
             ),
-            rating = null,
+            rating = rating,
             trailer = TrailerDisplayState(),
             hydrationState = HydrationState.PREVIEW_ONLY,
             sourceTrace = emptyList(),

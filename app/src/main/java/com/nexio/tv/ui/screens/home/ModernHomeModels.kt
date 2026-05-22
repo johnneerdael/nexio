@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
@@ -52,7 +53,9 @@ data class HeroPreview(
     val backdrop: String?,
     val imageUrl: String?,
     val frozenBackdropUrl: String? = null,
-    val frozenLogoUrl: String? = null
+    val frozenLogoUrl: String? = null,
+    val textSourceRank: DisplaySourceRank = DisplaySourceRank.FIRST_PAINT,
+    val textLanguageTag: String? = null
 )
 
 @Immutable
@@ -241,7 +244,8 @@ internal data class ModernHomeContentState(
     val trailerPreviewExternalUrls: Map<String, String> = emptyMap(),
     val trailerPreviewLoadingIds: Set<String> = emptySet(),
     val trailerPreviewNegativeCacheIds: Set<String> = emptySet(),
-    val trailerMetadataAvailableKeys: Set<String> = emptySet()
+    val trailerMetadataAvailableKeys: Set<String> = emptySet(),
+    val preferredLanguageTag: String? = null
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(
@@ -340,6 +344,8 @@ internal fun heroPreviewContentKey(item: ModernCarouselItem?): String? {
         append(preview.backdrop)
         append('|')
         append(preview.imageUrl)
+        append('|')
+        append(preview.textLanguageTag)
     }
 }
 
@@ -355,14 +361,64 @@ internal fun resolveDisplayedHeroPreview(
     displayedHeroItemKey: String?,
     activeHeroItemKey: String?,
     displayedHeroPreview: HeroPreview?,
-    liveActiveHeroPreview: HeroPreview?
+    liveActiveHeroPreview: HeroPreview?,
+    preferredLanguageTag: String? = null
 ): HeroPreview? {
     return if (displayedHeroItemKey != null && displayedHeroItemKey == activeHeroItemKey) {
-        liveActiveHeroPreview ?: displayedHeroPreview
+        selectForegroundHeroPreview(
+            current = displayedHeroPreview,
+            candidate = liveActiveHeroPreview,
+            preferredLanguageTag = preferredLanguageTag
+        )
     } else {
-        displayedHeroPreview ?: liveActiveHeroPreview
+        liveActiveHeroPreview ?: displayedHeroPreview
     }
 }
+
+internal fun selectForegroundHeroPreview(
+    current: HeroPreview?,
+    candidate: HeroPreview?,
+    preferredLanguageTag: String? = null
+): HeroPreview? {
+    if (current == null) return candidate
+    if (candidate == null) return current
+    val currentLanguageMatches = current.textLanguageTag.matchesPreferredLanguage(preferredLanguageTag)
+    val candidateLanguageMatches = candidate.textLanguageTag.matchesPreferredLanguage(preferredLanguageTag)
+    return when {
+        candidate.textSourceRank.ordinal > current.textSourceRank.ordinal -> candidate
+        candidate.textSourceRank.ordinal < current.textSourceRank.ordinal -> candidate.withForegroundTextFrom(current)
+        candidateLanguageMatches && !currentLanguageMatches -> candidate
+        currentLanguageMatches && !candidateLanguageMatches -> candidate.withForegroundTextFrom(current)
+        candidate.textLanguageTag != current.textLanguageTag -> candidate.withForegroundTextFrom(current)
+        else -> candidate
+    }
+}
+
+private fun HeroPreview.withForegroundTextFrom(source: HeroPreview): HeroPreview =
+    copy(
+        title = source.title,
+        logo = source.logo,
+        description = source.description,
+        contentTypeText = source.contentTypeText,
+        yearText = source.yearText,
+        genres = source.genres,
+        frozenLogoUrl = source.frozenLogoUrl,
+        textSourceRank = source.textSourceRank,
+        textLanguageTag = source.textLanguageTag
+    )
+
+private fun String?.matchesPreferredLanguage(preferredLanguageTag: String?): Boolean {
+    val current = normalizedLanguageTag() ?: return false
+    val preferred = preferredLanguageTag.normalizedLanguageTag() ?: return false
+    return current == preferred || current.substringBefore('-') == preferred.substringBefore('-')
+}
+
+private fun String?.normalizedLanguageTag(): String? =
+    this
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.replace('_', '-')
+        ?.lowercase()
 
 internal fun resolveFocusedTrailerSelection(
     rowKey: String?,
@@ -449,6 +505,7 @@ internal fun buildContinueWatchingItem(
             val isSeries = isSeriesType(item.progress.contentType)
             val episodeCode = item.progress.episodeDisplayString
             val episodeTitle = item.progress.episodeTitle?.takeIf { it.isNotBlank() }
+            val episodeImdbRating = item.episodeImdbRating.takeIf { isSeries }
             val episodeLabel = when {
                 isSeries && episodeCode != null && episodeTitle != null -> "$episodeCode · $episodeTitle"
                 isSeries && episodeCode != null -> episodeCode
@@ -463,9 +520,9 @@ internal fun buildContinueWatchingItem(
                     ?: item.progress.episodeTitle,
                 contentTypeText = episodeLabel,
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
-                imdbText = (item.episodeImdbRating ?: displayMetadata.imdbRating)
+                imdbText = (episodeImdbRating ?: displayMetadata.imdbRating)
                     ?.let { RatingDisplayFormatter.formatTitleRating(it) },
-                ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
+                ratingSource = if (episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
                 poster = resolvedPoster,
@@ -479,7 +536,9 @@ internal fun buildContinueWatchingItem(
                     // Portrait poster cards must take their image only from poster sources
                     // (Task 3 step 5). Backdrop/logo are NOT valid fallbacks here.
                     resolvedPoster
-                }
+                },
+                textSourceRank = resolved.textSourceRank,
+                textLanguageTag = resolved.textLanguageTag
             )
         }
         is ContinueWatchingItem.NextUp -> {
@@ -516,7 +575,9 @@ internal fun buildContinueWatchingItem(
                         resolvedPoster,
                         item.info.thumbnail
                     )
-                }
+                },
+                textSourceRank = resolved.textSourceRank,
+                textLanguageTag = resolved.textLanguageTag
             )
         }
     }
@@ -728,7 +789,9 @@ internal fun buildCatalogItem(
         backdrop = resolvedBackdropUrl,
         imageUrl = heroImageUrl,
         frozenBackdropUrl = frozenBackdrop,
-        frozenLogoUrl = frozenLogo
+        frozenLogoUrl = frozenLogo,
+        textSourceRank = resolved.textSourceRank,
+        textLanguageTag = resolved.textLanguageTag
     )
 
     val itemId = item?.id ?: resolved.contentId

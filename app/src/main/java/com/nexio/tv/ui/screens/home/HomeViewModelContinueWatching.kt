@@ -11,7 +11,6 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingRecord
@@ -479,10 +478,19 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         val idx = rawItems.indexOfFirst { it === item }
         projectedKeys[idx] ?: item.canonicalOrContentKey()
     }
-    val items = withContinueWatchingOverlaySidecars(itemsWithoutOverlaySidecars)
-    val traktUpNextItemsWithoutOverlaySidecars = snapshot.traktUpNextItems.map { entry ->
+    val items = withContinueWatchingOverlaySidecars(
+        preserveContinueWatchingEpisodeText(
+            incoming = itemsWithoutOverlaySidecars,
+            current = _displayContinueWatchingItems.value
+        )
+    )
+    val traktUpNextRawItems = snapshot.traktUpNextItems.map { entry ->
         entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
     }.filter { it.info.hasAired }
+    val traktUpNextItemsWithoutOverlaySidecars = preserveContinueWatchingEpisodeText(
+        incoming = traktUpNextRawItems,
+        current = _uiState.value.traktUpNextItems
+    )
     val traktUpNextItems = withContinueWatchingOverlaySidecars(traktUpNextItemsWithoutOverlaySidecars)
         .filterIsInstance<ContinueWatchingItem.NextUp>()
 
@@ -717,7 +725,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         is ContinueWatchingItem.InProgress -> item.progress.contentId
         is ContinueWatchingItem.NextUp -> item.info.contentId
     }
-    val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+    val metadataLanguage = profileBoundary.currentLanguageTag()
     val isTvdbContent = contentId.startsWith("tvdb:", ignoreCase = true)
     return try {
         val providerPreview = item.toContinueWatchingProviderPreview()
@@ -731,10 +739,10 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 profileBoundary = profileBoundary
             )
         }
-        val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
+        val localizedEpisodeMetadata = localizedContinueWatchingEpisodeMetadata(
             metadataRouterFacade = metadataRouterFacade,
             item = item,
-            language = tvdbLanguage
+            language = metadataLanguage
         )
 
         val existing = when (item) {
@@ -781,7 +789,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
                 displayMetadata = enrichedMetadata,
-                episodeDescription = localizedEpisodeDescription
+                episodeDescription = localizedEpisodeMetadata?.overview
                     ?: enrichedMetadata.description
                     ?: item.episodeDescription,
                 genres = enrichedMetadata.genres.ifEmpty { item.genres },
@@ -794,7 +802,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                     poster = enrichedMetadata.displayPoster,
                     backdrop = enrichedMetadata.displayBackdrop,
                     logo = enrichedMetadata.displayLogo,
-                    episodeDescription = localizedEpisodeDescription
+                    episodeTitle = localizedEpisodeMetadata?.title ?: item.info.episodeTitle,
+                    episodeDescription = localizedEpisodeMetadata?.overview
                         ?: enrichedMetadata.description
                         ?: item.info.episodeDescription,
                     genres = enrichedMetadata.genres.ifEmpty { item.info.genres },
@@ -920,17 +929,22 @@ private fun providerIdsForContinueWatchingProviderPreview(
     }
 }
 
-internal suspend fun localizedContinueWatchingEpisodeDescription(
+internal data class LocalizedContinueWatchingEpisodeMetadata(
+    val title: String?,
+    val overview: String?
+)
+
+internal suspend fun localizedContinueWatchingEpisodeMetadata(
     metadataRouterFacade: com.nexio.tv.core.metadata.router.MetadataRouterFacade,
     item: ContinueWatchingItem,
     language: String? = null
-): String? {
+): LocalizedContinueWatchingEpisodeMetadata? {
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
     if (item.contentId().startsWith("tvdb:", ignoreCase = true)) return null
 
-    return metadataRouterFacade.fetchTvEpisodeEnrichment(
+    val episodeMetadata = metadataRouterFacade.fetchTvEpisodeEnrichment(
         metadataRequest = MetadataRequest(
             contentId = item.contentId(),
             contentType = ContentType.fromString(item.contentType()),
@@ -946,7 +960,15 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
             language = language,
             seasonNumbers = listOf(season)
         )
-    ).value?.get(season to episode)?.overview?.takeIf { it.isNotBlank() }
+    ).value?.get(season to episode) ?: return null
+
+    val title = episodeMetadata.title?.takeIf { it.isNotBlank() }
+    val overview = episodeMetadata.overview?.takeIf { it.isNotBlank() }
+    if (title == null && overview == null) return null
+    return LocalizedContinueWatchingEpisodeMetadata(
+        title = title,
+        overview = overview
+    )
 }
 
 private fun ContinueWatchingItem.providerFallbackContentId(): String {
@@ -954,6 +976,116 @@ private fun ContinueWatchingItem.providerFallbackContentId(): String {
         is ContinueWatchingItem.InProgress -> progress.videoId
         is ContinueWatchingItem.NextUp -> info.videoId
     }
+}
+
+internal fun preserveContinueWatchingEpisodeText(
+    incoming: List<ContinueWatchingItem>,
+    current: List<ContinueWatchingItem>
+): List<ContinueWatchingItem> {
+    if (incoming.isEmpty() || current.isEmpty()) return incoming
+
+    val currentByKey = HashMap<ContinueWatchingEpisodeTextKey, ContinueWatchingItem>(current.size)
+    for (index in current.indices) {
+        val item = current[index]
+        val keys = item.episodeTextKeys()
+        for (keyIndex in keys.indices) {
+            currentByKey[keys[keyIndex]] = item
+        }
+    }
+    if (currentByKey.isEmpty()) return incoming
+
+    var changed = false
+    val merged = ArrayList<ContinueWatchingItem>(incoming.size)
+    for (index in incoming.indices) {
+        val item = incoming[index]
+        val currentItem = item.episodeTextKeys().firstNotNullOfOrNull { key -> currentByKey[key] }
+        val next = item.preserveEpisodeTextFrom(currentItem)
+        if (next !== item) changed = true
+        merged += next
+    }
+    return if (changed) merged else incoming
+}
+
+private data class ContinueWatchingEpisodeTextKey(
+    val itemKind: String,
+    val contentType: String,
+    val identity: String,
+    val season: Int,
+    val episode: Int
+)
+
+private fun ContinueWatchingItem.episodeTextKeys(): List<ContinueWatchingEpisodeTextKey> {
+    val season = season() ?: return emptyList()
+    val episode = episode() ?: return emptyList()
+    val itemKind = when (this) {
+        is ContinueWatchingItem.InProgress -> "in_progress"
+        is ContinueWatchingItem.NextUp -> "next_up"
+    }
+    val contentType = contentType().trim().lowercase(Locale.ROOT)
+    val identities = linkedSetOf<String>()
+    canonicalOrContentKey()
+        .trim()
+        .lowercase(Locale.ROOT)
+        .takeIf { it.isNotEmpty() }
+        ?.let(identities::add)
+    contentId()
+        .trim()
+        .lowercase(Locale.ROOT)
+        .takeIf { it.isNotEmpty() }
+        ?.let(identities::add)
+    if (identities.isEmpty()) return emptyList()
+
+    val keys = ArrayList<ContinueWatchingEpisodeTextKey>(identities.size)
+    for (identity in identities) {
+        keys += ContinueWatchingEpisodeTextKey(
+            itemKind = itemKind,
+            contentType = contentType,
+            identity = identity,
+            season = season,
+            episode = episode
+        )
+    }
+    return keys
+}
+
+private fun ContinueWatchingItem.preserveEpisodeTextFrom(
+    current: ContinueWatchingItem?
+): ContinueWatchingItem {
+    if (current == null) return this
+    return when {
+        this is ContinueWatchingItem.NextUp && current is ContinueWatchingItem.NextUp -> {
+            val title = current.info.episodeTitle.preferredEpisodeTextOver(info.episodeTitle)
+            val description = current.info.episodeDescription.preferredEpisodeTextOver(info.episodeDescription)
+            if (title == info.episodeTitle && description == info.episodeDescription) {
+                this
+            } else {
+                copy(
+                    info = info.copy(
+                        episodeTitle = title,
+                        episodeDescription = description
+                    )
+                )
+            }
+        }
+        this is ContinueWatchingItem.InProgress && current is ContinueWatchingItem.InProgress -> {
+            val title = current.progress.episodeTitle.preferredEpisodeTextOver(progress.episodeTitle)
+            val description = current.episodeDescription.preferredEpisodeTextOver(episodeDescription)
+            if (title == progress.episodeTitle && description == episodeDescription) {
+                this
+            } else {
+                copy(
+                    progress = progress.copy(episodeTitle = title),
+                    episodeDescription = description
+                )
+            }
+        }
+        else -> this
+    }
+}
+
+private fun String?.preferredEpisodeTextOver(fallback: String?): String? {
+    val current = this?.trim()?.takeIf { it.isNotEmpty() }
+    return current ?: fallback
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
@@ -1481,11 +1613,12 @@ private fun WatchProgress.toContinueWatchingInProgress(
     displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
 ): ContinueWatchingItem.InProgress {
     val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    val seriesEpisodeRating = displayMetadata?.imdbRating.takeIf { isSeriesType(contentType) }
     return ContinueWatchingItem.InProgress(
         progress = this,
         displayMetadata = displayMetadata,
         episodeDescription = displayMetadata?.description,
-        episodeImdbRating = displayMetadata?.imdbRating,
+        episodeImdbRating = seriesEpisodeRating,
         genres = displayMetadata?.genres.orEmpty(),
         releaseInfo = displayMetadata?.releaseInfo
     )

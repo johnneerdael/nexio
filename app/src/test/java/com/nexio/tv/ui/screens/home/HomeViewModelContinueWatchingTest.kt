@@ -21,8 +21,10 @@ import com.nexio.tv.data.repository.StreamFetchIdentity
 import com.nexio.tv.data.repository.StreamIdScheme
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.ContentIdentity
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
@@ -108,6 +110,45 @@ class HomeViewModelContinueWatchingTest {
         assertEquals("tvdb:393268:2:1", item.progress.videoId)
         assertEquals(65_066L, item.progress.position)
         assertEquals(200L, item.progress.lastWatched)
+    }
+
+    @Test
+    fun `movie snapshot title rating is not copied into episode imdb rating`() = runTest {
+        val progress = WatchProgress(
+            contentId = "tt28650488",
+            contentType = "movie",
+            name = "The Super Mario Galaxy Movie",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tt28650488",
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 0L,
+            duration = 0L,
+            lastWatched = 1L,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(progress),
+                displayMetadataByItemKey = mapOf(
+                    "movie:tt28650488" to HomeDisplayMetadata(
+                        title = "The Super Mario Galaxy Movie",
+                        imdbRating = 7.2f,
+                        ratingSource = TitleRatingSource.TMDB
+                    )
+                )
+            ),
+            nowMs = 1_000L
+        )
+
+        val item = items.single() as ContinueWatchingItem.InProgress
+        assertNull(item.episodeImdbRating)
+        assertEquals(7.2f, item.displayMetadata?.imdbRating)
+        assertEquals(TitleRatingSource.TMDB, item.displayMetadata?.ratingSource)
     }
 
     @Test
@@ -257,7 +298,7 @@ class HomeViewModelContinueWatchingTest {
     fun `localized episode description uses matching in progress episode overview`() = runTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         coEvery {
-            tvMetadataRouter.fetchSeasonEpisodes("tt0944947", "tt0944947", 2, null)
+            tvMetadataRouter.fetchSeasonEpisodes(any(), any(), any(), any())
         } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -278,13 +319,13 @@ class HomeViewModelContinueWatchingTest {
         )
         val item = ContinueWatchingItem.InProgress(
             progress = WatchProgress(
-                contentId = "tt0944947",
+                contentId = "tmdb:308014",
                 contentType = "series",
                 name = "Game of Thrones",
                 poster = null,
                 backdrop = null,
                 logo = null,
-                videoId = "tt0944947:2:5",
+                videoId = "tmdb:308014:2:5",
                 season = 2,
                 episode = 5,
                 episodeTitle = "The Ghost of Harrenhal",
@@ -295,10 +336,10 @@ class HomeViewModelContinueWatchingTest {
             episodeDescription = "English episode"
         )
 
-        val description = localizedContinueWatchingEpisodeDescription(
+        val description = localizedContinueWatchingEpisodeMetadata(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
-        )
+        )?.overview
 
         assertEquals("Nederlandse aflevering", description)
         coVerify(exactly = 1) {
@@ -310,7 +351,7 @@ class HomeViewModelContinueWatchingTest {
     fun `localized episode description uses matching next up episode overview`() = runTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         coEvery {
-            tvMetadataRouter.fetchSeasonEpisodes("tt0944947", "tt0944947", 3, null)
+            tvMetadataRouter.fetchSeasonEpisodes(any(), any(), any(), any())
         } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -318,7 +359,7 @@ class HomeViewModelContinueWatchingTest {
                 TvSeasonEpisode(
                     episodeNumber = 1,
                     airDate = null,
-                    metadata = episodeEnrichment("Nederlandse volgende aflevering")
+                    metadata = episodeEnrichment("Nederlandse volgende aflevering", title = "Nederlandse titel")
                 )
             )
         )
@@ -327,17 +368,17 @@ class HomeViewModelContinueWatchingTest {
         } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = mapOf((3 to 1) to episodeEnrichment("Nederlandse volgende aflevering"))
+            value = mapOf((3 to 1) to episodeEnrichment("Nederlandse volgende aflevering", title = "Nederlandse titel"))
         )
         val item = ContinueWatchingItem.NextUp(
             NextUpInfo(
-                contentId = "tt0944947",
+                contentId = "tmdb:308014",
                 contentType = "series",
                 name = "Game of Thrones",
                 poster = null,
                 backdrop = null,
                 logo = null,
-                videoId = "tt0944947:3:1",
+                videoId = "tmdb:308014:3:1",
                 season = 3,
                 episode = 1,
                 episodeTitle = "Valar Dohaeris",
@@ -347,15 +388,90 @@ class HomeViewModelContinueWatchingTest {
             )
         )
 
-        val description = localizedContinueWatchingEpisodeDescription(
+        val metadata = localizedContinueWatchingEpisodeMetadata(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
-        assertEquals("Nederlandse volgende aflevering", description)
+        assertEquals("Nederlandse volgende aflevering", metadata?.overview)
+        assertEquals("Nederlandse titel", metadata?.title)
         coVerify(exactly = 1) {
             tvMetadataRouter.fetchEpisodeEnrichment(any())
         }
+    }
+
+    @Test
+    fun `continue watching snapshot publish does not downgrade localized next up episode title`() {
+        val current = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tmdb:308014",
+                contentType = "series",
+                name = "Berlín y la dama del armiño",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tmdb:308014:1:4",
+                season = 1,
+                episode = 4,
+                episodeTitle = "Chinese sinaasappels",
+                episodeDescription = "Nederlandse aflevering",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+        val incomingRawSnapshot = ContinueWatchingItem.NextUp(
+            current.info.copy(
+                episodeTitle = "Oranges from China",
+                episodeDescription = "English episode"
+            )
+        )
+
+        val merged = preserveContinueWatchingEpisodeText(
+            incoming = listOf(incomingRawSnapshot),
+            current = listOf(current)
+        )
+
+        val item = merged.single() as ContinueWatchingItem.NextUp
+        assertEquals("Chinese sinaasappels", item.info.episodeTitle)
+        assertEquals("Nederlandse aflevering", item.info.episodeDescription)
+    }
+
+    @Test
+    fun `continue watching snapshot publish does not preserve localized episode title across episode changes`() {
+        val current = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tmdb:308014",
+                contentType = "series",
+                name = "Berlín y la dama del armiño",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tmdb:308014:1:4",
+                season = 1,
+                episode = 4,
+                episodeTitle = "Chinese sinaasappels",
+                episodeDescription = "Nederlandse aflevering",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+        val incomingNextEpisode = ContinueWatchingItem.NextUp(
+            current.info.copy(
+                videoId = "tmdb:308014:1:5",
+                episode = 5,
+                episodeTitle = "After Love",
+                episodeDescription = "Next English episode"
+            )
+        )
+
+        val merged = preserveContinueWatchingEpisodeText(
+            incoming = listOf(incomingNextEpisode),
+            current = listOf(current)
+        )
+
+        val item = merged.single() as ContinueWatchingItem.NextUp
+        assertEquals("After Love", item.info.episodeTitle)
+        assertEquals("Next English episode", item.info.episodeDescription)
     }
 
     @Test
@@ -380,7 +496,7 @@ class HomeViewModelContinueWatchingTest {
             )
         )
 
-        val description = localizedContinueWatchingEpisodeDescription(
+        val description = localizedContinueWatchingEpisodeMetadata(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
@@ -430,10 +546,10 @@ class HomeViewModelContinueWatchingTest {
         assertEquals(ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION, snapshotSlot.captured.routingVersion)
     }
 
-    private fun episodeEnrichment(overview: String?): TvEpisodeMetadata {
+    private fun episodeEnrichment(overview: String?, title: String? = null): TvEpisodeMetadata {
         return TvEpisodeMetadata(
             providerEpisodeId = null,
-            title = null,
+            title = title,
             overview = overview,
             thumbnail = null,
             airDate = null,

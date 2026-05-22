@@ -5,15 +5,18 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
 import com.nexio.tv.ui.screens.home.providerIdsFromContinueWatchingContentId
+import com.nexio.tv.ui.screens.home.textSourceRank
 
 /**
  * Per-surface projection for Continue Watching rows. Two variants mirror
@@ -41,6 +44,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
     abstract val logoRef: ArtworkDisplayRef?
     abstract val rating: TitleRating?
     abstract val stableIds: ProviderIds
+    abstract val textSourceRank: DisplaySourceRank
+    abstract val textLanguageTag: String?
 
     /**
      * Resume row. [source] carries CW-specific fields not on [ResolvedDisplayItem]
@@ -57,6 +62,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
         override val stableIds: ProviderIds,
+        override val textSourceRank: DisplaySourceRank,
+        override val textLanguageTag: String?,
         val source: ContinueWatchingItem.InProgress
     ) : ContinueWatchingResolvedDisplayItem() {
         val progress: WatchProgress get() = source.progress
@@ -73,6 +80,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
         override val stableIds: ProviderIds,
+        override val textSourceRank: DisplaySourceRank,
+        override val textLanguageTag: String?,
         val source: ContinueWatchingItem.NextUp
     ) : ContinueWatchingResolvedDisplayItem() {
         val info: NextUpInfo get() = source.info
@@ -106,6 +115,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
             stableIds = resolved.stableIds,
+            textSourceRank = resolved.textSourceRank(),
+            textLanguageTag = resolved.displayLanguageTag,
             source = source.withResolvedDisplayMetadata(resolved)
         )
 
@@ -121,6 +132,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
             logoRef = resolved.artwork.logo,
             rating = resolved.rating,
             stableIds = resolved.stableIds,
+            textSourceRank = resolved.textSourceRank(),
+            textLanguageTag = resolved.displayLanguageTag,
             source = source.withResolvedDisplayMetadata(resolved)
         )
 
@@ -147,6 +160,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
             logoRef = source.progress.logo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
             rating = null,
             stableIds = providerIdsFromContinueWatchingContentId(source.progress.contentId),
+            textSourceRank = DisplaySourceRank.FIRST_PAINT,
+            textLanguageTag = null,
             source = source
         )
 
@@ -168,6 +183,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
             logoRef = source.info.displayLogo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
             rating = null,
             stableIds = providerIdsFromContinueWatchingContentId(source.info.contentId),
+            textSourceRank = DisplaySourceRank.FIRST_PAINT,
+            textLanguageTag = null,
             source = source
         )
     }
@@ -177,7 +194,15 @@ private fun ContinueWatchingItem.InProgress.withResolvedDisplayMetadata(
     resolved: ResolvedDisplayItem
 ): ContinueWatchingItem.InProgress {
     val merged = displayMetadata.mergeResolvedDisplay(resolved)
-    return copy(displayMetadata = merged)
+    val isSeries = progress.contentType.equals("series", ignoreCase = true) ||
+        progress.contentType.equals("tv", ignoreCase = true)
+    return copy(
+        displayMetadata = merged,
+        episodeDescription = merged.description ?: episodeDescription,
+        episodeImdbRating = merged.imdbRating.takeIf { isSeries && merged.ratingSource == TitleRatingSource.IMDB },
+        genres = merged.genres.ifEmpty { genres },
+        releaseInfo = merged.releaseInfo ?: releaseInfo
+    )
 }
 
 private fun ContinueWatchingItem.NextUp.withResolvedDisplayMetadata(
@@ -190,9 +215,10 @@ private fun ContinueWatchingItem.NextUp.withResolvedDisplayMetadata(
         poster = merged.displayPoster ?: info.poster,
         backdrop = merged.displayBackdrop ?: info.backdrop,
         logo = merged.displayLogo ?: info.logo,
-        episodeDescription = info.episodeDescription ?: merged.description,
-        genres = info.genres.ifEmpty { merged.genres },
-        releaseInfo = info.releaseInfo ?: merged.releaseInfo
+        episodeDescription = merged.description ?: info.episodeDescription,
+        imdbRating = merged.imdbRating.takeIf { merged.ratingSource == TitleRatingSource.IMDB },
+        genres = merged.genres.ifEmpty { info.genres },
+        releaseInfo = merged.releaseInfo ?: info.releaseInfo
     ))
 }
 
@@ -200,6 +226,7 @@ private fun HomeDisplayMetadata?.mergeResolvedDisplay(
     resolved: ResolvedDisplayItem
 ): HomeDisplayMetadata {
     val current = this
+    val rating = selectMergedRating(current, resolved.rating)
     return HomeDisplayMetadata(
         title = resolved.display.title ?: current?.title,
         logo = resolved.artwork.logo.toLegacyArtworkString() ?: current?.logo,
@@ -207,8 +234,8 @@ private fun HomeDisplayMetadata?.mergeResolvedDisplay(
         genres = resolved.display.genres.ifEmpty { current?.genres.orEmpty() },
         releaseInfo = resolved.display.releaseDate ?: resolved.display.year?.toString() ?: current?.releaseInfo,
         runtime = resolved.display.runtimeText ?: current?.runtime,
-        imdbRating = resolved.rating?.value?.toFloat() ?: current?.imdbRating,
-        ratingSource = resolved.rating?.source ?: current?.ratingSource,
+        imdbRating = rating?.value,
+        ratingSource = rating?.source,
         tomatoesRating = resolved.display.tomatoesRating ?: current?.tomatoesRating,
         originalLanguage = current?.originalLanguage,
         imdbId = resolved.imdbId ?: resolved.stableIds.imdb ?: current?.imdbId,
@@ -218,6 +245,26 @@ private fun HomeDisplayMetadata?.mergeResolvedDisplay(
         thumbnail = resolved.artwork.thumbnail.toLegacyArtworkString() ?: current?.thumbnail,
         artwork = resolved.artwork
     )
+}
+
+private data class MergedDisplayRating(
+    val value: Float,
+    val source: TitleRatingSource
+)
+
+private fun selectMergedRating(
+    current: HomeDisplayMetadata?,
+    resolvedRating: TitleRating?
+): MergedDisplayRating? {
+    val currentRating = current?.imdbRating
+    val currentSource = current?.ratingSource
+    return when {
+        currentRating != null && currentSource == TitleRatingSource.IMDB &&
+            resolvedRating?.source != TitleRatingSource.IMDB -> MergedDisplayRating(currentRating, TitleRatingSource.IMDB)
+        resolvedRating != null -> MergedDisplayRating(resolvedRating.value.toFloat(), resolvedRating.source)
+        currentRating != null && currentSource != null -> MergedDisplayRating(currentRating, currentSource)
+        else -> null
+    }
 }
 
 private fun String?.toLegacyArtworkRefOrNull(type: ArtworkType): ArtworkDisplayRef? {
