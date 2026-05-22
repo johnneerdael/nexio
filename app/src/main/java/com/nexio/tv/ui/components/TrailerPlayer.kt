@@ -41,6 +41,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -140,6 +141,17 @@ internal class TrailerBufferingWatchdog(
 }
 
 private const val TRAILER_BUFFERING_STALL_TIMEOUT_MS = 10_000L
+
+internal fun buildTrailerTrackSelectionParameters(
+    base: TrackSelectionParameters
+): TrackSelectionParameters {
+    return base.buildUpon()
+        .setMaxVideoSize(1920, 1080)
+        .setMaxVideoFrameRate(30)
+        .setForceHighestSupportedBitrate(true)
+        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        .build()
+}
 
 internal fun shouldUseChunkedTrailerDataSource(
     trailerUrl: String?,
@@ -434,11 +446,7 @@ fun TrailerPlayer(
                     // text tracks because we render subtitles via the
                     // app-controlled overlay pipeline (TrailerSubtitleOverlay),
                     // not Media3's TextRenderer.
-                    trackSelectionParameters = trackSelectionParameters.buildUpon()
-                        .setMaxVideoSize(1920, 1080)
-                        .setMaxVideoFrameRate(30)
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                        .build()
+                    trackSelectionParameters = buildTrailerTrackSelectionParameters(trackSelectionParameters)
                 }
         } else {
             null

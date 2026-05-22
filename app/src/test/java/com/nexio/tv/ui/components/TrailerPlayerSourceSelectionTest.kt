@@ -1,5 +1,8 @@
 package com.nexio.tv.ui.components
 
+import androidx.media3.common.C
+import androidx.media3.common.TrackSelectionParameters
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,5 +27,16 @@ class TrailerPlayerSourceSelectionTest {
                 trailerAudioUrl = "https://rr2---sn-5hne6nsk.googlevideo.com/videoplayback?id=audio123"
             )
         )
+    }
+
+    @Test
+    fun `trailer track selection starts hls at highest supported 1080p variant`() {
+        val parameters = buildTrailerTrackSelectionParameters(TrackSelectionParameters.DEFAULT)
+
+        assertEquals(1920, parameters.maxVideoWidth)
+        assertEquals(1080, parameters.maxVideoHeight)
+        assertEquals(30, parameters.maxVideoFrameRate)
+        assertTrue(parameters.forceHighestSupportedBitrate)
+        assertTrue(parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
     }
 }
