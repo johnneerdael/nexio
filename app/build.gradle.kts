@@ -661,6 +661,8 @@ dependencies {
     implementation(libs.retrofit.moshi)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(libs.okio)
+    implementation(libs.duktape.android)
     implementation(libs.moshi)
     ksp(libs.moshi.codegen)
 

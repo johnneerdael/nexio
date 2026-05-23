@@ -866,6 +866,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewUserAgentsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewSigningClientKeysState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewStreamingDataPoTokensState = mutableStateMapOf<String, String>()
     internal val trailerPreviewCaptionsState = mutableStateMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
@@ -973,6 +974,8 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewUserAgentsState
     val trailerPreviewSigningClientKeys: Map<String, String>
         get() = trailerPreviewSigningClientKeysState
+    val trailerPreviewStreamingDataPoTokens: Map<String, String>
+        get() = trailerPreviewStreamingDataPoTokensState
     val trailerPreviewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>
         get() = trailerPreviewCaptionsState
     val trailerPreviewExternalUrls: Map<String, String>

@@ -407,6 +407,7 @@ class HomeViewModelPresentationPipelineTest {
         val audioUrls = mutableMapOf<String, String>()
         val userAgents = mutableMapOf<String, String>()
         val signingClientKeys = mutableMapOf<String, String>()
+        val streamingDataPoTokens = mutableMapOf<String, String>()
         val captions = mutableMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>()
         val externalUrls = mutableMapOf<String, String>()
         val negativeCache = mutableMapOf<String, Boolean>()
@@ -424,6 +425,7 @@ class HomeViewModelPresentationPipelineTest {
             trailerPreviewAudioUrls = audioUrls,
             trailerPreviewUserAgents = userAgents,
             trailerPreviewSigningClientKeys = signingClientKeys,
+            trailerPreviewStreamingDataPoTokens = streamingDataPoTokens,
             trailerPreviewCaptions = captions,
             trailerPreviewExternalUrls = externalUrls,
             trailerPreviewNegativeCache = negativeCache
@@ -444,6 +446,7 @@ class HomeViewModelPresentationPipelineTest {
         val audioUrls = mutableMapOf("tt15940132" to "https://cdn.example/stale-audio.m3u8")
         val userAgents = mutableMapOf("tt15940132" to "Stale")
         val signingClientKeys = mutableMapOf("tt15940132" to "stale-signing-key")
+        val streamingDataPoTokens = mutableMapOf("tt15940132" to "stale-pot")
         val captions = mutableMapOf<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>(
             "tt15940132" to listOf(
                 com.nexio.tv.data.trailer.YouTubeCaptionTrack(
@@ -462,6 +465,7 @@ class HomeViewModelPresentationPipelineTest {
             trailerPreviewAudioUrls = audioUrls,
             trailerPreviewUserAgents = userAgents,
             trailerPreviewSigningClientKeys = signingClientKeys,
+            trailerPreviewStreamingDataPoTokens = streamingDataPoTokens,
             trailerPreviewCaptions = captions,
             trailerPreviewExternalUrls = externalUrls,
             trailerPreviewNegativeCache = negativeCache
@@ -472,6 +476,7 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals(false, audioUrls.containsKey("tt15940132"))
         assertEquals(false, userAgents.containsKey("tt15940132"))
         assertEquals(false, signingClientKeys.containsKey("tt15940132"))
+        assertEquals(false, streamingDataPoTokens.containsKey("tt15940132"))
         assertEquals(false, captions.containsKey("tt15940132"))
         assertEquals("stremio:///detail/movie/tt15940132", externalUrls["tt15940132"])
         assertEquals(false, negativeCache.containsKey("tt15940132"))
@@ -572,6 +577,65 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals("tmdb-backdrop", merged.background)
         assertEquals("tmdb-logo", merged.logo)
         assertEquals("Localized War Machine", merged.name)
+    }
+
+    @Test
+    fun `mergeFocusedItemEnrichment keeps localized provider text over external metadata`() {
+        val preview = testPreview("tmdb:308014", "Berlin").copy(
+            description = "First paint English overview"
+        )
+        val merged = mergeFocusedItemEnrichment(
+            currentItem = preview,
+            tmdbEnrichment = TmdbEnrichment(
+                localizedTitle = "Berlin",
+                description = "Nederlandse beschrijving",
+                genres = listOf("Drama"),
+                backdrop = null,
+                logo = null,
+                poster = null,
+                directorMembers = emptyList(),
+                writerMembers = emptyList(),
+                castMembers = emptyList(),
+                releaseInfo = "2026",
+                rating = null,
+                runtimeMinutes = null,
+                director = emptyList(),
+                writer = emptyList(),
+                productionCompanies = emptyList(),
+                networks = emptyList(),
+                ageRating = null,
+                countries = null,
+                language = "nl",
+                collectionId = null,
+                collectionName = null
+            ),
+            externalMeta = Meta(
+                id = preview.id,
+                type = ContentType.SERIES,
+                name = "Berlin",
+                poster = null,
+                posterShape = preview.posterShape,
+                background = null,
+                logo = null,
+                description = "English external overview",
+                releaseInfo = null,
+                imdbRating = null,
+                genres = listOf("Crime"),
+                runtime = null,
+                director = emptyList(),
+                cast = emptyList(),
+                country = null,
+                awards = null,
+                language = "en",
+                links = emptyList(),
+                videos = emptyList(),
+                trailerYtIds = emptyList()
+            )
+        )
+
+        assertEquals("Nederlandse beschrijving", merged.description)
+        assertEquals("nl", merged.language)
+        assertEquals(listOf("Drama"), merged.genres)
     }
 
     private fun testPreview(id: String, title: String): MetaPreview {

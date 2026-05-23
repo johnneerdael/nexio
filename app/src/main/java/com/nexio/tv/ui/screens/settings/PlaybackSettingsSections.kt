@@ -69,6 +69,7 @@ import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
+import com.nexio.tv.data.local.TrailerMaxQuality
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
@@ -109,6 +110,7 @@ internal fun PlaybackSettingsSections(
     onShowOutlineColorDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onShowTrailerMaxQualityDialog: () -> Unit,
     onSetDeterministicAutoplayEnabled: (Boolean) -> Unit,
     onSetManualBitrateLimitMbps: (Double) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
@@ -129,6 +131,7 @@ internal fun PlaybackSettingsSections(
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
+    onSetTrailerMaxQuality: (TrailerMaxQuality) -> Unit,
     androidFrameRateStatus: AndroidFrameRateSettings.Status,
     onOpenAndroidDisplaySettings: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
@@ -348,6 +351,17 @@ internal fun PlaybackSettingsSections(
                     maxValue = 15,
                     step = 1,
                     onValueChange = onSetTrailerDelaySeconds,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = trailerSettings.enabled
+                )
+            }
+
+            item(key = "general_trailer_max_quality") {
+                NavigationSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.playback_trailer_max_quality),
+                    subtitle = trailerSettings.maxQuality.label,
+                    onClick = onShowTrailerMaxQualityDialog,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
                     enabled = trailerSettings.enabled
                 )
@@ -792,6 +806,8 @@ internal fun PlaybackSettingsDialogsHost(
     showIecPackerChannelLayoutDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
+    showTrailerMaxQualityDialog: Boolean,
+    trailerSettings: TrailerSettings,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
     onSetPreferredExternalPlayerPackageName: (String?) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
@@ -807,6 +823,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetNextEpisodeThresholdMode: (com.nexio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
+    onSetTrailerMaxQuality: (TrailerMaxQuality) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
     onDismissSubtitleStartupModeDialog: () -> Unit,
@@ -817,7 +834,8 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissDecoderPriorityDialog: () -> Unit,
     onDismissIecPackerChannelLayoutDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
-    onDismissReuseLastLinkCacheDialog: () -> Unit
+    onDismissReuseLastLinkCacheDialog: () -> Unit,
+    onDismissTrailerMaxQualityDialog: () -> Unit
 ) {
     if (showPlayerPreferenceDialog) {
         PlayerPreferenceDialog(
@@ -890,6 +908,102 @@ internal fun PlaybackSettingsDialogsHost(
         onDismissNextEpisodeThresholdModeDialog = onDismissNextEpisodeThresholdModeDialog,
         onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )
+
+    if (showTrailerMaxQualityDialog) {
+        TrailerMaxQualityDialog(
+            currentMaxQuality = trailerSettings.maxQuality,
+            onQualitySelected = { maxQuality ->
+                onSetTrailerMaxQuality(maxQuality)
+                onDismissTrailerMaxQualityDialog()
+            },
+            onDismiss = onDismissTrailerMaxQualityDialog
+        )
+    }
+}
+
+@Composable
+private fun TrailerMaxQualityDialog(
+    currentMaxQuality: TrailerMaxQuality,
+    onQualitySelected: (TrailerMaxQuality) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    val options = listOf(
+        Triple(TrailerMaxQuality.P720, "720p", stringResource(R.string.playback_trailer_max_quality_720_sub)),
+        Triple(TrailerMaxQuality.P1080, "1080p", stringResource(R.string.playback_trailer_max_quality_1080_sub)),
+        Triple(TrailerMaxQuality.P2160, "2160p", stringResource(R.string.playback_trailer_max_quality_2160_sub))
+    )
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.playback_trailer_max_quality),
+        width = 420.dp,
+        suppressFirstKeyUp = false
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            items(
+                count = options.size,
+                key = { index -> options[index].first.name }
+            ) { index ->
+                val (quality, title, description) = options[index]
+                val isSelected = quality == currentMaxQuality
+
+                Card(
+                    onClick = { onQualitySelected(quality) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                    colors = CardDefaults.colors(
+                        containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                        focusedContainerColor = NexioColors.FocusBackground
+                    ),
+                    shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                    scale = CardDefaults.scale(focusedScale = 1f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = description,
+                                color = NexioColors.TextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(R.string.cd_selected),
+                                tint = NexioColors.Primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

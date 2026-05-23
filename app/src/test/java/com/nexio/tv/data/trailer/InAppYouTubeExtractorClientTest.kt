@@ -6,23 +6,33 @@ import org.junit.Test
 
 class InAppYouTubeExtractorClientTest {
     @Test
-    fun `client list contains tv then ios then android`() {
-        assertEquals(listOf("tv", "ios", "android"), CLIENTS_FOR_TEST.sortedBy { it.priority }.map { it.key })
+    fun `active client list matches NewPipeExtractor default stream flow`() {
+        assertEquals(
+            listOf("android"),
+            CLIENTS_FOR_TEST.sortedBy { it.priority }.map { it.key }
+        )
     }
 
     @Test
-    fun `android_vr is no longer in the client list`() {
-        assertTrue(CLIENTS_FOR_TEST.none { it.key == "android_vr" })
+    fun `android client matches NewPipe GAPIS shape`() {
+        val android = CLIENTS_FOR_TEST.first { it.key == "android" }
+
+        assertEquals("ANDROID", android.context["clientName"])
+        assertEquals("21.03.36", android.context["clientVersion"])
+        assertEquals("WATCH", android.context["clientScreen"])
+        assertEquals("Android", android.context["osName"])
+        assertEquals("16", android.context["osVersion"])
+        assertEquals(36, android.context["androidSdkVersion"])
+        assertEquals("en-US", android.context["hl"])
+        assertEquals("US", android.context["gl"])
+        assertTrue(android.userAgent.contains("com.google.android.youtube/21.03.36"))
+        assertTrue(android.userAgent.contains("Android 15"))
     }
 
     @Test
-    fun `iOS UA matches NewPipe template`() {
-        val ios = CLIENTS_FOR_TEST.first { it.key == "ios" }
-
-        assertTrue(ios.userAgent.startsWith("com.google.ios.youtube/21.03.2("))
-        assertTrue(ios.userAgent.contains("iPhone16,2"))
-        assertTrue(ios.userAgent.contains("CPU iOS 18_7_2 like Mac OS X"))
-        assertTrue(ios.userAgent.endsWith("US)"))
+    fun `iOS and web embedded are not active stream clients by default`() {
+        assertTrue(CLIENTS_FOR_TEST.none { it.key == "ios" })
+        assertTrue(CLIENTS_FOR_TEST.none { it.key == "web_embedded" })
     }
 
     @Test
@@ -31,9 +41,7 @@ class InAppYouTubeExtractorClientTest {
     }
 
     @Test
-    fun `lookupClientUserAgent returns iOS UA when key is ios`() {
-        val ios = CLIENTS_FOR_TEST.first { it.key == "ios" }
-
-        assertEquals(ios.userAgent, lookupClientUserAgentForTest("ios"))
+    fun `lookupClientUserAgent returns null for inactive iOS key`() {
+        assertEquals(null, lookupClientUserAgentForTest("ios"))
     }
 }

@@ -6,13 +6,19 @@ import com.google.gson.Gson
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.integration.youtube.YouTubeTrailerIntegrationProvider
+import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransport
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransportCall
+import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.trailer.cipher.PlayerSourceCache
 import com.nexio.tv.data.trailer.cipher.SignatureCipherDecoder
+import com.nexio.tv.data.trailer.jsdecrypt.NsigDescrambler
+import com.nexio.tv.data.trailer.potoken.PoTokenProvider
+import com.nexio.tv.data.trailer.potoken.PoTokenResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -20,18 +26,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
 import java.net.URL
+import java.util.Base64
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "InAppYouTubeExtractor"
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
-// Used only as a tiebreaker for the split adaptive fallback path
-// (selectPreferredTrailerPlaybackSource currently prefers the combined
-// HLS manifest, so the split path rarely activates). iOS is kept here
-// for consistency with the combined source: when split IS used as a
-// last resort, sticking to one client gives matching wire properties
-// at fetch time.
-private const val PREFERRED_SEPARATE_CLIENT = "ios"
 // Cap concurrent in-flight YouTube watch-page extractions. Heap dumps showed up
 // to 3 simultaneous 1.26 MiB HTML char[] allocations + 271 KiB InnerTube JSON
 // responses (each fetch holds the body String for the duration of the regex
@@ -39,11 +40,20 @@ private const val PREFERRED_SEPARATE_CLIENT = "ios"
 // race a fetch storm; the semaphore serializes the heaviest portion at a small
 // permit count without changing per-call throughput beyond the parallelism cap.
 private const val EXTRACTOR_MAX_CONCURRENCY = 1
+private const val WEB_EMBEDDED_CLIENT_VERSION = "1.20260122.01.00"
+private const val YOUTUBEI_WEB_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player"
+private const val YOUTUBEI_GAPIS_V1_URL = "https://youtubei.googleapis.com/youtubei/v1"
+private const val YOUTUBEI_GAPIS_PLAYER_URL = "https://youtubei.googleapis.com/youtubei/v1/player"
+private const val FETCH_IOS_CLIENT = false
+private val NEWPIPE_ADAPTIVE_CLIENTS = listOf("android")
+private val CLIENT_SPECIFIC_VISITOR_DATA_KEYS = setOf("android", "ios", "web_embedded")
+private const val DEFAULT_TRAILER_MAX_ADAPTIVE_HEIGHT = 1080
+private const val ANDROID_REEL_MAX_ATTEMPTS = 8
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
-private val API_KEY_REGEX = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
 private val VISITOR_DATA_REGEX = Regex("\"VISITOR_DATA\":\"([^\"]+)\"")
 private val QUALITY_LABEL_REGEX = Regex("(\\d{2,4})p")
+private val MIME_CODECS_REGEX = Regex("""codecs="([^"]+)"""")
 
 internal data class YouTubeClient(
     val key: String,
@@ -55,7 +65,6 @@ internal data class YouTubeClient(
 )
 
 private data class WatchConfig(
-    val apiKey: String?,
     val visitorData: String?
 )
 
@@ -68,7 +77,17 @@ internal data class StreamCandidate(
     val itag: String,
     val height: Int,
     val fps: Int,
-    val ext: String
+    val ext: String,
+    val codec: String = "",
+    val mimeType: String = "",
+    val width: Int = 0,
+    val bitrate: Long = 0,
+    val audioSampleRate: Int = 0,
+    val initStart: Long = -1,
+    val initEnd: Long = -1,
+    val indexStart: Long = -1,
+    val indexEnd: Long = -1,
+    val durationMs: Long = -1
 )
 
 private data class ManifestBestVariant(
@@ -131,73 +150,92 @@ private fun trailerContainerPreference(ext: String): Int {
     }
 }
 
-internal val CLIENTS_FOR_TEST: List<YouTubeClient> get() = CLIENTS
+internal fun preferTrailerCompatibleVideo(
+    items: List<StreamCandidate>,
+    maxHeight: Int = DEFAULT_TRAILER_MAX_ADAPTIVE_HEIGHT
+): List<StreamCandidate> {
+    if (items.isEmpty()) return items
 
-private val CLIENTS = listOf(
-    // TVHTML5 (Cobalt) — returns high-quality adaptive formats (1080p+
-    // commonly, 4K on supported videos) with no PO Token requirement.
-    // URLs ship as signatureCipher fields, so playback depends on the
-    // SignatureCipherDecoder wired in Task 6b. Reference: yt-dlp PR
-    // #14693 _DEFAULT_CLIENTS, _base.py 'tv' entry.
-    YouTubeClient(
-        key = "tv",
-        id = "7",
-        version = "7.20260114.12.00",
-        userAgent = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
-        context = mapOf(
-            "clientName" to "TVHTML5",
-            "clientVersion" to "7.20260114.12.00",
-            "hl" to "en",
-            "gl" to "US"
-        ),
-        priority = 0
+    val cappedAny = items.filter { it.height in 1..maxHeight }
+    if (cappedAny.isEmpty()) return items
+
+    val highestHeight = cappedAny.maxOf { it.height }
+    val highest = cappedAny.filter { it.height == highestHeight }
+    return preferLessExpensiveTrailerCodec(highest)
+}
+
+private fun preferLessExpensiveTrailerCodec(items: List<StreamCandidate>): List<StreamCandidate> {
+    if (items.isEmpty()) return items
+
+    val h264 = items.filter { it.codec.startsWith("avc1", ignoreCase = true) }
+    if (h264.isNotEmpty()) return h264
+
+    val vp9 = items.filter { candidate ->
+        candidate.codec.equals("vp9", ignoreCase = true) ||
+            candidate.codec.startsWith("vp09", ignoreCase = true)
+    }
+    if (vp9.isNotEmpty()) return vp9
+
+    val nonAv1 = items.filterNot { it.codec.startsWith("av01", ignoreCase = true) }
+    if (nonAv1.isNotEmpty()) return nonAv1
+
+    return items
+}
+
+internal val CLIENTS_FOR_TEST: List<YouTubeClient> get() = ACTIVE_STREAM_CLIENTS
+
+private val ANDROID_CLIENT = YouTubeClient(
+    // NewPipeExtractor's Android track. Without an Android poToken it
+    // uses youtubei.googleapis.com/youtubei/v1/reel/reel_item_watch and
+    // then unwraps playerResponse from the reel response.
+    key = "android",
+    id = "3",
+    version = "21.03.36",
+    userAgent = "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip",
+    context = mapOf(
+        "clientName" to "ANDROID",
+        "clientVersion" to "21.03.36",
+        "clientScreen" to "WATCH",
+        "osName" to "Android",
+        "osVersion" to "16",
+        "platform" to "MOBILE",
+        "androidSdkVersion" to 36,
+        "hl" to "en-US",
+        "gl" to "US",
+        "utcOffsetMinutes" to 0
     ),
-    // NewPipe prefers iOS for HLS: non-iOS clients do not reliably return hlsManifestUrl.
-    YouTubeClient(
-        key = "ios",
-        id = "5",
-        version = "21.03.2",
-        userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
-        // iOS Innertube context shape that the www.youtube.com player
-        // endpoint accepts (returns full streamingData with HLS manifest
-        // URL). NewPipeExtractor uses a slightly different shape
-        // (osName="iOS", osVersion="18.7.2.22H124", +utcOffsetMinutes)
-        // because it targets youtubei.googleapis.com — that shape
-        // returns empty streamingData when sent to www.youtube.com.
-        context = mapOf(
-            "clientName" to "IOS",
-            "clientVersion" to "21.03.2",
-            "deviceMake" to "Apple",
-            "deviceModel" to "iPhone16,2",
-            "osName" to "iPhone",
-            "osVersion" to "18.7.2.22G100",
-            "platform" to "MOBILE",
-            "hl" to "en",
-            "gl" to "US"
-        ),
-        priority = 1
-    ),
-    YouTubeClient(
-        key = "android",
-        id = "3",
-        version = "21.03.36",
-        userAgent = "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip",
-        context = mapOf(
-            "clientName" to "ANDROID",
-            "clientVersion" to "21.03.36",
-            "osName" to "Android",
-            "osVersion" to "15",
-            "platform" to "MOBILE",
-            "androidSdkVersion" to 35,
-            "hl" to "en",
-            "gl" to "US"
-        ),
-        priority = 2
-    )
+    priority = 0
 )
 
+private val IOS_CLIENT = YouTubeClient(
+    // NewPipe prefers iOS for HLS: non-iOS clients do not reliably return hlsManifestUrl.
+    key = "ios",
+    id = "5",
+    version = "21.03.2",
+    userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
+    context = mapOf(
+        "clientName" to "IOS",
+        "clientVersion" to "21.03.2",
+        "clientScreen" to "WATCH",
+        "deviceMake" to "Apple",
+        "deviceModel" to "iPhone16,2",
+        "osName" to "iOS",
+        "osVersion" to "18.7.2.22H124",
+        "platform" to "MOBILE",
+        "hl" to "en-US",
+        "gl" to "US",
+        "utcOffsetMinutes" to 0
+    ),
+    priority = 1
+)
+
+private val ACTIVE_STREAM_CLIENTS = buildList {
+    add(ANDROID_CLIENT)
+    if (FETCH_IOS_CLIENT) add(IOS_CLIENT)
+}
+
 internal fun lookupClientUserAgent(clientKey: String?): String? =
-    clientKey?.let { key -> CLIENTS.firstOrNull { it.key == key }?.userAgent }
+    clientKey?.let { key -> ACTIVE_STREAM_CLIENTS.firstOrNull { it.key == key }?.userAgent }
 
 internal fun lookupClientUserAgentForTest(clientKey: String?): String? =
     lookupClientUserAgent(clientKey)
@@ -205,7 +243,11 @@ internal fun lookupClientUserAgentForTest(clientKey: String?): String? =
 @Singleton
 class InAppYouTubeExtractor @Inject constructor(
     private val integrationProvider: YouTubeTrailerIntegrationProvider,
-    private val playerSourceCache: PlayerSourceCache
+    private val directTransport: YouTubeTrailerTransport,
+    private val playerSourceCache: PlayerSourceCache,
+    private val poTokenProvider: PoTokenProvider,
+    private val nsigDescrambler: NsigDescrambler,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore
 ) {
     private val gson = Gson()
     private val concurrencyLimiter = Semaphore(EXTRACTOR_MAX_CONCURRENCY)
@@ -255,6 +297,7 @@ class InAppYouTubeExtractor @Inject constructor(
         originalLanguage: String?
     ): TrailerPlaybackSource? {
         val videoId = extractVideoId(youtubeUrl) ?: return null
+        val trailerMaxHeight = trailerSettingsDataStore.settings.first().maxQuality.maxHeight
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
         val watchResponse = fetchTransport(
@@ -267,18 +310,17 @@ class InAppYouTubeExtractor @Inject constructor(
         }
 
         val watchConfig = getWatchConfig(watchResponse.body)
-        val apiKey = watchConfig.apiKey
-            ?: throw IllegalStateException("Unable to extract INNERTUBE_API_KEY")
-
         return coroutineScope {
         // Kick off the player-JS fetch + cipher manifest parse in parallel
-        // with the per-client player API calls. The TVHTML5 client returns
-        // signatureCipher fields rather than direct URLs; without a manifest
-        // those entries get dropped at the format-collection branches below.
+        // with the per-client player API calls. If a future client returns
+        // signatureCipher fields rather than direct URLs, entries are dropped
+        // until the matching player manifest is available.
+        val playerJsUrl = playerSourceCache.extractPlayerJsUrl(watchResponse.body)
+        val playerJsDeferred = async {
+            playerJsUrl?.let { playerSourceCache.getPlayerJs(it) }
+        }
         val cipherManifestDeferred = async {
-            val playerJsUrl = playerSourceCache.extractPlayerJsUrl(watchResponse.body)
-                ?: return@async null
-            playerSourceCache.getCipherManifest(playerJsUrl)
+            playerJsUrl?.let { playerSourceCache.getCipherManifest(it) }
         }
 
         val progressive = mutableListOf<StreamCandidate>()
@@ -287,33 +329,117 @@ class InAppYouTubeExtractor @Inject constructor(
         val manifestUrls = mutableListOf<Triple<String, Int, String>>()
         var resolvedTrailerTitle: String? = null
         val captionsPerClient = mutableMapOf<String, List<YouTubeCaptionTrack>>()
+        val poTokensByClient = mutableMapOf<String, PoTokenResult>()
+        val visitorDataByClient = mutableMapOf<String, String>()
+        val contentPlaybackNonce = generateContentPlaybackNonce()
 
-        for (client in CLIENTS) {
+        for (client in ACTIVE_STREAM_CLIENTS.sortedBy { it.priority }) {
             try {
-                // TVHTML5 ships signatureCipher fields — the player API
-                // wants the matching signatureTimestamp on the request so
-                // the response cipher version aligns with the manifest we
-                // already fetched. Non-cipher clients (iOS, ANDROID) omit
-                // it (passing it doesn't hurt but adds an unnecessary
-                // await on the cipher manifest async branch).
-                val sigTimestampForClient = if (client.key == "tv") {
+                val requestClient = client
+                val progressiveBefore = progressive.size
+                val adaptiveVideoBefore = adaptiveVideo.size
+                val adaptiveAudioBefore = adaptiveAudio.size
+                val manifestBefore = manifestUrls.size
+                var progressiveMissingUrl = 0
+                var progressiveCipherDecoded = 0
+                var adaptiveVideoMissingUrl = 0
+                var adaptiveAudioMissingUrl = 0
+                var adaptiveVideoCipherDecoded = 0
+                var adaptiveAudioCipherDecoded = 0
+                var firstMissingAdaptiveFormat: String? = null
+                val embedUrl = if (requestClient.key == "web_embedded") {
+                    webEmbedUrl(videoId)
+                } else {
+                    null
+                }
+                val poTokenResult = if (requestClient.key == "web_embedded") {
+                    poTokenProvider.getWebClientPoToken(
+                        videoId = videoId,
+                        webClientName = requestClient.context["clientName"].toString(),
+                        webClientId = requestClient.id,
+                        webClientVersion = requestClient.version,
+                        webClientScreen = requestClient.context["clientScreen"]?.toString(),
+                        embedUrl = embedUrl
+                    )
+                } else {
+                    null
+                }
+                if (requestClient.key == "web_embedded" && poTokenResult == null) {
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Skipping WEB_EMBEDDED client: poToken unavailable")
+                    continue
+                }
+                // WEB_EMBEDDED ships signatureCipher
+                // fields — the player API wants the matching
+                // signatureTimestamp on the request so the response cipher
+                // version aligns with the manifest we already fetched.
+                // Non-cipher clients (iOS, ANDROID) omit it.
+                val sigTimestampForClient = if (
+                    requestClient.key == "web_embedded"
+                ) {
                     cipherManifestDeferred.await()?.signatureTimestamp
                 } else null
-                val playerResponse = fetchPlayerResponse(
-                    apiKey = apiKey,
-                    videoId = videoId,
-                    client = client,
-                    visitorData = watchConfig.visitorData,
-                    cookieHeader = null,
-                    signatureTimestamp = sigTimestampForClient
-                )
+                var resolvedPlayerResponse: Map<*, *>? = null
+                val maxAttempts = if (requestClient.key == "android") ANDROID_REEL_MAX_ATTEMPTS else 1
+                for (attempt in 1..maxAttempts) {
+                    val requestVisitorData = poTokenResult?.visitorData
+                        ?: resolveClientVisitorData(
+                            client = requestClient,
+                            embedUrl = embedUrl,
+                            fallbackVisitorData = watchConfig.visitorData,
+                            cache = visitorDataByClient,
+                            forceRefresh = attempt > 1
+                        )
+                    if (requestClient.key in CLIENT_SPECIFIC_VISITOR_DATA_KEYS && requestVisitorData.isNullOrBlank()) {
+                        if (BuildConfig.DEBUG) {
+                            Log.w(TAG, "Skipping ${requestClient.key}: client-specific visitorData unavailable")
+                        }
+                        break
+                    }
+
+                    val candidateResponse = fetchPlayerResponse(
+                        videoId = videoId,
+                        client = requestClient,
+                        visitorData = requestVisitorData,
+                        cookieHeader = null,
+                        signatureTimestamp = sigTimestampForClient,
+                        poTokenResult = poTokenResult,
+                        contentPlaybackNonce = contentPlaybackNonce,
+                        embedUrl = embedUrl
+                    )
+                    if (
+                        requestClient.key == "android" &&
+                        candidateResponse.hasAdaptiveFormatsWithoutPlayableUrl()
+                    ) {
+                        if (attempt < maxAttempts) {
+                            Log.w(
+                                TAG,
+                                "Android reel response videoId=$videoId attempt=$attempt " +
+                                    "has adaptive formats without URLs; retrying with fresh visitorData"
+                            )
+                        } else {
+                            Log.w(
+                                TAG,
+                                "Android reel response videoId=$videoId attempt=$attempt " +
+                                    "still has adaptive formats without URLs; dropping response instead of " +
+                                    "publishing progressive fallback"
+                            )
+                        }
+                        continue
+                    }
+                    resolvedPlayerResponse = candidateResponse
+                    break
+                }
+                val playerResponse = resolvedPlayerResponse ?: continue
+                if (poTokenResult != null) {
+                    poTokensByClient[requestClient.key] = poTokenResult
+                }
 
                 if (resolvedTrailerTitle.isNullOrBlank()) {
                     resolvedTrailerTitle = extractYouTubeTrailerTitle(playerResponse)
                 }
                 val captions = extractYouTubeCaptionTracks(playerResponse)
                 if (captions.isNotEmpty()) {
-                    captionsPerClient[client.key] = captions
+                    captionsPerClient[requestClient.key] = captions
                 }
                 extractDefaultYouTubeAudioLanguageCode(playerResponse)
                     ?.takeIf { code -> !isYouTubeTrailerLanguageAcceptable(code, originalLanguage) }
@@ -325,31 +451,44 @@ class InAppYouTubeExtractor @Inject constructor(
                         )
                     }
 
-                val streamingData = playerResponse.mapValue("streamingData") ?: continue
+                val streamingData = playerResponse.mapValue("streamingData")
+                if (streamingData == null) {
+                    val playability = playerResponse.mapValue("playabilityStatus")
+                    Log.w(
+                        TAG,
+                        "Client ${requestClient.key} returned no streamingData " +
+                            "status=${playability?.stringValue("status").orEmpty()} " +
+                            "reason=${playability?.stringValue("reason").orEmpty()}"
+                    )
+                    continue
+                }
                 val hlsManifestUrl = streamingData.stringValue("hlsManifestUrl")
                 if (!hlsManifestUrl.isNullOrBlank()) {
-                    manifestUrls += Triple(client.key, client.priority, hlsManifestUrl)
+                    manifestUrls += Triple(requestClient.key, requestClient.priority, hlsManifestUrl)
                 }
-                // YoutubeExplode StreamClient.cs:235-251 — DASH manifests
-                // carry the richest adaptive set (4K when available) for
-                // clients that return one (typically TVHTML5). HLS is
-                // preferred when both are present (priority + 10 on DASH).
+                // Some clients can return DASH manifests. HLS is preferred
+                // when both are present (priority + 10 on DASH).
                 // Media3's DefaultMediaSourceFactory dispatches by URL/MIME
                 // to DashMediaSource automatically.
                 val dashManifestUrl = streamingData.stringValue("dashManifestUrl")
                 if (!dashManifestUrl.isNullOrBlank()) {
-                    manifestUrls += Triple(client.key, client.priority + 10, dashManifestUrl)
+                    manifestUrls += Triple(requestClient.key, requestClient.priority + 10, dashManifestUrl)
                 }
 
                 val formats = streamingData.listMapValue("formats")
                 for (i in formats.indices) {
                     val format = formats[i]
-                    val url = format.stringValue("url") ?: run {
-                        val signatureCipher = format.stringValue("signatureCipher")
-                            ?: format.stringValue("cipher")
-                            ?: return@run null
+                    val directUrl = format.stringValue("url")
+                    val signatureCipher = format.stringValue("signatureCipher")
+                        ?: format.stringValue("cipher")
+                    val url = directUrl ?: run {
+                        if (signatureCipher == null) {
+                            progressiveMissingUrl++
+                            return@run null
+                        }
                         val manifest = cipherManifestDeferred.await() ?: return@run null
                         SignatureCipherDecoder.decode(signatureCipher, manifest)
+                            ?.also { progressiveCipherDecoded++ }
                     } ?: continue
                     val mimeType = format.stringValue("mimeType").orEmpty()
                     if (!mimeType.contains("video/") && mimeType.isNotBlank()) continue
@@ -362,29 +501,62 @@ class InAppYouTubeExtractor @Inject constructor(
                         ?: format.numberValue("averageBitrate")
                         ?: 0.0
 
+                    val streamUrl = appendYouTubeQueryParameter(url, "cpn", contentPlaybackNonce)
                     progressive += StreamCandidate(
-                        client = client.key,
-                        priority = client.priority,
-                        url = url,
+                        client = requestClient.key,
+                        priority = requestClient.priority,
+                        url = streamUrl,
                         score = videoScore(height, fps, bitrate),
                         hasN = hasNParam(url),
                         itag = format.stringValue("itag").orEmpty(),
                         height = height,
                         fps = fps,
-                        ext = if (mimeType.contains("webm")) "webm" else "mp4"
+                        ext = if (mimeType.contains("webm")) "webm" else "mp4",
+                        codec = parsePrimaryCodec(mimeType),
+                        mimeType = parseContainerMimeType(mimeType),
+                        width = (format.numberValue("width") ?: 0.0).toInt(),
+                        bitrate = bitrate.toLong(),
+                        initStart = format.rangeStart("initRange"),
+                        initEnd = format.rangeEnd("initRange"),
+                        indexStart = format.rangeStart("indexRange"),
+                        indexEnd = format.rangeEnd("indexRange"),
+                        durationMs = format.durationMs()
                     )
                 }
 
                 val adaptiveFormats = streamingData.listMapValue("adaptiveFormats")
                 for (i in adaptiveFormats.indices) {
                     val format = adaptiveFormats[i]
+                    val mimeType = format.stringValue("mimeType").orEmpty()
+                    val hasVideo = mimeType.contains("video/")
+                    val hasAudio = mimeType.contains("audio/") || mimeType.startsWith("audio/")
                     val directUrl = format.stringValue("url")
+                    val signatureCipher = format.stringValue("signatureCipher")
+                        ?: format.stringValue("cipher")
                     val resolvedUrl = directUrl ?: run {
-                        val signatureCipher = format.stringValue("signatureCipher")
-                            ?: format.stringValue("cipher")
-                            ?: return@run null
+                        if (signatureCipher == null) {
+                            if (hasVideo) {
+                                adaptiveVideoMissingUrl++
+                            } else if (hasAudio) {
+                                adaptiveAudioMissingUrl++
+                            }
+                            if (firstMissingAdaptiveFormat == null && (hasVideo || hasAudio)) {
+                                firstMissingAdaptiveFormat =
+                                    "itag=${format.stringValue("itag").orEmpty()} " +
+                                        "mime=${mimeType.take(80)} " +
+                                        "keys=${format.keysSummary()}"
+                            }
+                            return@run null
+                        }
                         val manifest = cipherManifestDeferred.await() ?: return@run null
                         SignatureCipherDecoder.decode(signatureCipher, manifest)
+                            ?.also {
+                                if (hasVideo) {
+                                    adaptiveVideoCipherDecoded++
+                                } else if (hasAudio) {
+                                    adaptiveAudioCipherDecoded++
+                                }
+                            }
                     } ?: continue
                     // Verify cipher-resolved URLs against HEAD + tail byte.
                     // Direct iOS/ANDROID URLs skip the round trip (low
@@ -396,10 +568,6 @@ class InAppYouTubeExtractor @Inject constructor(
                     } else {
                         resolvedUrl
                     }
-                    val mimeType = format.stringValue("mimeType").orEmpty()
-                    val hasVideo = mimeType.contains("video/")
-                    val hasAudio = mimeType.contains("audio/") || mimeType.startsWith("audio/")
-
                     if (hasVideo) {
                         val height = (format.numberValue("height")
                             ?: parseQualityLabel(format.stringValue("qualityLabel"))?.toDouble()
@@ -409,16 +577,26 @@ class InAppYouTubeExtractor @Inject constructor(
                             ?: format.numberValue("averageBitrate")
                             ?: 0.0
 
+                        val streamUrl = appendYouTubeQueryParameter(url, "cpn", contentPlaybackNonce)
                         adaptiveVideo += StreamCandidate(
-                            client = client.key,
-                            priority = client.priority,
-                            url = url,
+                            client = requestClient.key,
+                            priority = requestClient.priority,
+                            url = streamUrl,
                             score = videoScore(height, fps, bitrate),
                             hasN = hasNParam(url),
                             itag = format.stringValue("itag").orEmpty(),
                             height = height,
                             fps = fps,
-                            ext = if (mimeType.contains("webm")) "webm" else "mp4"
+                            ext = if (mimeType.contains("webm")) "webm" else "mp4",
+                            codec = parsePrimaryCodec(mimeType),
+                            mimeType = parseContainerMimeType(mimeType),
+                            width = (format.numberValue("width") ?: 0.0).toInt(),
+                            bitrate = bitrate.toLong(),
+                            initStart = format.rangeStart("initRange"),
+                            initEnd = format.rangeEnd("initRange"),
+                            indexStart = format.rangeStart("indexRange"),
+                            indexEnd = format.rangeEnd("indexRange"),
+                            durationMs = format.durationMs()
                         )
                     } else if (hasAudio) {
                         val bitrate = format.numberValue("bitrate")
@@ -426,23 +604,56 @@ class InAppYouTubeExtractor @Inject constructor(
                             ?: 0.0
                         val asr = format.numberValue("audioSampleRate") ?: 0.0
 
+                        val streamUrl = appendYouTubeQueryParameter(url, "cpn", contentPlaybackNonce)
                         adaptiveAudio += StreamCandidate(
-                            client = client.key,
-                            priority = client.priority,
-                            url = url,
+                            client = requestClient.key,
+                            priority = requestClient.priority,
+                            url = streamUrl,
                             score = audioScore(bitrate, asr),
                             hasN = hasNParam(url),
                             itag = format.stringValue("itag").orEmpty(),
                             height = 0,
                             fps = 0,
-                            ext = if (mimeType.contains("webm")) "webm" else "m4a"
+                            ext = if (mimeType.contains("webm")) "webm" else "m4a",
+                            codec = parsePrimaryCodec(mimeType),
+                            mimeType = parseContainerMimeType(mimeType),
+                            bitrate = bitrate.toLong(),
+                            audioSampleRate = asr.toInt(),
+                            initStart = format.rangeStart("initRange"),
+                            initEnd = format.rangeEnd("initRange"),
+                            indexStart = format.rangeStart("indexRange"),
+                            indexEnd = format.rangeEnd("indexRange"),
+                            durationMs = format.durationMs()
                         )
                     }
                 }
-            } catch (error: Exception) {
-                if (BuildConfig.DEBUG) {
-                    Log.w(TAG, "Client ${client.key} failed: ${error.message}")
+                Log.d(
+                    TAG,
+                    "Client ${requestClient.key} videoId=$videoId formats " +
+                        "progressive=${progressive.size - progressiveBefore} " +
+                        "adaptiveVideo=${adaptiveVideo.size - adaptiveVideoBefore} " +
+                        "adaptiveAudio=${adaptiveAudio.size - adaptiveAudioBefore} " +
+                        "manifests=${manifestUrls.size - manifestBefore} " +
+                        "progressiveMissingUrl=$progressiveMissingUrl " +
+                        "progressiveCipherDecoded=$progressiveCipherDecoded " +
+                        "adaptiveVideoMissingUrl=$adaptiveVideoMissingUrl " +
+                        "adaptiveAudioMissingUrl=$adaptiveAudioMissingUrl " +
+                        "adaptiveVideoCipherDecoded=$adaptiveVideoCipherDecoded " +
+                        "adaptiveAudioCipherDecoded=$adaptiveAudioCipherDecoded " +
+                        "firstMissingAdaptive=${firstMissingAdaptiveFormat.orEmpty()}"
+                )
+                if (
+                    hasPreferredAdaptivePairForClient(
+                        requestClient.key,
+                        adaptiveVideo,
+                        adaptiveAudio,
+                        trailerMaxHeight
+                    )
+                ) {
+                    break
                 }
+            } catch (error: Exception) {
+                Log.w(TAG, "Client ${client.key} failed: ${error.message}")
             }
         }
 
@@ -476,9 +687,16 @@ class InAppYouTubeExtractor @Inject constructor(
             }
         }
 
+        val playerJs = playerJsDeferred.await()
         val bestProgressive = sortTrailerCandidatesForPlayback(progressive).firstOrNull()
-        val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
-        val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
+            ?.descrambleNsig(playerJs)
+        val bestAdaptivePair = pickBestAdaptivePair(adaptiveVideo, adaptiveAudio, trailerMaxHeight)
+        val bestVideo = bestAdaptivePair?.first?.descrambleNsig(playerJs)
+        val bestAudio = bestAdaptivePair?.second?.descrambleNsig(playerJs)
+        val adaptiveClientKey = bestVideo?.client?.takeIf { clientKey ->
+            bestAudio != null && clientKey == bestAudio.client
+        }
+        val useDirectAdaptive = adaptiveClientKey in NEWPIPE_ADAPTIVE_CLIENTS
         val combinedUrl = selectPreferredCombinedTrailerUrl(
             manifestUrl = bestManifest?.manifestUrl,
             progressiveUrl = bestProgressive?.url
@@ -487,6 +705,7 @@ class InAppYouTubeExtractor @Inject constructor(
         // combined first (HLS manifest or progressive), split adaptive as
         // fallback.
         val resolvedClientKey = when {
+            useDirectAdaptive -> bestVideo?.client
             combinedUrl != null && combinedUrl == bestManifest?.manifestUrl -> bestManifest.client
             combinedUrl != null && combinedUrl == bestProgressive?.url -> bestProgressive.client
             bestVideo != null -> bestVideo.client
@@ -504,31 +723,46 @@ class InAppYouTubeExtractor @Inject constructor(
 
         val playbackSource = selectPreferredTrailerPlaybackSource(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
-            adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
-            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
-            userAgent = resolvedUserAgent
+            adaptiveVideoUrl = bestVideo?.let {
+                if (useDirectAdaptive) it.asDashDataUri() ?: it.url else resolveReachableUrl(it.url)
+            },
+            adaptiveAudioUrl = bestAudio?.let {
+                if (useDirectAdaptive) it.asDashDataUri() ?: it.url else resolveReachableUrl(it.url)
+            },
+            userAgent = resolvedUserAgent,
+            streamingDataPoToken = poTokensByClient[adaptiveClientKey]?.streamingDataPoToken,
+            preferAdaptive = useDirectAdaptive
         )?.copy(
             captions = resolvedCaptionTracks,
             signingClientKey = resolvedClientKey
         ) ?: return@coroutineScope null
 
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                TAG,
-                "Kotlin selection video=${summarizeUrl(playbackSource.videoUrl)} " +
-                    "audioPresent=${!playbackSource.audioUrl.isNullOrBlank()} " +
-                    "combinedSelected=${!combinedUrl.isNullOrBlank()} " +
-                    "manifestAvailable=${bestManifest != null} " +
-                    "bestProgressiveExt=${bestProgressive?.ext.orEmpty()} " +
-                    "bestAdaptiveVideoExt=${bestVideo?.ext.orEmpty()} " +
-                    "progressiveCount=${progressive.size} " +
-                    "adaptiveVideoCount=${adaptiveVideo.size} adaptiveAudioCount=${adaptiveAudio.size}"
-            )
-        }
+        Log.d(
+            TAG,
+            "Kotlin selection videoId=$videoId video=${summarizeUrl(playbackSource.videoUrl)} " +
+                "audioPresent=${!playbackSource.audioUrl.isNullOrBlank()} " +
+                "sourceType=${if (playbackSource.audioUrl.isNullOrBlank()) "combined" else "adaptive"} " +
+                "manifestAvailable=${bestManifest != null} " +
+                "webEmbeddedPoToken=${poTokensByClient.containsKey("web_embedded")} " +
+                "adaptiveClient=${adaptiveClientKey.orEmpty()} " +
+                "maxHeight=${trailerMaxHeight}p " +
+                "bestProgressive=${bestProgressive?.height ?: 0}p/${bestProgressive?.client.orEmpty()} " +
+                "bestAdaptiveVideo=${bestVideo?.height ?: 0}p/${bestVideo?.client.orEmpty()} " +
+                "bestAdaptiveAudio=${bestAudio?.client.orEmpty()} " +
+                "bestProgressiveExt=${bestProgressive?.ext.orEmpty()} " +
+                "bestAdaptiveVideoExt=${bestVideo?.ext.orEmpty()} " +
+                "bestAdaptiveVideoItag=${bestVideo?.itag.orEmpty()} " +
+                "bestAdaptiveVideoCodec=${bestVideo?.codec.orEmpty()} " +
+                "progressiveCount=${progressive.size} " +
+                "adaptiveVideoCount=${adaptiveVideo.size} adaptiveAudioCount=${adaptiveAudio.size}"
+        )
 
         playbackSource
         } // end coroutineScope
     }
+
+    private suspend fun StreamCandidate.descrambleNsig(playerJs: String?): StreamCandidate =
+        copy(url = nsigDescrambler.descrambleUrl(url, playerJs))
 
     private fun extractVideoId(input: String): String? {
         val trimmed = input.trim()
@@ -569,70 +803,150 @@ class InAppYouTubeExtractor @Inject constructor(
     }
 
     private fun getWatchConfig(html: String): WatchConfig {
-        val apiKey = API_KEY_REGEX.find(html)?.groupValues?.getOrNull(1)
         val visitorData = VISITOR_DATA_REGEX.find(html)?.groupValues?.getOrNull(1)
-        return WatchConfig(apiKey = apiKey, visitorData = visitorData)
+        return WatchConfig(
+            visitorData = visitorData
+        )
+    }
+
+    private suspend fun resolveClientVisitorData(
+        client: YouTubeClient,
+        embedUrl: String?,
+        fallbackVisitorData: String?,
+        cache: MutableMap<String, String>,
+        forceRefresh: Boolean = false
+    ): String? {
+        if (client.key !in CLIENT_SPECIFIC_VISITOR_DATA_KEYS) {
+            return fallbackVisitorData
+        }
+
+        val cacheKey = "${client.key}|${client.version}|${embedUrl.orEmpty()}"
+        val cached = cache[cacheKey]
+        if (!forceRefresh && !cached.isNullOrBlank()) return cached
+
+        val fetched = try {
+            fetchVisitorDataForClient(client, embedUrl)
+        } catch (error: Exception) {
+            Log.w(TAG, "visitor_id ${client.key} failed: ${error.message}")
+            null
+        }
+        if (!fetched.isNullOrBlank()) {
+            cache[cacheKey] = fetched
+            return fetched
+        }
+        return null
+    }
+
+    private suspend fun fetchVisitorDataForClient(
+        client: YouTubeClient,
+        embedUrl: String?
+    ): String? {
+        val context = buildInnertubeContext(
+            client = client,
+            visitorData = null,
+            embedUrl = if (client.key == "web_embedded") embedUrl else null
+        )
+        val endpoint = when (client.key) {
+            "android" -> "https://youtubei.googleapis.com/youtubei/v1/visitor_id?prettyPrint=false"
+            else -> "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false"
+        }
+        val response = fetchTransport(
+            url = endpoint,
+            method = "POST",
+            headers = buildPlayerRequestHeaders(
+                client = client,
+                visitorData = null,
+                cookieHeader = null
+            ),
+            body = gson.toJson(mapOf("context" to context))
+        )
+        if (!response.ok) {
+            throw IllegalStateException("visitor_id ${client.key} failed (${response.status})")
+        }
+        val parsed = gson.fromJson(response.body, Map::class.java)
+        return parsed
+            ?.mapValue("responseContext")
+            ?.stringValue("visitorData")
+            ?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun fetchPlayerResponse(
-        apiKey: String,
         videoId: String,
         client: YouTubeClient,
         visitorData: String?,
         cookieHeader: String?,
-        signatureTimestamp: String? = null
+        signatureTimestamp: String? = null,
+        poTokenResult: PoTokenResult? = null,
+        contentPlaybackNonce: String? = null,
+        embedUrl: String? = null
     ): Map<*, *> {
-        // Use the www.youtube.com player endpoint with the InnerTube
-        // API key for all clients. The youtubei.googleapis.com endpoint
-        // was attempted as an alignment with NewPipeExtractor but
-        // returned reduced streamingData (no HLS manifest URL for many
-        // videos, and outright empty responses for others) without a
-        // poToken — and we don't have a poToken implementation. The
-        // www.youtube.com endpoint accepts the iOS-shaped body shape
-        // and consistently returns full streamingData including the
-        // iOS HLS manifest URL.
-        val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
-
-        // The www.youtube.com player endpoint needs the WEB wire fingerprint
-        // (origin, referer, accept-language) to return full streamingData
-        // even when the body's `context.client` is IOS — without it,
-        // iOS-shaped requests get a reduced response that omits the
-        // HLS manifest URL, and we fall back to a 360p progressive
-        // mp4. We override the User-Agent to the iOS app's UA so the
-        // returned URLs are still signed for iOS (which we need for
-        // the iOS HLS path). Per-host header dispatch in TrailerPlayer
-        // handles the iOS-flavored properties on segment fetches.
-        val headers = buildMap {
-            putAll(
-                buildYouTubeWireProperties(
-                    profile = YouTubeWireProfile.WEB,
-                    userAgent = client.userAgent,
-                    cookieHeader = cookieHeader
-                )
-            )
-            put("content-type", "application/json")
-            put("x-youtube-client-name", client.id)
-            put("x-youtube-client-version", client.version)
-            if (!visitorData.isNullOrBlank()) put("x-goog-visitor-id", visitorData)
+        val useAndroidReelRequest = client.key == "android" && poTokenResult == null
+        val endpoint = when (client.key) {
+            "android" -> {
+                if (useAndroidReelRequest) {
+                    // NewPipeExtractor's no-poToken Android path uses the Shorts/Reels
+                    // endpoint and unwraps playerResponse from it. Calling /player with
+                    // the same client currently gives reduced streams for some trailers.
+                    "$YOUTUBEI_GAPIS_V1_URL/reel/reel_item_watch?prettyPrint=false" +
+                        "&t=${generateTParameter()}&id=${Uri.encode(videoId)}&\$fields=playerResponse"
+                } else {
+                    "$YOUTUBEI_GAPIS_PLAYER_URL?prettyPrint=false" +
+                        "&t=${generateTParameter()}&id=${Uri.encode(videoId)}"
+                }
+            }
+            "ios" -> {
+                // NewPipeExtractor routes non-web clients through GAPIS and
+                // includes the mobile-only `t` and `id` query parameters.
+                "$YOUTUBEI_GAPIS_PLAYER_URL?prettyPrint=false" +
+                    "&t=${generateTParameter()}&id=${Uri.encode(videoId)}"
+            }
+            "web_embedded" -> {
+                "$YOUTUBEI_WEB_PLAYER_URL?prettyPrint=false"
+            }
+            else -> {
+                throw IllegalArgumentException("Unsupported YouTube client ${client.key}")
+            }
         }
 
-        // No `cpn` in the body: NewPipe sends it to youtubei.googleapis.com,
-        // but the www.youtube.com player endpoint we use returns empty
-        // streamingData when cpn is present in some video requests.
-        // contentPlaybackContext binds the response to a specific player
-        // version when cipher fields are involved (YoutubeExplode
-        // StreamClient.cs:289). For non-cipher clients html5Preference
-        // alone is sufficient.
+        val headers = buildPlayerRequestHeaders(client, visitorData, cookieHeader)
+
         val contentPlaybackContext = buildMap<String, Any> {
             put("html5Preference", "HTML5_PREF_WANTS")
             signatureTimestamp?.toIntOrNull()?.let { put("signatureTimestamp", it) }
+            if (client.key == "web_embedded") {
+                put("referer", embedUrl ?: webEmbedUrl(videoId))
+            }
         }
-        val payload = buildMap<String, Any> {
+        val context = buildInnertubeContext(client, visitorData, embedUrl)
+        val playerRequestPayload = buildMap<String, Any> {
             put("videoId", videoId)
+            if (!contentPlaybackNonce.isNullOrBlank()) {
+                put("cpn", contentPlaybackNonce)
+            }
             put("contentCheckOk", true)
             put("racyCheckOk", true)
-            put("context", mapOf("client" to client.context))
+            put("context", context)
             put("playbackContext", mapOf("contentPlaybackContext" to contentPlaybackContext))
+            if (poTokenResult != null) {
+                put("serviceIntegrityDimensions", mapOf("poToken" to poTokenResult.playerRequestPoToken))
+            }
+        }
+        val payload = if (useAndroidReelRequest) {
+            val reelPlayerRequest = buildMap<String, Any> {
+                put("videoId", videoId)
+                if (!contentPlaybackNonce.isNullOrBlank()) {
+                    put("cpn", contentPlaybackNonce)
+                }
+                put("contentCheckOk", true)
+                put("racyCheckOk", true)
+            }
+            mapOf(
+                "context" to context,
+                "playerRequest" to reelPlayerRequest,
+                "disablePlayerResponse" to false
+            )
+        } else {
+            playerRequestPayload
         }
 
         val response = fetchTransport(
@@ -647,7 +961,77 @@ class InAppYouTubeExtractor @Inject constructor(
         }
 
         val parsed = gson.fromJson(response.body, Map::class.java)
-        return parsed ?: emptyMap<String, Any>()
+        val playerResponse = if (useAndroidReelRequest) {
+            parsed?.mapValue("playerResponse") ?: emptyMap<String, Any>()
+        } else {
+            parsed ?: emptyMap<String, Any>()
+        }
+        if (isPlayerResponseNotValid(playerResponse, videoId)) {
+            throw IllegalStateException("player API ${client.key} returned substituted playerResponse")
+        }
+        return playerResponse
+    }
+
+    private fun isPlayerResponseNotValid(playerResponse: Map<*, *>, videoId: String): Boolean {
+        return playerResponse
+            .mapValue("videoDetails")
+            ?.stringValue("videoId") != videoId
+    }
+
+    private fun buildPlayerRequestHeaders(
+        client: YouTubeClient,
+        visitorData: String?,
+        cookieHeader: String?
+    ): Map<String, String> = when (client.key) {
+        "android", "ios" -> {
+            buildMap {
+                put("content-type", "application/json")
+                put("user-agent", client.userAgent)
+                put("x-goog-api-format-version", "2")
+                cookieHeader
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { put("Cookie", it) }
+            }
+        }
+        else -> {
+            buildMap {
+                putAll(
+                    buildYouTubeWireProperties(
+                        profile = YouTubeWireProfile.WEB,
+                        userAgent = client.userAgent,
+                        cookieHeader = cookieHeader
+                    )
+                )
+                put("content-type", "application/json")
+                put("x-youtube-client-name", client.id)
+                put("x-youtube-client-version", client.version)
+                if (client.key == "web_embedded") {
+                    put("origin", "https://www.youtube.com")
+                    put("referer", "https://www.youtube.com")
+                }
+                if (!visitorData.isNullOrBlank()) put("x-goog-visitor-id", visitorData)
+            }
+        }
+    }
+
+    private fun buildInnertubeContext(
+        client: YouTubeClient,
+        visitorData: String?,
+        embedUrl: String?
+    ): Map<String, Any> = buildMap {
+        val clientContext = buildMap<String, Any> {
+            putAll(client.context)
+            if (!visitorData.isNullOrBlank()) {
+                put("visitorData", visitorData)
+            }
+        }
+        put("client", clientContext)
+        if (client.key == "web_embedded" && !embedUrl.isNullOrBlank()) {
+            put("thirdParty", mapOf("embedUrl" to embedUrl))
+        }
+        put("request", mapOf("internalExperimentFlags" to emptyList<Any>(), "useSsl" to true))
+        put("user", mapOf("lockedSafetyMode" to false))
     }
 
     private suspend fun parseHlsManifest(manifestUrl: String): ManifestBestVariant? {
@@ -766,6 +1150,25 @@ class InAppYouTubeExtractor @Inject constructor(
         return match.groupValues.getOrNull(1)?.toIntOrNull()
     }
 
+    private fun parsePrimaryCodec(mimeType: String): String {
+        val codecs = MIME_CODECS_REGEX.find(mimeType)?.groupValues?.getOrNull(1).orEmpty()
+        return codecs.substringBefore(',').trim()
+    }
+
+    private fun parseContainerMimeType(mimeType: String): String =
+        mimeType.substringBefore(';').trim()
+
+    private fun Map<*, *>.rangeStart(key: String): Long =
+        mapValue(key)?.stringValue("start")?.toLongOrNull() ?: -1L
+
+    private fun Map<*, *>.rangeEnd(key: String): Long =
+        mapValue(key)?.stringValue("end")?.toLongOrNull() ?: -1L
+
+    private fun Map<*, *>.durationMs(): Long =
+        stringValue("approxDurationMs")?.toLongOrNull()
+            ?: stringValue("durationMs")?.toLongOrNull()
+            ?: -1L
+
     private fun hasNParam(url: String): Boolean {
         return runCatching {
             !Uri.parse(url).getQueryParameter("n").isNullOrBlank()
@@ -786,6 +1189,42 @@ class InAppYouTubeExtractor @Inject constructor(
             return sortTrailerCandidatesForPlayback(sameClient).firstOrNull()
         }
         return sortTrailerCandidatesForPlayback(items).firstOrNull()
+    }
+
+    private fun hasPreferredAdaptivePairForClient(
+        clientKey: String,
+        videoItems: List<StreamCandidate>,
+        audioItems: List<StreamCandidate>,
+        maxHeight: Int = DEFAULT_TRAILER_MAX_ADAPTIVE_HEIGHT
+    ): Boolean {
+        if (clientKey !in NEWPIPE_ADAPTIVE_CLIENTS) return false
+        val video = preferTrailerCompatibleVideo(videoItems.filter { it.client == clientKey }, maxHeight)
+        return video.isNotEmpty() && audioItems.any { it.client == clientKey }
+    }
+
+    private fun pickBestAdaptivePair(
+        videoItems: List<StreamCandidate>,
+        audioItems: List<StreamCandidate>,
+        maxHeight: Int = DEFAULT_TRAILER_MAX_ADAPTIVE_HEIGHT
+    ): Pair<StreamCandidate, StreamCandidate>? {
+        val compatibleVideoItems = preferTrailerCompatibleVideo(videoItems, maxHeight)
+        for (i in NEWPIPE_ADAPTIVE_CLIENTS.indices) {
+            val clientKey = NEWPIPE_ADAPTIVE_CLIENTS[i]
+            val video = pickBestForClient(compatibleVideoItems, clientKey)?.takeIf { it.client == clientKey }
+            val audio = pickBestForClient(audioItems, clientKey)?.takeIf { it.client == clientKey }
+            if (video != null && audio != null) {
+                return video to audio
+            }
+        }
+        return null
+    }
+
+    private fun StreamCandidate.asDashDataUri(): String? {
+        if (initStart < 0 || initEnd < 0 || indexStart < 0 || indexEnd < 0) return null
+        if (durationMs <= 0L || bitrate <= 0L || mimeType.isBlank() || codec.isBlank()) return null
+        val manifest = buildSingleSegmentDashManifest(this)
+        val encoded = Base64.getEncoder().encodeToString(manifest.toByteArray(Charsets.UTF_8))
+        return "data:application/dash+xml;base64,$encoded"
     }
 
     private suspend fun resolveReachableUrl(url: String): String {
@@ -857,6 +1296,25 @@ class InAppYouTubeExtractor @Inject constructor(
         headers: Map<String, String>,
         body: String? = null
     ): TrailerHttpResponse {
+        if (url.startsWith(YOUTUBEI_GAPIS_V1_URL)) {
+            return withContext(Dispatchers.IO) {
+                val response = directTransport.execute(
+                    YouTubeTrailerTransportCall(
+                        url = url,
+                        method = method,
+                        headers = headers,
+                        body = body
+                    )
+                )
+                TrailerHttpResponse(
+                    ok = response.isSuccessful,
+                    status = response.statusCode,
+                    statusText = response.statusText,
+                    url = response.url,
+                    body = response.body
+                )
+            }
+        }
         return when (
             val result = integrationProvider.fetch(
                 YouTubeTrailerTransportCall(
@@ -986,6 +1444,77 @@ internal fun isEnglishYouTubeLanguageCode(languageCode: String?): Boolean {
     return normalized == "en" || normalized.startsWith("en-")
 }
 
+private fun appendYouTubeQueryParameter(url: String, key: String, value: String?): String {
+    if (value.isNullOrBlank()) return url
+    return try {
+        val uri = Uri.parse(url)
+        if (uri.getQueryParameter(key) != null) {
+            url
+        } else {
+            uri.buildUpon().appendQueryParameter(key, value).build().toString()
+        }
+    } catch (_: Exception) {
+        url
+    }
+}
+
+private fun webEmbedUrl(videoId: String): String =
+    "https://www.youtube.com/watch?v=$videoId"
+
+internal fun buildSingleSegmentDashManifest(stream: StreamCandidate): String {
+    val durationSeconds = String.format(Locale.ENGLISH, "%.3f", stream.durationMs / 1000.0)
+    val escapedUrl = xmlEscape(stream.url)
+    val escapedMime = xmlEscape(stream.mimeType)
+    val escapedCodec = xmlEscape(stream.codec)
+    val sampleRate = stream.audioSampleRate.takeIf { it > 0 }
+    val videoAttributes = if (stream.height > 0) {
+        val widthAttr = stream.width.takeIf { it > 0 }?.let { """ width="$it"""" }.orEmpty()
+        val frameRateAttr = stream.fps.takeIf { it > 0 }?.let { """ frameRate="$it"""" }.orEmpty()
+        """$widthAttr height="${stream.height}"$frameRateAttr"""
+    } else {
+        ""
+    }
+    val audioAttributes = sampleRate?.let { """ audioSamplingRate="$it"""" }.orEmpty()
+    val audioChannelConfiguration = if (stream.height == 0) {
+        """
+          <AudioChannelConfiguration schemeIdUri="urn:mpeg:dash:23003:3:audio_channel_configuration:2011" value="2"/>
+        """.trimIndent()
+    } else {
+        ""
+    }
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <MPD xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns="urn:mpeg:DASH:schema:MPD:2011"
+             xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011 DASH-MPD.xsd"
+             minBufferTime="PT1.500S"
+             profiles="urn:mpeg:dash:profile:full:2011"
+             type="static"
+             mediaPresentationDuration="PT${durationSeconds}S">
+          <Period>
+            <AdaptationSet id="0" mimeType="$escapedMime" subsegmentAlignment="true">
+              <Role schemeIdUri="urn:mpeg:DASH:role:2011" value="main"/>
+              <Representation id="${stream.itag.substringBefore('.')}" codecs="$escapedCodec" startWithSAP="1" maxPlayoutRate="1" bandwidth="${stream.bitrate}"$videoAttributes$audioAttributes>
+        $audioChannelConfiguration
+                <BaseURL>$escapedUrl</BaseURL>
+                <SegmentBase indexRange="${stream.indexStart}-${stream.indexEnd}">
+                  <Initialization range="${stream.initStart}-${stream.initEnd}"/>
+                </SegmentBase>
+              </Representation>
+            </AdaptationSet>
+          </Period>
+        </MPD>
+    """.trimIndent()
+}
+
+private fun xmlEscape(value: String): String =
+    value
+        .replace("&", "&amp;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+
 internal fun isYouTubeTrailerLanguageAcceptable(
     trailerLanguageCode: String?,
     originalLanguage: String?
@@ -1013,21 +1542,21 @@ private fun normalizeBaseLanguageCode(code: String?): String? {
 }
 
 private fun Map<*, *>.mapValue(key: String): Map<*, *>? {
-    return this[key] as? Map<*, *>
+    return valueForJsonKey(key) as? Map<*, *>
 }
 
 private fun Map<*, *>.listMapValue(key: String): List<Map<*, *>> {
-    val raw = this[key] as? List<*> ?: return emptyList()
+    val raw = valueForJsonKey(key) as? List<*> ?: return emptyList()
     return raw.mapNotNull { it as? Map<*, *> }
 }
 
 private fun Map<*, *>.stringValue(key: String): String? {
-    val value = this[key] ?: return null
+    val value = valueForJsonKey(key) ?: return null
     return value.toString()
 }
 
 private fun Map<*, *>.intListValue(key: String): List<Int> {
-    val value = this[key] as? List<*> ?: return emptyList()
+    val value = valueForJsonKey(key) as? List<*> ?: return emptyList()
     return value.mapNotNull {
         when (it) {
             is Number -> it.toInt()
@@ -1038,10 +1567,54 @@ private fun Map<*, *>.intListValue(key: String): List<Int> {
 }
 
 private fun Map<*, *>.numberValue(key: String): Double? {
-    val value = this[key] ?: return null
+    val value = valueForJsonKey(key) ?: return null
     return when (value) {
         is Number -> value.toDouble()
         is String -> value.toDoubleOrNull()
         else -> null
     }
 }
+
+private fun Map<*, *>.valueForJsonKey(key: String): Any? {
+    this[key]?.let { return it }
+    return entries.firstOrNull { (entryKey, _) ->
+        val normalizedKey = entryKey
+            ?.toString()
+            ?.filterNot { ch -> Character.isISOControl(ch) }
+        normalizedKey == key
+    }?.value
+}
+
+private fun Map<*, *>.hasAdaptiveFormatsWithoutPlayableUrl(): Boolean {
+    val adaptiveFormats = mapValue("streamingData")
+        ?.listMapValue("adaptiveFormats")
+        ?: return false
+    if (adaptiveFormats.isEmpty()) return false
+
+    var mediaFormatCount = 0
+    var playableCount = 0
+    for (i in adaptiveFormats.indices) {
+        val format = adaptiveFormats[i]
+        val mimeType = format.stringValue("mimeType").orEmpty()
+        val isMedia = mimeType.contains("video/") || mimeType.contains("audio/")
+        if (!isMedia) continue
+        mediaFormatCount++
+        if (
+            !format.stringValue("url").isNullOrBlank() ||
+            !format.stringValue("signatureCipher").isNullOrBlank() ||
+            !format.stringValue("cipher").isNullOrBlank()
+        ) {
+            playableCount++
+        }
+    }
+    return mediaFormatCount > 0 && playableCount == 0
+}
+
+private fun Map<*, *>.keysSummary(): String =
+    keys
+        .joinToString(separator = ",", limit = 12, truncated = "...") { key ->
+            key
+                ?.toString()
+                ?.filterNot { ch -> Character.isISOControl(ch) }
+                .orEmpty()
+        }

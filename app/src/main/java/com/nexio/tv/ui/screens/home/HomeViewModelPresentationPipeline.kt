@@ -563,6 +563,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
             trailerPreviewAudioUrls = trailerPreviewAudioUrlsState,
             trailerPreviewUserAgents = trailerPreviewUserAgentsState,
             trailerPreviewSigningClientKeys = trailerPreviewSigningClientKeysState,
+            trailerPreviewStreamingDataPoTokens = trailerPreviewStreamingDataPoTokensState,
             trailerPreviewCaptions = trailerPreviewCaptionsState,
             trailerPreviewExternalUrls = trailerPreviewExternalUrlsState,
             trailerPreviewNegativeCache = trailerPreviewNegativeCache
@@ -602,6 +603,7 @@ internal fun publishHomeTrailerPreviewResolution(
     trailerPreviewAudioUrls: MutableMap<String, String>,
     trailerPreviewUserAgents: MutableMap<String, String>,
     trailerPreviewSigningClientKeys: MutableMap<String, String>,
+    trailerPreviewStreamingDataPoTokens: MutableMap<String, String>,
     trailerPreviewCaptions: MutableMap<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>>,
     trailerPreviewExternalUrls: MutableMap<String, String>,
     trailerPreviewNegativeCache: MutableMap<String, Boolean>
@@ -615,6 +617,8 @@ internal fun publishHomeTrailerPreviewResolution(
                 ?: trailerPreviewUserAgents.remove(itemId)
             result.source.signingClientKey?.takeIf { it.isNotBlank() }?.let { trailerPreviewSigningClientKeys[itemId] = it }
                 ?: trailerPreviewSigningClientKeys.remove(itemId)
+            result.source.streamingDataPoToken?.takeIf { it.isNotBlank() }?.let { trailerPreviewStreamingDataPoTokens[itemId] = it }
+                ?: trailerPreviewStreamingDataPoTokens.remove(itemId)
             result.source.captions.takeIf { it.isNotEmpty() }?.let { trailerPreviewCaptions[itemId] = it }
                 ?: trailerPreviewCaptions.remove(itemId)
             trailerPreviewExternalUrls.remove(itemId)
@@ -626,6 +630,7 @@ internal fun publishHomeTrailerPreviewResolution(
             trailerPreviewAudioUrls.remove(itemId)
             trailerPreviewUserAgents.remove(itemId)
             trailerPreviewSigningClientKeys.remove(itemId)
+            trailerPreviewStreamingDataPoTokens.remove(itemId)
             trailerPreviewCaptions.remove(itemId)
             trailerPreviewExternalUrls[itemId] = result.url
             trailerPreviewNegativeCache.remove(itemId)
@@ -1110,10 +1115,10 @@ internal fun mergeFocusedItemEnrichment(
         merged = merged.copy(
             background = externalMeta.background ?: merged.background,
             logo = externalMeta.logo ?: merged.logo,
-            description = externalMeta.description ?: merged.description,
+            description = merged.description ?: externalMeta.description,
             imdbRating = externalMeta.imdbRating ?: merged.imdbRating,
-            genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres,
-            language = externalMeta.language ?: merged.language
+            genres = if (merged.genres.isNotEmpty()) merged.genres else externalMeta.genres,
+            language = merged.language ?: externalMeta.language
         )
     }
     return merged

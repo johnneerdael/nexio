@@ -11,7 +11,13 @@ data class TrailerPlaybackSource(
      * (iOS-signed URLs need iOS-flavored properties, Android-signed need
      * Android). `null` when unknown (e.g., backend-resolved sources).
      */
-    val signingClientKey: String? = null
+    val signingClientKey: String? = null,
+    /**
+     * Content-bound poToken to append as `pot` to every `googlevideo.com`
+     * request for this playback source. Non-null only for WEB adaptive
+     * sources that were requested with a matching player poToken.
+     */
+    val streamingDataPoToken: String? = null
 )
 
 data class YouTubeCaptionTrack(
@@ -26,24 +32,40 @@ internal fun selectPreferredTrailerPlaybackSource(
     combinedUrl: String?,
     adaptiveVideoUrl: String?,
     adaptiveAudioUrl: String?,
-    userAgent: String? = null
+    userAgent: String? = null,
+    streamingDataPoToken: String? = null,
+    preferAdaptive: Boolean = !streamingDataPoToken.isNullOrBlank()
 ): TrailerPlaybackSource? {
-    // Prefer the combined source (iOS HLS master playlist or progressive
-    // muxed) over split adaptive video+audio. Direct adaptive `/videoplayback`
-    // URLs require a poToken — without one YouTube 403s the segment fetch.
-    // iOS HLS manifest URLs work without a poToken (per NewPipeExtractor's
-    // own note in YoutubeStreamExtractor.getHlsUrl) and `tts_caps/1` text
-    // alternate-rendition fetches are avoided by leaving Media3's text-
-    // track parameters at their defaults.
+    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() }
+    val normalizedAdaptiveAudioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() }
+
+    if (
+        preferAdaptive &&
+        normalizedAdaptiveVideoUrl != null &&
+        normalizedAdaptiveAudioUrl != null
+    ) {
+        return TrailerPlaybackSource(
+            videoUrl = normalizedAdaptiveVideoUrl,
+            audioUrl = normalizedAdaptiveAudioUrl,
+            userAgent = userAgent,
+            streamingDataPoToken = streamingDataPoToken
+        )
+    }
+
+    // Without an explicit adaptive preference, keep the combined source
+    // (HLS master playlist or progressive muxed) as the conservative
+    // fallback. The extractor only sets preferAdaptive when it has a
+    // client path expected to survive direct googlevideo fetches:
+    // ANDROID_VR, ANDROID after n= descrambling, or WEB with poToken.
     val normalizedCombinedUrl = combinedUrl?.takeIf { it.isNotBlank() }
     if (normalizedCombinedUrl != null) {
         return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl, userAgent = userAgent)
     }
 
-    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() } ?: return null
+    if (normalizedAdaptiveVideoUrl == null) return null
     return TrailerPlaybackSource(
         videoUrl = normalizedAdaptiveVideoUrl,
-        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() },
+        audioUrl = normalizedAdaptiveAudioUrl,
         userAgent = userAgent
     )
 }

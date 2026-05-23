@@ -113,6 +113,89 @@ class TrailerServiceBackendBoundaryTest {
     }
 
     @Test
+    fun `youtube trailer does not cache progressive googlevideo fallback over later adaptive source`() = runTest {
+        val extractor = mockk<InAppYouTubeExtractor>()
+        val backendProvider = mockk<TrailerBackendProvider>(relaxed = true)
+        val progressiveFallback = TrailerPlaybackSource(
+            videoUrl = "https://rr1---sn.example.googlevideo.com/videoplayback?itag=18"
+        )
+        val adaptiveSource = TrailerPlaybackSource(
+            videoUrl = "data:application/dash+xml;base64,VIDEO",
+            audioUrl = "data:application/dash+xml;base64,AUDIO",
+            signingClientKey = "android"
+        )
+        val youtubeUrl = "https://www.youtube.com/watch?v=abc12345678"
+
+        coEvery { extractor.extractPlaybackSource(youtubeUrl, any()) } returnsMany listOf(
+            progressiveFallback,
+            adaptiveSource
+        )
+
+        val service = buildService(
+            inAppYouTubeExtractor = extractor,
+            trailerBackendProvider = backendProvider
+        )
+
+        val first = service.getTrailerPlaybackSourceFromYouTubeUrl(
+            youtubeUrl = youtubeUrl,
+            title = "Demo",
+            year = "2026"
+        )
+        val second = service.getTrailerPlaybackSourceFromYouTubeUrl(
+            youtubeUrl = youtubeUrl,
+            title = "Demo",
+            year = "2026"
+        )
+
+        assertEquals(progressiveFallback.videoUrl, first?.videoUrl)
+        assertEquals(adaptiveSource.videoUrl, second?.videoUrl)
+        assertEquals(adaptiveSource.audioUrl, second?.audioUrl)
+        coVerify(exactly = 2) { extractor.extractPlaybackSource(youtubeUrl, any()) }
+    }
+
+    @Test
+    fun `youtube trailer does not cache adaptive playback source over later codec selection`() = runTest {
+        val extractor = mockk<InAppYouTubeExtractor>()
+        val backendProvider = mockk<TrailerBackendProvider>(relaxed = true)
+        val av1AdaptiveSource = TrailerPlaybackSource(
+            videoUrl = "data:application/dash+xml;base64,AV1",
+            audioUrl = "data:application/dash+xml;base64,AUDIO",
+            signingClientKey = "android"
+        )
+        val vp9AdaptiveSource = TrailerPlaybackSource(
+            videoUrl = "data:application/dash+xml;base64,VP9",
+            audioUrl = "data:application/dash+xml;base64,AUDIO",
+            signingClientKey = "android"
+        )
+        val youtubeUrl = "https://www.youtube.com/watch?v=abc12345678"
+
+        coEvery { extractor.extractPlaybackSource(youtubeUrl, any()) } returnsMany listOf(
+            av1AdaptiveSource,
+            vp9AdaptiveSource
+        )
+
+        val service = buildService(
+            inAppYouTubeExtractor = extractor,
+            trailerBackendProvider = backendProvider
+        )
+
+        val first = service.getTrailerPlaybackSourceFromYouTubeUrl(
+            youtubeUrl = youtubeUrl,
+            title = "Demo",
+            year = "2026"
+        )
+        val second = service.getTrailerPlaybackSourceFromYouTubeUrl(
+            youtubeUrl = youtubeUrl,
+            title = "Demo",
+            year = "2026"
+        )
+
+        assertEquals(av1AdaptiveSource.videoUrl, first?.videoUrl)
+        assertEquals(vp9AdaptiveSource.videoUrl, second?.videoUrl)
+        coVerify(exactly = 2) { extractor.extractPlaybackSource(youtubeUrl, any()) }
+    }
+
+    @Test
     fun `youtube trailer returns null when backend provider misses`() = runTest {
         val extractor = mockk<InAppYouTubeExtractor>()
         val backendProvider = mockk<TrailerBackendProvider>()

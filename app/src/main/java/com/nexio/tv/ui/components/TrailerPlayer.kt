@@ -42,15 +42,20 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.decoder.ffmpeg.ExperimentalFfmpegVideoRenderer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.dash.manifest.DashManifestParser
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -64,6 +69,7 @@ import com.nexio.tv.data.trailer.YouTubeWireProfile
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import com.nexio.tv.data.trailer.buildYouTubeWireProperties
 import com.nexio.tv.data.trailer.pickTrailerCaptionTrack
+import com.nexio.tv.data.trailer.potoken.appendPoTokenToGoogleVideoUri
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.ui.screens.player.TimedAddonCueGroup
@@ -72,11 +78,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import java.io.ByteArrayInputStream
 import java.util.ArrayList
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 
 private const val TAG = "TrailerPlayer"
+private const val DASH_DATA_URI_PREFIX = "data:application/dash+xml;base64,"
+private const val TRAILER_MAX_VIDEO_WIDTH = 3840
+private const val TRAILER_MAX_VIDEO_HEIGHT = 2160
 
 /**
  * Plan: Bug B — Task B1.
@@ -146,7 +157,7 @@ internal fun buildTrailerTrackSelectionParameters(
     base: TrackSelectionParameters
 ): TrackSelectionParameters {
     return base.buildUpon()
-        .setMaxVideoSize(1920, 1080)
+        .setMaxVideoSize(TRAILER_MAX_VIDEO_WIDTH, TRAILER_MAX_VIDEO_HEIGHT)
         .setMaxVideoFrameRate(30)
         .setForceHighestSupportedBitrate(true)
         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -157,6 +168,12 @@ internal fun shouldUseChunkedTrailerDataSource(
     trailerUrl: String?,
     trailerAudioUrl: String?
 ): Boolean {
+    if (
+        trailerUrl?.startsWith("data:application/dash+xml", ignoreCase = true) == true ||
+        trailerAudioUrl?.startsWith("data:application/dash+xml", ignoreCase = true) == true
+    ) {
+        return true
+    }
     val videoUsesChunking = trailerUrl
         ?.takeIf { it.isNotBlank() }
         ?.let(::shouldUseYouTubeChunkedTransfer)
@@ -166,6 +183,25 @@ internal fun shouldUseChunkedTrailerDataSource(
         ?.let(::shouldUseYouTubeChunkedTransfer)
         ?: false
     return videoUsesChunking || audioUsesChunking
+}
+
+internal fun buildTrailerMediaItem(url: String): MediaItem {
+    val builder = MediaItem.Builder().setUri(url)
+    if (isTrailerDashDataUri(url)) {
+        builder.setMimeType(MimeTypes.APPLICATION_MPD)
+    }
+    return builder.build()
+}
+
+internal fun isTrailerDashDataUri(url: String): Boolean =
+    url.startsWith(DASH_DATA_URI_PREFIX, ignoreCase = true)
+
+private fun playbackStateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> state.toString()
 }
 
 private class TrailerRenderersFactory(
@@ -181,10 +217,20 @@ private class TrailerRenderersFactory(
         allowedVideoJoiningTimeMs: Long,
         out: ArrayList<Renderer>
     ) {
+        if (trailerPrefersFfmpegVideoRenderer()) {
+            out.add(
+                ExperimentalFfmpegVideoRenderer(
+                    allowedVideoJoiningTimeMs,
+                    eventHandler,
+                    eventListener,
+                    DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY
+                )
+            )
+        }
         out.add(
             TrailerMediaCodecVideoRenderer(
                 context = context,
-                mediaCodecSelector = MediaCodecSelector.PREFER_SOFTWARE,
+                mediaCodecSelector = trailerVideoMediaCodecSelector(),
                 allowedJoiningTimeMs = allowedVideoJoiningTimeMs,
                 enableDecoderFallback = enableDecoderFallback,
                 eventHandler = eventHandler,
@@ -193,6 +239,11 @@ private class TrailerRenderersFactory(
         )
     }
 }
+
+internal fun trailerPrefersFfmpegVideoRenderer(): Boolean = true
+
+internal fun trailerVideoMediaCodecSelector(): MediaCodecSelector =
+    MediaCodecSelector.PREFER_SOFTWARE
 
 private class TrailerMediaCodecVideoRenderer(
     context: Context,
@@ -303,6 +354,7 @@ fun TrailerPlayer(
     overscanZoom: Float = 1f,
     trailerUserAgent: String? = null,
     trailerSigningClientKey: String? = null,
+    trailerStreamingDataPoToken: String? = null,
     trailerCaptions: List<YouTubeCaptionTrack> = emptyList(),
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
@@ -487,10 +539,10 @@ fun TrailerPlayer(
     val releaseCalled = remember(trailerPlayer) { AtomicBoolean(false) }
     val displayModeBlockActive = remember(trailerPlayer) { AtomicBoolean(false) }
 
-    fun buildTrailerMediaSourceFactory(
+    fun buildTrailerDataSourceFactory(
         videoUrl: String,
         audioUrl: String?
-    ): DefaultMediaSourceFactory {
+    ): DataSource.Factory {
         // The trailer source's userAgent matches the client that signed the
         // video URL (iOS app UA when the HLS manifest came from the iOS
         // player response). We need this UA on googlevideo.com segment
@@ -504,6 +556,7 @@ fun TrailerPlayer(
             ?: YOUTUBE_STABLE_WEB_USER_AGENT
         val signedClientProfile = when (trailerSigningClientKey) {
             "ios" -> YouTubeWireProfile.IOS
+            "android_vr" -> YouTubeWireProfile.ANDROID
             "android" -> YouTubeWireProfile.ANDROID
             else -> YouTubeWireProfile.WEB
         }
@@ -521,12 +574,21 @@ fun TrailerPlayer(
         )
         val resolver = ResolvingDataSource.Resolver { dataSpec ->
             val host = dataSpec.uri.host.orEmpty()
-            val properties = if (host.contains("googlevideo.com")) {
+            val isGoogleVideo = host.contains("googlevideo.com")
+            val properties = if (isGoogleVideo) {
                 signedClientProperties
             } else {
                 webProperties
             }
-            dataSpec.withRequestHeaders(properties)
+            val uri = if (isGoogleVideo) {
+                appendPoTokenToGoogleVideoUri(dataSpec.uri, trailerStreamingDataPoToken)
+            } else {
+                dataSpec.uri
+            }
+            dataSpec.buildUpon()
+                .setUri(uri)
+                .build()
+                .withRequestHeaders(properties)
         }
         // Pass-through for the upstream HTTP factory: use the signed-client
         // UA as the default (matches googlevideo.com expectations); the
@@ -540,29 +602,42 @@ fun TrailerPlayer(
         // content:// dispatch to their own sources while https:// continues
         // through the HTTP factory (+ our per-host resolver).
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
-            DefaultMediaSourceFactory(
-                DefaultDataSource.Factory(
-                    context,
-                    ResolvingDataSource.Factory(
-                        YoutubeChunkedDataSourceFactory(
-                            userAgent = effectiveUserAgent,
-                            requestProperties = signedClientProperties
-                        ),
-                        resolver
-                    )
+            DefaultDataSource.Factory(
+                context,
+                ResolvingDataSource.Factory(
+                    YoutubeChunkedDataSourceFactory(
+                        userAgent = effectiveUserAgent,
+                        requestProperties = signedClientProperties
+                    ),
+                    resolver
                 )
             )
         } else {
             val httpFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent(effectiveUserAgent)
                 .setAllowCrossProtocolRedirects(true)
-            DefaultMediaSourceFactory(
-                DefaultDataSource.Factory(
-                    context,
-                    ResolvingDataSource.Factory(httpFactory, resolver)
-                )
+            DefaultDataSource.Factory(
+                context,
+                ResolvingDataSource.Factory(httpFactory, resolver)
             )
         }
+    }
+
+    fun createTrailerMediaSource(
+        dataSourceFactory: DataSource.Factory,
+        url: String
+    ): MediaSource {
+        if (isTrailerDashDataUri(url)) {
+            val encodedManifest = url.substringAfter(DASH_DATA_URI_PREFIX)
+            val manifestBytes = Base64.getDecoder().decode(encodedManifest)
+            val manifest = ByteArrayInputStream(manifestBytes).use { input ->
+                DashManifestParser().parse(Uri.EMPTY, input)
+            }
+            return DashMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(manifest, buildTrailerMediaItem(url))
+        }
+        return DefaultMediaSourceFactory(dataSourceFactory)
+            .createMediaSource(buildTrailerMediaItem(url))
     }
 
     fun prepareTrailerMediaSource(
@@ -570,14 +645,19 @@ fun TrailerPlayer(
         videoUrl: String,
         audioUrl: String?
     ) {
-        val mediaSourceFactory = buildTrailerMediaSourceFactory(videoUrl, audioUrl)
-        val videoMediaItem = MediaItem.fromUri(videoUrl)
+        val dataSourceFactory = buildTrailerDataSourceFactory(videoUrl, audioUrl)
+        Log.i(
+            TAG,
+            "Preparing trailer media source videoDash=${isTrailerDashDataUri(videoUrl)} " +
+                "audioDash=${audioUrl?.let(::isTrailerDashDataUri) == true} " +
+                "audioPresent=${!audioUrl.isNullOrBlank()}"
+        )
         if (!audioUrl.isNullOrBlank()) {
-            val videoSource = mediaSourceFactory.createMediaSource(videoMediaItem)
-            val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))
+            val videoSource = createTrailerMediaSource(dataSourceFactory, videoUrl)
+            val audioSource = createTrailerMediaSource(dataSourceFactory, audioUrl)
             player.setMediaSource(MergingMediaSource(videoSource, audioSource))
         } else {
-            player.setMediaSource(mediaSourceFactory.createMediaSource(videoMediaItem))
+            player.setMediaSource(createTrailerMediaSource(dataSourceFactory, videoUrl))
         }
     }
 
@@ -650,6 +730,12 @@ fun TrailerPlayer(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 bufferingWatchdog.onPlaybackStateChanged(playbackState)
+                Log.i(
+                    TAG,
+                    "Trailer playback state=${playbackStateName(playbackState)} " +
+                        "position=${player.currentPosition.coerceAtLeast(0L)} " +
+                        "duration=${player.duration.takeIf { it > 0 } ?: 0L}"
+                )
                 if (playbackState == Player.STATE_ENDED) {
                     currentOnEnded()
                 }

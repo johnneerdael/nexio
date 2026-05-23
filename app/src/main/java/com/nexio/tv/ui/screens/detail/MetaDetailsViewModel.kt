@@ -27,7 +27,6 @@ import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.core.tvdb.TvdbSeriesTiming
@@ -207,7 +206,7 @@ private data class DetailMetadataEnrichment(
     val tvEnrichment: TvMetadataEnrichment?,
     val animeRelated: List<com.nexio.tv.domain.model.MetaPreview> = emptyList(),
     val isAnimeDetail: Boolean = false,
-    val tvdbLanguage: String,
+    val metadataLanguage: String,
     val tmdbContentType: ContentType,
     val isTvContent: Boolean,
     val settings: TmdbSettings,
@@ -1089,7 +1088,7 @@ class MetaDetailsViewModel @Inject constructor(
                         targetMeta = enrichment.meta,
                         tvEnrichment = enrichment.tvEnrichment,
                         tmdbContentType = enrichment.tmdbContentType,
-                        tvdbLanguage = enrichment.tvdbLanguage,
+                        metadataLanguage = enrichment.metadataLanguage,
                         settings = enrichment.settings,
                         isTvContent = enrichment.isTvContent,
                         episodeOrder = enrichment.tvEpisodeOrder,
@@ -1250,7 +1249,7 @@ class MetaDetailsViewModel @Inject constructor(
                     targetMeta = currentMeta,
                     tvEnrichment = enrichment.tvEnrichment,
                     tmdbContentType = enrichment.tmdbContentType,
-                    tvdbLanguage = enrichment.tvdbLanguage,
+                    metadataLanguage = enrichment.metadataLanguage,
                     settings = enrichment.settings,
                     isTvContent = enrichment.isTvContent,
                     episodeOrder = enrichment.tvEpisodeOrder,
@@ -1326,7 +1325,7 @@ class MetaDetailsViewModel @Inject constructor(
                         contentId = "tmdb:$tmdbId",
                         contentType = tmdbContentType,
                         sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                        language = currentTvdbLanguageTag(),
+                        language = currentMetadataLanguageTag(),
                         depth = MetadataDepth.DETAIL_SECONDARY
                     ),
                     tmdbId = tmdbId,
@@ -1430,7 +1429,7 @@ class MetaDetailsViewModel @Inject constructor(
                             contentId = "tmdb:$tmdbId",
                             contentType = tmdbContentType,
                             sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                            language = currentTvdbLanguageTag(),
+                            language = currentMetadataLanguageTag(),
                             depth = MetadataDepth.DETAIL_SECONDARY
                         ),
                         tmdbId = tmdbId,
@@ -1581,7 +1580,7 @@ class MetaDetailsViewModel @Inject constructor(
                             contentId = "tmdb:$tmdbId",
                             contentType = tmdbContentType,
                             sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                            language = currentTvdbLanguageTag(),
+                            language = currentMetadataLanguageTag(),
                             depth = MetadataDepth.DETAIL_SECONDARY
                         ),
                         tmdbId = tmdbId,
@@ -1665,7 +1664,7 @@ class MetaDetailsViewModel @Inject constructor(
         val settings = tmdbSettingsDataStore.settings.first()
         val tmdbContentType = resolveTmdbContentType(meta)
         val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
-        val tvdbLanguage = currentTvdbLanguageTag()
+        val metadataLanguage = currentMetadataLanguageTag()
         val detailDocument = resolvedDetail ?: runCatching {
             loadResolvedDetailDocument(
                 contentId = meta.id,
@@ -1699,7 +1698,7 @@ class MetaDetailsViewModel @Inject constructor(
                 targetMeta = updated,
                 tvEnrichment = tvEnrichment,
                 tmdbContentType = tmdbContentType,
-                tvdbLanguage = tvdbLanguage,
+                metadataLanguage = metadataLanguage,
                 settings = settings,
                 isTvContent = isTvContent,
                 episodeOrder = tvEpisodeOrder,
@@ -1713,7 +1712,7 @@ class MetaDetailsViewModel @Inject constructor(
             tvEnrichment = tvEnrichment,
             animeRelated = animeRelated,
             isAnimeDetail = isKitsuAnimeByProvider,
-            tvdbLanguage = tvdbLanguage,
+            metadataLanguage = metadataLanguage,
             tmdbContentType = tmdbContentType,
             isTvContent = isTvContent,
             settings = settings,
@@ -1851,7 +1850,7 @@ class MetaDetailsViewModel @Inject constructor(
                     targetMeta = meta,
                     tvEnrichment = snapshot.resolvedDetail?.toTvMetadataEnrichment(),
                     tmdbContentType = tmdbContentType,
-                    tvdbLanguage = currentTvdbLanguageTag(),
+                    metadataLanguage = currentMetadataLanguageTag(),
                     settings = settings,
                     isTvContent = isTvContent,
                     episodeOrder = order
@@ -2139,7 +2138,7 @@ class MetaDetailsViewModel @Inject constructor(
         targetMeta: Meta,
         tvEnrichment: TvMetadataEnrichment?,
         tmdbContentType: ContentType,
-        tvdbLanguage: String,
+        metadataLanguage: String,
         settings: TmdbSettings,
         isTvContent: Boolean,
         episodeOrder: DetailTvEpisodeOrder,
@@ -2196,7 +2195,7 @@ class MetaDetailsViewModel @Inject constructor(
                     itemType = tmdbContentType.toApiString(),
                     previewSourceItemId = episodeRequestContentId
                 ),
-                language = tvdbLanguage,
+                language = metadataLanguage,
                 seasonNumber = seasonNumbers.firstOrNull(),
                 depth = MetadataDepth.SEASON
             ),
@@ -2204,7 +2203,7 @@ class MetaDetailsViewModel @Inject constructor(
                 contentId = episodeRequestContentId,
                 fallbackContentId = episodeFallbackContentId,
                 contentType = tmdbContentType,
-                language = tvdbLanguage,
+                language = metadataLanguage,
                 seasonNumbers = seasonNumbers
             )
         )
@@ -2642,8 +2641,8 @@ class MetaDetailsViewModel @Inject constructor(
         return false
     }
 
-    private fun currentTvdbLanguageTag(): String {
-        return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+    private fun currentMetadataLanguageTag(): String {
+        return profileBoundary.currentLanguageTag()
     }
 
     private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
@@ -2771,7 +2770,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentId = if (!tmdbId.isNullOrBlank()) "tmdb:$tmdbId" else meta.id,
                     contentType = resolveTmdbContentType(meta),
                     sourceContext = MetadataSourceContext(itemType = meta.apiType),
-                    language = currentTvdbLanguageTag(),
+                    language = currentMetadataLanguageTag(),
                     depth = MetadataDepth.DETAIL_MEDIA
                 ),
                 tmdbId = tmdbId,
@@ -2870,7 +2869,7 @@ class MetaDetailsViewModel @Inject constructor(
             contentId = meta.id,
             contentType = ContentType.SERIES,
             sourceContext = MetadataSourceContext(itemType = meta.apiType),
-            language = currentTvdbLanguageTag(),
+            language = currentMetadataLanguageTag(),
             seasonNumber = season,
             depth = MetadataDepth.DETAIL_MEDIA
         )
@@ -3554,7 +3553,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentId = if (!tmdbId.isNullOrBlank()) "tmdb:$tmdbId" else meta.id,
                     contentType = trailerContentType,
                     sourceContext = MetadataSourceContext(itemType = trailerContentType.toApiString()),
-                    language = currentTvdbLanguageTag(),
+                    language = currentMetadataLanguageTag(),
                     depth = MetadataDepth.DETAIL_MEDIA
                 ),
                 title = meta.name,
@@ -3583,6 +3582,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerAudioUrl = trailerResult.source.audioUrl,
                         trailerUserAgent = trailerResult.source.userAgent,
                         trailerSigningClientKey = trailerResult.source.signingClientKey,
+                        trailerStreamingDataPoToken = trailerResult.source.streamingDataPoToken,
                         trailerCaptions = trailerResult.source.captions,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
@@ -3600,6 +3600,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerAudioUrl = null,
                         trailerUserAgent = null,
                         trailerSigningClientKey = null,
+                        trailerStreamingDataPoToken = null,
                         trailerCaptions = emptyList(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.FAILED,
@@ -3653,7 +3654,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentId = meta.id,
                     contentType = ContentType.SERIES,
                     sourceContext = MetadataSourceContext(itemType = meta.apiType),
-                    language = currentTvdbLanguageTag(),
+                    language = currentMetadataLanguageTag(),
                     depth = MetadataDepth.DETAIL_MEDIA
                 ),
                 title = meta.name,
@@ -3688,6 +3689,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerAudioUrl = recapSource?.audioUrl,
                         trailerUserAgent = recapSource?.userAgent,
                         trailerSigningClientKey = recapSource?.signingClientKey,
+                        trailerStreamingDataPoToken = recapSource?.streamingDataPoToken,
                         trailerCaptions = recapSource?.captions.orEmpty(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (recapSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
@@ -3746,7 +3748,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentId = meta.id,
                     contentType = ContentType.SERIES,
                     sourceContext = MetadataSourceContext(itemType = meta.apiType),
-                    language = currentTvdbLanguageTag(),
+                    language = currentMetadataLanguageTag(),
                     depth = MetadataDepth.DETAIL_MEDIA
                 ),
                 title = meta.name,
@@ -3781,6 +3783,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerAudioUrl = seasonTrailerSource?.audioUrl,
                         trailerUserAgent = seasonTrailerSource?.userAgent,
                         trailerSigningClientKey = seasonTrailerSource?.signingClientKey,
+                        trailerStreamingDataPoToken = seasonTrailerSource?.streamingDataPoToken,
                         trailerCaptions = seasonTrailerSource?.captions.orEmpty(),
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (seasonTrailerSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,

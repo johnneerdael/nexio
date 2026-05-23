@@ -445,6 +445,7 @@ fun HomeScreen(
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
             previewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
+            previewStreamingDataPoTokens = viewModel.trailerPreviewStreamingDataPoTokens,
             previewCaptions = viewModel.trailerPreviewCaptions
         )
         HomePosterOptionsDialog(
@@ -526,6 +527,7 @@ fun HomeScreen(
         viewModel.trailerPreviewAudioUrls,
         viewModel.trailerPreviewUserAgents,
         viewModel.trailerPreviewSigningClientKeys,
+        viewModel.trailerPreviewStreamingDataPoTokens,
         viewModel.trailerPreviewCaptions,
         viewModel.trailerPreviewExternalUrls,
         viewModel.trailerPreviewLoadingItemIds,
@@ -540,6 +542,7 @@ fun HomeScreen(
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
             previewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
+            previewStreamingDataPoTokens = viewModel.trailerPreviewStreamingDataPoTokens,
             previewCaptions = viewModel.trailerPreviewCaptions
         )
         if (playback != null) {
@@ -595,6 +598,7 @@ fun HomeScreen(
                 trailerAudioUrl = activePosterTrailerPlayback.audioUrl,
                 trailerUserAgent = activePosterTrailerPlayback.userAgent,
                 trailerSigningClientKey = activePosterTrailerPlayback.signingClientKey,
+                trailerStreamingDataPoToken = activePosterTrailerPlayback.streamingDataPoToken,
                 trailerCaptions = activePosterTrailerPlayback.captions,
                 isPlaying = true,
                 cropToFill = true,
@@ -704,6 +708,7 @@ private fun ClassicHomeRoute(
         trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         trailerPreviewUserAgents = viewModel.trailerPreviewUserAgents,
         trailerPreviewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
+        trailerPreviewStreamingDataPoTokens = viewModel.trailerPreviewStreamingDataPoTokens,
         trailerPreviewCaptions = viewModel.trailerPreviewCaptions,
         trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
         onNavigateToDetail = onNavigateToDetail,
@@ -821,9 +826,11 @@ private fun ModernHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
+    val homeProfileSession by viewModel.activeHomeProfileSession.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val modernContentState = remember(
         resolvedContinueWatchingItems,
+        homeProfileSession.language,
         uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
@@ -843,6 +850,7 @@ private fun ModernHomeRoute(
         viewModel.trailerPreviewAudioUrls,
         viewModel.trailerPreviewUserAgents,
         viewModel.trailerPreviewSigningClientKeys,
+        viewModel.trailerPreviewStreamingDataPoTokens,
         viewModel.trailerPreviewCaptions,
         viewModel.trailerPreviewExternalUrls,
         viewModel.trailerPreviewLoadingItemIds,
@@ -851,6 +859,7 @@ private fun ModernHomeRoute(
     ) {
         ModernHomeContentState(
             continueWatchingItems = resolvedContinueWatchingItems,
+            preferredLanguageTag = homeProfileSession.language,
             modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
@@ -870,6 +879,7 @@ private fun ModernHomeRoute(
             trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
             trailerPreviewUserAgents = viewModel.trailerPreviewUserAgents,
             trailerPreviewSigningClientKeys = viewModel.trailerPreviewSigningClientKeys,
+            trailerPreviewStreamingDataPoTokens = viewModel.trailerPreviewStreamingDataPoTokens,
             trailerPreviewCaptions = viewModel.trailerPreviewCaptions,
             trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
             trailerPreviewLoadingIds = viewModel.trailerPreviewLoadingItemIds,

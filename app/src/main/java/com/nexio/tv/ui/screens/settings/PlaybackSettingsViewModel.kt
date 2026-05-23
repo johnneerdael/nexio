@@ -17,6 +17,7 @@ import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.TraceSettingsDataStore
+import com.nexio.tv.data.local.TrailerMaxQuality
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -181,6 +182,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setTrailerDelaySeconds(seconds: Int) {
         trailerSettingsDataStore.setDelaySeconds(seconds)
+    }
+
+    suspend fun setTrailerMaxQuality(maxQuality: TrailerMaxQuality) {
+        trailerSettingsDataStore.setMaxQuality(maxQuality)
     }
 
     suspend fun setPauseOverlayEnabled(enabled: Boolean) {

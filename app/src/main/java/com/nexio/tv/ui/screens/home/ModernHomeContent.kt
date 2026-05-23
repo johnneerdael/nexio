@@ -661,10 +661,13 @@ internal fun ModernHomeContent(
             activeRowKey = resolvedRow.key
             activeItemIndex = resolvedIndex
             focusedItemByRow[resolvedRow.key] = resolvedIndex
-            heroItem = resolvedRow.items.getOrNull(resolvedIndex)?.heroPreview
-                ?: resolvedRow.items.firstOrNull()?.heroPreview
-            displayedHeroItemKey = resolvedRow.items.getOrNull(resolvedIndex)?.key
-                ?: resolvedRow.items.firstOrNull()?.key
+            val resolvedHeroItem = resolvedRow.items.getOrNull(resolvedIndex) ?: resolvedRow.items.firstOrNull()
+            heroItem = selectForegroundHeroPreview(
+                current = if (displayedHeroItemKey == resolvedHeroItem?.key) heroItem else null,
+                candidate = resolvedHeroItem?.heroPreview,
+                preferredLanguageTag = contentState.preferredLanguageTag
+            )
+            displayedHeroItemKey = resolvedHeroItem?.key
             pendingRowFocusKey = resolvedRow.key
             pendingRowFocusIndex = resolvedIndex
             pendingRowFocusNonce++
@@ -683,10 +686,13 @@ internal fun ModernHomeContent(
         activeRowKey = resolvedActive.key
         activeItemIndex = resolvedIndex
         focusedItemByRow[resolvedActive.key] = resolvedIndex
-        heroItem = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
-            ?: resolvedActive.items.firstOrNull()?.heroPreview
-        displayedHeroItemKey = resolvedActive.items.getOrNull(resolvedIndex)?.key
-            ?: resolvedActive.items.firstOrNull()?.key
+        val resolvedHeroItem = resolvedActive.items.getOrNull(resolvedIndex) ?: resolvedActive.items.firstOrNull()
+        heroItem = selectForegroundHeroPreview(
+            current = if (displayedHeroItemKey == resolvedHeroItem?.key) heroItem else null,
+            candidate = resolvedHeroItem?.heroPreview,
+            preferredLanguageTag = contentState.preferredLanguageTag
+        )
+        displayedHeroItemKey = resolvedHeroItem?.key
         if (!focusState.hasSavedFocus && (!hadActiveRow || existingActive == null)) {
             pendingRowFocusKey = resolvedActive.key
             pendingRowFocusIndex = resolvedIndex
@@ -893,15 +899,25 @@ internal fun ModernHomeContent(
         if (latestKey != targetHeroKey) return@LaunchedEffect
         val latestHero = resolveActiveHeroPreview(row, latestHeroIndex)
         if (latestHero != null && heroItem != latestHero) {
+            val currentHero = if (displayedHeroItemKey == latestKey) heroItem else null
+            heroItem = selectForegroundHeroPreview(
+                current = currentHero,
+                candidate = latestHero,
+                preferredLanguageTag = contentState.preferredLanguageTag
+            )
             displayedHeroItemKey = latestKey
-            heroItem = latestHero
         }
     }
     LaunchedEffect(activeHeroPreviewKey, isVerticalRowsScrolling) {
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val latestHero = resolveActiveHeroPreview(latestHeroRow, latestHeroIndex) ?: return@LaunchedEffect
-        if (heroItem != latestHero) {
-            heroItem = latestHero
+        val selectedHero = selectForegroundHeroPreview(
+            current = if (displayedHeroItemKey == activeHeroItemKey) heroItem else null,
+            candidate = latestHero,
+            preferredLanguageTag = contentState.preferredLanguageTag
+        )
+        if (heroItem != selectedHero) {
+            heroItem = selectedHero
         }
     }
     val latestActiveRow by rememberUpdatedState(activeRow)
@@ -963,7 +979,8 @@ internal fun ModernHomeContent(
             displayedHeroItemKey = displayedHeroItemKey,
             activeHeroItemKey = activeHeroItemKey,
             displayedHeroPreview = heroItem,
-            liveActiveHeroPreview = liveActiveHeroPreview
+            liveActiveHeroPreview = liveActiveHeroPreview,
+            preferredLanguageTag = contentState.preferredLanguageTag
         )
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
@@ -1010,6 +1027,14 @@ internal fun ModernHomeContent(
             unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewSigningClientKeys[it] }
+        } else {
+            null
+        }
+        val heroTrailerPreviewStreamingDataPoToken = if (
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewStreamingDataPoTokens[it] }
         } else {
             null
         }
@@ -1194,6 +1219,7 @@ internal fun ModernHomeContent(
             trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
             trailerPreviewUserAgent = heroTrailerPreviewUserAgent,
             trailerPreviewSigningClientKey = heroTrailerPreviewSigningClientKey,
+            trailerPreviewStreamingDataPoToken = heroTrailerPreviewStreamingDataPoToken,
             trailerPreviewCaptions = heroTrailerPreviewCaptions,
             showLoadingIndicator = heroTrailerPending && heroTrailerPreviewUrl.isNullOrBlank(),
             showTextOverlay = !heroTrailerFullscreenMode || fullscreenTextOverlayVisible,
@@ -1434,6 +1460,7 @@ internal fun ModernHomeContent(
                             trailerPreviewAudioUrls = contentState.trailerPreviewAudioUrls,
                             trailerPreviewUserAgents = contentState.trailerPreviewUserAgents,
                             trailerPreviewSigningClientKeys = contentState.trailerPreviewSigningClientKeys,
+                            trailerPreviewStreamingDataPoTokens = contentState.trailerPreviewStreamingDataPoTokens,
                             trailerPreviewCaptions = contentState.trailerPreviewCaptions,
                             trailerPreviewExternalUrls = contentState.trailerPreviewExternalUrls,
                             modernCatalogCardWidth = modernCatalogCardWidth,
@@ -1541,6 +1568,7 @@ private fun ModernHeroSection(
     trailerPreviewAudioUrl: String?,
     trailerPreviewUserAgent: String?,
     trailerPreviewSigningClientKey: String?,
+    trailerPreviewStreamingDataPoToken: String?,
     trailerPreviewCaptions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>,
     showLoadingIndicator: Boolean,
     showTextOverlay: Boolean,
@@ -1574,6 +1602,7 @@ private fun ModernHeroSection(
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         trailerPreviewUserAgent = trailerPreviewUserAgent,
         trailerPreviewSigningClientKey = trailerPreviewSigningClientKey,
+        trailerPreviewStreamingDataPoToken = trailerPreviewStreamingDataPoToken,
         trailerPreviewCaptions = trailerPreviewCaptions,
         showLoadingIndicator = showLoadingIndicator,
         trailerMuted = trailerMuted,

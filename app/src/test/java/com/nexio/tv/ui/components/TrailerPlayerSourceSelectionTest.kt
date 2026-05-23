@@ -2,6 +2,7 @@ package com.nexio.tv.ui.components
 
 import androidx.media3.common.C
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -30,13 +31,19 @@ class TrailerPlayerSourceSelectionTest {
     }
 
     @Test
-    fun `trailer track selection starts hls at highest supported 1080p variant`() {
+    fun `trailer track selection allows up to 4k software decoded variants`() {
         val parameters = buildTrailerTrackSelectionParameters(TrackSelectionParameters.DEFAULT)
 
-        assertEquals(1920, parameters.maxVideoWidth)
-        assertEquals(1080, parameters.maxVideoHeight)
+        assertEquals(3840, parameters.maxVideoWidth)
+        assertEquals(2160, parameters.maxVideoHeight)
         assertEquals(30, parameters.maxVideoFrameRate)
         assertTrue(parameters.forceHighestSupportedBitrate)
         assertTrue(parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+    }
+
+    @Test
+    fun `trailer video renderer prefers ffmpeg and keeps software media codec fallback`() {
+        assertTrue(trailerPrefersFfmpegVideoRenderer())
+        assertEquals(MediaCodecSelector.PREFER_SOFTWARE, trailerVideoMediaCodecSelector())
     }
 }

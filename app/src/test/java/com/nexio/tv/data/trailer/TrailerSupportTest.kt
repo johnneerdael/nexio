@@ -189,6 +189,238 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `preferTrailerCompatibleVideo prefers 4k h264 over vp9 and av1 when available`() {
+        val preferred = preferTrailerCompatibleVideo(
+            listOf(
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-av1.mp4",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "401",
+                    height = 2160,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "av01.0.12M.08"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-vp9.webm",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "313",
+                    height = 2160,
+                    fps = 30,
+                    ext = "webm",
+                    codec = "vp9"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-h264.mp4",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "266",
+                    height = 2160,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "avc1.640033"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-1080-h264.mp4",
+                    score = 1080_030_000.0,
+                    hasN = false,
+                    itag = "137",
+                    height = 1080,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "avc1.640028"
+                )
+            ),
+            maxHeight = 2160
+        )
+
+        assertEquals(listOf("266"), preferred.map { it.itag })
+    }
+
+    @Test
+    fun `preferTrailerCompatibleVideo prefers 4k vp9 over av1 when h264 is unavailable`() {
+        val preferred = preferTrailerCompatibleVideo(
+            listOf(
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-av1.mp4",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "401",
+                    height = 2160,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "av01.0.12M.08"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-vp9.webm",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "313",
+                    height = 2160,
+                    fps = 30,
+                    ext = "webm",
+                    codec = "vp9"
+                )
+            ),
+            maxHeight = 2160
+        )
+
+        assertEquals(listOf("313"), preferred.map { it.itag })
+    }
+
+    @Test
+    fun `preferTrailerCompatibleVideo keeps 4k av1 instead of dropping to lower h264`() {
+        val preferred = preferTrailerCompatibleVideo(
+            listOf(
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-av1.mp4",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "401",
+                    height = 2160,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "av01.0.12M.08"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-1080-h264.mp4",
+                    score = 1080_030_000.0,
+                    hasN = false,
+                    itag = "137",
+                    height = 1080,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "avc1.640028"
+                )
+            ),
+            maxHeight = 2160
+        )
+
+        assertEquals(listOf("401"), preferred.map { it.itag })
+    }
+
+    @Test
+    fun `preferTrailerCompatibleVideo defaults to 1080p cap`() {
+        val preferred = preferTrailerCompatibleVideo(
+            listOf(
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-vp9.webm",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "313",
+                    height = 2160,
+                    fps = 30,
+                    ext = "webm",
+                    codec = "vp9"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-1080-h264.mp4",
+                    score = 1080_030_000.0,
+                    hasN = false,
+                    itag = "137",
+                    height = 1080,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "avc1.640028"
+                )
+            )
+        )
+
+        assertEquals(listOf("137"), preferred.map { it.itag })
+    }
+
+    @Test
+    fun `preferTrailerCompatibleVideo uses highest height below selected cap`() {
+        val preferred = preferTrailerCompatibleVideo(
+            listOf(
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-2160-vp9.webm",
+                    score = 2160_030_000.0,
+                    hasN = false,
+                    itag = "313",
+                    height = 2160,
+                    fps = 30,
+                    ext = "webm",
+                    codec = "vp9"
+                ),
+                StreamCandidate(
+                    client = "android",
+                    priority = 1,
+                    url = "https://example.com/trailer/video-720-h264.mp4",
+                    score = 720_030_000.0,
+                    hasN = false,
+                    itag = "136",
+                    height = 720,
+                    fps = 30,
+                    ext = "mp4",
+                    codec = "avc1.4d401f"
+                )
+            ),
+            maxHeight = 720
+        )
+
+        assertEquals(listOf("136"), preferred.map { it.itag })
+    }
+
+    @Test
+    fun `buildSingleSegmentDashManifest includes youtube range metadata`() {
+        val manifest = buildSingleSegmentDashManifest(
+            StreamCandidate(
+                client = "android",
+                priority = 1,
+                url = "https://rr.example.googlevideo.com/videoplayback?itag=137&mime=video%2Fmp4",
+                score = 1080_030_000.0,
+                hasN = false,
+                itag = "137",
+                height = 1080,
+                fps = 30,
+                ext = "mp4",
+                codec = "avc1.640028",
+                mimeType = "video/mp4",
+                width = 1920,
+                bitrate = 4_200_000,
+                initStart = 0,
+                initEnd = 739,
+                indexStart = 740,
+                indexEnd = 1199,
+                durationMs = 125_000
+            )
+        )
+
+        assertTrue(manifest.contains("""mimeType="video/mp4""""))
+        assertTrue(manifest.contains("""codecs="avc1.640028""""))
+        assertTrue(manifest.contains("""width="1920" height="1080" frameRate="30""""))
+        assertTrue(manifest.contains("""indexRange="740-1199""""))
+        assertTrue(manifest.contains("""<Initialization range="0-739"/>"""))
+        assertTrue(manifest.contains("mediaPresentationDuration=\"PT125.000S\""))
+        assertTrue(manifest.contains("https://rr.example.googlevideo.com/videoplayback?itag=137&amp;mime=video%2Fmp4"))
+    }
+
+    @Test
     fun `selectPreferredTrailerPlaybackSource prefers combined over split adaptive`() {
         // iOS HLS manifest works without a poToken; direct /videoplayback
         // URLs do not. Keep combined as the primary playback path.

@@ -23,6 +23,7 @@ class PlayerSourceCache @Inject constructor() {
 
     private val mutex = Mutex()
     private var cachedUrl: String? = null
+    private var cachedPlayerJs: String? = null
     private var cachedManifest: CipherManifest? = null
 
     /**
@@ -55,11 +56,26 @@ class PlayerSourceCache @Inject constructor() {
             return@withLock cachedManifest
         }
 
-        val playerJs = fetchPlayerJs(playerJsUrl) ?: return@withLock null
+        val playerJs = fetchPlayerJsLocked(playerJsUrl) ?: return@withLock null
         val manifest = PlayerSourceParser.parse(playerJs)
         cachedUrl = playerJsUrl
         cachedManifest = manifest
         manifest
+    }
+
+    suspend fun getPlayerJs(playerJsUrl: String): String? = mutex.withLock {
+        fetchPlayerJsLocked(playerJsUrl)
+    }
+
+    private suspend fun fetchPlayerJsLocked(playerJsUrl: String): String? {
+        if (cachedUrl == playerJsUrl && cachedPlayerJs != null) {
+            return cachedPlayerJs
+        }
+        val playerJs = fetchPlayerJs(playerJsUrl) ?: return null
+        cachedUrl = playerJsUrl
+        cachedPlayerJs = playerJs
+        cachedManifest = null
+        return playerJs
     }
 
     private suspend fun fetchPlayerJs(playerJsUrl: String): String? = withContext(Dispatchers.IO) {

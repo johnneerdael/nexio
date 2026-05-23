@@ -227,6 +227,10 @@
     <string name="playback_autoplay_trailers_sub">Allow detail and home trailer previews to start automatically after the configured delay.</string>
     <string name="playback_trailer_delay">Trailer Delay</string>
     <string name="playback_trailer_delay_sub">How long to wait before auto-starting a trailer preview.</string>
+    <string name="playback_trailer_max_quality">Trailer Max Quality</string>
+    <string name="playback_trailer_max_quality_720_sub">Prefer up to 720p adaptive trailer streams.</string>
+    <string name="playback_trailer_max_quality_1080_sub">Prefer up to 1080p adaptive trailer streams.</string>
+    <string name="playback_trailer_max_quality_2160_sub">Prefer up to 2160p adaptive trailer streams when the device can keep up.</string>
     <string name="playback_auto_frame_rate">Auto Frame Rate</string>
     <string name="playback_afr_android_open">Open Android display settings</string>
     <string name="playback_afr_android_open_sub">Configure the device match-content frame-rate setting used by Android TV.</string>

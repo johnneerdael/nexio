@@ -200,6 +200,7 @@ internal fun PlaybackSettingsContent(
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
+    var showTrailerMaxQualityDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
     var showExternalPlayerDialog by remember { mutableStateOf(false) }
     var showCollectorDashboardDialog by remember { mutableStateOf(false) }
@@ -216,6 +217,7 @@ internal fun PlaybackSettingsContent(
         showIecPackerChannelLayoutDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
+        showTrailerMaxQualityDialog = false
         showPlayerPreferenceDialog = false
         showExternalPlayerDialog = false
     }
@@ -258,6 +260,7 @@ internal fun PlaybackSettingsContent(
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onShowTrailerMaxQualityDialog = { openDialog { showTrailerMaxQualityDialog = true } },
                 onSetDeterministicAutoplayEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setDeterministicAutoplayEnabled(enabled) }
                 },
@@ -307,6 +310,9 @@ internal fun PlaybackSettingsContent(
                 onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
                 onSetTrailerDelaySeconds = { seconds ->
                     coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) }
+                },
+                onSetTrailerMaxQuality = { maxQuality ->
+                    coroutineScope.launch { viewModel.setTrailerMaxQuality(maxQuality) }
                 },
                 androidFrameRateStatus = androidFrameRateStatus,
                 onOpenAndroidDisplaySettings = openAndroidDisplaySettings,
@@ -462,6 +468,8 @@ internal fun PlaybackSettingsContent(
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
+        showTrailerMaxQualityDialog = showTrailerMaxQualityDialog,
+        trailerSettings = trailerSettings,
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
@@ -503,6 +511,9 @@ internal fun PlaybackSettingsContent(
         onSetReuseLastLinkCacheHours = { hours ->
             coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
         },
+        onSetTrailerMaxQuality = { maxQuality ->
+            coroutineScope.launch { viewModel.setTrailerMaxQuality(maxQuality) }
+        },
         onDismissLanguageDialog = ::dismissAllDialogs,
         onDismissSecondaryLanguageDialog = ::dismissAllDialogs,
         onDismissSubtitleStartupModeDialog = ::dismissAllDialogs,
@@ -513,7 +524,8 @@ internal fun PlaybackSettingsContent(
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
         onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
-        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
+        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs,
+        onDismissTrailerMaxQualityDialog = ::dismissAllDialogs
     )
 
     if (showCollectorDashboardDialog) {

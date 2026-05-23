@@ -11,11 +11,20 @@ import java.security.SecureRandom
 private const val CPN_ALPHABET =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 private const val CPN_LENGTH = 16
+private const val T_PARAMETER_LENGTH = 12
 private val cpnRandom = SecureRandom()
 
 fun generateContentPlaybackNonce(): String {
-    val out = CharArray(CPN_LENGTH)
-    for (i in 0 until CPN_LENGTH) {
+    return randomYoutubeNonce(CPN_LENGTH)
+}
+
+fun generateTParameter(): String {
+    return randomYoutubeNonce(T_PARAMETER_LENGTH)
+}
+
+private fun randomYoutubeNonce(length: Int): String {
+    val out = CharArray(length)
+    for (i in 0 until length) {
         out[i] = CPN_ALPHABET[cpnRandom.nextInt(CPN_ALPHABET.length)]
     }
     return String(out)

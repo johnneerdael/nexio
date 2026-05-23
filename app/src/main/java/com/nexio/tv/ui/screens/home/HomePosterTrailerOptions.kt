@@ -9,6 +9,7 @@ internal data class HomePosterTrailerPlayback(
     val audioUrl: String? = null,
     val userAgent: String? = null,
     val signingClientKey: String? = null,
+    val streamingDataPoToken: String? = null,
     val captions: List<com.nexio.tv.data.trailer.YouTubeCaptionTrack> = emptyList(),
     val heroPreview: HeroPreview? = null
 )
@@ -38,6 +39,7 @@ internal fun playableHomeTrailerFor(
     previewAudioUrls: Map<String, String>,
     previewUserAgents: Map<String, String> = emptyMap(),
     previewSigningClientKeys: Map<String, String> = emptyMap(),
+    previewStreamingDataPoTokens: Map<String, String> = emptyMap(),
     previewCaptions: Map<String, List<com.nexio.tv.data.trailer.YouTubeCaptionTrack>> = emptyMap()
 ): HomePosterTrailerPlayback? {
     val videoUrl = previewUrls[itemId]?.takeIf { it.isNotBlank() } ?: return null
@@ -48,6 +50,7 @@ internal fun playableHomeTrailerFor(
         audioUrl = previewAudioUrls[itemId]?.takeIf { it.isNotBlank() },
         userAgent = previewUserAgents[itemId]?.takeIf { it.isNotBlank() },
         signingClientKey = previewSigningClientKeys[itemId]?.takeIf { it.isNotBlank() },
+        streamingDataPoToken = previewStreamingDataPoTokens[itemId]?.takeIf { it.isNotBlank() },
         captions = previewCaptions[itemId].orEmpty(),
         heroPreview = item?.toHomeHeroPreview()
     )

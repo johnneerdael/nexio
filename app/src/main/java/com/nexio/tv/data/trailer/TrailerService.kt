@@ -57,18 +57,12 @@ private fun TrailerResolutionResult?.traceResultKind(): String = when (this) {
 
 internal const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
-private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 
 private sealed interface CachedTrailerLookup {
     data object Miss : CachedTrailerLookup
     data class Hit(val result: TrailerResolutionResult) : CachedTrailerLookup
 }
-
-private data class CachedTrailerPlaybackSource(
-    val playbackSource: TrailerPlaybackSource,
-    val cachedAt: Instant
-)
 
 @Singleton
 class TrailerService(
@@ -105,7 +99,6 @@ class TrailerService(
     )
 
     private val lookupCache = ConcurrentHashMap<String, CachedTrailerLookup>()
-    private val youtubeSourceCache = ConcurrentHashMap<String, CachedTrailerPlaybackSource>()
     // Process-lifetime cache: tmdbId (Int) → latest aired season number, or -1 if none found / detection failed.
     // ConcurrentHashMap does not accept null values, so -1 is used as a sentinel for "computed but no result".
     private val tvLatestAiredSeasonCache = ConcurrentHashMap<Int, Int>()
@@ -562,7 +555,6 @@ class TrailerService(
 
     fun clearCache() {
         lookupCache.clear()
-        youtubeSourceCache.clear()
         tvLatestAiredSeasonCache.clear()
     }
 
@@ -1003,14 +995,6 @@ class TrailerService(
         year: String?,
         originalLanguage: String? = null
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
-        val youtubeKey = extractYouTubeVideoId(youtubeUrl)
-        if (!youtubeKey.isNullOrBlank()) {
-            getValidCachedYoutubeSource(youtubeKey)?.let { cached ->
-                trailerDebugLog("resolveYouTubeTrailer cache hit key=$youtubeKey")
-                return@withContext TrailerResolutionResult.Playback(cached.playbackSource)
-            }
-        }
-
         val localSource = try {
             inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl, originalLanguage)
         } catch (error: NonEnglishYouTubeTrailerException) {
@@ -1033,12 +1017,6 @@ class TrailerService(
         if (localSource != null) {
             trailerDebugLog("resolveYouTubeTrailer native success url=$youtubeUrl")
             Log.d(TAG, "Resolved $youtubeUrl via local in-app extractor")
-            if (!youtubeKey.isNullOrBlank()) {
-                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                    playbackSource = localSource,
-                    cachedAt = Instant.now(clock)
-                )
-            }
             return@withContext TrailerResolutionResult.Playback(localSource)
         }
         trailerDebugLog("resolveYouTubeTrailer native miss url=$youtubeUrl")
@@ -1057,12 +1035,6 @@ class TrailerService(
         if (backendSource != null) {
                 trailerDebugLog("resolveYouTubeTrailer backend success url=$youtubeUrl")
                 Log.d(TAG, "Resolved $youtubeUrl via trailer backend bridge")
-                if (!youtubeKey.isNullOrBlank()) {
-                    youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                        playbackSource = backendSource,
-                        cachedAt = Instant.now(clock)
-                    )
-                }
                 return@withContext TrailerResolutionResult.Playback(backendSource)
         }
         trailerDebugLog("resolveYouTubeTrailer backend miss url=$youtubeUrl")
@@ -1090,16 +1062,6 @@ class TrailerService(
         return AnimeStremioId.isExplicitAnimeOnlyId(contentId)
     }
 
-    private fun getValidCachedYoutubeSource(youtubeKey: String): CachedTrailerPlaybackSource? {
-        val cached = youtubeSourceCache[youtubeKey] ?: return null
-        val age = Duration.between(cached.cachedAt, Instant.now(clock))
-        if (age <= YOUTUBE_SOURCE_CACHE_TTL) {
-            return cached
-        }
-        youtubeSourceCache.remove(youtubeKey, cached)
-        trailerDebugLog("resolveYouTubeTrailer cache expired key=$youtubeKey")
-        return null
-    }
 }
 
 internal fun normalizeTmdbTrailerLanguage(language: String?): String {
