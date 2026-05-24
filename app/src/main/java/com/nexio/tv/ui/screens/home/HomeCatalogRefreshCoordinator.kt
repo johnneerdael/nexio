@@ -133,7 +133,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         if (rows.isEmpty()) return rows
         val artworkProviderSettings = posterRatingsUrlResolver.currentSettings()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
-        val hydratedRows = rows.map { row ->
+        val hydratedRows = ArrayList<CatalogRow>(rows.size)
+        for (rowIndex in rows.indices) {
+            val row = rows[rowIndex]
             val rowKey = homeCatalogGlobalKey(row)
             val oldItems = existingRowsByKey[rowKey]?.items.orEmpty()
             val diff = diffCatalogItems(oldItems = oldItems, newItems = row.items)
@@ -143,10 +145,13 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 .toHashSet()
             val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
 
-            val hydratedItems = row.items.map { item ->
+            val hydratedItems = ArrayList<MetaPreview>(row.items.size)
+            for (itemIndex in row.items.indices) {
+                val item = row.items[itemIndex]
                 val itemKey = "${item.apiType}:${item.id}"
                 if (hasResolvedAuthority(itemKey)) {
-                    return@map item
+                    hydratedItems += item
+                    continue
                 }
                 val persistedFallback = oldItemsByKey[itemKey]
                 if (shouldReusePersistedHomeItem(
@@ -154,7 +159,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         persistedFallback = persistedFallback
                     )
                 ) {
-                    return@map persistedFallback!!
+                    hydratedItems += persistedFallback!!
+                    continue
                 }
                 val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
                     itemKey = itemKey,
@@ -171,7 +177,33 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     persistedFallback = persistedFallback,
                     externalMeta = null
                 )
-                val localized = overlayProviderLocalizedMetadata(merged, onLog)
+                val cachedDisplayMetadata = metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(
+                    itemKey = itemKey,
+                    languageTag = languageTag
+                )?.takeIf { it.hasRefreshDisplayFields() }
+                val localized = if (cachedDisplayMetadata != null) {
+                    if (telemetryEnabled) {
+                        onLog(
+                            "home_display_cache_hit",
+                            "catalogKey=$rowKey itemKey=$itemKey"
+                        )
+                    }
+                    mergePersistedHomeDisplayMetadata(
+                        currentItem = merged,
+                        persistedFallback = null,
+                        externalMeta = cachedDisplayMetadata.toMetaForRefresh(merged)
+                    )
+                } else {
+                    val providerLocalized = overlayProviderLocalizedMetadata(merged, onLog)
+                    if (providerLocalized != merged) {
+                        metadataDiskCacheStore.writeHomeDisplayMetadata(
+                            itemKey = itemKey,
+                            languageTag = languageTag,
+                            metadata = providerLocalized.toHomeDisplayMetadata()
+                        )
+                    }
+                    providerLocalized
+                }
                 posterRatingsUrlResolver.applyArtworkRef(
                     localized.withCompatiblePersistedInternalPoster(
                         persistedFallback = persistedFallback,
@@ -179,8 +211,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     ),
                     artworkProviderSettings
                 )
+                    .also { hydratedItems += it }
             }
-            row.copy(items = hydratedItems)
+            hydratedRows += row.copy(items = hydratedItems)
         }
 
         val flattenedItems = hydratedRows.flatMap { it.items }
@@ -519,6 +552,46 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     }
 }
 
+private fun HomeDisplayMetadata.toMetaForRefresh(base: MetaPreview): Meta =
+    Meta(
+        id = base.id,
+        type = base.type,
+        rawType = base.rawType,
+        name = title ?: base.name,
+        poster = poster,
+        posterShape = base.posterShape,
+        background = backdrop,
+        logo = logo,
+        description = description,
+        releaseInfo = releaseInfo,
+        runtime = runtime,
+        imdbRating = imdbRating,
+        ratingSource = ratingSource,
+        genres = genres,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        originalLanguage = originalLanguage,
+        links = emptyList(),
+        posterProviderTag = posterProviderTag,
+        artwork = artwork
+    )
+
+private fun HomeDisplayMetadata.hasRefreshDisplayFields(): Boolean =
+    !title.isNullOrBlank() ||
+        !description.isNullOrBlank() ||
+        genres.isNotEmpty() ||
+        !releaseInfo.isNullOrBlank() ||
+        !runtime.isNullOrBlank() ||
+        imdbRating != null ||
+        !poster.isNullOrBlank() ||
+        !backdrop.isNullOrBlank() ||
+        !logo.isNullOrBlank() ||
+        artwork != null
+
 /**
  * Projects a freshly-emitted rail row against the persisted (overlay-applied) row using
  * [HomeRailProjectionReducer]. The rail row is FIRST_PAINT input; the persisted row
@@ -539,13 +612,14 @@ internal fun mergePersistedHomeDisplayMetadata(
     if (persistedFallback == null && externalMeta == null) return currentItem
     val externalAsPreview: MetaPreview? = externalMeta?.let { meta ->
         currentItem.copy(
-            name = meta.name ?: currentItem.name,
+            name = meta.name,
             description = meta.description,
             genres = meta.genres,
             releaseInfo = meta.releaseInfo,
             runtime = meta.runtime,
             imdbRating = meta.imdbRating,
             ratingSource = meta.ratingSource ?: currentItem.ratingSource,
+            originalLanguage = meta.originalLanguage ?: currentItem.originalLanguage,
             poster = meta.poster ?: currentItem.poster,
             background = meta.background ?: currentItem.background,
             logo = meta.logo ?: currentItem.logo,
@@ -582,7 +656,9 @@ private fun projectRailRowAgainstPersisted(
         existing = resolvedSlots,
         profile = null
     )
-    return rawRailItem.applyMergedSlotsForRefresh(merged)
+    return rawRailItem.applyMergedSlotsForRefresh(merged).copy(
+        originalLanguage = resolvedRow.originalLanguage ?: rawRailItem.originalLanguage
+    )
 }
 
 private fun MetaPreview.applyMergedSlotsForRefresh(

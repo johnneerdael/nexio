@@ -42,6 +42,7 @@ import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
+import com.nexio.tv.domain.model.strictlyContains
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.toSettingsSignature
 import javax.inject.Inject
@@ -95,6 +96,65 @@ class HomeHydrationCoordinator @Inject constructor(
                 return null
             }
 
+            val currentSettings = settingsSource.settings.first()
+            val settingsSignature = currentSettings.toSettingsSignature()
+            val cachedOverlay = readValidCachedOverlay(
+                item = item,
+                itemKey = itemKey,
+                languageTag = languageTag,
+                settingsSignature = settingsSignature
+            )
+            if (cachedOverlay != null) {
+                val overlayForAlias = cachedOverlay.withRequestedItemKey(itemKey)
+                if (currentGeneration() != expectedGeneration) {
+                    traceEvents.emitHomeHydrationIgnored(
+                        itemKey = itemKey,
+                        reason = "generation_mismatch",
+                        trigger = trigger.name
+                    )
+                    return null
+                }
+                val firstPaintMetadata = item.toHomeDisplayMetadata()
+                val overlayAccepted = onOverlayApplied(overlayForAlias)
+                emitCacheHitRatingAndArtworkSurface(
+                    item = item,
+                    itemKey = itemKey,
+                    firstPaintMetadata = firstPaintMetadata,
+                    overlay = overlayForAlias,
+                    overlayAccepted = overlayAccepted
+                )
+                if (!overlayAccepted) {
+                    return null
+                }
+                traceEvents.emitHomeHydrationApplied(
+                    railId = item.firstPaintRailSource?.name,
+                    itemKey = itemKey,
+                    firstPaintSource = item.firstPaintSource.name,
+                    canonicalProvider = overlayForAlias.canonicalProvider.name,
+                    canonicalId = overlayForAlias.canonicalId,
+                    imdbId = overlayForAlias.imdbId,
+                    trigger = trigger.name,
+                    priority = priority.name,
+                    workClass = WORK_CLASS_BACKGROUND_HYDRATION,
+                    changedFields = changedFields(firstPaintMetadata, overlayForAlias.fields),
+                    displayHashBefore = firstPaintMetadata.hydratedHomeDisplayHash(),
+                    displayHashAfter = overlayForAlias.displayHash,
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    networkExecuted = false,
+                    cacheDecision = CACHE_DECISION_OVERLAY_HIT
+                )
+                return overlayForAlias
+            }
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
+
             val request = item.toMetadataRequest(languageTag)
             val result = metadataRouterFacade.resolveRequest(request)
             if (currentGeneration() != expectedGeneration) {
@@ -117,8 +177,6 @@ class HomeHydrationCoordinator @Inject constructor(
             }
 
             val bundle = stableIds.bundle
-            val currentSettings = settingsSource.settings.first()
-            val settingsSignature = currentSettings.toSettingsSignature()
             val stableIdsSnapshot = bundle?.let { b ->
                 ProviderIds(
                     imdb = b.sidecars.imdbId ?: item.firstPaintStableIds.imdb,
@@ -162,11 +220,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 languageTag = overlay.languageTag,
                 policyVersion = overlay.policyVersion
             )
-            if (existingOverlay != null &&
-                existingOverlay.state != HomeItemHydrationState.STALE_READY &&
-                existingOverlay.displayHash == overlay.displayHash &&
-                existingOverlay.fields == overlay.fields
-            ) {
+            if (existingOverlay?.canReuseAsContentUnchangedOverlay(item, overlay) == true) {
                 traceEvents.emitHomeHydrationIgnored(
                     itemKey = itemKey,
                     reason = "overlay_content_unchanged",
@@ -270,6 +324,92 @@ class HomeHydrationCoordinator @Inject constructor(
         } catch (error: Exception) {
             failed(itemKey, trigger, error.toHomeHydrationFailureReason())
         }
+    }
+
+    private fun readValidCachedOverlay(
+        item: MetaPreview,
+        itemKey: String,
+        languageTag: String,
+        settingsSignature: String,
+        nowMs: Long = System.currentTimeMillis()
+    ): HydratedHomeOverlay? {
+        val overlay = overlayStore.readForItemKeys(
+            itemKeys = setOf(itemKey),
+            languageTag = languageTag,
+            policyVersion = HOME_OVERLAY_POLICY_VERSION,
+            nowMs = nowMs
+        )[itemKey] ?: return null
+        if (overlay.state == HomeItemHydrationState.STALE_READY) return null
+        if (overlay.isStale(nowMs)) return null
+        if (overlay.settingsSignature != settingsSignature) return null
+        if (item.firstPaintStableIds.strictlyContains(overlay.stableIdsSnapshot)) return null
+        if (item.requiresOriginalLanguageForVisibleHydration() && overlay.fields.originalLanguage.isNullOrBlank()) {
+            return null
+        }
+        return overlay
+    }
+
+    private fun MetaPreview.requiresOriginalLanguageForVisibleHydration(): Boolean =
+        type == ContentType.SERIES ||
+            apiType.equals("series", ignoreCase = true) ||
+            apiType.equals("tv", ignoreCase = true)
+
+    private fun HydratedHomeOverlay.canReuseAsContentUnchangedOverlay(
+        item: MetaPreview,
+        freshOverlay: HydratedHomeOverlay,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (state == HomeItemHydrationState.STALE_READY) return false
+        if (isStale(nowMs)) return false
+        if (settingsSignature != freshOverlay.settingsSignature) return false
+        if (stableIdsSnapshot != freshOverlay.stableIdsSnapshot) return false
+        if (item.firstPaintStableIds.strictlyContains(stableIdsSnapshot)) return false
+        if (item.requiresOriginalLanguageForVisibleHydration() && fields.originalLanguage.isNullOrBlank()) return false
+        return displayHash == freshOverlay.displayHash && fields == freshOverlay.fields
+    }
+
+    private fun HydratedHomeOverlay.withRequestedItemKey(itemKey: String): HydratedHomeOverlay =
+        if (this.itemKey == itemKey) this else copy(itemKey = itemKey)
+
+    private fun emitCacheHitRatingAndArtworkSurface(
+        item: MetaPreview,
+        itemKey: String,
+        firstPaintMetadata: HomeDisplayMetadata,
+        overlay: HydratedHomeOverlay,
+        overlayAccepted: Boolean
+    ) {
+        val previewRating = firstPaintMetadata.imdbRating
+        val acceptedPreviewRating = RatingValueValidator.validTitleRating(previewRating)
+        val sanitizedPreviewRating = RatingValueValidator.sanitizeTitleRating(previewRating)
+        val sanitizedHydratedRating = RatingValueValidator.sanitizeTitleRating(overlay.fields.imdbRating)
+        traceEvents.emitHomeRatingAndArtworkSurface(
+            surface = "HOME",
+            itemKeyHash = traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, itemKey),
+            firstPaintRatingValue = sanitizedPreviewRating,
+            firstPaintRatingAccepted = acceptedPreviewRating,
+            firstPaintRatingRejectReason = if (previewRating != null && !acceptedPreviewRating) {
+                "OUT_OF_RANGE_TITLE_RATING"
+            } else {
+                null
+            },
+            firstPaintLogoPresent = firstPaintMetadata.displayLogo != null,
+            firstPaintTmdbIdHash = item.firstPaintStableIds.tmdbOrPreviewId(item.id)
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            firstPaintTvdbIdHash = item.firstPaintStableIds.tvdb
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            firstPaintImdbIdHash = item.firstPaintStableIds.imdb
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            hydrationStarted = true,
+            routeProvider = null,
+            tvdbIdHash = overlay.stableIdsSnapshot.tvdb?.let {
+                traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it)
+            },
+            overlayApplied = overlayAccepted,
+            hydratedRatingValue = sanitizedHydratedRating,
+            hydratedRatingSource = overlay.fields.ratingSource?.name.takeIf { sanitizedHydratedRating != null },
+            hydratedLogoPresent = overlay.fields.displayLogo != null,
+            hydratedLogoSource = overlay.fields.artwork?.logo?.trace?.selectedProvider
+        )
     }
 
     private suspend fun MetadataResolutionResult.toHydratedHomeOverlay(
@@ -775,6 +915,7 @@ class HomeHydrationCoordinator @Inject constructor(
     private companion object {
         const val HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE = "home-rating-artwork"
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
+        const val CACHE_DECISION_OVERLAY_HIT = "OVERLAY_CACHE_HIT"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L
         const val OVERLAY_EXPIRES_MS = 7L * 24L * 60L * 60L * 1000L
         val OBFUSCATED_CLASS_NAME = Regex("[a-z]\\d*")

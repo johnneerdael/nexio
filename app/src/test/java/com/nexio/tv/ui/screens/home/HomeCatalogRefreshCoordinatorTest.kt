@@ -35,10 +35,12 @@ import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ArtworkProviderSettings
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
@@ -1375,6 +1377,65 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
+    fun `home refresh uses cached display metadata without provider localized resolution`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-cache-display", poster = null).copy(
+            name = "Raw title",
+            description = "Raw description"
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        every {
+            metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem("movie:tt-cache-display", "en")
+        } returns true
+        every {
+            metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem("movie:tt-cache-display", "en")
+        } returns HomeDisplayMetadata(
+            title = "Cached localized title",
+            description = "Cached localized description",
+            imdbRating = 7.4f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = listOf("Cached Genre"),
+            originalLanguage = "ja"
+        )
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } answers { firstArg() }
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            telemetryEnabled = true,
+            onLog = { _, _ -> }
+        )
+
+        val item = hydratedRows.single().items.single()
+        assertEquals("Cached localized title", item.name)
+        assertEquals("Cached localized description", item.description)
+        assertEquals(7.4f, item.imdbRating ?: 0f, 0f)
+        assertEquals(listOf("Cached Genre"), item.genres)
+        assertEquals("ja", item.originalLanguage)
+        coVerify(exactly = 0) { metadataRouterFacade.resolveRequest(any()) }
+        verify(exactly = 0) {
+            metadataDiskCacheStore.writeHomeDisplayMetadata(any(), any(), any())
+        }
+    }
+
+    @Test
     fun `home refresh preserves compatible persisted internal poster before artwork projection`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
@@ -1589,7 +1650,7 @@ class HomeCatalogRefreshCoordinatorTest {
     private fun coordinator(
         catalogRepository: CatalogRepository,
         tvMetadataRouter: TvMetadataRouter,
-        metadataDiskCacheStore: MetadataDiskCacheStore = mockk(relaxed = true),
+        metadataDiskCacheStore: MetadataDiskCacheStore = emptyMetadataDiskCacheStore(),
         posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
     ): HomeCatalogRefreshCoordinator {
         val posterResolver = posterRatingsUrlResolver ?: mockk<PosterRatingsUrlResolver>(relaxed = true).also {
@@ -1615,6 +1676,11 @@ class HomeCatalogRefreshCoordinatorTest {
             appContext = context
         )
     }
+
+    private fun emptyMetadataDiskCacheStore(): MetadataDiskCacheStore =
+        mockk<MetadataDiskCacheStore>(relaxed = true).also { store ->
+            every { store.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
+        }
 
     private fun coordinator(
         catalogRepository: CatalogRepository,
