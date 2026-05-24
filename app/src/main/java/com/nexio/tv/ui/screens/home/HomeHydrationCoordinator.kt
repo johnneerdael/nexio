@@ -1,11 +1,16 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver
+import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.ContentTypeDefaults
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.takeIfImageType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -32,6 +37,7 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
@@ -55,7 +61,10 @@ class HomeHydrationCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val overlayStore: HydratedHomeOverlayStore,
     private val traceEvents: TraceMetadataEvents,
-    private val settingsSource: ArtworkProviderSettingsSource
+    private val settingsSource: ArtworkProviderSettingsSource,
+    private val artworkProviderResolver: ArtworkProviderResolver = ArtworkProviderResolver(
+        ArtworkProviderCapabilityResolver()
+    )
 ) {
     suspend fun hydrate(
         item: MetaPreview,
@@ -126,7 +135,8 @@ class HomeHydrationCoordinator @Inject constructor(
                 bundle = bundle,
                 languageTag = languageTag,
                 stableIdsSnapshot = stableIdsSnapshot,
-                settingsSignature = settingsSignature
+                settingsSignature = settingsSignature,
+                currentSettings = currentSettings
             ) ?: return failed(itemKey, trigger, "canonical_identity_unresolved")
 
             if (currentGeneration() != expectedGeneration) {
@@ -268,13 +278,19 @@ class HomeHydrationCoordinator @Inject constructor(
         bundle: StableIdBundle?,
         languageTag: String,
         stableIdsSnapshot: ProviderIds,
-        settingsSignature: String
+        settingsSignature: String,
+        currentSettings: ArtworkProviderSettings
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
         val fields = displayMetadata
             .sanitizeHydratedTitleRating()
-            .withHydratedOnlyArtwork(item, resolvedDocument)
+            .withHydratedOnlyArtwork(
+                item = item,
+                document = resolvedDocument,
+                stableIds = stableIdsSnapshot,
+                settings = currentSettings
+            )
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -314,9 +330,12 @@ class HomeHydrationCoordinator @Inject constructor(
 
     private fun HomeDisplayMetadata.withHydratedOnlyArtwork(
         item: MetaPreview,
-        document: ResolvedMetadataDocument
+        document: ResolvedMetadataDocument,
+        stableIds: ProviderIds,
+        settings: ArtworkProviderSettings
     ): HomeDisplayMetadata {
         val typed = artwork?.enforceArtworkTypeBoundaries()
+        val isAnime = item.isAnimeForArtworkRouting()
         val posterFromPreview = document.isPreviewArtwork(ResolvedField.POSTER) ||
             (poster != null && document.poster == null && poster == item.poster) ||
             (document.poster == null && typed?.poster != null && typed.poster == item.artwork?.poster)
@@ -329,16 +348,88 @@ class HomeHydrationCoordinator @Inject constructor(
         val thumbnailFromPreview = thumbnail != null &&
             typed?.thumbnail == item.artwork?.thumbnail
         val hydratedTyped = ArtworkBundle(
-            poster = typed?.poster.takeUnless { posterFromPreview },
-            backdrop = typed?.backdrop.takeUnless { backdropFromPreview },
-            logo = typed?.logo.takeUnless { logoFromPreview },
-            thumbnail = typed?.thumbnail.takeUnless { thumbnailFromPreview }
+            poster = typed?.poster.takeIf {
+                !posterFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.POSTER,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            backdrop = typed?.backdrop.takeIf {
+                !backdropFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.BACKDROP,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            logo = typed?.logo.takeIf {
+                !logoFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.LOGO,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            thumbnail = typed?.thumbnail.takeIf {
+                !thumbnailFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.THUMBNAIL,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            }
         ).enforceArtworkTypeBoundaries()
         return copy(
-            poster = hydratedTyped.poster.toLegacyArtworkString() ?: poster.takeUnless { posterFromPreview },
-            backdrop = hydratedTyped.backdrop.toLegacyArtworkString() ?: backdrop.takeUnless { backdropFromPreview },
-            logo = hydratedTyped.logo.toLegacyArtworkString() ?: logo.takeUnless { logoFromPreview },
-            thumbnail = hydratedTyped.thumbnail.toLegacyArtworkString() ?: thumbnail.takeUnless { thumbnailFromPreview },
+            poster = hydratedTyped.poster.toLegacyArtworkString() ?: poster.takeIf {
+                !posterFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.POSTER,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            backdrop = hydratedTyped.backdrop.toLegacyArtworkString() ?: backdrop.takeIf {
+                !backdropFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.BACKDROP,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            logo = hydratedTyped.logo.toLegacyArtworkString() ?: logo.takeIf {
+                !logoFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.LOGO,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            thumbnail = hydratedTyped.thumbnail.toLegacyArtworkString() ?: thumbnail.takeIf {
+                !thumbnailFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.THUMBNAIL,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
             artwork = hydratedTyped.takeIf {
                 it.poster.takeIfImageType(ArtworkType.POSTER) != null ||
                     it.backdrop.takeIfImageType(ArtworkType.BACKDROP) != null ||
@@ -351,6 +442,54 @@ class HomeHydrationCoordinator @Inject constructor(
     private fun ResolvedMetadataDocument.isPreviewArtwork(field: ResolvedField): Boolean =
         sourceRoles[field] == SourceRole.RAIL_PREVIEW ||
             sourceRoles[field] == SourceRole.ADDON_PREVIEW
+
+    private fun ResolvedMetadataDocument.acceptsArtworkProvider(
+        type: ArtworkType,
+        ref: ArtworkDisplayRef?,
+        contentType: ContentType,
+        isAnime: Boolean,
+        stableIds: ProviderIds,
+        settings: ArtworkProviderSettings
+    ): Boolean {
+        val field = type.toResolvedField()
+        val actualProvider = ref.providerKey()
+            ?: field?.let { sourceProviders[it]?.trim()?.takeIf { value -> value.isNotBlank() } }
+            ?: return false
+        val preferred = artworkProviderResolver.resolve(
+            artworkType = type,
+            contentType = contentType,
+            isAnime = isAnime,
+            availableIds = stableIds,
+            settings = settings
+        ).key
+        if (actualProvider.equals(preferred, ignoreCase = true)) return true
+        val stock = ContentTypeDefaults.resolve(type, isAnime).key
+        if (actualProvider.equals(stock, ignoreCase = true)) return true
+        return field != null &&
+            actualProvider.equals("TVDB", ignoreCase = true) &&
+            !isPreviewArtwork(field)
+    }
+
+    private fun ArtworkDisplayRef?.providerKey(): String? =
+        when (this) {
+            is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key
+                ?: trace.selectedProvider?.trim()?.takeIf { it.isNotBlank() }
+            is ArtworkDisplayRef.LegacyString -> trace.selectedProvider?.trim()?.takeIf { it.isNotBlank() }
+            is ArtworkDisplayRef.Placeholder -> null
+            null -> null
+        }
+
+    private fun ArtworkType.toResolvedField(): ResolvedField? =
+        when (this) {
+            ArtworkType.POSTER -> ResolvedField.POSTER
+            ArtworkType.BACKDROP -> ResolvedField.BACKDROP
+            ArtworkType.LOGO -> ResolvedField.LOGO
+            ArtworkType.THUMBNAIL -> null
+        }
+
+    private fun MetaPreview.isAnimeForArtworkRouting(): Boolean =
+        apiType.equals("anime", ignoreCase = true) ||
+            firstPaintRailSource == RailSource.BUILT_IN_KITSU
 
     private fun failed(
         itemKey: String,
