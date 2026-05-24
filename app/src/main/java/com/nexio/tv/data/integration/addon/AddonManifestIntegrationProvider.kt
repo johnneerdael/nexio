@@ -8,7 +8,7 @@ import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.data.remote.api.AddonApi
+import com.nexio.tv.data.remote.api.AddonManifestApi
 import com.nexio.tv.data.remote.dto.AddonManifestDto
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,7 +17,7 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 class AddonManifestIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
-    private val addonApi: AddonApi
+    private val addonApi: AddonManifestApi
 ) {
     suspend fun getManifest(
         addonId: String,

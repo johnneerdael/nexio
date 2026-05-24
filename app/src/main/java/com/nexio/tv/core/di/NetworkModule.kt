@@ -11,6 +11,7 @@ import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
 import com.nexio.tv.core.player.auth.EgressIpFingerprint
 import com.nexio.tv.core.player.auth.PlaybackAuthFingerprintHolder
 import com.nexio.tv.data.remote.api.AddonApi
+import com.nexio.tv.data.remote.api.AddonManifestApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
 import com.nexio.tv.data.remote.api.ArmApi
@@ -405,7 +406,30 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("addonManifest")
+    fun provideAddonManifestOkHttpClient(
+        @Named("addonCatalog") okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
+    @Provides
+    @Singleton
     fun provideRetrofit(@Named("addonCatalog") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://placeholder.Nexio.tv/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    @Named("addonManifest")
+    fun provideAddonManifestRetrofit(
+        @Named("addonManifest") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://placeholder.Nexio.tv/")
             .client(okHttpClient)
@@ -577,6 +601,12 @@ object NetworkModule {
     @Singleton
     fun provideAddonApi(retrofit: Retrofit): AddonApi =
         retrofit.create(AddonApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAddonManifestApi(
+        @Named("addonManifest") retrofit: Retrofit
+    ): AddonManifestApi = retrofit.create(AddonManifestApi::class.java)
 
     @Provides
     @Singleton
