@@ -88,16 +88,16 @@ class AccountConfigResetSuppressionContractTest {
         val pullEnd = source.indexOf("private fun hasLiveFullAccountSession", startIndex = pullStart)
         val pullBody = source.substring(pullStart, pullEnd)
 
-        val snapshotPullRpc = pullBody.indexOf("\"sync_pull_account_snapshot\"")
-        val secretResolution = pullBody.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)")
+        val snapshotPullRpc = pullBody.indexOf("\"sync_pull_account_snapshot_v13\"")
+        val secretResolution = pullBody.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(")
         val mutexLock = pullBody.indexOf("applyingRemoteMutex.withLock")
         val lockBody = pullBody.substring(mutexLock)
         val guardedLiveSessionCheck = lockBody.indexOf("if (!hasLiveFullAccountSession())")
         val applyingRemoteFlag = lockBody.indexOf("isApplyingRemote = true")
         val stalePullFailure = pullBody.indexOf("if (!appliedRemoteSettings)")
-        val addonBuild = pullBody.indexOf("val remoteAddonConfigs = buildRemoteAddonInstallConfigs")
+        val addonBuild = pullBody.indexOf("val remoteAddonConfigs = if (addonPayloadsChanged)")
         val finalLiveSessionCheck = pullBody.indexOf("if (!hasLiveFullAccountSession())", startIndex = addonBuild)
-        val addonResult = pullBody.indexOf("Result.success(remoteAddonConfigs)")
+        val addonResult = pullBody.indexOf("AccountSnapshotPullResult(")
 
         assertTrue("pullFromRemoteAndApply must fetch the account snapshot before resolving secrets", snapshotPullRpc >= 0)
         assertTrue("pullFromRemoteAndApply must resolve remote secrets before acquiring the apply mutex", secretResolution >= 0)
@@ -106,7 +106,7 @@ class AccountConfigResetSuppressionContractTest {
             "pullFromRemoteAndApply must not hold applyingRemoteMutex while resolving remote secrets",
             secretResolution in (snapshotPullRpc + 1) until mutexLock
         )
-        assertTrue(lockBody.contains("applyResolvedRemoteSecrets(resolvedSecrets)"))
+        assertTrue(lockBody.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)"))
         assertTrue(guardedLiveSessionCheck >= 0 && guardedLiveSessionCheck < applyingRemoteFlag)
         assertTrue(stalePullFailure in (mutexLock + 1) until addonBuild)
         assertTrue(finalLiveSessionCheck in (addonBuild + 1) until addonResult)

@@ -55,6 +55,15 @@ class SyncWatermarkDataStore @Inject constructor(
         return dataStore.data.first()[accountSettingsSectionKey(section)] ?: 0L
     }
 
+    suspend fun getAccountSettingsSectionWatermarks(): Map<AccountSettingsSectionKey, Long> {
+        val prefs = dataStore.data.first()
+        return AccountSettingsSectionKey.entries.mapNotNull { section ->
+            prefs[accountSettingsSectionKey(section)]?.let { watermark ->
+                section to watermark
+            }
+        }.toMap()
+    }
+
     suspend fun setAccountSettingsSection(section: AccountSettingsSectionKey, ms: Long) {
         dataStore.edit { prefs -> prefs[accountSettingsSectionKey(section)] = ms }
     }

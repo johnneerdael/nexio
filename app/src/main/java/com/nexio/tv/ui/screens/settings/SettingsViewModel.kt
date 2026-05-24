@@ -94,11 +94,13 @@ internal class SettingsViewModel @Inject constructor(
     private suspend fun pullAccountSnapshot(): Result<Unit> {
         addonRepository.beginRemoteSyncReconcile()
         return try {
-            val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
-            addonRepository.reconcileWithRemoteAddonConfigs(
-                remoteAddons = remoteAddonConfigs,
-                removeMissingLocal = true
-            )
+            val pullResult = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
+            if (pullResult.addonsChanged) {
+                addonRepository.reconcileWithRemoteAddonConfigs(
+                    remoteAddons = pullResult.remoteAddonConfigs,
+                    removeMissingLocal = true
+                )
+            }
             accountSyncRefreshNotifier.notifyRefreshRequired()
             Result.success(Unit)
         } catch (e: CancellationException) {

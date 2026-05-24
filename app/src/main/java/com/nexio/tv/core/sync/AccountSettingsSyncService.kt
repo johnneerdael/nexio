@@ -116,6 +116,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.nexio.tv.data.remote.supabase.V13AccountSnapshotEnvelope
 import com.nexio.tv.data.remote.supabase.V10PushResult
+import com.nexio.tv.data.remote.supabase.V10AccountSecretRow
 import com.nexio.tv.data.remote.supabase.V13BatchPushResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -188,6 +189,11 @@ private val ACCOUNT_SECRET_SECTION_KEYS = setOf(
 private val SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS = setOf(
     AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION,
     AccountSettingsSectionKey.INTEGRATIONS_GEMINI
+)
+
+data class AccountSnapshotPullResult(
+    val remoteAddonConfigs: List<AddonPreferences.AddonInstallConfig>,
+    val addonsChanged: Boolean
 )
 
 private fun Set<AccountSettingsSectionKey>?.includesSection(section: AccountSettingsSectionKey): Boolean {
@@ -788,6 +794,24 @@ class AccountSettingsSyncService @Inject constructor(
         val secrets: AccountSecretPushSnapshot
     )
 
+    private data class AccountSecretResolveKey(
+        val secretType: String,
+        val secretRef: String
+    )
+
+    private class AccountSecretResolveSession {
+        private val values = mutableMapOf<AccountSecretResolveKey, Any?>()
+
+        fun has(key: AccountSecretResolveKey): Boolean = values.containsKey(key)
+
+        @Suppress("UNCHECKED_CAST")
+        fun <T : Any> get(key: AccountSecretResolveKey): T? = values[key] as? T
+
+        fun put(key: AccountSecretResolveKey, value: Any?) {
+            values[key] = value
+        }
+    }
+
     private data class ResolvedRemoteSecretsForApply(
         val mdbListApiKey: String?,
         val omdbApiKey: String?,
@@ -1039,7 +1063,7 @@ class AccountSettingsSyncService @Inject constructor(
     suspend fun pullFromRemoteAndApply(
         clearPendingChanges: Boolean = true,
         preserveLocalSectionKeys: Set<AccountSettingsSectionKey> = emptySet()
-    ): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
+    ): Result<AccountSnapshotPullResult> = withContext(Dispatchers.IO) {
         try {
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
@@ -1062,19 +1086,68 @@ class AccountSettingsSyncService @Inject constructor(
                 appliedSections += key to section.updatedAtMs
             }
             val appliedSectionKeys = appliedSections.map { it.first }.toSet()
+            val localSettingsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null)
+            val localAddonsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null)
+            val localSecretsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+            val delta = accountSnapshotDelta(
+                remoteSettingsUpdatedAtMs = envelope.settings.updatedAtMs,
+                localSettingsUpdatedAtMs = localSettingsWatermark,
+                remoteSectionStamps = appliedSections.map { (key, updatedAtMs) ->
+                    AccountSettingsSectionRemoteStamp(sectionKey = key, updatedAtMs = updatedAtMs)
+                },
+                localSectionWatermarks = syncWatermarkStore.getAccountSettingsSectionWatermarks(),
+                remoteAddonsUpdatedAtMs = envelope.addons.updatedAtMs,
+                localAddonsUpdatedAtMs = localAddonsWatermark,
+                remoteSecretsUpdatedAtMs = envelope.secrets.updatedAtMs,
+                localSecretsUpdatedAtMs = localSecretsWatermark
+            )
+            val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
+            val changedAccountSecretSectionKeys = if (delta.secretsChanged) {
+                changedAccountSecretSectionKeysSince(envelope.secrets.items, localSecretsWatermark)
+            } else {
+                emptySet()
+            }
+            val addonSecretsChanged = delta.secretsChanged &&
+                addonCredentialSecretsChanged(envelope.secrets.items, localSecretsWatermark)
+            val addonPayloadsChanged = delta.addonsChanged || addonSecretsChanged
+            if (!delta.settingsChanged && !addonPayloadsChanged && !delta.secretsChanged) {
+                markWatermarksFromEnvelope(envelope, appliedSections)
+                clearSuppression(switchGenAtPullStart)
+                if (clearPendingChanges) {
+                    synchronized(pendingChangedPaths) {
+                        if (pendingChangedPathsGeneration == pullStartedGeneration) {
+                            pendingChangedPaths.clear()
+                        }
+                    }
+                }
+                lastAppliedRemoteRevision = settingsRevision
+                return@withContext Result.success(
+                    AccountSnapshotPullResult(
+                        remoteAddonConfigs = emptyList(),
+                        addonsChanged = false
+                    )
+                )
+            }
             syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
             for ((key, updatedAtMs) in appliedSections) {
                 syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
             }
-            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
-            val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
-            val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys
+            val sectionKeysToApply = delta.changedSectionKeys - preserveLocalSectionKeys
+            val changedSecretSectionKeys = delta.changedSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
             val preservedPullSecretSectionKeys = preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
-            val sectionKeysToResolveSecretsFor = sectionKeysToApply + preservedPullSecretSectionKeys
-            val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)
-            if (resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()) {
-                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+            val sectionKeysToResolveSecretsFor = if (delta.secretsChanged) {
+                changedSecretSectionKeys + changedAccountSecretSectionKeys + preservedPullSecretSectionKeys
             } else {
+                preservedPullSecretSectionKeys
+            }
+            val resolveSession = AccountSecretResolveSession()
+            val resolvedSecrets = resolveRemoteSecretsForApply(
+                settings = settings,
+                sectionKeys = sectionKeysToResolveSecretsFor,
+                resolveSession = resolveSession
+            )
+            val accountSecretsResolved = resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()
+            if (!accountSecretsResolved) {
                 Log.w(
                     TAG,
                     "Not advancing account secrets watermark; unresolved=${resolvedSecrets.unresolvedRemoteSecretSectionKeys}, preserved=$preservedPullSecretSectionKeys"
@@ -1082,7 +1155,7 @@ class AccountSettingsSyncService @Inject constructor(
             }
             val secretBaselinePreserveSectionKeys = preserveLocalSectionKeys + resolvedSecrets.preservedLocalSectionKeys
             val scheduleSecretFollowUpPush = resolvedSecrets.followUpLocalSecretSectionKeys.isNotEmpty() &&
-                resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()
+                accountSecretsResolved
 
             var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
@@ -1093,6 +1166,7 @@ class AccountSettingsSyncService @Inject constructor(
                 try {
                     applySharedAccountConfigSyncSettings(
                         settings = settings,
+                        resolveRemoteInlineSecrets = false,
                         sectionKeys = sectionKeysToApply
                     )
                     applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)
@@ -1124,24 +1198,104 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             refreshDebridAccountStatesForAppliedSections(sectionKeysToApply)
+
+            if (!hasLiveFullAccountSession()) {
+                return@withContext Result.failure(IllegalStateException("No live full account session"))
+            }
+            var addonSecretResolveFailed = false
+            val remoteAddonConfigs = if (addonPayloadsChanged) {
+                buildRemoteAddonInstallConfigs(envelope.addons.items) { addon ->
+                    val result = resolveRemoteAddonUrl(addon, resolveSession)
+                    if (result.isFailure) {
+                        addonSecretResolveFailed = true
+                    }
+                    result
+                }
+            } else {
+                emptyList()
+            }
+            if (addonSecretResolveFailed) {
+                Log.w(TAG, "Not reconciling remote addons; at least one addon credential secret failed to resolve")
+                return@withContext Result.failure(IllegalStateException("Remote addon credential secret resolution failed"))
+            }
+            syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
+            if (accountSecretsResolved) {
+                syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+            }
             if (scheduleSecretFollowUpPush && hasLiveFullAccountSession()) {
                 pushJob = scope.launch {
                     delay(500)
                     pushToRemote()
                 }
             }
-
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
-            val remoteAddonConfigs = buildRemoteAddonInstallConfigs(envelope.addons.items, ::resolveRemoteAddonUrl)
-            if (!hasLiveFullAccountSession()) {
-                return@withContext Result.failure(IllegalStateException("No live full account session"))
-            }
-            Result.success(remoteAddonConfigs)
+            Result.success(
+                AccountSnapshotPullResult(
+                    remoteAddonConfigs = remoteAddonConfigs,
+                    addonsChanged = addonPayloadsChanged
+                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun markWatermarksFromEnvelope(
+        envelope: V13AccountSnapshotEnvelope,
+        appliedSections: List<Pair<AccountSettingsSectionKey, Long>>
+    ) {
+        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null, ms = envelope.settings.updatedAtMs)
+        for ((key, updatedAtMs) in appliedSections) {
+            syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
+        }
+        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
+        syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+    }
+
+    private fun changedAccountSecretSectionKeysSince(
+        secretRows: List<V10AccountSecretRow>,
+        localSecretsWatermark: Long
+    ): Set<AccountSettingsSectionKey> {
+        val sectionKeys = linkedSetOf<AccountSettingsSectionKey>()
+        for (row in secretRows) {
+            if (row.updatedAtMs <= localSecretsWatermark) continue
+            accountSecretSectionKeyForType(row.secretType)?.let { sectionKeys += it }
+        }
+        return sectionKeys
+    }
+
+    private fun addonCredentialSecretsChanged(
+        secretRows: List<V10AccountSecretRow>,
+        localSecretsWatermark: Long
+    ): Boolean {
+        return secretRows.any { row ->
+            row.secretType == "addon_credential" && row.updatedAtMs > localSecretsWatermark
+        }
+    }
+
+    private fun accountSecretSectionKeyForType(secretType: String): AccountSettingsSectionKey? {
+        return when (secretType) {
+            MDBLIST_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_MDBLIST
+            OMDB_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_OMDB
+            TRANSLATION_SECRET_TYPE,
+            GEMINI_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION
+            ANIMESKIP_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP
+            RPDB_SECRET_TYPE,
+            TOP_POSTERS_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS
+            PREMIUMIZE_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE
+            TORBOX_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX
+            EASY_DEBRID_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID
+            REAL_DEBRID_ACCESS_SECRET_TYPE,
+            REAL_DEBRID_REFRESH_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
+            TRAKT_ACCESS_SECRET_TYPE,
+            TRAKT_REFRESH_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH
+            SIMKL_ACCESS_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
+            KITSU_ACCESS_SECRET_TYPE,
+            KITSU_REFRESH_SECRET_TYPE -> AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH
+            else -> null
         }
     }
 
@@ -2005,7 +2159,8 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun resolveRemoteSecretsForApply(
         settings: AccountConfigSyncPayload,
-        sectionKeys: Set<AccountSettingsSectionKey>? = null
+        sectionKeys: Set<AccountSettingsSectionKey>? = null,
+        resolveSession: AccountSecretResolveSession? = null
     ): ResolvedRemoteSecretsForApply {
         // Each helper returns null when the resolve RPC fails transiently (network,
         // JWT, decode). Only overwrite the local API key when we have an authoritative
@@ -2020,7 +2175,7 @@ class AccountSettingsSyncService @Inject constructor(
         }
 
         val mdbListApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)) {
-            resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
+            resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2028,7 +2183,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST)
         }
         val omdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_OMDB)) {
-            resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
+            resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2037,14 +2192,14 @@ class AccountSettingsSyncService @Inject constructor(
         }
         val resolveSubtitleTranslation = sectionKeys.includesAnySection(SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS)
         val genericTranslationKey = if (resolveSubtitleTranslation) {
-            resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
+            resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF, resolveSession)
         } else {
             null
         }
         val allowLegacyFallback = resolveSubtitleTranslation &&
             settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
         val legacyGeminiKey = if (genericTranslationKey != null && genericTranslationKey.isBlank() && allowLegacyFallback) {
-            resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF)
+            resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2058,7 +2213,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_SUBTITLE_TRANSLATION)
         }
         val animeSkipClientId = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)) {
-            resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)
+            resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2066,12 +2221,12 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_ANIME_SKIP)
         }
         val rpdbApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
-            resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)
+            resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF, resolveSession)
         } else {
             null
         }
         val topPostersApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)) {
-            resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)
+            resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2082,7 +2237,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_POSTER_RATINGS)
         }
         val premiumizeApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)) {
-            resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)
+            resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2093,7 +2248,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_PREMIUMIZE)
         }
         val torBoxApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)) {
-            resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)
+            resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2101,7 +2256,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_TOR_BOX)
         }
         val easyDebridApiKey = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)) {
-            resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)
+            resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, resolveSession)
         } else {
             null
         }
@@ -2112,7 +2267,7 @@ class AccountSettingsSyncService @Inject constructor(
             preserveUnresolvedRemoteSecretSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_EASY_DEBRID)
         }
         val resolvedRealDebrid = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID)) {
-            resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid)
+            resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid, resolveSession)
         } else {
             null
         }
@@ -2129,7 +2284,7 @@ class AccountSettingsSyncService @Inject constructor(
             followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_DEBRID_REAL_DEBRID
         }
         val resolvedTrakt = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_TRAKT_AUTH)) {
-            resolveRemoteTraktSecrets(settings.integrations.traktAuth)
+            resolveRemoteTraktSecrets(settings.integrations.traktAuth, resolveSession)
         } else {
             null
         }
@@ -2143,7 +2298,7 @@ class AccountSettingsSyncService @Inject constructor(
             }
         }
         val resolvedSimkl = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH)) {
-            resolveRemoteSimklSecrets(settings.integrations.simklAuth)
+            resolveRemoteSimklSecrets(settings.integrations.simklAuth, resolveSession)
         } else {
             null
         }
@@ -2154,7 +2309,7 @@ class AccountSettingsSyncService @Inject constructor(
             followUpLocalSecretSections += AccountSettingsSectionKey.INTEGRATIONS_SIMKL_AUTH
         }
         val resolvedKitsu = if (sectionKeys.includesSection(AccountSettingsSectionKey.INTEGRATIONS_KITSU_AUTH)) {
-            resolveRemoteKitsuSecrets(settings.integrations.kitsuAuth)
+            resolveRemoteKitsuSecrets(settings.integrations.kitsuAuth, resolveSession)
         } else {
             null
         }
@@ -2245,18 +2400,29 @@ class AccountSettingsSyncService @Inject constructor(
      * leave local credentials untouched. Returns the trimmed key (possibly empty)
      * when the server authoritatively responded.
      */
-    private suspend fun resolveApiKeySecretOrNull(secretType: String, secretRef: String): String? {
-        val payload = resolveAccountSecretPayloadOrNull<AccountSecretApiKeyPayload>(secretType, secretRef)
+    private suspend fun resolveApiKeySecretOrNull(
+        secretType: String,
+        secretRef: String,
+        resolveSession: AccountSecretResolveSession? = null
+    ): String? {
+        val payload = resolveAccountSecretPayloadOrNull<AccountSecretApiKeyPayload>(
+            secretType,
+            secretRef,
+            resolveSession
+        )
             ?: return null
         return payload.apiKey?.trim().orEmpty()
     }
 
     private suspend inline fun <reified T : Any> resolveAccountSecretPayloadOrNull(
         secretType: String,
-        secretRef: String
+        secretRef: String,
+        resolveSession: AccountSecretResolveSession? = null
     ): T? {
         val resolveKey = "$secretType:$secretRef"
         if (sameBootMissingSecretResolveKeys.contains(resolveKey)) return null
+        val cacheKey = AccountSecretResolveKey(secretType, secretRef)
+        if (resolveSession?.has(cacheKey) == true) return resolveSession.get(cacheKey)
         val result = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -2274,7 +2440,9 @@ class AccountSettingsSyncService @Inject constructor(
                 sameBootMissingSecretResolveKeys += resolveKey
             }
         }
-        return result.getOrNull()
+        val payload = result.getOrNull()
+        resolveSession?.put(cacheKey, payload)
+        return payload
     }
 
     private fun Throwable.isSameBootMissingSecretResolveFailure(): Boolean {
@@ -2288,14 +2456,19 @@ class AccountSettingsSyncService @Inject constructor(
             ("function" in text && "schema cache" in text)
     }
 
-    private suspend fun resolveRemoteTraktSecrets(remote: TraktAuthSyncSettings): ResolvedRemoteTraktSecrets? {
+    private suspend fun resolveRemoteTraktSecrets(
+        remote: TraktAuthSyncSettings,
+        resolveSession: AccountSecretResolveSession? = null
+    ): ResolvedRemoteTraktSecrets? {
         val accessPayload = resolveAccountSecretPayloadOrNull<AccountTraktAccessSecretPayload>(
             TRAKT_ACCESS_SECRET_TYPE,
-            TRAKT_SECRET_REF
+            TRAKT_SECRET_REF,
+            resolveSession
         )
         val refreshPayload = resolveAccountSecretPayloadOrNull<AccountTraktRefreshSecretPayload>(
             TRAKT_REFRESH_SECRET_TYPE,
-            TRAKT_SECRET_REF
+            TRAKT_SECRET_REF,
+            resolveSession
         )
 
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
@@ -2397,10 +2570,14 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun resolveRemoteSimklSecrets(remote: SimklAuthSyncSettings): ResolvedRemoteSimklSecrets? {
+    private suspend fun resolveRemoteSimklSecrets(
+        remote: SimklAuthSyncSettings,
+        resolveSession: AccountSecretResolveSession? = null
+    ): ResolvedRemoteSimklSecrets? {
         val accessPayload = resolveAccountSecretPayloadOrNull<AccountSimklAccessSecretPayload>(
             SIMKL_ACCESS_SECRET_TYPE,
-            SIMKL_SECRET_REF
+            SIMKL_SECRET_REF,
+            resolveSession
         ) ?: return null
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val localState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
@@ -2449,14 +2626,19 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun resolveRemoteKitsuSecrets(remote: KitsuAuthSyncSettings): ResolvedRemoteKitsuSecrets? {
+    private suspend fun resolveRemoteKitsuSecrets(
+        remote: KitsuAuthSyncSettings,
+        resolveSession: AccountSecretResolveSession? = null
+    ): ResolvedRemoteKitsuSecrets? {
         val accessPayload = resolveAccountSecretPayloadOrNull<AccountKitsuAccessSecretPayload>(
             KITSU_ACCESS_SECRET_TYPE,
-            KITSU_SECRET_REF
+            KITSU_SECRET_REF,
+            resolveSession
         )
         val refreshPayload = resolveAccountSecretPayloadOrNull<AccountKitsuRefreshSecretPayload>(
             KITSU_REFRESH_SECRET_TYPE,
-            KITSU_SECRET_REF
+            KITSU_SECRET_REF,
+            resolveSession
         )
 
         if (accessPayload == null || refreshPayload == null) {
@@ -2533,14 +2715,19 @@ class AccountSettingsSyncService @Inject constructor(
         )
     }
 
-    private suspend fun resolveRemoteRealDebridSecrets(remote: RealDebridSyncSettings): ResolvedRemoteRealDebridSecrets? {
+    private suspend fun resolveRemoteRealDebridSecrets(
+        remote: RealDebridSyncSettings,
+        resolveSession: AccountSecretResolveSession? = null
+    ): ResolvedRemoteRealDebridSecrets? {
         val accessPayload = resolveAccountSecretPayloadOrNull<AccountRealDebridAccessSecretPayload>(
             REAL_DEBRID_ACCESS_SECRET_TYPE,
-            REAL_DEBRID_SECRET_REF
+            REAL_DEBRID_SECRET_REF,
+            resolveSession
         )
         val refreshPayload = resolveAccountSecretPayloadOrNull<AccountRealDebridRefreshSecretPayload>(
             REAL_DEBRID_REFRESH_SECRET_TYPE,
-            REAL_DEBRID_SECRET_REF
+            REAL_DEBRID_SECRET_REF,
+            resolveSession
         )
 
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
@@ -2631,13 +2818,17 @@ class AccountSettingsSyncService @Inject constructor(
         realDebridAuthDataStore.clearAuth()
     }
 
-    private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
+    private suspend fun resolveRemoteAddonUrl(
+        addon: AccountAddonPayload,
+        resolveSession: AccountSecretResolveSession? = null
+    ): Result<String> {
         return runCatching {
             if (addon.transportSchemaVersion == 2 && !addon.transportSecretRef.isNullOrBlank()) {
                 val transportPayload = (
                     resolveAccountSecretPayloadOrNull<AccountAddonSecretPayload>(
                         "addon_credential",
-                        addon.transportSecretRef
+                        addon.transportSecretRef,
+                        resolveSession
                     ) ?: throw IllegalStateException("Missing addon transport secret ${addon.transportSecretRef}")
                     ).requireValidV2Transport(
                     secretRef = addon.transportSecretRef,
@@ -2657,7 +2848,8 @@ class AccountSettingsSyncService @Inject constructor(
                     (
                         resolveAccountSecretPayloadOrNull<AccountAddonSecretPayload>(
                             "addon_credential",
-                            secretRef
+                            secretRef,
+                            resolveSession
                         ) ?: throw IllegalStateException("Missing addon credential secret $secretRef")
                         ).requireValidV1Secret(
                         secretRef = secretRef,

@@ -2,11 +2,11 @@ package com.nexio.tv.ui.screens.settings
 
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.AccountSnapshotPullResult
 import com.nexio.tv.core.sync.AccountSettingsSyncService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
-import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.model.UserProfile
@@ -236,7 +236,12 @@ class SettingsViewModelSyncTest {
     }
 
     private fun accountSettingsSyncService(
-        result: Result<List<AddonPreferences.AddonInstallConfig>> = Result.success(emptyList())
+        result: Result<AccountSnapshotPullResult> = Result.success(
+            AccountSnapshotPullResult(
+                remoteAddonConfigs = emptyList(),
+                addonsChanged = true
+            )
+        )
     ): AccountSettingsSyncService {
         return mockk {
             coEvery { pullFromRemoteAndApply() } returns result

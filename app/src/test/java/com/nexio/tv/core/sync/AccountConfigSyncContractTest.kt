@@ -77,6 +77,66 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountConfigSyncContractTest {
     @Test
+    fun `account snapshot delta marks unchanged surfaces from watermarks`() {
+        val remoteSections = listOf(
+            AccountSettingsSectionRemoteStamp(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST, updatedAtMs = 100L),
+            AccountSettingsSectionRemoteStamp(AccountSettingsSectionKey.INTEGRATIONS_OMDB, updatedAtMs = 200L)
+        )
+
+        val delta = accountSnapshotDelta(
+            remoteSettingsUpdatedAtMs = 200L,
+            localSettingsUpdatedAtMs = 200L,
+            remoteSectionStamps = remoteSections,
+            localSectionWatermarks = mapOf(
+                AccountSettingsSectionKey.INTEGRATIONS_MDBLIST to 100L,
+                AccountSettingsSectionKey.INTEGRATIONS_OMDB to 200L
+            ),
+            remoteAddonsUpdatedAtMs = 300L,
+            localAddonsUpdatedAtMs = 300L,
+            remoteSecretsUpdatedAtMs = 400L,
+            localSecretsUpdatedAtMs = 400L
+        )
+
+        assertFalse(delta.settingsChanged)
+        assertTrue(delta.changedSectionKeys.isEmpty())
+        assertFalse(delta.addonsChanged)
+        assertFalse(delta.secretsChanged)
+    }
+
+    @Test
+    fun `account snapshot delta returns only sections with newer remote stamps`() {
+        val delta = accountSnapshotDelta(
+            remoteSettingsUpdatedAtMs = 250L,
+            localSettingsUpdatedAtMs = 200L,
+            remoteSectionStamps = listOf(
+                AccountSettingsSectionRemoteStamp(AccountSettingsSectionKey.INTEGRATIONS_MDBLIST, updatedAtMs = 100L),
+                AccountSettingsSectionRemoteStamp(AccountSettingsSectionKey.INTEGRATIONS_OMDB, updatedAtMs = 250L)
+            ),
+            localSectionWatermarks = mapOf(
+                AccountSettingsSectionKey.INTEGRATIONS_MDBLIST to 100L,
+                AccountSettingsSectionKey.INTEGRATIONS_OMDB to 200L
+            ),
+            remoteAddonsUpdatedAtMs = 300L,
+            localAddonsUpdatedAtMs = 100L,
+            remoteSecretsUpdatedAtMs = 400L,
+            localSecretsUpdatedAtMs = 350L
+        )
+
+        assertTrue(delta.settingsChanged)
+        assertEquals(setOf(AccountSettingsSectionKey.INTEGRATIONS_OMDB), delta.changedSectionKeys)
+        assertTrue(delta.addonsChanged)
+        assertTrue(delta.secretsChanged)
+    }
+
+    @Test
+    fun `sync watermark store exposes all account settings section watermarks`() {
+        val source = File("app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt").readText()
+
+        assertTrue(source.contains("suspend fun getAccountSettingsSectionWatermarks()"))
+        assertTrue(source.contains("AccountSettingsSectionKey.entries.mapNotNull"))
+    }
+
+    @Test
     fun `home catalog rails are included in the account home section payload`() {
         val rails = listOf(
             HomeCatalogRail(
@@ -464,7 +524,8 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(
             "v13 pull must resolve sparse snapshot secrets plus preserved dirty secret sections",
-            pullBlock.contains("resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)")
+            pullBlock.contains("resolveRemoteSecretsForApply(") &&
+                pullBlock.contains("sectionKeys = sectionKeysToResolveSecretsFor")
         )
         assertTrue(
             "v13 pull must pass section presence into local settings application",
@@ -472,12 +533,72 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(
             "v13 pull must allow stale recovery to preserve locally dirty sections",
-            pullBlock.contains("val sectionKeysToApply = appliedSectionKeys - preserveLocalSectionKeys")
+            pullBlock.contains("val sectionKeysToApply = delta.changedSectionKeys - preserveLocalSectionKeys")
         )
         assertFalse(
             "v13 pull must not apply the default-backed sparse payload as a complete payload",
             pullBlock.contains("applySharedAccountConfigSyncSettings(settings)")
         )
+        assertTrue(
+            "v13 pull must not resolve remote inline secrets while applying already-resolved sparse settings",
+            pullBlock.contains("resolveRemoteInlineSecrets = false")
+        )
+    }
+
+    @Test
+    fun `v13 pull computes snapshot delta before resolving remote secrets`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val deltaIndex = source.indexOf("accountSnapshotDelta(", startIndex = pullStart)
+        val resolveIndex = source.indexOf("resolveRemoteSecretsForApply(", startIndex = pullStart)
+
+        assertTrue("pullFromRemoteAndApply must compute accountSnapshotDelta", deltaIndex > pullStart)
+        assertTrue("delta must be computed before secret resolution", deltaIndex < resolveIndex)
+        assertTrue(
+            "secret resolution should be gated by delta.secretsChanged or changed secret-backed sections",
+            source.substring(deltaIndex, resolveIndex).contains("sectionKeysToResolveSecretsFor")
+        )
+    }
+
+    @Test
+    fun `v13 pull has fast path for unchanged account snapshot`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+
+        assertTrue(
+            "unchanged snapshot should avoid apply and secret resolves",
+            source.indexOf("if (!delta.settingsChanged && !addonPayloadsChanged && !delta.secretsChanged)", pullStart) > pullStart
+        )
+    }
+
+    @Test
+    fun `v13 pull rebuilds remote addon configs only when addon or secret watermarks changed`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val addonBuildIndex = source.indexOf("buildRemoteAddonInstallConfigs(", startIndex = pullStart)
+        assertTrue("pull should still rebuild remote addon configs when needed", addonBuildIndex > pullStart)
+
+        val guardStart = source.lastIndexOf("if (addonPayloadsChanged)", addonBuildIndex)
+        assertTrue(
+            "remote addon URL reconstruction should be gated by addon/secret delta",
+            guardStart > pullStart && guardStart < addonBuildIndex
+        )
+        assertTrue(
+            "remote addon reconcile must fail closed when an addon credential cannot resolve",
+            source.indexOf("var addonSecretResolveFailed = false", startIndex = pullStart) in pullStart until addonBuildIndex &&
+                source.indexOf("return@withContext Result.failure(IllegalStateException(\"Remote addon credential secret resolution failed\"))", startIndex = addonBuildIndex) > addonBuildIndex
+        )
+    }
+
+    @Test
+    fun `secret resolves use one per pull resolve session`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+
+        assertTrue(source.contains("private data class AccountSecretResolveKey"))
+        assertTrue(source.contains("private class AccountSecretResolveSession"))
+        assertTrue(source.contains("val resolveSession = AccountSecretResolveSession()"))
+        assertTrue(source.contains("resolveSession = resolveSession"))
+        assertTrue(source.contains("resolveRemoteAddonUrl(addon, resolveSession)"))
     }
 
     @Test
@@ -1154,11 +1275,12 @@ class AccountConfigSyncContractTest {
         val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
         val refreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
         val pullBlock = source.substring(pullStart, refreshStart)
-        val resolveIndex = pullBlock.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(settings, sectionKeysToResolveSecretsFor)")
+        val resolveIndex = pullBlock.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(")
         val secretsWatermarkIndex = pullBlock.indexOf("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS")
 
         assertTrue("account secrets watermark must be decided after secret resolution", secretsWatermarkIndex > resolveIndex)
-        assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = sectionKeysToApply + preservedPullSecretSectionKeys"))
+        assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = if (delta.secretsChanged)"))
+        assertTrue(pullBlock.contains("changedSecretSectionKeys + changedAccountSecretSectionKeys + preservedPullSecretSectionKeys"))
         assertTrue(pullBlock.contains("preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)"))
         assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
         assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)"))

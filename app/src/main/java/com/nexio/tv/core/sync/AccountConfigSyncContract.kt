@@ -397,6 +397,42 @@ internal fun dirtyAccountSettingsSectionKeys(
     }
 }
 
+internal data class AccountSettingsSectionRemoteStamp(
+    val sectionKey: AccountSettingsSectionKey,
+    val updatedAtMs: Long
+)
+
+internal data class AccountSnapshotDelta(
+    val settingsChanged: Boolean,
+    val changedSectionKeys: Set<AccountSettingsSectionKey>,
+    val addonsChanged: Boolean,
+    val secretsChanged: Boolean
+)
+
+internal fun accountSnapshotDelta(
+    remoteSettingsUpdatedAtMs: Long,
+    localSettingsUpdatedAtMs: Long,
+    remoteSectionStamps: List<AccountSettingsSectionRemoteStamp>,
+    localSectionWatermarks: Map<AccountSettingsSectionKey, Long>,
+    remoteAddonsUpdatedAtMs: Long,
+    localAddonsUpdatedAtMs: Long,
+    remoteSecretsUpdatedAtMs: Long,
+    localSecretsUpdatedAtMs: Long
+): AccountSnapshotDelta {
+    val changedSections = linkedSetOf<AccountSettingsSectionKey>()
+    for (stamp in remoteSectionStamps) {
+        if (stamp.updatedAtMs > (localSectionWatermarks[stamp.sectionKey] ?: 0L)) {
+            changedSections += stamp.sectionKey
+        }
+    }
+    return AccountSnapshotDelta(
+        settingsChanged = remoteSettingsUpdatedAtMs > localSettingsUpdatedAtMs || changedSections.isNotEmpty(),
+        changedSectionKeys = changedSections,
+        addonsChanged = remoteAddonsUpdatedAtMs > localAddonsUpdatedAtMs,
+        secretsChanged = remoteSecretsUpdatedAtMs > localSecretsUpdatedAtMs
+    )
+}
+
 internal suspend fun buildAccountSettingsSectionsPushParamsV13(
     payload: AccountConfigSyncPayload,
     sectionKeys: Set<AccountSettingsSectionKey>,
