@@ -59,6 +59,7 @@ import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
+import com.nexio.tv.data.repository.ScreensaverTrailerCandidateCacheRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
@@ -178,6 +179,7 @@ class HomeViewModel @Inject constructor(
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository,
+    internal val screensaverTrailerCandidateCacheRepository: ScreensaverTrailerCandidateCacheRepository,
     internal val catalogInventoryRepository: CatalogInventoryRepository,
     internal val projectionCache: ResolvedDisplayProjectionCache,
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
@@ -876,13 +878,10 @@ class HomeViewModel @Inject constructor(
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
     internal var trailerPreviewJob: Job? = null
-    // Plan: Bug A — Task A3. Screensaver trailer warmer job. Iterates the
-    // screensaver candidate pool and calls metadataRouterFacade.fetchTrailer
-    // per item so MediaClipStore is populated; the subsequent re-publish in
-    // republishScreensaverSurfaceAfterWarm attaches selectedPlaybackRef to
-    // each ResolvedDisplayItem.trailer. Cancelled by HomePlaybackWorkGate
-    // when playback starts (Task A6).
-    internal var screensaverTrailerWarmJob: Job? = null
+    // Metadata-only screensaver trailer candidate cache refresh. This may fetch
+    // TMDB /videos behind a 48h gate and store YouTube IDs, but must never
+    // resolve playable YouTube streams.
+    internal var screensaverTrailerCandidateCacheJob: Job? = null
     internal var lastHomeTrailerSurfaceTraceSummary: HomeTrailerSurfaceTraceSummary? = null
     internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())

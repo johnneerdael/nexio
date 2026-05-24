@@ -11,7 +11,7 @@ internal fun rankedTmdbTrailerPlaybackRefs(videos: List<TmdbVideoResult>): List<
             ?.let(TrailerPlaybackRef::YouTubeId)
     }
 
-internal fun rankedTmdbTrailerYoutubeIds(videos: List<TmdbVideoResult>): List<String> =
+fun rankedTmdbTrailerYoutubeIds(videos: List<TmdbVideoResult>): List<String> =
     rankTmdbVideoCandidates(videos).mapNotNull { video ->
         video.key
             ?.trim()

@@ -29,6 +29,7 @@ import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
+import com.nexio.tv.data.repository.ScreensaverTrailerCandidateCacheRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.model.Addon
@@ -1431,6 +1432,7 @@ class HomeViewModelFocusHydrationTest {
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
                 activeProfileSession = { profileSessionFlow.value }
             ),
+            screensaverTrailerCandidateCacheRepository = mockk<ScreensaverTrailerCandidateCacheRepository>(relaxed = true),
             catalogInventoryRepository = CatalogInventoryRepository(),
             projectionCache = ResolvedDisplayProjectionCache(),
             integrationOwnershipService = mockk(relaxed = true),

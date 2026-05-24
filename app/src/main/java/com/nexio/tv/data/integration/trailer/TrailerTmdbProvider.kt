@@ -26,13 +26,19 @@ private fun trailerWarnLog(message: String) {
     runCatching { Log.w(TAG, message) }
 }
 
+interface TrailerTmdbVideoProvider {
+    suspend fun getTmdbApiKey(): String?
+    suspend fun fetchMovieVideos(tmdbId: Int, preferredLanguage: String, apiKey: String): List<TmdbVideoResult>
+    suspend fun fetchTvVideos(tmdbId: Int, preferredLanguage: String, apiKey: String): List<TmdbVideoResult>
+}
+
 @Suppress("LongParameterList")
 class TrailerTmdbProvider @Inject constructor(
     private val tmdbIntegrationProvider: TmdbIntegrationProvider,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val metadataApiKeyResolver: MetadataApiKeyResolver? = null,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore
-) {
+) : TrailerTmdbVideoProvider {
     suspend fun resolveLatestAiredSeasonNumber(
         tmdbId: Int,
         apiKey: String,
@@ -59,7 +65,7 @@ class TrailerTmdbProvider @Inject constructor(
         }
     }
 
-    suspend fun getTmdbApiKey(): String? {
+    override suspend fun getTmdbApiKey(): String? {
         metadataApiKeyResolver?.tmdbCredential()?.let { credential ->
             if (credential.missing) {
                 trailerDebugLog("TMDB trailer lookup skipped: api_key_missing")
@@ -71,7 +77,7 @@ class TrailerTmdbProvider @Inject constructor(
         return apiKey.takeIf { it.isNotBlank() }
     }
 
-    suspend fun fetchMovieVideos(
+    override suspend fun fetchMovieVideos(
         tmdbId: Int,
         preferredLanguage: String,
         apiKey: String
@@ -86,7 +92,7 @@ class TrailerTmdbProvider @Inject constructor(
         return fetchMovieVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
     }
 
-    suspend fun fetchTvVideos(
+    override suspend fun fetchTvVideos(
         tmdbId: Int,
         preferredLanguage: String,
         apiKey: String

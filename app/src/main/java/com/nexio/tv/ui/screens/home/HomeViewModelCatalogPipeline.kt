@@ -3279,13 +3279,7 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
     sourceRows: List<CatalogRow> = tmdbTrendingScreensaverRows(
         tmdbSnapshot = tmdbDiscoverySnapshot,
         persistedTmdbGroups = persistedTmdbSyntheticGroups
-    ),
-    // Plan: Bug A — Task A5. Set true on the re-publish after a warm cycle to
-    // break the publish → warm → republish → publish loop. The mapper still
-    // re-runs (necessary — the warmer wrote into MediaClipStore and the
-    // synchronous TrailerResolver needs another mapper pass to attach
-    // selectedPlaybackRef per item), but the warmer itself is NOT relaunched.
-    skipWarm: Boolean = false
+    )
 ) {
     // Plan: Bug A — Task A6.5 (regression hardening 2026-05-22).
     //
@@ -3338,47 +3332,13 @@ internal fun HomeViewModel.publishTmdbTrendingScreensaverSurface(
         fallbackIdCount = resolvedItems.sumOf { item -> item.trailer.fallbackTrailerYtIds.size }
     )
 
-    // Plan: Bug A — Task A4. Kick off MediaClipStore warm-up so the next
-    // publish (via republishScreensaverSurfaceAfterWarm in Task A5) can
-    // attach selectedPlaybackRef per item. We publish the initial empty-
-    // trailer surface FIRST so IMAGE-mode fallback is available immediately
-    // without waiting for the warm-up. The skipIfAlreadyWarmed dedupe is a
-    // future optimization (Plan note: Task A3 step 2 placeholder); the
-    // current implementation warms unconditionally on every publish, which
-    // matches MediaClipStore's existing freshTtl/staleTtl behavior.
-    //
-    // skipWarm short-circuits this on the re-publish path so we don't loop
-    // forever (Task A5).
-    //
-    // ScreensaverWarmCandidate is constructed only for items that have at
-    // least one of (tmdbId, contentId) so the TMDB lookup has something to
-    // hit. Items missing a usable id are skipped — they couldn't have
-    // resolved anyway.
-    if (!skipWarm) {
-        refreshScreensaverTrailerCachePipeline {
-            resolvedItems.mapNotNull { item -> item.toScreensaverWarmCandidate() }
-        }
+    screensaverTrailerCandidateCacheJob?.cancel()
+    screensaverTrailerCandidateCacheJob = viewModelScope.launch {
+        screensaverTrailerCandidateCacheRepository.ensureFreshTmdbTrendingTrailerCandidates(
+            profileId = profileSession.profileId,
+            items = resolvedItems
+        )
     }
-}
-
-/**
- * Plan: Bug A — Task A4. Adapter from the typed authority record to the
- * warmer's per-item input. Returns null if the item has neither title nor a
- * TMDB-ish identifier that `metadataRouterFacade.fetchTrailer(...)` can
- * dispatch on.
- */
-private fun com.nexio.tv.domain.model.ResolvedDisplayItem.toScreensaverWarmCandidate(): com.nexio.tv.ui.screens.home.ScreensaverWarmCandidate? {
-    val title = display.title?.trim()?.takeIf { it.isNotBlank() } ?: return null
-    val tmdbId = stableIds.tmdb?.trim()?.takeIf { it.isNotBlank() }
-        ?: contentId.takeIf { it.startsWith("tmdb:") }?.removePrefix("tmdb:")?.takeIf { it.isNotBlank() }
-    return com.nexio.tv.ui.screens.home.ScreensaverWarmCandidate(
-        itemId = contentId,
-        title = title,
-        releaseInfo = display.releaseDate,
-        apiType = itemType.toApiString(),
-        tmdbId = tmdbId,
-        fallbackYtId = trailer.fallbackTrailerYtIds.firstOrNull { it.isNotBlank() }
-    )
 }
 
 private fun com.nexio.tv.domain.model.ResolvedDisplayItem.hasScreensaverTrailerResolutionPath(): Boolean =

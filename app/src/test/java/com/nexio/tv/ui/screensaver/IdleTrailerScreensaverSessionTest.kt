@@ -209,6 +209,27 @@ class IdleTrailerScreensaverSessionTest {
     }
 
     @Test
+    fun `prepare trailer screensaver session resolves only initial trailer`() = runBlocking {
+        val candidates = listOf(
+            buildCandidate("movie-1", listOf("abc123def45")),
+            buildCandidate("movie-2", listOf("def456ghi78"))
+        )
+        val attemptedItemIds = mutableListOf<String>()
+
+        val session = prepareIdleTrailerScreensaverSessionFromCandidates(
+            candidates = candidates,
+            shuffleCandidates = { it }
+        ) { candidate, playbackRef ->
+            attemptedItemIds += candidate.itemId
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/${playbackRef.playbackIdForTest()}.mp4")
+        }
+
+        requireNotNull(session)
+        assertEquals("movie-1", session.initialPlayback.candidate.itemId)
+        assertEquals(listOf("movie-1"), attemptedItemIds)
+    }
+
+    @Test
     fun `resolveNextIdleTrailerPlayback with empty skip set loops back to first candidate`() = runBlocking {
         val candidates = listOf(
             buildCandidate("movie-1", listOf("abc123def45")),

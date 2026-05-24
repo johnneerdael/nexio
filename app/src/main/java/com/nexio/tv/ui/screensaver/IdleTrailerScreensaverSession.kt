@@ -222,13 +222,16 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
         playbackRef: TrailerPlaybackRef
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverPlayback? {
-    orderedIndices.forEach { index ->
-        val candidate = candidates.getOrNull(index) ?: return@forEach
-        candidate.playbackRefsForSession().forEach { playbackRef ->
+    for (orderedIndexPosition in orderedIndices.indices) {
+        val index = orderedIndices[orderedIndexPosition]
+        val candidate = candidates.getOrNull(index) ?: continue
+        val playbackRefs = candidate.playbackRefsForSession()
+        for (playbackRefIndex in playbackRefs.indices) {
+            val playbackRef = playbackRefs[playbackRefIndex]
             if (idleTrailerPlaybackKey(candidate, playbackRef) in skippedPlaybackKeys) {
-                return@forEach
+                continue
             }
-            val source = resolvePlayback(candidate, playbackRef) ?: return@forEach
+            val source = resolvePlayback(candidate, playbackRef) ?: continue
             return IdleTrailerScreensaverPlayback(
                 candidate = candidate,
                 playbackRef = playbackRef,
