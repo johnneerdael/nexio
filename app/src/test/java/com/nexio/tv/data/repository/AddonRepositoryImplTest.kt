@@ -21,7 +21,10 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -434,6 +437,140 @@ class AddonRepositoryImplTest {
         FileBackedJsonObjectStore.resetSharedStateForTest(manifestCacheFile(context))
         assertEquals(emptySet<String>(), FileBackedJsonObjectStore(manifestCacheFile(context)).keys())
         coVerify(exactly = 1) { preferences.removeAddon(cleanBaseUrl) }
+    }
+
+    @Test
+    fun `getInstalledAddons emits cached manifests without refreshing them`() = runTest {
+        val baseUrl = "https://cached.example/config/manifest.json"
+        val cleanBaseUrl = normalizeAddonInstallUrl(baseUrl)
+        val cachedAddon = addonDto(name = "Cached Addon").toDomain(cleanBaseUrl)
+            .copy(parserPreset = AddonParserPreset.NEXIO_TORII, isAnime = true)
+        val provider = mockk<AddonManifestIntegrationProvider>(relaxed = true)
+        val addonSyncService = mockk<AddonSyncService>(relaxed = true)
+        val authManager = mockk<AuthManager>(relaxed = true)
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs)
+        FileBackedJsonObjectStore(manifestCacheFile(context))
+            .put(cleanBaseUrl, gson.toJsonTree(cachedAddon).asJsonObject)
+        FileBackedJsonObjectStore.resetSharedStateForTest(manifestCacheFile(context))
+        val preferences = mockk<AddonPreferences>(relaxed = true)
+        every { preferences.installedAddons } returns flowOf(
+            listOf(
+                AddonPreferences.AddonInstallConfig(
+                    url = cleanBaseUrl,
+                    parserPreset = AddonParserPreset.NEXIO_TORII,
+                    isAnime = true
+                )
+            )
+        )
+
+        val repository = AddonRepositoryImpl(
+            addonManifestIntegrationProvider = provider,
+            preferences = preferences,
+            addonSyncService = addonSyncService,
+            authManager = authManager,
+            context = context
+        )
+
+        val installed = repository.getInstalledAddons().first()
+
+        assertEquals(1, installed.size)
+        assertEquals(cleanBaseUrl, installed.single().baseUrl)
+        assertEquals("Cached Addon", installed.single().name)
+        assertEquals(AddonParserPreset.NEXIO_TORII, installed.single().parserPreset)
+        assertTrue(installed.single().isAnime)
+        coVerify(exactly = 0) { provider.getManifest(any(), any()) }
+    }
+
+    @Test
+    fun `getInstalledAddons fetches only manifests missing from cache`() = runTest {
+        val cachedUrl = normalizeAddonInstallUrl("https://cached.example/config/manifest.json")
+        val missingUrl = normalizeAddonInstallUrl("https://missing.example/config/manifest.json")
+        val missingManifestUrl = buildAddonRequestUrl(missingUrl, "manifest.json")
+        val cachedAddon = addonDto(name = "Cached Addon").toDomain(cachedUrl)
+            .copy(parserPreset = AddonParserPreset.NEXIO_TORII)
+        val missingDto = addonDto(name = "Fetched Missing Addon")
+        val provider = mockk<AddonManifestIntegrationProvider>()
+        val addonSyncService = mockk<AddonSyncService>(relaxed = true)
+        val authManager = mockk<AuthManager>(relaxed = true)
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs)
+        FileBackedJsonObjectStore(manifestCacheFile(context))
+            .put(cachedUrl, gson.toJsonTree(cachedAddon).asJsonObject)
+        FileBackedJsonObjectStore.resetSharedStateForTest(manifestCacheFile(context))
+        val preferences = mockk<AddonPreferences>(relaxed = true)
+        every { preferences.installedAddons } returns flowOf(
+            listOf(
+                AddonPreferences.AddonInstallConfig(
+                    url = cachedUrl,
+                    parserPreset = AddonParserPreset.NEXIO_TORII
+                ),
+                AddonPreferences.AddonInstallConfig(
+                    url = missingUrl,
+                    parserPreset = AddonParserPreset.NEXIO_NAGARE,
+                    isAnime = true
+                )
+            )
+        )
+        coEvery {
+            provider.getManifest(addonId = missingUrl, manifestUrl = missingManifestUrl)
+        } returns NetworkResult.Success(missingDto)
+
+        val repository = AddonRepositoryImpl(
+            addonManifestIntegrationProvider = provider,
+            preferences = preferences,
+            addonSyncService = addonSyncService,
+            authManager = authManager,
+            context = context
+        )
+
+        val emissions = repository.getInstalledAddons().take(2).toList()
+
+        assertEquals(
+            listOf(listOf("Cached Addon"), listOf("Cached Addon", "Fetched Missing Addon")),
+            emissions.map { list -> list.map { it.name } }
+        )
+        assertEquals(AddonParserPreset.NEXIO_NAGARE, emissions.last().single { it.baseUrl == missingUrl }.parserPreset)
+        assertTrue(emissions.last().single { it.baseUrl == missingUrl }.isAnime)
+        coVerify(exactly = 0) {
+            provider.getManifest(addonId = cachedUrl, manifestUrl = buildAddonRequestUrl(cachedUrl, "manifest.json"))
+        }
+        coVerify(exactly = 1) {
+            provider.getManifest(addonId = missingUrl, manifestUrl = missingManifestUrl)
+        }
+    }
+
+    @Test
+    fun `getInstalledAddons repeated collectors do not refresh cached manifests`() = runTest {
+        val baseUrl = normalizeAddonInstallUrl("https://cached.example/config/manifest.json")
+        val cachedAddon = addonDto(name = "Cached Addon").toDomain(baseUrl)
+        val provider = mockk<AddonManifestIntegrationProvider>(relaxed = true)
+        val addonSyncService = mockk<AddonSyncService>(relaxed = true)
+        val authManager = mockk<AuthManager>(relaxed = true)
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs)
+        FileBackedJsonObjectStore(manifestCacheFile(context))
+            .put(baseUrl, gson.toJsonTree(cachedAddon).asJsonObject)
+        FileBackedJsonObjectStore.resetSharedStateForTest(manifestCacheFile(context))
+        val preferences = mockk<AddonPreferences>(relaxed = true)
+        every { preferences.installedAddons } returns flowOf(
+            listOf(AddonPreferences.AddonInstallConfig(url = baseUrl))
+        )
+
+        val repository = AddonRepositoryImpl(
+            addonManifestIntegrationProvider = provider,
+            preferences = preferences,
+            addonSyncService = addonSyncService,
+            authManager = authManager,
+            context = context
+        )
+
+        val first = repository.getInstalledAddons().first()
+        val second = repository.getInstalledAddons().first()
+
+        assertEquals(listOf("Cached Addon"), first.map { it.name })
+        assertEquals(listOf("Cached Addon"), second.map { it.name })
+        coVerify(exactly = 0) { provider.getManifest(any(), any()) }
     }
 
     private fun mockContext(): Context {

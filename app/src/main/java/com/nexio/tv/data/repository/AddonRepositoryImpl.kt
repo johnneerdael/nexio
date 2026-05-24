@@ -205,42 +205,64 @@ class AddonRepositoryImpl @Inject constructor(
         }.getOrNull()
     }
 
+    private fun normalizeInstalledConfigs(
+        addonConfigs: List<AddonPreferences.AddonInstallConfig>,
+        label: String
+    ): List<AddonPreferences.AddonInstallConfig> =
+        addonConfigs.mapNotNull { addon ->
+            safeCanonicalizeUrl(addon.url, label)?.let { normalized ->
+                addon.copy(url = normalized)
+            }
+        }
+
+    private fun cachedAddonForConfig(
+        addonConfig: AddonPreferences.AddonInstallConfig
+    ): Addon? =
+        manifestCache[addonConfig.url]?.copy(
+            parserPreset = addonConfig.parserPreset,
+            isAnime = addonConfig.isAnime
+        )
+
+    private fun cachedAddonsForConfigs(
+        addonConfigs: List<AddonPreferences.AddonInstallConfig>
+    ): List<Addon> =
+        addonConfigs.mapNotNull(::cachedAddonForConfig)
+
+    private fun configsMissingCachedManifest(
+        addonConfigs: List<AddonPreferences.AddonInstallConfig>
+    ): List<AddonPreferences.AddonInstallConfig> =
+        addonConfigs.filter { addonConfig -> manifestCache[addonConfig.url] == null }
+
     override fun getInstalledAddons(): Flow<List<Addon>> =
         preferences.installedAddons.flatMapLatest { addonConfigs ->
             flow {
-                val validConfigs = addonConfigs.mapNotNull { addon ->
-                    safeCanonicalizeUrl(addon.url, "preferences flow")?.let { normalized ->
-                        addon.copy(url = normalized)
-                    }
-                }
-
-                // Emit cached addons immediately (now includes disk-persisted cache)
-                val cached = validConfigs.mapNotNull { addonConfig ->
-                    manifestCache[addonConfig.url]?.copy(
-                        parserPreset = addonConfig.parserPreset,
-                        isAnime = addonConfig.isAnime
-                    )
-                }
+                val validConfigs = normalizeInstalledConfigs(addonConfigs, "preferences flow")
+                val cached = cachedAddonsForConfigs(validConfigs)
                 if (cached.isNotEmpty()) {
                     emit(applyDisplayNames(cached))
                 }
 
-                val fresh = coroutineScope {
-                    validConfigs.map { addonConfig ->
-                        async {
-                            when (val result = fetchAddon(addonConfig.url, addonConfig.parserPreset)) {
-                                is NetworkResult.Success -> result.data.copy(isAnime = addonConfig.isAnime)
-                                else -> manifestCache[canonicalizeUrl(addonConfig.url)]
-                                    ?.copy(
-                                        parserPreset = addonConfig.parserPreset,
-                                        isAnime = addonConfig.isAnime
-                                    )
+                val missingConfigs = configsMissingCachedManifest(validConfigs)
+                val fetchedMissing = if (missingConfigs.isEmpty()) {
+                    emptyList()
+                } else {
+                    coroutineScope {
+                        missingConfigs.map { addonConfig ->
+                            async {
+                                when (val result = fetchAddon(addonConfig.url, addonConfig.parserPreset)) {
+                                    is NetworkResult.Success -> result.data.copy(isAnime = addonConfig.isAnime)
+                                    else -> null
+                                }
                             }
-                        }
-                    }.awaitAll().filterNotNull()
+                        }.awaitAll().filterNotNull()
+                    }
                 }
 
-               
+                val fresh = if (fetchedMissing.isEmpty()) {
+                    cached
+                } else {
+                    cachedAddonsForConfigs(validConfigs)
+                }
                 if (fresh != cached || cached.isEmpty()) {
                     emit(applyDisplayNames(fresh))
                 }
@@ -249,19 +271,8 @@ class AddonRepositoryImpl @Inject constructor(
 
     override suspend fun getCachedInstalledAddons(): List<Addon> {
         val addonConfigs = preferences.installedAddons.first()
-        val validConfigs = addonConfigs.mapNotNull { addon ->
-            safeCanonicalizeUrl(addon.url, "cache warmup")?.let { normalized ->
-                addon.copy(url = normalized)
-            }
-        }
-        return applyDisplayNames(
-            validConfigs.mapNotNull { addonConfig ->
-                manifestCache[addonConfig.url]?.copy(
-                    parserPreset = addonConfig.parserPreset,
-                    isAnime = addonConfig.isAnime
-                )
-            }
-        )
+        val validConfigs = normalizeInstalledConfigs(addonConfigs, "cache warmup")
+        return applyDisplayNames(cachedAddonsForConfigs(validConfigs))
     }
 
     override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> {
