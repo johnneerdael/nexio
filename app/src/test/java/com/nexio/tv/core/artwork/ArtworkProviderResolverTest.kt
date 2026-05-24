@@ -36,7 +36,7 @@ class ArtworkProviderResolverTest {
         )
     }
 
-    @Test fun `explicit RPDB without imdb falls through to addon default`() {
+    @Test fun `explicit RPDB without imdb falls through to tmdb stock default`() {
         val result = resolver.resolve(
             artworkType = ArtworkType.POSTER,
             contentType = ContentType.MOVIE,
@@ -45,12 +45,12 @@ class ArtworkProviderResolverTest {
             settings = rpdbSettings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
             result
         )
     }
 
-    @Test fun `DEFAULT for non-anime poster returns addon`() {
+    @Test fun `DEFAULT for non-anime poster returns tmdb stock`() {
         val result = resolver.resolve(
             artworkType = ArtworkType.POSTER,
             contentType = ContentType.MOVIE,
@@ -59,12 +59,12 @@ class ArtworkProviderResolverTest {
             settings = defaultSettings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
             result
         )
     }
 
-    @Test fun `DEFAULT for anime poster returns addon`() {
+    @Test fun `DEFAULT for anime poster returns kitsu stock`() {
         val result = resolver.resolve(
             artworkType = ArtworkType.POSTER,
             contentType = ContentType.SERIES,
@@ -73,7 +73,7 @@ class ArtworkProviderResolverTest {
             settings = defaultSettings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU),
             result
         )
     }
@@ -92,7 +92,7 @@ class ArtworkProviderResolverTest {
         )
     }
 
-    @Test fun `thumbnail always returns addon`() {
+    @Test fun `thumbnail uses source-appropriate stock default`() {
         val result = resolver.resolve(
             artworkType = ArtworkType.THUMBNAIL,
             contentType = ContentType.SERIES,
@@ -101,7 +101,7 @@ class ArtworkProviderResolverTest {
             settings = defaultSettings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
             result
         )
     }
@@ -125,7 +125,7 @@ class ArtworkProviderResolverTest {
         )
     }
 
-    @Test fun `FANART_TV explicit + ANIME falls through to ContentTypeDefaults (ADDON)`() {
+    @Test fun `FANART_TV explicit + ANIME falls through to ContentTypeDefaults KITSU`() {
         val settings = ArtworkProviderSettings(
             selection = ArtworkProviderSelectionSettings(
                 posterProvider = ArtworkProviderChoiceKey.FANART_TV
@@ -139,12 +139,12 @@ class ArtworkProviderResolverTest {
             settings = settings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU),
             chosen
         )
     }
 
-    @Test fun `FANART_TV explicit + missing TMDB id falls through to ADDON`() {
+    @Test fun `FANART_TV explicit + missing TMDB id falls through to TMDB stock`() {
         val settings = ArtworkProviderSettings(
             selection = ArtworkProviderSelectionSettings(
                 posterProvider = ArtworkProviderChoiceKey.FANART_TV
@@ -158,7 +158,7 @@ class ArtworkProviderResolverTest {
             settings = settings
         )
         assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON),
+            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
             chosen
         )
     }

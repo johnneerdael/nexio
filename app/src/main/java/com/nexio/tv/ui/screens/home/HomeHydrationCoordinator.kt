@@ -1,7 +1,10 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
+import com.nexio.tv.core.artwork.takeIfImageType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDepth
@@ -13,6 +16,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
@@ -270,7 +274,7 @@ class HomeHydrationCoordinator @Inject constructor(
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
         val fields = displayMetadata
             .sanitizeHydratedTitleRating()
-            .withStructuredArtworkLegacyFields()
+            .withHydratedOnlyArtwork(item, resolvedDocument)
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -308,16 +312,45 @@ class HomeHydrationCoordinator @Inject constructor(
         )
     }
 
-    private fun HomeDisplayMetadata.withStructuredArtworkLegacyFields(): HomeDisplayMetadata {
+    private fun HomeDisplayMetadata.withHydratedOnlyArtwork(
+        item: MetaPreview,
+        document: ResolvedMetadataDocument
+    ): HomeDisplayMetadata {
         val typed = artwork?.enforceArtworkTypeBoundaries()
+        val posterFromPreview = document.isPreviewArtwork(ResolvedField.POSTER) ||
+            (poster != null && document.poster == null && poster == item.poster) ||
+            (document.poster == null && typed?.poster != null && typed.poster == item.artwork?.poster)
+        val backdropFromPreview = document.isPreviewArtwork(ResolvedField.BACKDROP) ||
+            (backdrop != null && document.backdrop == null && backdrop == item.background) ||
+            (document.backdrop == null && typed?.backdrop != null && typed.backdrop == item.artwork?.backdrop)
+        val logoFromPreview = document.isPreviewArtwork(ResolvedField.LOGO) ||
+            (logo != null && document.logo == null && logo == item.logo) ||
+            (document.logo == null && typed?.logo != null && typed.logo == item.artwork?.logo)
+        val thumbnailFromPreview = thumbnail != null &&
+            typed?.thumbnail == item.artwork?.thumbnail
+        val hydratedTyped = ArtworkBundle(
+            poster = typed?.poster.takeUnless { posterFromPreview },
+            backdrop = typed?.backdrop.takeUnless { backdropFromPreview },
+            logo = typed?.logo.takeUnless { logoFromPreview },
+            thumbnail = typed?.thumbnail.takeUnless { thumbnailFromPreview }
+        ).enforceArtworkTypeBoundaries()
         return copy(
-            poster = typed?.poster.toLegacyArtworkString() ?: poster,
-            backdrop = typed?.backdrop.toLegacyArtworkString() ?: backdrop,
-            logo = typed?.logo.toLegacyArtworkString() ?: logo,
-            thumbnail = typed?.thumbnail.toLegacyArtworkString() ?: thumbnail,
-            artwork = typed
+            poster = hydratedTyped.poster.toLegacyArtworkString() ?: poster.takeUnless { posterFromPreview },
+            backdrop = hydratedTyped.backdrop.toLegacyArtworkString() ?: backdrop.takeUnless { backdropFromPreview },
+            logo = hydratedTyped.logo.toLegacyArtworkString() ?: logo.takeUnless { logoFromPreview },
+            thumbnail = hydratedTyped.thumbnail.toLegacyArtworkString() ?: thumbnail.takeUnless { thumbnailFromPreview },
+            artwork = hydratedTyped.takeIf {
+                it.poster.takeIfImageType(ArtworkType.POSTER) != null ||
+                    it.backdrop.takeIfImageType(ArtworkType.BACKDROP) != null ||
+                    it.logo.takeIfImageType(ArtworkType.LOGO) != null ||
+                    it.thumbnail.takeIfImageType(ArtworkType.THUMBNAIL) != null
+            }
         )
     }
+
+    private fun ResolvedMetadataDocument.isPreviewArtwork(field: ResolvedField): Boolean =
+        sourceRoles[field] == SourceRole.RAIL_PREVIEW ||
+            sourceRoles[field] == SourceRole.ADDON_PREVIEW
 
     private fun failed(
         itemKey: String,

@@ -37,7 +37,7 @@ class HomeResolvedDisplayMapperPreferredProvidersTest {
     }
 
     @Test
-    fun `DEFAULT for non-anime movie returns addon for all four types`() {
+    fun `DEFAULT for non-anime movie returns tmdb stock for all four types`() {
         val firstPaint = preview(
             id = "tmdb:550",
             apiType = "movie",
@@ -56,11 +56,11 @@ class HomeResolvedDisplayMapperPreferredProvidersTest {
             nowMs = 10_000L
         ).single()
 
-        val addon = ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON)
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.POSTER])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.LOGO])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
+        val tmdb = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.POSTER])
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.LOGO])
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
     }
 
     @Test
@@ -87,16 +87,16 @@ class HomeResolvedDisplayMapperPreferredProvidersTest {
         ).single()
 
         val rpdb = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
-        val addon = ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON)
+        val tmdb = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
         assertEquals(rpdb, resolved.preferredArtworkProviders[ArtworkType.POSTER])
-        // Non-poster types unchanged -> still addon default.
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.LOGO])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
+        // Non-poster types unchanged -> still TMDB stock defaults.
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.LOGO])
+        assertEquals(tmdb, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
     }
 
     @Test
-    fun `anime detected via BUILT_IN_KITSU railSource picks addon defaults`() {
+    fun `anime detected via BUILT_IN_KITSU railSource picks kitsu stock defaults`() {
         val firstPaint = preview(
             id = "kitsu:1234",
             apiType = "series",
@@ -116,14 +116,11 @@ class HomeResolvedDisplayMapperPreferredProvidersTest {
             nowMs = 10_000L
         ).single()
 
-        val addon = ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON)
-        // The anime default branch returns the addon provider for all four types
-        // (matches the current [ContentTypeDefaults.resolve] table; if fanart.tv
-        // is wired in later, this test will need to track that change).
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.POSTER])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.LOGO])
-        assertEquals(addon, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
+        val kitsu = ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU)
+        assertEquals(kitsu, resolved.preferredArtworkProviders[ArtworkType.POSTER])
+        assertEquals(kitsu, resolved.preferredArtworkProviders[ArtworkType.BACKDROP])
+        assertEquals(kitsu, resolved.preferredArtworkProviders[ArtworkType.LOGO])
+        assertEquals(kitsu, resolved.preferredArtworkProviders[ArtworkType.THUMBNAIL])
     }
 
     @Test

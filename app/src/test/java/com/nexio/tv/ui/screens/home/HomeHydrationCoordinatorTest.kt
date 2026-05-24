@@ -385,6 +385,68 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `hydrated overlay strips artwork selected from preview source role`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val previewPoster = artworkRef("preview-poster", ArtworkType.POSTER)
+        val previewBackdrop = artworkRef("preview-backdrop", ArtworkType.BACKDROP)
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                poster = "nexio-artwork://decision/preview-poster",
+                backdrop = "nexio-artwork://decision/preview-backdrop",
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                )
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/preview-poster",
+                backdrop = "nexio-artwork://decision/preview-backdrop",
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                ),
+                sourceRoles = mapOf(
+                    ResolvedField.POSTER to SourceRole.RAIL_PREVIEW,
+                    ResolvedField.BACKDROP to SourceRole.ADDON_PREVIEW
+                ),
+                sourceProviders = mapOf(
+                    ResolvedField.POSTER to "TMDB",
+                    ResolvedField.BACKDROP to "ADDON"
+                )
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
+
+        coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview(
+                id = "tmdb:94997",
+                type = ContentType.SERIES,
+                rating = 8.3f,
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                )
+            ),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(overlaySlot.captured.fields.artwork)
+        assertNull(overlaySlot.captured.fields.poster)
+        assertNull(overlaySlot.captured.fields.backdrop)
+    }
+
+    @Test
     fun `hydration emits rating and artwork surface trace`() = runTest {
         val sink = RecordingTraceSink()
         val facade = mockk<MetadataRouterFacade>()
