@@ -138,6 +138,7 @@ test("buildApprovalExchangePayload prefers requested display name and trims it",
   assert.equal(payload.device_name, "Session Device");
   assert.equal(payload.device_model, "Chromecast");
   assert.equal(payload.device_platform, "Android TV");
+  assert.equal(payload.reuse_device_credential_id, null);
   assert.equal(payload.used_at, null);
   assert.ok(
     typeof payload.expires_at === "string" && payload.expires_at.length > 0,
@@ -191,6 +192,23 @@ test("buildApprovalExchangePayload falls back to session metadata and default na
   });
 
   assert.equal(fallback.display_name, "Living Room TV");
+});
+
+test("buildApprovalExchangePayload carries selected reuse credential id", async () => {
+  const payload = await buildApprovalExchangePayload({
+    ownerUserId: "owner-user-id",
+    requesterUserId: "requester-user-id",
+    linkedDeviceId: "linked-device-id",
+    requestedDisplayName: "Living Room TV",
+    sessionRow: {
+      device_name: "Living Room TV",
+      device_model: "Chromecast",
+      device_platform: "Android TV",
+      reuse_device_credential_id: "credential-id",
+    },
+  });
+
+  assert.equal(payload.reuse_device_credential_id, "credential-id");
 });
 
 test("buildDurableCredential returns a client payload plus hashed server payload", async () => {
@@ -319,6 +337,22 @@ test("durable auth migration supports logical credential reuse handoffs", () => 
   assert.match(
     migrationContractText,
     /WHERE id = v_handoff\.reuse_device_credential_id/i,
+  );
+});
+
+test("tv login exchange stages the approved reuse credential id", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../tv-logins-exchange/index.ts", import.meta.url),
+  );
+
+  assert.match(source, /reuse_device_credential_id\?: string \| null/);
+  assert.match(
+    source,
+    /reuse_device_credential_id: input\.sessionRow\.reuse_device_credential_id \?\?\s+null/,
+  );
+  assert.match(
+    source,
+    /buildApprovalExchangePayload\(\{\s+ownerUserId,\s+requesterUserId: requesterUser\.id,\s+linkedDeviceId: linkedDeviceRow\.id,\s+requestedDisplayName: sessionRow\.requested_display_name \?\? null,\s+sessionRow,/s,
   );
 });
 
