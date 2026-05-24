@@ -467,6 +467,8 @@ class HomeHydrationCoordinator @Inject constructor(
         if (actualProvider.equals(stock, ignoreCase = true)) return true
         return field != null &&
             actualProvider.equals("TVDB", ignoreCase = true) &&
+            preferred.equals(stock, ignoreCase = true) &&
+            type != ArtworkType.POSTER &&
             !isPreviewArtwork(field)
     }
 

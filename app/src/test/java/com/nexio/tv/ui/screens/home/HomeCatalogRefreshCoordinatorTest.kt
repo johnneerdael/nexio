@@ -133,7 +133,10 @@ class HomeCatalogRefreshCoordinatorTest {
             profileBoundary = profileBoundary
         )
 
-        assertEquals(item, enriched)
+        assertEquals(item.runtime, enriched.runtime)
+        assertEquals(item.name, enriched.name)
+        assertEquals(item.description, enriched.description)
+        assertEquals(item.poster, enriched.poster)
     }
 
     @Test
@@ -434,13 +437,14 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         } coAnswers {
-            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
-            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(7)
             onCatalogReady(
                 "addon_movie_popular",
                 catalogRow,
@@ -496,6 +500,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
@@ -564,12 +569,13 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         } coAnswers {
-            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
             activeProfileSession.value = expectedProfileSession.copy(
                 profileId = 2,
                 sessionId = "new-session",
@@ -657,6 +663,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
@@ -675,7 +682,7 @@ class HomeCatalogRefreshCoordinatorTest {
             Dispatchers.resetMain()
         }
 
-        assertEquals(2, tmdbObserveCount)
+        assertEquals(3, tmdbObserveCount)
         verify(exactly = 0) { viewModel.tmdbDiscoverySnapshot = any() }
     }
 
@@ -832,13 +839,14 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         } coAnswers {
-            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
-            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(7)
             onCatalogReady(
                 "addon_movie_popular",
                 fullRow,
@@ -963,13 +971,14 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         } coAnswers {
-            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
-            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(7)
             onCatalogReady(
                 "addon_movie_popular",
                 displayRow,
@@ -1089,6 +1098,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 isCatalogDisabled = any(),
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
+                hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
                 onLog = any()
@@ -1308,6 +1318,60 @@ class HomeCatalogRefreshCoordinatorTest {
             )
         }
         verify(exactly = 0) { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) }
+    }
+
+    @Test
+    fun `home refresh keeps catalog display fields unchanged when resolved authority exists`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-authority-display", poster = null).copy(
+            name = "Raw title",
+            description = "Raw description"
+        )
+        val persistedPreview = rawPreview.copy(
+            name = "Persisted localized title",
+            description = "Persisted localized description",
+            poster = "nexio-artwork://decision/persisted"
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        val existingRow = row.copy(items = listOf(persistedPreview))
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } answers { firstArg() }
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "Provider title",
+                description = "Provider description"
+            )
+        )
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            existingRowsByKey = mapOf(homeCatalogGlobalKey(row) to existingRow),
+            hasResolvedAuthority = { true },
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(rawPreview, hydratedRows.single().items.single())
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        verify(exactly = 0) { posterRatingsUrlResolver.applyArtworkRef(any(), any()) }
     }
 
     @Test

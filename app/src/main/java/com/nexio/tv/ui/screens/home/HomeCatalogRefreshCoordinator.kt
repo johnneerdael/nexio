@@ -126,6 +126,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     internal suspend fun hydrateAndPrefetchRows(
         rows: List<CatalogRow>,
         existingRowsByKey: Map<String, CatalogRow> = emptyMap(),
+        hasResolvedAuthority: (String) -> Boolean = { false },
         telemetryEnabled: Boolean,
         onLog: (String, String?) -> Unit
     ): List<CatalogRow> {
@@ -144,6 +145,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
             val hydratedItems = row.items.map { item ->
                 val itemKey = "${item.apiType}:${item.id}"
+                if (hasResolvedAuthority(itemKey)) {
+                    return@map item
+                }
                 val persistedFallback = oldItemsByKey[itemKey]
                 if (shouldReusePersistedHomeItem(
                         itemChanged = itemKey in changedKeys,
@@ -206,6 +210,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         isCatalogDisabled: (Addon, CatalogDescriptor) -> Boolean,
         getCurrentRow: suspend (String) -> CatalogRow?,
         isItemReferencedElsewhere: suspend (String, String) -> Boolean,
+        hasResolvedAuthority: (String) -> Boolean = { false },
         onCatalogReady: suspend (String, CatalogRow, CatalogItemDiff) -> Unit,
         onRawCatalogBatchComplete: suspend () -> Unit = {},
         onLog: (String, String?) -> Unit
@@ -273,6 +278,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 existingRowsByKey = refreshedEntries.associate { entry ->
                     entry.catalogKey to entry.row.copy(items = entry.oldItems)
                 },
+                hasResolvedAuthority = hasResolvedAuthority,
                 telemetryEnabled = telemetryEnabled,
                 onLog = onLog
             )

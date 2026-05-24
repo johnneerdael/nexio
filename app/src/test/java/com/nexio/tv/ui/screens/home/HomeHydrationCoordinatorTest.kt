@@ -549,6 +549,53 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `hydrated overlay rejects tvdb poster when explicit premium poster provider is active`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val tvdbPoster = artworkRef("tvdb-poster", ArtworkType.POSTER, provider = "TVDB")
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                artwork = ArtworkBundle(poster = tvdbPoster)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/tvdb-poster",
+                artwork = ArtworkBundle(poster = tvdbPoster),
+                sourceRoles = mapOf(ResolvedField.POSTER to SourceRole.ARTWORK),
+                sourceProviders = mapOf(ResolvedField.POSTER to "TVDB")
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coordinator(
+            facade = facade,
+            store = store,
+            sink = RecordingTraceSink(),
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(overlaySlot.captured.fields.artwork)
+        assertNull(overlaySlot.captured.fields.poster)
+    }
+
+    @Test
     fun `hydrated overlay drops artwork from neither configured nor stock provider`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
