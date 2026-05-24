@@ -39,6 +39,19 @@ class AddonSyncCodecTest {
     }
 
     @Test
+    fun `configured addon manifest url normalizes then rebuilds original manifest request`() {
+        val installUrl = "https://torii.nexioapp.org/%7B%22NexioTorii%22%3A%22abc%22%7D/manifest.json"
+        val normalized = normalizeAddonInstallUrl(installUrl)
+        val requestUrl = buildAddonRequestUrl(normalized, "manifest.json")
+
+        assertEquals(
+            "https://torii.nexioapp.org/%7B%22NexioTorii%22%3A%22abc%22%7D",
+            normalized
+        )
+        assertEquals(installUrl, requestUrl)
+    }
+
+    @Test
     fun `top streaming uuid manifest path is stored as v2 transport suffix`() {
         val parsed = parseAddonInstallUrl(
             "https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json"
