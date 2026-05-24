@@ -466,6 +466,23 @@ test("invalidCredentialResponse is a 401 contract for revoked or invalid credent
   );
 });
 
+test("device session exchange rejects stale rotated credentials by public id and hash", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../device-session-exchange/index.ts", import.meta.url),
+  );
+
+  assert.match(source, /\.eq\("device_public_id", body\.devicePublicId\)/);
+  assert.match(source, /\.eq\("status", "active"\)/);
+  assert.match(
+    source,
+    /if \(candidateHash !== credentialRow\.credential_hash\) \{\s+return invalidCredentialResponse\(\);\s+\}/s,
+  );
+  assert.match(
+    source,
+    /if \(!credentialRow\) \{\s+return invalidCredentialResponse\(\);\s+\}/s,
+  );
+});
+
 test("normalizeDeviceExchangeBody rejects blank credential inputs", () => {
   assert.throws(
     () =>
