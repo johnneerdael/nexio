@@ -8,10 +8,13 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.domain.model.DisplayFeatureSignature
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
+import com.nexio.tv.domain.model.identitySignature
+import com.nexio.tv.domain.model.visibleDisplaySignature
 import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,7 +55,7 @@ class ResolvedDisplaySurfaceRepository(
     private fun observeSurface(surfaceKey: String, profileId: Int): Flow<List<ResolvedDisplayItem>> =
         surfaces
             .map { bySurface -> bySurface[surfaceKey]?.get(profileId).orEmpty() }
-            .distinctUntilChanged()
+            .distinctUntilChanged { old, new -> shouldSuppressSurfaceEmission(surfaceKey, old, new) }
 
     fun observeItem(profileId: Int, itemKey: String): Flow<ResolvedDisplayItem?> =
         observeHomeSurface(profileId).map { items -> items.firstOrNull { it.itemKey == itemKey } }
@@ -255,19 +258,26 @@ private fun shouldSuppressSurfaceUpdate(
 ): Boolean = when (surfaceKey) {
     ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY ->
         existing.semanticallySameScreensaverSurface(nextItems)
-    // After HomeResolvedDisplayMapper memoization, identical-content (MetaPreview, overlay)
-    // tuples return the SAME ResolvedDisplayItem instance across emissions.
-    // mergeIncrementalItems still allocates a fresh outer list each publish, so a
-    // list-identity compare cannot work — but element-wise reference equality is
-    // both correct and O(n). Deep equals() would be slow and could incorrectly
-    // mask the ref-equality fast path.
-    // withPreservedTrailerState only allocates a copy() when restoring a trailer
-    // (rare); in the common no-op steady-state path it returns `this`, so element
-    // refs stay stable and this short-circuit fires.
+    // HOME display stability is semantic, not reference-only. Identity-only
+    // strengthening and timestamp churn may update the authority item without
+    // forcing downstream display emissions.
     ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
     ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY ->
-        existing.refEqualsByIndex(nextItems)
+        existing.sameVisibleAndIdentitySurface(nextItems)
     else -> false
+}
+
+private fun shouldSuppressSurfaceEmission(
+    surfaceKey: String,
+    existing: List<ResolvedDisplayItem>,
+    nextItems: List<ResolvedDisplayItem>
+): Boolean = when (surfaceKey) {
+    ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY ->
+        existing.semanticallySameScreensaverSurface(nextItems)
+    ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+    ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY ->
+        existing.sameVisibleDisplaySurface(nextItems)
+    else -> existing == nextItems
 }
 
 // Indexed-for ref-equality compare. `existing.zip(other).all { (a, b) -> a === b }`
@@ -299,6 +309,41 @@ private fun ResolvedDisplayItem.screensaverStablePayload(): ResolvedDisplayItem 
         trailer = trailer.copy(lastResolvedAtMs = null),
         updatedAtMs = 0L
     )
+
+private val REPOSITORY_DISPLAY_FEATURE_SIGNATURE = DisplayFeatureSignature(
+    languageTag = null,
+    artworkSettingsSignature = "repository-authority",
+    ratingProviderPolicy = "repository-authority",
+    displayPolicyVersion = 1
+)
+
+private fun List<ResolvedDisplayItem>.sameVisibleDisplaySurface(
+    other: List<ResolvedDisplayItem>
+): Boolean {
+    if (size != other.size) return false
+    for (i in indices) {
+        val left = this[i]
+        val right = other[i]
+        if (left.itemKey != right.itemKey) return false
+        if (
+            left.visibleDisplaySignature(REPOSITORY_DISPLAY_FEATURE_SIGNATURE) !=
+            right.visibleDisplaySignature(REPOSITORY_DISPLAY_FEATURE_SIGNATURE)
+        ) {
+            return false
+        }
+    }
+    return true
+}
+
+private fun List<ResolvedDisplayItem>.sameVisibleAndIdentitySurface(
+    other: List<ResolvedDisplayItem>
+): Boolean {
+    if (!sameVisibleDisplaySurface(other)) return false
+    for (i in indices) {
+        if (this[i].identitySignature() != other[i].identitySignature()) return false
+    }
+    return true
+}
 
 /**
  * Non-downgrade per-itemKey merge — the load-bearing rule #1 enforcement point.

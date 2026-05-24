@@ -257,6 +257,108 @@ class ResolvedDisplaySurfaceRepositoryTest {
     }
 
     @Test
+    fun `home surface publish suppresses semantically unchanged timestamp and trailer resolution churn`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val emissions = mutableListOf<List<ResolvedDisplayItem>>()
+        val collectJob = launch {
+            repository.observeHomeSurface(profileId = 1).collect { items ->
+                emissions += items
+            }
+        }
+        val first = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Fight Club",
+            trailer = TrailerDisplayState(
+                fallbackTrailerYtIds = listOf("trailer-a"),
+                selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("trailer-a"),
+                availabilityReason = "fallback_youtube_id",
+                surface = "home",
+                lastResolvedAtMs = 100L
+            )
+        )
+        val sameDisplayNewRuntimeState = first.copy(
+            updatedAtMs = 2_000L,
+            trailer = first.trailer.copy(
+                selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("trailer-b"),
+                lastResolvedAtMs = 3_000L
+            )
+        )
+
+        runCurrent()
+        assertTrue(
+            repository.publishResolvedItems(
+                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                profileSession = activeSession.value,
+                items = listOf(first)
+            )
+        )
+        runCurrent()
+        assertFalse(
+            repository.publishResolvedItems(
+                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                profileSession = activeSession.value,
+                items = listOf(sameDisplayNewRuntimeState)
+            )
+        )
+        runCurrent()
+
+        assertEquals(2, emissions.size)
+        assertEquals(emptyList<ResolvedDisplayItem>(), emissions[0])
+        assertEquals(listOf(first), emissions[1])
+        assertEquals(listOf(first), repository.getSnapshot(profileId = 1))
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `home surface stores identity strengthening without display emission`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val emissions = mutableListOf<List<ResolvedDisplayItem>>()
+        val collectJob = launch {
+            repository.observeHomeSurface(profileId = 1).collect { items ->
+                emissions += items
+            }
+        }
+        val first = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Fight Club"
+        ).copy(
+            imdbId = null,
+            stableIds = ProviderIds(tmdb = "550")
+        )
+        val strengthened = first.copy(
+            imdbId = "tt0137523",
+            stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
+        )
+
+        runCurrent()
+        assertTrue(
+            repository.publishResolvedItems(
+                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                profileSession = activeSession.value,
+                items = listOf(first),
+                replace = true
+            )
+        )
+        runCurrent()
+        assertTrue(
+            repository.publishResolvedItems(
+                surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+                profileSession = activeSession.value,
+                items = listOf(strengthened),
+                replace = true
+            )
+        )
+        runCurrent()
+
+        assertEquals(2, emissions.size)
+        assertEquals("tt0137523", repository.getSnapshot(profileId = 1).single().stableIds.imdb)
+        assertEquals(null, emissions.last().single().stableIds.imdb)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `observeItem emits the stored resolved item for the requested profile and key`() = runTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })

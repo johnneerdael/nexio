@@ -9,6 +9,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -37,6 +38,57 @@ class ResolvedDisplaySignatureTest {
         assertEquals(
             base.visibleDisplaySignature(featureSignature),
             restamped.visibleDisplaySignature(featureSignature)
+        )
+    }
+
+    @Test
+    fun `trailer playback resolution state does not change visible display signature`() {
+        val base = resolvedItem(
+            trailer = TrailerDisplayState(
+                fallbackTrailerYtIds = listOf("yt-1"),
+                selectedPlaybackRef = null,
+                availabilityReason = "available",
+                surface = "home",
+                resolverSource = "candidate_cache",
+                lastResolvedAtMs = 100L
+            )
+        )
+        val resolvedPlayback = base.copy(
+            trailer = TrailerDisplayState(
+                fallbackTrailerYtIds = listOf("yt-2"),
+                selectedPlaybackRef = TrailerPlaybackRef.YouTubeId("yt-2"),
+                availabilityReason = "resolved",
+                surface = "screensaver",
+                resolverSource = "youtubei",
+                lastResolvedAtMs = 200L
+            )
+        )
+
+        assertEquals(
+            base.visibleDisplaySignature(featureSignature),
+            resolvedPlayback.visibleDisplaySignature(featureSignature)
+        )
+    }
+
+    @Test
+    fun `artwork trace changes do not change visible display signature`() {
+        val base = resolvedItem()
+        val traceChanged = base.copy(
+            artwork = base.artwork.copy(
+                poster = artworkRef(
+                    key = "poster-1",
+                    imageType = ArtworkType.POSTER,
+                    trace = ArtworkTrace(selectedProvider = "different-trace")
+                )
+            ),
+            slots = slots(
+                trace = listOf("different-slot-trace")
+            )
+        )
+
+        assertEquals(
+            base.visibleDisplaySignature(featureSignature),
+            traceChanged.visibleDisplaySignature(featureSignature)
         )
     }
 
@@ -147,26 +199,28 @@ class ResolvedDisplaySignatureTest {
 
     private fun slots(
         updatedAtMs: Long = 300L,
-        expiresAtMs: Long? = 400L
+        expiresAtMs: Long? = 400L,
+        trace: List<String> = listOf("trace")
     ): ResolvedDisplayFieldSlots = ResolvedDisplayFieldSlots(
-        title = slot("The Movie", updatedAtMs, expiresAtMs),
-        originalTitle = slot("The Original Movie", updatedAtMs, expiresAtMs),
-        overview = slot("A display description.", updatedAtMs, expiresAtMs),
-        genres = slot(listOf("Action", "Sci-Fi"), updatedAtMs, expiresAtMs),
-        releaseInfo = slot("1999-03-31", updatedAtMs, expiresAtMs),
-        runtime = slot("90 min", updatedAtMs, expiresAtMs),
-        rating = slot(TitleRating(8.7, TitleRatingSource.IMDB), updatedAtMs, expiresAtMs),
-        poster = slot(artworkRef("poster-1", ArtworkType.POSTER), updatedAtMs, expiresAtMs),
-        backdrop = slot(artworkRef("backdrop-1", ArtworkType.BACKDROP), updatedAtMs, expiresAtMs),
-        logo = slot(artworkRef("logo-1", ArtworkType.LOGO), updatedAtMs, expiresAtMs),
-        thumbnail = slot(null, updatedAtMs, expiresAtMs),
-        posterProviderTag = slot("rail-preview", updatedAtMs, expiresAtMs)
+        title = slot("The Movie", updatedAtMs, expiresAtMs, trace),
+        originalTitle = slot("The Original Movie", updatedAtMs, expiresAtMs, trace),
+        overview = slot("A display description.", updatedAtMs, expiresAtMs, trace),
+        genres = slot(listOf("Action", "Sci-Fi"), updatedAtMs, expiresAtMs, trace),
+        releaseInfo = slot("1999-03-31", updatedAtMs, expiresAtMs, trace),
+        runtime = slot("90 min", updatedAtMs, expiresAtMs, trace),
+        rating = slot(TitleRating(8.7, TitleRatingSource.IMDB), updatedAtMs, expiresAtMs, trace),
+        poster = slot(artworkRef("poster-1", ArtworkType.POSTER), updatedAtMs, expiresAtMs, trace),
+        backdrop = slot(artworkRef("backdrop-1", ArtworkType.BACKDROP), updatedAtMs, expiresAtMs, trace),
+        logo = slot(artworkRef("logo-1", ArtworkType.LOGO), updatedAtMs, expiresAtMs, trace),
+        thumbnail = slot(null, updatedAtMs, expiresAtMs, trace),
+        posterProviderTag = slot("rail-preview", updatedAtMs, expiresAtMs, trace)
     )
 
     private fun <T> slot(
         value: T?,
         updatedAtMs: Long,
-        expiresAtMs: Long?
+        expiresAtMs: Long?,
+        trace: List<String>
     ): ResolvedSlot<T> = ResolvedSlot(
         value = value,
         rank = DisplaySourceRank.RESOLVED,
@@ -174,17 +228,21 @@ class ResolvedDisplaySignatureTest {
         role = "PRIMARY",
         updatedAtMs = updatedAtMs,
         expiresAtMs = expiresAtMs,
-        trace = listOf("trace")
+        trace = trace
     )
 
-    private fun artworkRef(key: String, imageType: ArtworkType): ArtworkDisplayRef.RuntimeAsset =
+    private fun artworkRef(
+        key: String,
+        imageType: ArtworkType,
+        trace: ArtworkTrace = ArtworkTrace.empty()
+    ): ArtworkDisplayRef.RuntimeAsset =
         ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("decision-$key"),
             assetKey = null,
             imageType = imageType,
             selectedProvider = ArtworkProviderId.RailPreview,
             sourceRole = ArtworkSourceRole.RAIL_PREVIEW,
-            trace = ArtworkTrace.empty(),
+            trace = trace,
             displayHints = ArtworkDisplayHints()
         )
 }
