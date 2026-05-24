@@ -389,6 +389,38 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `qr exchange saves rotated durable credential before activation and session import`() = runTest {
+        val calls = mutableListOf<String>()
+
+        finalizeTvLoginExchange(
+            result = DurableDeviceCredentialIssueResult(
+                devicePublicId = "tv_rotated",
+                deviceSecret = "rotated-secret",
+                accessToken = "access-token",
+                refreshToken = "refresh-token"
+            ),
+            saveCredential = { publicId, secret ->
+                calls += "save:$publicId:$secret"
+            },
+            activateCredential = { publicId, secret ->
+                calls += "activate:$publicId:$secret"
+            },
+            importAuthTokens = { accessToken, refreshToken ->
+                calls += "import:$accessToken:$refreshToken"
+            }
+        )
+
+        assertEquals(
+            listOf(
+                "save:tv_rotated:rotated-secret",
+                "activate:tv_rotated:rotated-secret",
+                "import:access-token:refresh-token"
+            ),
+            calls
+        )
+    }
+
+    @Test
     fun `qr exchange does not import auth when credential save fails`() = runTest {
         var imported = false
 
