@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TrailerDisplayState
+import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -109,6 +110,38 @@ class ScreensaverTrailerCandidateCacheRepositoryTest {
         assertEquals(1, provider.movieRequests)
         assertTrue(result.youtubeIds.isEmpty())
         assertNull(result.extractedVideoUrl)
+    }
+
+    @Test
+    fun `legacy obfuscated state file reads typed profile state without refetching`() = runTest {
+        val stateFileName = "legacy-obfuscated-gate-${System.nanoTime()}.json"
+        File(context.filesDir, stateFileName).writeText(
+            """{"a":{"1":{"a":99000,"b":40,"c":499}}}"""
+        )
+        val provider = FakeScreensaverTrailerTmdbProvider()
+        val mediaClipStore = MediaClipStore(
+            context,
+            prefsName = "legacy-obfuscated-gate-${System.nanoTime()}",
+            clock = { 100_000L }
+        )
+        val repository = ScreensaverTrailerCandidateCacheRepository(
+            context = context,
+            trailerTmdbProvider = provider,
+            mediaClipStore = mediaClipStore,
+            clock = { 100_000L },
+            stateFileName = stateFileName,
+            testOnlyConstructor = true
+        )
+
+        val result = repository.ensureFreshTmdbTrendingTrailerCandidates(
+            profileId = 1,
+            items = listOf(resolvedItem(tmdbId = "550", type = ContentType.MOVIE))
+        )
+
+        assertEquals(ScreensaverTrailerCandidateCacheStatus.HIT, result.status)
+        assertEquals(99_000L, result.refreshedAtMs)
+        assertEquals(0, provider.movieRequests)
+        assertEquals(0, provider.tvRequests)
     }
 
     private fun resolvedItem(tmdbId: String, type: ContentType): ResolvedDisplayItem =

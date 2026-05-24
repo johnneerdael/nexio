@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository
 
 import android.content.Context
-import com.google.gson.Gson
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.media.ClipSite
@@ -80,7 +79,6 @@ class ScreensaverTrailerCandidateCacheRepository internal constructor(
         testOnlyConstructor = false
     )
 
-    private val gson = Gson()
     private val mutex = Mutex()
     private val stateFile: File
         get() = File(context.filesDir, stateFileName)
@@ -214,7 +212,7 @@ class ScreensaverTrailerCandidateCacheRepository internal constructor(
             FileInputStream(file).use { fis ->
                 BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
                     JsonReader(br).use { reader ->
-                        gson.fromJson(reader, StoreState::class.java) ?: StoreState()
+                        readStoreState(reader)
                     }
                 }
             }
@@ -228,11 +226,73 @@ class ScreensaverTrailerCandidateCacheRepository internal constructor(
         FileOutputStream(temp).use { fos ->
             BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
                 JsonWriter(bw).use { writer ->
-                    gson.toJson(state, StoreState::class.java, writer)
+                    writeStoreState(writer, state)
                 }
             }
         }
         Files.move(temp.toPath(), file.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+    }
+
+    private fun readStoreState(reader: JsonReader): StoreState {
+        val profiles = linkedMapOf<String, ProfileState>()
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "profiles", "a" -> readProfiles(reader, profiles)
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        return StoreState(profiles)
+    }
+
+    private fun readProfiles(
+        reader: JsonReader,
+        out: MutableMap<String, ProfileState>
+    ) {
+        reader.beginObject()
+        while (reader.hasNext()) {
+            val profileId = reader.nextName()
+            readProfileState(reader)?.let { out[profileId] = it }
+        }
+        reader.endObject()
+    }
+
+    private fun readProfileState(reader: JsonReader): ProfileState? {
+        var refreshedAtMs = 0L
+        var itemCount = 0
+        var storedCandidateCount = 0
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "refreshedAtMs", "a" -> refreshedAtMs = runCatching { reader.nextLong() }.getOrDefault(0L)
+                "itemCount", "b" -> itemCount = runCatching { reader.nextInt() }.getOrDefault(0)
+                "storedCandidateCount", "c" -> storedCandidateCount = runCatching { reader.nextInt() }.getOrDefault(0)
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        return ProfileState(
+            refreshedAtMs = refreshedAtMs,
+            itemCount = itemCount,
+            storedCandidateCount = storedCandidateCount
+        )
+    }
+
+    private fun writeStoreState(writer: JsonWriter, state: StoreState) {
+        writer.beginObject()
+        writer.name("profiles")
+        writer.beginObject()
+        for ((profileId, profileState) in state.profiles) {
+            writer.name(profileId)
+            writer.beginObject()
+            writer.name("refreshedAtMs").value(profileState.refreshedAtMs)
+            writer.name("itemCount").value(profileState.itemCount)
+            writer.name("storedCandidateCount").value(profileState.storedCandidateCount)
+            writer.endObject()
+        }
+        writer.endObject()
+        writer.endObject()
     }
 
     private data class StoreState(
