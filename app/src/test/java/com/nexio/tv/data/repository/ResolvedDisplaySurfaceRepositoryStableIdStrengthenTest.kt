@@ -178,4 +178,31 @@ class ResolvedDisplaySurfaceRepositoryStableIdStrengthenTest {
         assertEquals("tt12345678", after[0].stableIds.imdb)
         assertEquals("555", after[0].stableIds.tvdb)
     }
+
+    @Test
+    fun `canonical identity strengthening surfaces even when display slots are identical`() = runTest {
+        repo.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = profileSession,
+            items = listOf(
+                item(stableIds = ProviderIds(tmdb = "687163"), rank = DisplaySourceRank.RESOLVED)
+                    .copy(canonicalProvider = null, canonicalId = null)
+            ),
+            replace = true
+        )
+
+        repo.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = profileSession,
+            items = listOf(
+                item(stableIds = ProviderIds(tmdb = "687163"), rank = DisplaySourceRank.RESOLVED)
+                    .copy(canonicalProvider = "TMDB", canonicalId = "687163")
+            ),
+            replace = true
+        )
+
+        val after = repo.observeHomeSurface(profileSession.profileId).first()
+        assertEquals("TMDB", after.single().canonicalProvider)
+        assertEquals("687163", after.single().canonicalId)
+    }
 }

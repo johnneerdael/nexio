@@ -13,7 +13,6 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TrailerDisplayState
-import com.nexio.tv.domain.model.identitySignature
 import com.nexio.tv.domain.model.visibleDisplaySignature
 import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
 import javax.inject.Inject
@@ -258,12 +257,12 @@ private fun shouldSuppressSurfaceUpdate(
 ): Boolean = when (surfaceKey) {
     ResolvedDisplaySurfaceRepository.SCREENSAVER_SURFACE_KEY ->
         existing.semanticallySameScreensaverSurface(nextItems)
-    // HOME display stability is semantic, not reference-only. Identity-only
-    // strengthening and timestamp churn may update the authority item without
-    // forcing downstream display emissions.
+    // Publish suppression is authority suppression. Only skip when the stored
+    // item references are unchanged; visible-only suppression belongs at the
+    // observer boundary so non-visible authority state can still update.
     ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
     ResolvedDisplaySurfaceRepository.UNIFIED_WATCHLIST_SURFACE_KEY ->
-        existing.sameVisibleAndIdentitySurface(nextItems)
+        existing.refEqualsByIndex(nextItems)
     else -> false
 }
 
@@ -320,6 +319,7 @@ private val REPOSITORY_DISPLAY_FEATURE_SIGNATURE = DisplayFeatureSignature(
 private fun List<ResolvedDisplayItem>.sameVisibleDisplaySurface(
     other: List<ResolvedDisplayItem>
 ): Boolean {
+    if (refEqualsByIndex(other)) return true
     if (size != other.size) return false
     for (i in indices) {
         val left = this[i]
@@ -331,16 +331,6 @@ private fun List<ResolvedDisplayItem>.sameVisibleDisplaySurface(
         ) {
             return false
         }
-    }
-    return true
-}
-
-private fun List<ResolvedDisplayItem>.sameVisibleAndIdentitySurface(
-    other: List<ResolvedDisplayItem>
-): Boolean {
-    if (!sameVisibleDisplaySurface(other)) return false
-    for (i in indices) {
-        if (this[i].identitySignature() != other[i].identitySignature()) return false
     }
     return true
 }
@@ -398,11 +388,15 @@ private fun applyNonDowngradeMerge(
     // requires this merge to be ID-aware, not slot-only.
     val mergedStableIds = strengthenProviderIds(existing.stableIds, incoming.stableIds)
     val mergedImdbId = incoming.imdbId ?: existing.imdbId
+    val mergedCanonicalProvider = incoming.canonicalProvider ?: existing.canonicalProvider
+    val mergedCanonicalId = incoming.canonicalId ?: existing.canonicalId
 
     if (mergedSlots == existingSlots &&
         incoming.slotDerivedFieldsMatch(existing) &&
         mergedStableIds == existing.stableIds &&
-        mergedImdbId == existing.imdbId
+        mergedImdbId == existing.imdbId &&
+        mergedCanonicalProvider == existing.canonicalProvider &&
+        mergedCanonicalId == existing.canonicalId
     ) {
         return existing
     }
@@ -420,7 +414,9 @@ private fun applyNonDowngradeMerge(
         display = mergedDisplay,
         rating = mergedRating,
         stableIds = mergedStableIds,
-        imdbId = mergedImdbId
+        imdbId = mergedImdbId,
+        canonicalProvider = mergedCanonicalProvider,
+        canonicalId = mergedCanonicalId
     )
 }
 

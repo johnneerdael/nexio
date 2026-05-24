@@ -294,7 +294,7 @@ class ResolvedDisplaySurfaceRepositoryTest {
             )
         )
         runCurrent()
-        assertFalse(
+        assertTrue(
             repository.publishResolvedItems(
                 surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
                 profileSession = activeSession.value,
@@ -306,7 +306,7 @@ class ResolvedDisplaySurfaceRepositoryTest {
         assertEquals(2, emissions.size)
         assertEquals(emptyList<ResolvedDisplayItem>(), emissions[0])
         assertEquals(listOf(first), emissions[1])
-        assertEquals(listOf(first), repository.getSnapshot(profileId = 1))
+        assertEquals(listOf(sameDisplayNewRuntimeState), repository.getSnapshot(profileId = 1))
         collectJob.cancel()
     }
 

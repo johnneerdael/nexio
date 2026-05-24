@@ -1,8 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
-import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
-import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
@@ -272,7 +270,7 @@ class HomeHydrationCoordinator @Inject constructor(
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
         val fields = displayMetadata
             .sanitizeHydratedTitleRating()
-            .mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
+            .withStructuredArtworkLegacyFields()
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -302,31 +300,22 @@ class HomeHydrationCoordinator @Inject constructor(
         )
     }
 
-    private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
-        firstPaintArtwork: ArtworkBundle?
-    ): HomeDisplayMetadata {
-        val hydratedArtwork = artwork?.enforceArtworkTypeBoundaries()
-        val fallbackArtwork = firstPaintArtwork?.enforceArtworkTypeBoundaries()
-        val mergedOrNull = ArtworkBundle(
-            poster = hydratedArtwork?.poster ?: fallbackArtwork?.poster,
-            backdrop = hydratedArtwork?.backdrop ?: fallbackArtwork?.backdrop,
-            logo = hydratedArtwork?.logo ?: fallbackArtwork?.logo,
-            thumbnail = hydratedArtwork?.thumbnail ?: fallbackArtwork?.thumbnail
-        ).enforceArtworkTypeBoundaries().emptyOrNull()
-        return copy(
-            poster = mergedOrNull?.poster.toLegacyArtworkString() ?: poster,
-            backdrop = mergedOrNull?.backdrop.toLegacyArtworkString() ?: backdrop,
-            logo = mergedOrNull?.logo.toLegacyArtworkString() ?: logo,
-            thumbnail = mergedOrNull?.thumbnail.toLegacyArtworkString() ?: thumbnail,
-            artwork = mergedOrNull
-        )
-    }
-
     private fun HomeDisplayMetadata.sanitizeHydratedTitleRating(): HomeDisplayMetadata {
         val cleanRating = RatingValueValidator.sanitizeTitleRating(imdbRating)
         return copy(
             imdbRating = cleanRating,
             ratingSource = ratingSource.takeIf { cleanRating != null }
+        )
+    }
+
+    private fun HomeDisplayMetadata.withStructuredArtworkLegacyFields(): HomeDisplayMetadata {
+        val typed = artwork?.enforceArtworkTypeBoundaries()
+        return copy(
+            poster = typed?.poster.toLegacyArtworkString() ?: poster,
+            backdrop = typed?.backdrop.toLegacyArtworkString() ?: backdrop,
+            logo = typed?.logo.toLegacyArtworkString() ?: logo,
+            thumbnail = typed?.thumbnail.toLegacyArtworkString() ?: thumbnail,
+            artwork = typed
         )
     }
 

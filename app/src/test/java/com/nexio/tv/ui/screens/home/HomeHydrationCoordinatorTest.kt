@@ -296,7 +296,7 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
-    fun `preview logo survives when hydrated logo is absent`() = runTest {
+    fun `hydrated overlay does not persist preview logo when hydrated logo is absent`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
@@ -335,12 +335,12 @@ class HomeHydrationCoordinatorTest {
             onOverlayApplied = { true }
         )
 
-        assertSame(previewLogo, overlaySlot.captured.fields.artwork?.logo)
+        assertNull(overlaySlot.captured.fields.artwork?.logo)
         assertNotNull(overlaySlot.captured.fields.artwork?.backdrop)
     }
 
     @Test
-    fun `hydrated artwork merge keeps typed fallback refs even when legacy strings exist`() = runTest {
+    fun `hydrated artwork keeps only hydrated typed refs even when preview fallback exists`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
@@ -380,8 +380,8 @@ class HomeHydrationCoordinatorTest {
         )
 
         assertSame(hydratedBackdrop, overlaySlot.captured.fields.artwork?.backdrop)
-        assertSame(previewLogo, overlaySlot.captured.fields.artwork?.logo)
-        assertEquals("nexio-artwork://decision/preview-logo", overlaySlot.captured.fields.displayLogo)
+        assertNull(overlaySlot.captured.fields.artwork?.logo)
+        assertEquals("hydrated-logo-url-or-key", overlaySlot.captured.fields.displayLogo)
     }
 
     @Test
