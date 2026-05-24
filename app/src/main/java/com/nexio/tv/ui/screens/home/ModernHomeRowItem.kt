@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ResolvedDisplayItem
@@ -28,7 +29,9 @@ data class ModernHomeRowItem(
     val releaseInfo: String?,
     val tomatoesRating: Double?,
     val hydrationState: HydrationState,
-    override val posterProviderTag: String?
+    override val posterProviderTag: String?,
+    val textSourceRank: DisplaySourceRank = DisplaySourceRank.FIRST_PAINT,
+    val textLanguageTag: String? = null
 ) : RailCardData {
     override val id: String get() = contentId
     override val name: String? get() = title
@@ -51,7 +54,9 @@ data class ModernHomeRowItem(
                 releaseInfo = resolved.display.releaseDate,
                 tomatoesRating = resolved.display.tomatoesRating,
                 hydrationState = resolved.hydrationState,
-                posterProviderTag = resolved.artwork.poster.deriveProviderTag()
+                posterProviderTag = resolved.artwork.poster.deriveProviderTag(),
+                textSourceRank = resolved.textSourceRank(),
+                textLanguageTag = resolved.displayLanguageTag
             )
 
         /**
@@ -84,6 +89,22 @@ data class ModernHomeRowItem(
             posterProviderTag = meta.posterProviderTag
         )
     }
+}
+
+internal fun ResolvedDisplayItem.textSourceRank(): DisplaySourceRank {
+    val slots = slots ?: return when (hydrationState) {
+        HydrationState.PREVIEW_ONLY -> DisplaySourceRank.FIRST_PAINT
+        HydrationState.IDENTITY_READY,
+        HydrationState.HYDRATING,
+        HydrationState.FAILED_USING_PREVIEW -> DisplaySourceRank.FIRST_PAINT
+        HydrationState.CANONICAL_READY,
+        HydrationState.STALE_READY -> DisplaySourceRank.STALE_RESOLVED
+    }
+    var best = slots.title.rank
+    if (slots.overview.rank.ordinal > best.ordinal) best = slots.overview.rank
+    if (slots.genres.rank.ordinal > best.ordinal) best = slots.genres.rank
+    if (slots.releaseInfo.rank.ordinal > best.ordinal) best = slots.releaseInfo.rank
+    return best
 }
 
 internal fun ArtworkDisplayRef?.deriveProviderTag(): String? = when (this) {

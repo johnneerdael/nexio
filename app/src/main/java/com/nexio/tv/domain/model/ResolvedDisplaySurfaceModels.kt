@@ -31,7 +31,8 @@ data class ResolvedDisplayItem(
      * Consumers must tolerate null and fall back to the flat fields above.
      */
     val slots: ResolvedDisplayFieldSlots? = null,
-    val preferredArtworkProviders: Map<ArtworkType, ArtworkProviderId> = emptyMap()
+    val preferredArtworkProviders: Map<ArtworkType, ArtworkProviderId> = emptyMap(),
+    val displayLanguageTag: String? = null
 )
 
 @Immutable
