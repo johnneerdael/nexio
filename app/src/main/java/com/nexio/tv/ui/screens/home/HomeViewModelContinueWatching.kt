@@ -63,6 +63,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val CONTINUE_WATCHING_EPISODE_SUFFIX = Regex(":s\\d+e\\d+$", RegexOption.IGNORE_CASE)
+private const val LEGACY_TEKENFILMS_ID_PREFIX = "tekenfilms:"
 
 /**
  * Pure dedup function: collapses entries that share the same projected identity key into one row.
@@ -241,7 +242,8 @@ internal fun buildContinueWatchingItemsForSnapshot(
                 row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
         }
     }.filter { item ->
-        item !is ContinueWatchingItem.NextUp || item.info.hasAired
+        !item.hasLegacyTekenfilmsContinueWatchingId() &&
+            (item !is ContinueWatchingItem.NextUp || item.info.hasAired)
     }.dedupByCanonicalOrContentKey()
 }
 
@@ -261,8 +263,30 @@ private fun buildRawContinueWatchingItemsForSnapshot(
             is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
         }
     }.filter { item ->
-        item !is ContinueWatchingItem.NextUp || item.info.hasAired
+        !item.hasLegacyTekenfilmsContinueWatchingId() &&
+            (item !is ContinueWatchingItem.NextUp || item.info.hasAired)
     }.dedupByCanonicalOrContentKey()
+}
+
+private fun ContinueWatchingItem.hasLegacyTekenfilmsContinueWatchingId(): Boolean {
+    return legacyTekenfilmsContinueWatchingIds().any { id ->
+        id.trim().startsWith(LEGACY_TEKENFILMS_ID_PREFIX, ignoreCase = true)
+    }
+}
+
+private fun ContinueWatchingItem.legacyTekenfilmsContinueWatchingIds(): List<String> {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> listOfNotNull(
+            progress.contentId,
+            progress.videoId,
+            streamFetchVideoId
+        )
+        is ContinueWatchingItem.NextUp -> listOfNotNull(
+            info.contentId,
+            info.videoId,
+            info.streamFetchVideoId
+        )
+    }
 }
 
 private fun visibleContinueWatchingNextUpItems(snapshot: ContinueWatchingSnapshot): List<TrackingNextUpEntry> {

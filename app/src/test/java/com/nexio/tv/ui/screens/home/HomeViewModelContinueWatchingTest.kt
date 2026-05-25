@@ -152,6 +152,84 @@ class HomeViewModelContinueWatchingTest {
     }
 
     @Test
+    fun `continue watching drops legacy tekenfilms resume ids`() = runTest {
+        val legacyResume = WatchProgress(
+            contentId = "tekenfilms:assepoester-1950",
+            contentType = "movie",
+            name = "Assepoester",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tekenfilms:assepoester-1950",
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 1_000L,
+            duration = 10_000L,
+            lastWatched = 100L
+        )
+        val imdbResume = WatchProgress(
+            contentId = "tt0042332",
+            contentType = "movie",
+            name = "Cinderella",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tt0042332",
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 1_000L,
+            duration = 10_000L,
+            lastWatched = 200L
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(resumeItems = listOf(legacyResume, imdbResume)),
+            nowMs = 1_000L
+        )
+
+        assertEquals(1, items.size)
+        assertEquals("tt0042332", items.single().contentId())
+    }
+
+    @Test
+    fun `continue watching drops legacy tekenfilms next up ids`() = runTest {
+        val legacyNextUp = TrackingNextUpEntry(
+            contentId = "tekenfilms:legacy-show",
+            contentType = "series",
+            name = "Legacy Show",
+            season = 1,
+            episode = 1,
+            episodeTitle = "Episode 1",
+            videoId = "tekenfilms:legacy-show:1:1",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 100L
+        )
+        val imdbNextUp = TrackingNextUpEntry(
+            contentId = "tt1234567",
+            contentType = "series",
+            name = "IMDB Show",
+            season = 1,
+            episode = 1,
+            episodeTitle = "Episode 1",
+            videoId = "tt1234567:1:1",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 200L
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(nextUpItems = listOf(legacyNextUp, imdbNextUp)),
+            nowMs = 1_000L
+        )
+
+        assertEquals(1, items.size)
+        assertEquals("tt1234567", items.single().contentId())
+    }
+
+    @Test
     fun `canonical records render safe fallback resume when raw progress has invalid episode coordinate`() = runTest {
         val rawResume = watchProgress(
             contentId = "tt9794044",
