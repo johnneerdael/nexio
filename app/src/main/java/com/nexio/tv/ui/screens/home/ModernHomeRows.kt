@@ -130,11 +130,10 @@ internal fun resolveModernCarouselCardImageUrl(
  * 2. Resolved-authority legacy URL on [item.heroPreview] — same provenance,
  *    just stringly-typed. Used when the resolved row never produced a typed
  *    ref (cold-start restore items pre-Phase-3.7).
- * 3. `metaPreview.artwork.*` typed ref — addon-side artwork that bypasses
- *    the merge boundary; last resort only, so it cannot win over a resolved
- *    upgrade.
- * 4. `metaPreview.poster` / `metaPreview.background` legacy URL — final
- *    fallback for items where nothing resolved.
+ * There is intentionally no direct `MetaPreview` fallback here. First paint
+ * must enter the resolved display authority before it can render, otherwise raw
+ * addon metadata can bypass the non-downgrade merge and reintroduce poster /
+ * backdrop popping.
  *
  * Inverting this priority away from `metaPreview.artwork.*` is what stops
  * the RPDB↔addon popping: previously the addon's `metaPreview.artwork.poster`
@@ -144,7 +143,6 @@ internal fun resolveModernCarouselCardImageUrl(
  */
 internal fun resolveModernCarouselCardArtworkModel(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
@@ -169,17 +167,7 @@ internal fun resolveModernCarouselCardArtworkModel(
         imageType = resolvedLegacyType
     )
     if (resolvedLegacyModel != null) return resolvedLegacyModel
-
-    val artwork = metaPreview.artwork
-    val metaTypedModel = if (useBackdrop) {
-        artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
-    } else {
-        artwork?.poster.toCoilModelOrNull()
-    }
-    if (metaTypedModel != null) return metaTypedModel
-
-    val metaLegacyUrl = if (useBackdrop) fallbackModel else metaPreview.poster
-    return metaLegacyUrl.toLegacyArtworkCoilModelOrNull(
+    return fallbackModel.toLegacyArtworkCoilModelOrNull(
         ownerKey = "${item.key}:${resolvedLegacyType.name.lowercase()}",
         imageType = resolvedLegacyType
     )
@@ -187,7 +175,6 @@ internal fun resolveModernCarouselCardArtworkModel(
 
 internal fun resolveModernCarouselCardFallbackArtworkModel(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean
@@ -197,15 +184,10 @@ internal fun resolveModernCarouselCardFallbackArtworkModel(
     val legacyFallback = if (useBackdrop) {
         firstNonBlank(
             item.heroPreview.backdrop,
-            item.heroPreview.poster,
-            metaPreview.background,
-            metaPreview.poster
+            item.heroPreview.poster
         )
     } else {
-        firstNonBlank(
-            item.heroPreview.poster,
-            metaPreview.poster
-        )
+        item.heroPreview.poster
     }
     return legacyFallback.toLegacyArtworkCoilModelOrNull(
         ownerKey = "${item.key}:fallback:${fallbackType.name.lowercase()}",
@@ -562,10 +544,9 @@ internal fun ModernRowSection(
                 // expected for CW items (different keyspace) and for transient races
                 // where the MetaPreview isn't yet attached. The visible-render path
                 // tolerates the miss identically (return@itemsIndexed).
-                val meta = metaByItemKey[item.itemKey] ?: return
+                if (!metaByItemKey.containsKey(item.itemKey)) return
                 val model = resolveModernCarouselCardArtworkModel(
                     item = item,
-                    metaPreview = meta,
                     useLandscapePosters = useLandscapePosters,
                     focusedPosterBackdropExpandEnabled = false,
                     isBackdropExpanded = false
@@ -915,20 +896,18 @@ private fun ModernCarouselCard(
     val requestHeightPx = remember(cardHeight, density) {
         with(density) { cardHeight.roundToPx() }
     }
-    val coilModel = remember(item, metaPreview, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+    val coilModel = remember(item, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
         resolveModernCarouselCardArtworkModel(
             item = item,
-            metaPreview = metaPreview,
             useLandscapePosters = useLandscapePosters,
             focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
             isBackdropExpanded = isBackdropExpanded,
             fallbackModel = imageUrl
         )
     }
-    val fallbackArtworkModel = remember(item, metaPreview, useLandscapePosters, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+    val fallbackArtworkModel = remember(item, useLandscapePosters, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
         resolveModernCarouselCardFallbackArtworkModel(
             item = item,
-            metaPreview = metaPreview,
             useLandscapePosters = useLandscapePosters,
             focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
             isBackdropExpanded = isBackdropExpanded
@@ -960,8 +939,7 @@ private fun ModernCarouselCard(
     }
     val effectiveLogoUrl = frozenLogoUrl.value
     val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, metaPreview.id) {
-        (metaPreview.artwork?.logo.toCoilModelOrNull()
-            ?: effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO))?.let {
+        effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO)?.let {
             val modelKey = it.toString()
             ImageRequest.Builder(context)
                 .data(it)
