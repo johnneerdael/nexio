@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
@@ -85,6 +86,19 @@ private data class SyntheticCatalogOrderGroup(
     val orderKey: String,
     val rows: List<CatalogRow>
 )
+
+internal fun projectCatalogRowForHomeDisplay(
+    row: CatalogRow,
+    currentLayout: HomeLayout
+): CatalogRow {
+    val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN &&
+        (row.supportsSkip || TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row))
+    return if (row.items.size > 25 && !shouldKeepFullRowInModern) {
+        row.copy(items = row.items.take(25))
+    } else {
+        row
+    }
+}
 
 internal fun resolveEffectiveHomeOrderForCatalogRails(
     configuredRails: List<HomeCatalogRail>,
@@ -3052,21 +3066,20 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
 
         val nextTruncatedCache = mutableMapOf<String, HomeViewModel.TruncatedRowCacheEntry>()
         val computedDisplayRows = effectiveOrderedRows.map { row ->
-            val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN && row.supportsSkip
-            if (row.items.size > 25 && !shouldKeepFullRowInModern) {
+            val projectedRow = projectCatalogRowForHomeDisplay(row, currentLayout)
+            if (projectedRow !== row) {
                 val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
                 val cachedEntry = previousTruncatedRowCache[key]
                 if (cachedEntry != null && cachedEntry.sourceRow === row) {
                     nextTruncatedCache[key] = cachedEntry
                     cachedEntry.truncatedRow
                 } else {
-                    val truncatedRow = row.copy(items = row.items.take(25))
                     val nextEntry = HomeViewModel.TruncatedRowCacheEntry(
                         sourceRow = row,
-                        truncatedRow = truncatedRow
+                        truncatedRow = projectedRow
                     )
                     nextTruncatedCache[key] = nextEntry
-                    truncatedRow
+                    projectedRow
                 }
             } else {
                 row
