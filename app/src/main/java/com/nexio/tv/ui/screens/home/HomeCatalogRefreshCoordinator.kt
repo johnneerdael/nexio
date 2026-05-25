@@ -6,6 +6,7 @@ import coil.imageLoader
 import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.emptyOrNull
@@ -133,11 +134,16 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog: (String, String?) -> Unit
     ): List<CatalogRow> {
         if (rows.isEmpty()) return rows
+        if (rows.all { row -> TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row) }) return rows
         val artworkProviderSettings = posterRatingsUrlResolver.currentSettings()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val hydratedRows = ArrayList<CatalogRow>(rows.size)
         for (rowIndex in rows.indices) {
             val row = rows[rowIndex]
+            if (TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row)) {
+                hydratedRows += row
+                continue
+            }
             val rowKey = homeCatalogGlobalKey(row)
             val oldItems = existingRowsByKey[rowKey]?.items.orEmpty()
             val diff = diffCatalogItems(oldItems = oldItems, newItems = row.items)

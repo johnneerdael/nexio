@@ -73,6 +73,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -1397,6 +1398,39 @@ class HomeCatalogRefreshCoordinatorTest {
             )
         }
         verify(exactly = 0) { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) }
+    }
+
+    @Test
+    fun `home refresh leaves tekenfilms rows untouched without artwork hydration`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tekenfilms:movie-1", poster = "https://tekenfilms.nexioapp.org/poster.jpg")
+        val row = CatalogRow(
+            addonId = "org.nexio.tekenfilms",
+            addonName = "Tekenfilms",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            catalogId = "tekenfilms_nl",
+            catalogName = "Tekenfilms NL",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertSame(row, hydratedRows.single())
+        verify(exactly = 0) { posterRatingsUrlResolver.applyArtworkRef(any(), any()) }
+        coVerify(exactly = 0) { posterRatingsUrlResolver.currentSettings() }
     }
 
     @Test
