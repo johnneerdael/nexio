@@ -60,6 +60,55 @@ class ModernHomePresentationTest {
     }
 
     @Test
+    fun `tekenfilms presentation fills missing resolved items from first paint source row`() {
+        val cache = ModernCarouselRowBuildCache()
+        val items = (0 until 40).map { index -> meta("tekenfilms:movie-$index") }
+        val row = catalogRow("tekenfilms_nl", "Tekenfilms", ContentType.MOVIE, items).copy(
+            addonId = "org.nexio.tekenfilms",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org"
+        )
+        val truncatedResolvedRail = ResolvedRailRow(
+            catalogId = row.catalogId,
+            title = row.catalogName,
+            items = items.take(25).map { meta -> ModernHomeRowItem.from(syntheticResolvedDisplayItem(meta)) }
+        )
+
+        val state = buildModernHomePresentation(
+            input = presentationInput(
+                catalogRows = listOf(row),
+                resolvedRailRows = listOf(truncatedResolvedRail)
+            ),
+            cache = cache
+        )
+
+        val renderedRow = state.rows.single()
+        assertEquals(40, renderedRow.items.size)
+        assertEquals("tekenfilms:movie-39", (renderedRow.items.last().payload as ModernPayload.Catalog).itemId)
+    }
+
+    @Test
+    fun `ordinary presentation does not fill missing resolved items from source row`() {
+        val cache = ModernCarouselRowBuildCache()
+        val items = (0 until 40).map { index -> meta("movie-$index") }
+        val row = catalogRow("popular", "Popular", ContentType.MOVIE, items)
+        val truncatedResolvedRail = ResolvedRailRow(
+            catalogId = row.catalogId,
+            title = row.catalogName,
+            items = items.take(25).map { meta -> ModernHomeRowItem.from(syntheticResolvedDisplayItem(meta)) }
+        )
+
+        val state = buildModernHomePresentation(
+            input = presentationInput(
+                catalogRows = listOf(row),
+                resolvedRailRows = listOf(truncatedResolvedRail)
+            ),
+            cache = cache
+        )
+
+        assertEquals(25, state.rows.single().items.size)
+    }
+
+    @Test
     fun `removes stale catalog cache entries when row disappears`() {
         val cache = ModernCarouselRowBuildCache()
         buildModernHomePresentation(
@@ -262,6 +311,7 @@ class ModernHomePresentationTest {
      */
     private fun presentationInput(
         catalogRows: List<CatalogRow>,
+        resolvedRailRows: List<ResolvedRailRow>? = null,
         continueWatchingItems: List<ContinueWatchingResolvedDisplayItem> = emptyList(),
         useLandscapePosters: Boolean = false,
         showCatalogTypeSuffix: Boolean = true,
@@ -271,17 +321,20 @@ class ModernHomePresentationTest {
     ): ModernHomePresentationInput {
         // Mirror catalog rows into resolved rails. Deduplicate on catalogId to match the
         // visible-rows behavior that runs upstream of the resolved publisher in production.
-        val resolvedByCatalogId = LinkedHashMap<String, ResolvedRailRow>()
-        catalogRows.forEach { row ->
-            if (resolvedByCatalogId.containsKey(row.catalogId)) return@forEach
-            val resolvedItems = row.items.map { meta ->
-                ModernHomeRowItem.from(syntheticResolvedDisplayItem(meta))
+        val effectiveResolvedRailRows = resolvedRailRows ?: run {
+            val resolvedByCatalogId = LinkedHashMap<String, ResolvedRailRow>()
+            catalogRows.forEach { row ->
+                if (resolvedByCatalogId.containsKey(row.catalogId)) return@forEach
+                val resolvedItems = row.items.map { meta ->
+                    ModernHomeRowItem.from(syntheticResolvedDisplayItem(meta))
+                }
+                resolvedByCatalogId[row.catalogId] = ResolvedRailRow(
+                    catalogId = row.catalogId,
+                    title = row.catalogName,
+                    items = resolvedItems
+                )
             }
-            resolvedByCatalogId[row.catalogId] = ResolvedRailRow(
-                catalogId = row.catalogId,
-                title = row.catalogName,
-                items = resolvedItems
-            )
+            resolvedByCatalogId.values.toList()
         }
         // Plan B Task 5e-pre — the surface-level MetaPreview lookup is now an
         // explicit input to the build function (produced by HomeViewModel at the
@@ -295,7 +348,7 @@ class ModernHomePresentationTest {
         }
         return ModernHomePresentationInput(
             catalogRows = catalogRows,
-            resolvedRailRows = resolvedByCatalogId.values.toList(),
+            resolvedRailRows = effectiveResolvedRailRows,
             continueWatchingItems = continueWatchingItems,
             metaByItemKey = metaByItemKey,
             useLandscapePosters = useLandscapePosters,

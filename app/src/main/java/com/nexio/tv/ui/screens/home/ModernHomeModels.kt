@@ -277,6 +277,7 @@ internal data class ModernHomeContentState(
 internal data class ModernCatalogRowBuildCacheEntry(
     val source: CatalogRow,
     val resolvedRail: ResolvedRailRow,
+    val presentationItemCount: Int,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
     val mappedRow: HeroCarouselRow

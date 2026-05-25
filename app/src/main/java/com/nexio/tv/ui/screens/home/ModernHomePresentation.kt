@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.homeDisplayItemKey
 
 internal fun buildModernHomePresentation(
     input: ModernHomePresentationInput,
@@ -79,6 +81,10 @@ internal fun buildModernHomePresentation(
             // Surface-level MetaPreview lookup is already populated by the
             // producer (input.metaByItemKey); no per-rail population pass here.
 
+            val presentationItems = presentationRailItems(
+                sourceRow = sourceRow,
+                resolvedRail = resolvedRail
+            )
             val cached = cache.catalogRows[rowKey]
             // Resolved authority gates cache reuse: the rail row instance returned by
             // ResolvedDisplayProjectionCache is stable when content is unchanged, so a
@@ -90,7 +96,8 @@ internal fun buildModernHomePresentation(
                     cached.source === sourceRow &&
                     cached.useLandscapePosters == input.useLandscapePosters &&
                     cached.showCatalogTypeSuffix == input.showCatalogTypeSuffix &&
-                    cached.resolvedRail === resolvedRail
+                    cached.resolvedRail === resolvedRail &&
+                    cached.presentationItemCount == presentationItems.size
 
             val mappedRow = if (canReuseMappedRow) {
                 val cachedMappedRow = checkNotNull(cached).mappedRow
@@ -119,7 +126,7 @@ internal fun buildModernHomePresentation(
                     supportsSkip = sourceRow.supportsSkip,
                     hasMore = sourceRow.hasMore,
                     isLoading = sourceRow.isLoading,
-                    items = resolvedRail.items.map { resolvedItem ->
+                    items = presentationItems.map { resolvedItem ->
                         val metaPreview = metaByItemKey[resolvedItem.itemKey]
                         val itemIdForKey = metaPreview?.id ?: resolvedItem.contentId
                         val occurrence = rowItemOccurrenceCounts.getOrDefault(itemIdForKey, 0)
@@ -161,6 +168,7 @@ internal fun buildModernHomePresentation(
             cache.catalogRows[rowKey] = ModernCatalogRowBuildCacheEntry(
                 source = sourceRow,
                 resolvedRail = resolvedRail,
+                presentationItemCount = presentationItems.size,
                 useLandscapePosters = input.useLandscapePosters,
                 showCatalogTypeSuffix = input.showCatalogTypeSuffix,
                 mappedRow = mappedRow
@@ -184,3 +192,28 @@ internal fun buildModernHomePresentation(
 // alias keeps the buildModernHomePresentation body readable without re-importing the
 // already-resolved type from buildCatalogItem's signature.
 private typealias CatalogRow_ = com.nexio.tv.domain.model.CatalogRow
+
+private fun presentationRailItems(
+    sourceRow: CatalogRow_,
+    resolvedRail: ResolvedRailRow
+): List<ModernHomeRowItem> {
+    if (!TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(sourceRow)) {
+        return resolvedRail.items
+    }
+    if (sourceRow.items.size <= resolvedRail.items.size) {
+        return resolvedRail.items
+    }
+
+    val resolvedByItemKey = HashMap<String, ModernHomeRowItem>(resolvedRail.items.size)
+    for (i in resolvedRail.items.indices) {
+        val resolved = resolvedRail.items[i]
+        resolvedByItemKey[resolved.itemKey] = resolved
+    }
+    val out = ArrayList<ModernHomeRowItem>(sourceRow.items.size)
+    for (i in sourceRow.items.indices) {
+        val meta = sourceRow.items[i]
+        val itemKey = homeDisplayItemKey(meta.apiType, meta.id)
+        out += resolvedByItemKey[itemKey] ?: ModernHomeRowItem.fromMetaPreview(meta)
+    }
+    return out
+}
