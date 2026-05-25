@@ -104,6 +104,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
 private const val POSTER_PREFETCH_DISTANCE = 8
 
+private fun ModernCarouselItem.artworkCacheOwnerId(): String = when (val payload = payload) {
+    is ModernPayload.Catalog -> payload.itemId
+    is ModernPayload.ContinueWatching -> itemKey
+}
+
 internal fun resolveModernCarouselCardImageUrl(
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
@@ -255,7 +260,7 @@ private fun ModernContinueWatchingRowItem(
 private fun ModernCatalogRowItem(
     rowKey: String,
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
+    metaPreview: MetaPreview?,
     payload: ModernPayload.Catalog,
     requester: FocusRequester,
     useLandscapePosters: Boolean,
@@ -302,7 +307,7 @@ private fun ModernCatalogRowItem(
         if (!isCardFocused || focusEventId != targetEventId) return@LaunchedEffect
 
         latestOnFocused()
-        latestOnItemFocus(metaPreview)
+        metaPreview?.let(latestOnItemFocus)
         latestOnPreloadAdjacentItem()
         latestOnCatalogSelectionFocused(
             FocusedCatalogSelection(
@@ -315,7 +320,6 @@ private fun ModernCatalogRowItem(
 
     ModernCarouselCard(
         item = item,
-        metaPreview = metaPreview,
         useLandscapePosters = useLandscapePosters,
         showLabels = showLabels,
         cardCornerRadius = posterCardCornerRadius,
@@ -540,11 +544,6 @@ internal fun ModernRowSection(
             val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
 
             fun enqueueIfNeeded(item: ModernCarouselItem) {
-                // Skip prefetch when the surface metaByItemKey lookup misses; this is
-                // expected for CW items (different keyspace) and for transient races
-                // where the MetaPreview isn't yet attached. The visible-render path
-                // tolerates the miss identically (return@itemsIndexed).
-                if (!metaByItemKey.containsKey(item.itemKey)) return
                 val model = resolveModernCarouselCardArtworkModel(
                     item = item,
                     useLandscapePosters = useLandscapePosters,
@@ -692,10 +691,12 @@ internal fun ModernRowSection(
                         }
 
                         is ModernPayload.Catalog -> {
-                            val metaPreview = metaByItemKey[item.itemKey] ?: return@itemsIndexed
+                            val metaPreview = metaByItemKey[item.itemKey]
                             val nextCatalogItem = row.items.getOrNull(index + 1)
                                 ?.let { metaByItemKey[it.itemKey] }
-                            val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
+                            val isWatched = remember(metaPreview) {
+                                metaPreview?.let(isCatalogItemWatched) ?: false
+                            }
                             val playTrailerInExpandedCard =
                                 focusedPosterBackdropTrailerPlaybackTarget ==
                                     FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
@@ -768,7 +769,7 @@ internal fun ModernRowSection(
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onLongPress = remember(metaPreview, payload.addonBaseUrl) {
-                                    { onCatalogItemLongPress(metaPreview, payload.addonBaseUrl) }
+                                    { metaPreview?.let { onCatalogItemLongPress(it, payload.addonBaseUrl) } }
                                 },
                                 canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
                                 fullscreenTrailerActive = fullscreenTrailerActive,
@@ -816,7 +817,6 @@ private fun ModernCatalogLoadingPlaceholder(
 @Composable
 private fun ModernCarouselCard(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     showLabels: Boolean,
     cardCornerRadius: Dp,
@@ -913,13 +913,15 @@ private fun ModernCarouselCard(
             isBackdropExpanded = isBackdropExpanded
         )
     }
-    val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, metaPreview.id, metaPreview.posterProviderTag) {
+    val artworkOwnerId = remember(item) { item.artworkCacheOwnerId() }
+    val posterProviderTag = remember(item.posterRef) { item.posterRef.deriveProviderTag() }
+    val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, artworkOwnerId, posterProviderTag) {
         coilModel?.let { model ->
             val modelKey = model.toString()
             val diskKey = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-                ArtworkImageCacheKeys.backdrop(metaPreview.id, modelKey)
+                ArtworkImageCacheKeys.backdrop(artworkOwnerId, modelKey)
             } else {
-                ArtworkImageCacheKeys.poster(metaPreview.id, metaPreview.posterProviderTag, modelKey)
+                ArtworkImageCacheKeys.poster(artworkOwnerId, posterProviderTag, modelKey)
             }
             ImageRequest.Builder(context)
                 .data(model)
@@ -938,14 +940,14 @@ private fun ModernCarouselCard(
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
     val effectiveLogoUrl = frozenLogoUrl.value
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, metaPreview.id) {
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, artworkOwnerId) {
         effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO)?.let {
             val modelKey = it.toString()
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${modelKey}_${maxLogoWidthPx}x${logoHeightPx}")
-                .diskCacheKey(ArtworkImageCacheKeys.logo(metaPreview.id, modelKey))
+                .diskCacheKey(ArtworkImageCacheKeys.logo(artworkOwnerId, modelKey))
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }
