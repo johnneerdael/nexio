@@ -493,36 +493,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 }
             }
             if (!audioFfmpegPreferredStreamUrls.contains(url) &&
-                shouldRunDeterministicAudioFfmpegProbe(
+                shouldUseDeterministicAudioFfmpegRouting(
                     url = url,
                     ffmpegAvailable = FfmpegLibrary.isAvailable()
                 )
             ) {
-                val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(addonBaseUrl)
-                val cached = PlayProbeCache.get(url, headers)
-                val metadata = cached ?: withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
-                    FfmpegStreamMetadataProbe.probe(
-                        url = url,
-                        headers = headers,
-                        addonHost = addonHost
-                    )?.also { PlayProbeCache.put(url, headers, it) }
-                }
-                if (shouldPreferFfmpegAudioFromProbe(
-                        ffmpegAvailable = FfmpegLibrary.isAvailable(),
-                        metadata = metadata
-                    )
-                ) {
-                    audioFfmpegPreferredStreamUrls.add(url)
-                    safeAudioForcedStreamUrls.remove(url)
-                    audioDisabledForcedStreamUrls.remove(url)
-                    Log.i(
-                        PlayerRuntimeController.TAG,
-                        "AUDIO_RENDERER: deterministic FFmpeg audio preference " +
-                            "reason=legacy_avi_mp3 " +
-                            "format=${metadata?.formatName ?: "unknown"} " +
-                            "host=${url.safeHost()}"
-                    )
-                }
+                audioFfmpegPreferredStreamUrls.add(url)
+                safeAudioForcedStreamUrls.remove(url)
+                audioDisabledForcedStreamUrls.remove(url)
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "AUDIO_RENDERER: deterministic FFmpeg audio preference " +
+                        "reason=legacy_avi_container " +
+                        "host=${url.safeHost()}"
+                )
             }
             val safeAudioModeEnabled =
                 !kodiCustomAudioSinkEnabled &&
@@ -1417,7 +1401,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
                                     return
                                 }
-                                if (!isSafeAudioModeActiveForCurrentPlayback) {
+                                if (shouldRetryStuckPlaybackWithSafeAudio(
+                                        safeAudioModeActive =
+                                            isSafeAudioModeActiveForCurrentPlayback,
+                                        audioFfmpegFallbackActive =
+                                            isAudioFfmpegFallbackActiveForCurrentPlayback,
+                                        audioDisabledForStream = isAudioDisabledForCurrentPlayback
+                                    )
+                                ) {
                                     Log.w(
                                         PlayerRuntimeController.TAG,
                                         "Stuck player detected, retrying with safe audio mode " +
@@ -2141,11 +2132,32 @@ internal fun shouldRetryStuckPlaybackWithAudioFfmpeg(
     return ffmpegAvailable && !audioFfmpegFallbackActive && !audioDisabledForStream
 }
 
+internal fun shouldRetryStuckPlaybackWithSafeAudio(
+    safeAudioModeActive: Boolean,
+    audioFfmpegFallbackActive: Boolean,
+    audioDisabledForStream: Boolean
+): Boolean {
+    return !safeAudioModeActive && !audioFfmpegFallbackActive && !audioDisabledForStream
+}
+
 internal fun shouldRunDeterministicAudioFfmpegProbe(
     url: String,
     ffmpegAvailable: Boolean
 ): Boolean {
-    if (!ffmpegAvailable) return false
+    return shouldUseDeterministicAudioFfmpegRouting(
+        url = url,
+        ffmpegAvailable = ffmpegAvailable
+    )
+}
+
+internal fun shouldUseDeterministicAudioFfmpegRouting(
+    url: String,
+    ffmpegAvailable: Boolean
+): Boolean {
+    return ffmpegAvailable && isLegacyAviContainerUrl(url)
+}
+
+private fun isLegacyAviContainerUrl(url: String): Boolean {
     val path = runCatching { Uri.parse(url).path.orEmpty() }
         .getOrDefault(url.substringBefore('?'))
         .lowercase(Locale.US)

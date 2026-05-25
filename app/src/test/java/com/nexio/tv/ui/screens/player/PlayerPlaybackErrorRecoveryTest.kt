@@ -126,6 +126,28 @@ class PlayerPlaybackErrorRecoveryTest {
     }
 
     @Test
+    fun `stuck playback does not retry safe audio after ffmpeg audio is active`() {
+        assertFalse(
+            shouldRetryStuckPlaybackWithSafeAudio(
+                safeAudioModeActive = false,
+                audioFfmpegFallbackActive = true,
+                audioDisabledForStream = false
+            )
+        )
+    }
+
+    @Test
+    fun `stuck playback can retry safe audio before ffmpeg audio is active`() {
+        assertTrue(
+            shouldRetryStuckPlaybackWithSafeAudio(
+                safeAudioModeActive = false,
+                audioFfmpegFallbackActive = false,
+                audioDisabledForStream = false
+            )
+        )
+    }
+
+    @Test
     fun `stuck playback skips ffmpeg audio when audio is already disabled`() {
         assertFalse(
             shouldRetryStuckPlaybackWithAudioFfmpeg(
@@ -140,6 +162,16 @@ class PlayerPlaybackErrorRecoveryTest {
     fun `avi urls run deterministic ffmpeg audio probe when ffmpeg is available`() {
         assertTrue(
             shouldRunDeterministicAudioFfmpegProbe(
+                url = "https://tekenfilms.nexioapp.org/nl/Atlantis%20de%20verzonken%20stad.avi",
+                ffmpegAvailable = true
+            )
+        )
+    }
+
+    @Test
+    fun `avi urls use deterministic ffmpeg audio routing without startup probe`() {
+        assertTrue(
+            shouldUseDeterministicAudioFfmpegRouting(
                 url = "https://tekenfilms.nexioapp.org/nl/Atlantis%20de%20verzonken%20stad.avi",
                 ffmpegAvailable = true
             )
