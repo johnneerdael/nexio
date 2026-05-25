@@ -36,6 +36,13 @@ data class ResolvedDisplayItem(
 )
 
 @Immutable
+data class DisplayBundle(
+    val canonicalKey: String,
+    val aliases: Set<String>,
+    val item: ResolvedDisplayItem
+)
+
+@Immutable
 data class ResolvedDisplayFields(
     val title: String?,
     val originalTitle: String?,

@@ -150,6 +150,281 @@ class ResolvedDisplaySurfaceRepositoryTest {
     }
 
     @Test
+    fun `publishResolvedItems merges alias rows into one canonical authority item`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val tmdbRailItem = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "First paint title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val imdbRailItem = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Hydrated title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        val published = repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(tmdbRailItem, imdbRailItem)
+        )
+
+        assertTrue(published)
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Hydrated title", snapshot.single().display.title)
+        assertEquals("tt0137523", snapshot.single().stableIds.imdb)
+        assertEquals(snapshot.single(), repository.observeItem(profileId = 1, itemKey = "movie:imdb:tt0137523").first())
+    }
+
+    @Test
+    fun `incremental publish strengthens an alias match instead of appending duplicate row`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val preview = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val hydratedAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Canonical title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(preview)
+        )
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(hydratedAlias),
+            replace = false
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Canonical title", snapshot.single().display.title)
+        assertEquals("tt0137523", snapshot.single().stableIds.imdb)
+    }
+
+    @Test
+    fun `incremental alias update preserves existing surface position`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val first = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val second = resolvedItem(
+            itemKey = "movie:tmdb:551",
+            title = "Second title"
+        ).copy(
+            contentId = "tmdb:551",
+            parentId = "tmdb:551",
+            canonicalId = "551",
+            imdbId = "tt-other",
+            stableIds = ProviderIds(tmdb = "551", imdb = "tt-other")
+        )
+        val firstAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Canonical title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(first, second))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(firstAlias),
+            replace = false
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(listOf("movie:tmdb:550", "movie:tmdb:551"), snapshot.map { it.itemKey })
+        assertEquals("Canonical title", snapshot[0].display.title)
+        assertEquals("Second title", snapshot[1].display.title)
+    }
+
+    @Test
+    fun `replace alias update preserves existing authority key`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val preview = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val hydratedAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Canonical title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(preview))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(hydratedAlias),
+            replace = true
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Canonical title", snapshot.single().display.title)
+    }
+
+    @Test
+    fun `replace with competing aliases keeps hydrated display`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val preview = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val hydratedAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Canonical title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(preview))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(preview, hydratedAlias),
+            replace = true
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Canonical title", snapshot.single().display.title)
+        assertEquals("tt0137523", snapshot.single().stableIds.imdb)
+    }
+
+    @Test
+    fun `replace with competing aliases keeps hydrated display when alias arrives first`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val preview = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Preview title"
+        ).copy(stableIds = ProviderIds(tmdb = "550"), imdbId = null)
+        val hydratedAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Canonical title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(preview))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(hydratedAlias, preview),
+            replace = true
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Canonical title", snapshot.single().display.title)
+        assertEquals("tt0137523", snapshot.single().stableIds.imdb)
+    }
+
+    @Test
+    fun `restoreFromDisk skips existing aliases without overwriting memory`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val memoryItem = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Memory title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+        val diskAlias = resolvedItem(
+            itemKey = "movie:imdb:tt0137523",
+            title = "Stale disk title"
+        ).copy(stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(memoryItem))
+        repository.restoreFromDisk(mapOf(diskAlias.itemKey to diskAlias), profileId = 1)
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("movie:tmdb:550", snapshot.single().itemKey)
+        assertEquals("Memory title", snapshot.single().display.title)
+    }
+
+    @Test
+    fun `bare content ids do not alias across providers`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val tmdbBare = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "TMDB title"
+        ).copy(
+            contentId = "550",
+            parentId = "550",
+            canonicalProvider = null,
+            canonicalId = null,
+            imdbId = null,
+            stableIds = ProviderIds()
+        )
+        val traktBare = resolvedItem(
+            itemKey = "movie:trakt:550",
+            title = "Trakt title"
+        ).copy(
+            contentId = "550",
+            parentId = "550",
+            canonicalProvider = null,
+            canonicalId = null,
+            imdbId = null,
+            stableIds = ProviderIds()
+        )
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(tmdbBare, traktBare))
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(2, snapshot.size)
+        assertEquals(listOf("TMDB title", "Trakt title"), snapshot.map { it.display.title })
+    }
+
+    @Test
+    fun `stable simkl id participates in authority aliases`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val tmdbItem = resolvedItem(
+            itemKey = "series:tmdb:94997",
+            title = "TMDB title"
+        ).copy(
+            itemType = ContentType.SERIES,
+            mediaKind = MetadataMediaKind.SERIES,
+            contentId = "tmdb:tv:94997",
+            parentId = "tmdb:tv:94997",
+            stableIds = ProviderIds(tmdb = "94997", simkl = "5045")
+        )
+        val simklAlias = resolvedItem(
+            itemKey = "series:simkl:5045",
+            title = "Simkl title"
+        ).copy(
+            itemType = ContentType.SERIES,
+            mediaKind = MetadataMediaKind.SERIES,
+            contentId = "simkl:5045",
+            parentId = "simkl:5045",
+            stableIds = ProviderIds(simkl = "5045")
+        )
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(tmdbItem))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(simklAlias),
+            replace = false
+        )
+
+        val snapshot = repository.getSnapshot(profileId = 1)
+        assertEquals(1, snapshot.size)
+        assertEquals("series:tmdb:94997", snapshot.single().itemKey)
+        assertEquals("Simkl title", snapshot.single().display.title)
+        assertEquals("5045", snapshot.single().stableIds.simkl)
+        assertEquals(snapshot.single(), repository.observeItem(profileId = 1, itemKey = "tv:simkl:5045").first())
+    }
+
+    @Test
     fun `home and screensaver surfaces keep independent snapshots for same profile`() = runTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
@@ -368,7 +643,13 @@ class ResolvedDisplaySurfaceRepositoryTest {
             profileSession = activeSession.value,
             items = listOf(
                 expectedItem,
-                resolvedItem(itemKey = "movie:tmdb:551", title = "Other Title")
+                resolvedItem(itemKey = "movie:tmdb:551", title = "Other Title").copy(
+                    contentId = "tmdb:551",
+                    parentId = "tmdb:551",
+                    canonicalId = "551",
+                    imdbId = "tt-other",
+                    stableIds = ProviderIds(tmdb = "551", imdb = "tt-other")
+                )
             )
         )
 

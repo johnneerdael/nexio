@@ -8,7 +8,9 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.domain.model.DisplayBundle
 import com.nexio.tv.domain.model.DisplayFeatureSignature
+import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
@@ -57,7 +59,7 @@ class ResolvedDisplaySurfaceRepository(
             .distinctUntilChanged { old, new -> shouldSuppressSurfaceEmission(surfaceKey, old, new) }
 
     fun observeItem(profileId: Int, itemKey: String): Flow<ResolvedDisplayItem?> =
-        observeHomeSurface(profileId).map { items -> items.firstOrNull { it.itemKey == itemKey } }
+        observeHomeSurface(profileId).map { items -> items.firstOrNull { it.matchesAuthorityAlias(itemKey) } }
 
     suspend fun getSnapshot(profileId: Int): List<ResolvedDisplayItem> =
         getSnapshot(HOME_SURFACE_KEY, profileId)
@@ -96,7 +98,7 @@ class ResolvedDisplaySurfaceRepository(
             val currentSurface = current[surfaceKey].orEmpty()
             val existing = currentSurface[active.profileId].orEmpty()
             val merged = mergeIncrementalItems(existing, items, traceEvents)
-            val nextItems = merged.distinctBy { item -> item.itemKey }
+            val nextItems = merged.toAuthorityProjection()
             if (shouldSuppressSurfaceUpdate(surfaceKey, existing, nextItems)) {
                 current
             } else {
@@ -138,7 +140,7 @@ class ResolvedDisplaySurfaceRepository(
                 applyNonDowngradeMergeForReplace(existingList, items, traceEvents)
             } else {
                 mergeIncrementalItems(existingList, items, traceEvents)
-            }.distinctBy { item -> item.itemKey }
+            }.toAuthorityProjection()
             if (shouldSuppressSurfaceUpdate(surfaceKey, existingList, nextItems)) {
                 current
             } else {
@@ -167,10 +169,17 @@ class ResolvedDisplaySurfaceRepository(
         surfaces.update { current ->
             val currentSurface = current[HOME_SURFACE_KEY].orEmpty()
             val existing = currentSurface[profileId].orEmpty()
-            val existingKeys = existing.map { it.itemKey }.toSet()
-            val newItems = itemsList.filter { it.itemKey !in existingKeys }
+            val existingAliases = HashSet<String>(existing.size * 2)
+            for (i in existing.indices) existingAliases += existing[i].toDisplayBundle().aliases
+            val newItems = ArrayList<ResolvedDisplayItem>(itemsList.size)
+            for (i in itemsList.indices) {
+                val item = itemsList[i]
+                if (item.toDisplayBundle().aliases.none { alias -> alias in existingAliases }) {
+                    newItems += item
+                }
+            }
             if (newItems.isEmpty()) return@update current
-            val merged = existing + newItems
+            val merged = (existing + newItems).toAuthorityProjection()
             current + (HOME_SURFACE_KEY to (currentSurface + (profileId to merged)))
         }
     }
@@ -184,7 +193,7 @@ class ResolvedDisplaySurfaceRepository(
     ) {
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
-            current + (surfaceKey to (currentSurface + (profileId to items.distinctBy { item -> item.itemKey })))
+            current + (surfaceKey to (currentSurface + (profileId to items.toAuthorityProjection())))
         }
     }
 
@@ -220,23 +229,40 @@ private fun mergeIncrementalItems(
     val existingByKey = HashMap<String, ResolvedDisplayItem>(existing.size)
     for (i in existing.indices) {
         val item = existing[i]
-        existingByKey[item.itemKey] = item
+        val bundle = item.toDisplayBundle()
+        for (alias in bundle.aliases) existingByKey[alias] = item
     }
-    val mergedIncoming = ArrayList<ResolvedDisplayItem>(incoming.size)
+    val replacementsByExistingKey = HashMap<String, ResolvedDisplayItem>(incoming.size)
+    val additions = ArrayList<ResolvedDisplayItem>(incoming.size)
     val incomingKeys = HashSet<String>(incoming.size)
     for (i in incoming.indices) {
         val item = incoming[i]
-        val existingForKey = existingByKey[item.itemKey]
+        val incomingBundle = item.toDisplayBundle()
+        val existingForKey = incomingBundle.aliases.firstNotNullOfOrNull { alias -> existingByKey[alias] }
         val rankProtected = applyNonDowngradeMerge(item, existingForKey, traceEvents)
-        mergedIncoming += rankProtected.withPreservedTrailerState(existingForKey)
-        incomingKeys += item.itemKey
+        val merged = rankProtected.withPreservedTrailerState(existingForKey)
+        if (existingForKey != null) {
+            replacementsByExistingKey[existingForKey.itemKey] = if (item.itemKey != existingForKey.itemKey) {
+                merged.copy(itemKey = existingForKey.itemKey)
+            } else {
+                merged
+            }
+        } else {
+            additions += merged
+        }
+        incomingKeys += incomingBundle.aliases
     }
-    val out = ArrayList<ResolvedDisplayItem>(existing.size + mergedIncoming.size)
+    val out = ArrayList<ResolvedDisplayItem>(existing.size + additions.size)
     for (i in existing.indices) {
         val item = existing[i]
-        if (item.itemKey !in incomingKeys) out += item
+        val replacement = replacementsByExistingKey[item.itemKey]
+        if (replacement != null) {
+            out += replacement
+        } else if (item.toDisplayBundle().aliases.none { alias -> alias in incomingKeys }) {
+            out += item
+        }
     }
-    for (i in mergedIncoming.indices) out += mergedIncoming[i]
+    for (i in additions.indices) out += additions[i]
     return out
 }
 
@@ -278,6 +304,127 @@ private fun shouldSuppressSurfaceEmission(
         existing.sameVisibleDisplaySurface(nextItems)
     else -> existing == nextItems
 }
+
+private fun List<ResolvedDisplayItem>.toAuthorityProjection(): List<ResolvedDisplayItem> {
+    if (isEmpty()) return this
+    val activeBundles = LinkedHashMap<String, DisplayBundle>(size)
+    val aliasToCanonical = HashMap<String, String>(size * 2)
+    for (i in indices) {
+        val incomingBundle = this[i].toDisplayBundle()
+        val existingCanonical = incomingBundle.aliases.firstNotNullOfOrNull { alias -> aliasToCanonical[alias] }
+        if (existingCanonical == null) {
+            activeBundles[incomingBundle.canonicalKey] = incomingBundle
+            for (alias in incomingBundle.aliases) aliasToCanonical[alias] = incomingBundle.canonicalKey
+        } else {
+            val existingBundle = activeBundles[existingCanonical] ?: incomingBundle
+            val mergedItem = if (incomingBundle.item.itemKey == existingBundle.item.itemKey) {
+                existingBundle.item
+            } else {
+                applyNonDowngradeMerge(
+                    incoming = incomingBundle.item,
+                    existing = existingBundle.item,
+                    traceEvents = null
+                )
+                    .withPreservedTrailerState(existingBundle.item)
+                    .copy(itemKey = existingBundle.item.itemKey)
+            }
+            val mergedAliases = existingBundle.aliases + incomingBundle.aliases
+            val mergedBundle = existingBundle.copy(
+                aliases = mergedAliases,
+                item = mergedItem
+            )
+            activeBundles[existingCanonical] = mergedBundle
+            for (alias in mergedAliases) aliasToCanonical[alias] = existingCanonical
+        }
+    }
+    if (activeBundles.size == size) {
+        var sameInPlace = true
+        var index = 0
+        for (bundle in activeBundles.values) {
+            if (bundle.item !== this[index]) {
+                sameInPlace = false
+                break
+            }
+            index += 1
+        }
+        if (sameInPlace) return this
+    }
+    val out = ArrayList<ResolvedDisplayItem>(activeBundles.size)
+    for (bundle in activeBundles.values) out += bundle.item
+    return out
+}
+
+private fun ResolvedDisplayItem.matchesAuthorityAlias(itemKey: String): Boolean =
+    toDisplayBundle().aliases.contains(itemKey)
+
+private fun ResolvedDisplayItem.toDisplayBundle(): DisplayBundle {
+    val aliases = authorityAliases()
+    return DisplayBundle(
+        canonicalKey = canonicalAuthorityKey(aliases),
+        aliases = aliases,
+        item = this
+    )
+}
+
+private fun ResolvedDisplayItem.canonicalAuthorityKey(aliases: Set<String>): String =
+    when {
+        !canonicalProvider.isNullOrBlank() && !canonicalId.isNullOrBlank() ->
+            "${itemType.toApiString()}:${canonicalProvider.lowercase()}:$canonicalId"
+        !stableIds.imdb.isNullOrBlank() -> "${itemType.toApiString()}:imdb:${stableIds.imdb}"
+        !stableIds.tmdb.isNullOrBlank() -> "${itemType.toApiString()}:tmdb:${stableIds.tmdb}"
+        !stableIds.tvdb.isNullOrBlank() -> "${itemType.toApiString()}:tvdb:${stableIds.tvdb}"
+        !stableIds.simkl.isNullOrBlank() -> "${itemType.toApiString()}:simkl:${stableIds.simkl}"
+        !stableIds.kitsu.isNullOrBlank() -> "${itemType.toApiString()}:kitsu:${stableIds.kitsu}"
+        !stableIds.trakt.isNullOrBlank() -> "${itemType.toApiString()}:trakt:${stableIds.trakt}"
+        else -> aliases.first()
+    }
+
+private fun ResolvedDisplayItem.authorityAliases(): Set<String> = buildSet {
+    itemKey.trim().takeIf { it.isNotBlank() }?.let(::add)
+    contentId.trim().takeIf { it.isNotBlank() }?.let { id ->
+        if (id.contains(':')) add("${itemType.toApiString()}:$id")
+        addTypedProviderAlias(itemType.toApiString(), id)
+    }
+    addStableAliases(itemType.toApiString(), stableIds)
+    if (!canonicalProvider.isNullOrBlank() && !canonicalId.isNullOrBlank()) {
+        addStableAlias(itemType.toApiString(), canonicalProvider, canonicalId)
+    }
+}.ifEmpty { setOf(itemKey) }
+
+private fun MutableSet<String>.addTypedProviderAlias(itemType: String, contentId: String) {
+    val parts = contentId.trim().split(':').filter { it.isNotBlank() }
+    if (parts.size < 2) return
+    val provider = parts[0].lowercase()
+    val id = when {
+        parts.size >= 3 && parts[1].equals("tv", ignoreCase = true) -> parts[2]
+        parts.size >= 3 && parts[1].equals("movie", ignoreCase = true) -> parts[2]
+        else -> parts[1]
+    }
+    normalizedAuthorityTypes(itemType).forEach { type -> add("$type:$provider:$id") }
+}
+
+private fun MutableSet<String>.addStableAliases(type: String, ids: ProviderIds) {
+    ids.imdb?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "imdb", id) }
+    ids.tmdb?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "tmdb", id) }
+    ids.tvdb?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "tvdb", id) }
+    ids.trakt?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "trakt", id) }
+    ids.simkl?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "simkl", id) }
+    ids.kitsu?.takeIf { it.isNotBlank() }?.let { id -> addStableAlias(type, "kitsu", id) }
+}
+
+private fun MutableSet<String>.addStableAlias(type: String, provider: String, id: String) {
+    val normalizedProvider = provider.lowercase()
+    normalizedAuthorityTypes(type).forEach { normalizedType ->
+        add("$normalizedType:$normalizedProvider:$id")
+    }
+}
+
+private fun normalizedAuthorityTypes(type: String): Set<String> =
+    when (type.lowercase()) {
+        "series", "tv", "show" -> setOf("series", "tv")
+        "movie" -> setOf("movie")
+        else -> setOf(type.lowercase())
+    }
 
 // Indexed-for ref-equality compare. `existing.zip(other).all { (a, b) -> a === b }`
 // allocates a List<Pair> ~equal in size to the surface (~300 items per publish);
@@ -514,14 +661,64 @@ private fun applyNonDowngradeMergeForReplace(
     val existingByKey = HashMap<String, ResolvedDisplayItem>(existing.size)
     for (i in existing.indices) {
         val item = existing[i]
-        existingByKey[item.itemKey] = item
+        val bundle = item.toDisplayBundle()
+        for (alias in bundle.aliases) existingByKey[alias] = item
     }
     val out = ArrayList<ResolvedDisplayItem>(incoming.size)
+    val outIndexByExistingKey = HashMap<String, Int>(incoming.size)
     for (i in incoming.indices) {
         val item = incoming[i]
-        val existingForKey = existingByKey[item.itemKey]
-        val rankProtected = applyNonDowngradeMerge(item, existingForKey, traceEvents)
-        out += rankProtected.withPreservedTrailerState(existingForKey)
+        val existingForKey = item.toDisplayBundle().aliases.firstNotNullOfOrNull { alias -> existingByKey[alias] }
+        val outKey = existingForKey?.itemKey
+        val priorOutIndex = outKey?.let { outIndexByExistingKey[it] }
+        val mergeBase = if (priorOutIndex != null) out[priorOutIndex] else existingForKey
+        val mergeInput = if (
+            priorOutIndex != null &&
+            mergeBase != null &&
+            item.authorityStrengthScore() < mergeBase.authorityStrengthScore()
+        ) {
+            mergeBase
+        } else {
+            item
+        }
+        val rankProtected = applyNonDowngradeMerge(mergeInput, mergeBase, traceEvents)
+        val merged = rankProtected.withPreservedTrailerState(mergeBase)
+        val projected = if (existingForKey != null && merged.itemKey != existingForKey.itemKey) {
+            merged.copy(itemKey = existingForKey.itemKey)
+        } else {
+            merged
+        }
+        if (priorOutIndex != null) {
+            out[priorOutIndex] = projected
+        } else {
+            if (outKey != null) outIndexByExistingKey[outKey] = out.size
+            out += projected
+        }
     }
     return out
+}
+
+private fun ResolvedDisplayItem.authorityStrengthScore(): Int {
+    var score = 0
+    if (!imdbId.isNullOrBlank()) score += 2
+    if (!canonicalProvider.isNullOrBlank() && !canonicalId.isNullOrBlank()) score += 2
+    if (!stableIds.imdb.isNullOrBlank()) score += 2
+    if (!stableIds.tmdb.isNullOrBlank()) score += 1
+    if (!stableIds.tvdb.isNullOrBlank()) score += 1
+    if (!stableIds.trakt.isNullOrBlank()) score += 1
+    if (!stableIds.simkl.isNullOrBlank()) score += 1
+    if (!stableIds.kitsu.isNullOrBlank()) score += 1
+    if (!stableIds.slug.isNullOrBlank()) score += 1
+    if (!stableIds.mal.isNullOrBlank()) score += 1
+    if (!stableIds.anilist.isNullOrBlank()) score += 1
+    if (!stableIds.anidb.isNullOrBlank()) score += 1
+    score += when (hydrationState) {
+        HydrationState.CANONICAL_READY,
+        HydrationState.STALE_READY -> 4
+        HydrationState.IDENTITY_READY,
+        HydrationState.HYDRATING -> 2
+        HydrationState.FAILED_USING_PREVIEW -> 1
+        HydrationState.PREVIEW_ONLY -> 0
+    }
+    return score
 }
