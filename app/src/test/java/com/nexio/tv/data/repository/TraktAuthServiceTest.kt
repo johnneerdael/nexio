@@ -31,7 +31,7 @@ import retrofit2.Response
 class TraktAuthServiceTest {
 
     @Test
-    fun `refresh token 400 clears auth state`() = runTest {
+    fun `refresh token 400 preserves auth state for account sync recovery`() = runTest {
         val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
         val profileManager = testProfileManager()
         val traktAuthDataStore = TraktAuthDataStore(
@@ -69,11 +69,11 @@ class TraktAuthServiceTest {
         val refreshed = service.refreshTokenIfNeeded(force = true)
 
         assertFalse(refreshed)
-        assertFalse(traktAuthDataStore.state.first().isAuthenticated)
+        assertTrue(traktAuthDataStore.state.first().isAuthenticated)
     }
 
     @Test
-    fun `refresh token 400 clears only routed secondary profile auth state`() = runTest {
+    fun `refresh token 400 preserves routed secondary profile auth state`() = runTest {
         val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
         val activeProfileId = MutableStateFlow(2)
         val profileManager = testProfileManager(activeProfileId)
@@ -120,7 +120,7 @@ class TraktAuthServiceTest {
 
         assertFalse(refreshed)
         assertTrue(traktAuthDataStore.stateForProfile(1).first().isAuthenticated)
-        assertFalse(traktAuthDataStore.stateForProfile(2).first().isAuthenticated)
+        assertTrue(traktAuthDataStore.stateForProfile(2).first().isAuthenticated)
     }
 
     @Test

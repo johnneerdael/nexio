@@ -298,9 +298,8 @@ class TraktAuthService @Inject constructor(
                 trace("refreshTokenIfNeeded: failed code=${response.code()}")
                 if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
                     logWarn {
-                        "Token refresh returned ${response.code()}, clearing auth state"
+                        "Token refresh returned ${response.code()}, preserving auth state for account sync recovery"
                     }
-                    traktAuthDataStore.clearAuth(profileId)
                     tripCircuit("Token refresh returned ${response.code()}")
                 }
                 return@withLock false
