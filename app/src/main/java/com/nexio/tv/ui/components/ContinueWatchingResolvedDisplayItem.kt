@@ -43,6 +43,12 @@ sealed class ContinueWatchingResolvedDisplayItem {
     abstract val backdropRef: ArtworkDisplayRef?
     abstract val logoRef: ArtworkDisplayRef?
     abstract val rating: TitleRating?
+    abstract val description: String?
+    abstract val genres: List<String>
+    abstract val releaseInfo: String?
+    abstract val tomatoesRating: Double?
+    abstract val episodeDescription: String?
+    abstract val episodeThumbnail: String?
     abstract val stableIds: ProviderIds
     abstract val textSourceRank: DisplaySourceRank
     abstract val textLanguageTag: String?
@@ -61,6 +67,12 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val backdropRef: ArtworkDisplayRef?,
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
+        override val description: String?,
+        override val genres: List<String>,
+        override val releaseInfo: String?,
+        override val tomatoesRating: Double?,
+        override val episodeDescription: String?,
+        override val episodeThumbnail: String?,
         override val stableIds: ProviderIds,
         override val textSourceRank: DisplaySourceRank,
         override val textLanguageTag: String?,
@@ -79,6 +91,12 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val backdropRef: ArtworkDisplayRef?,
         override val logoRef: ArtworkDisplayRef?,
         override val rating: TitleRating?,
+        override val description: String?,
+        override val genres: List<String>,
+        override val releaseInfo: String?,
+        override val tomatoesRating: Double?,
+        override val episodeDescription: String?,
+        override val episodeThumbnail: String?,
         override val stableIds: ProviderIds,
         override val textSourceRank: DisplaySourceRank,
         override val textLanguageTag: String?,
@@ -106,36 +124,56 @@ sealed class ContinueWatchingResolvedDisplayItem {
         fun fromInProgress(
             resolved: ResolvedDisplayItem,
             source: ContinueWatchingItem.InProgress
-        ): InProgress = InProgress(
-            itemKey = resolved.itemKey,
-            contentId = resolved.contentId,
-            title = resolved.display.title,
-            posterRef = resolved.artwork.poster,
-            backdropRef = resolved.artwork.backdrop,
-            logoRef = resolved.artwork.logo,
-            rating = resolved.rating,
-            stableIds = resolved.stableIds,
-            textSourceRank = resolved.textSourceRank(),
-            textLanguageTag = resolved.displayLanguageTag,
-            source = source.withResolvedDisplayMetadata(resolved)
-        )
+        ): InProgress {
+            val mergedSource = source.withResolvedDisplayMetadata(resolved)
+            val display = mergedSource.displayMetadataOrFallback()
+            return InProgress(
+                itemKey = resolved.itemKey,
+                contentId = resolved.contentId,
+                title = resolved.display.title ?: display.title,
+                posterRef = resolved.artwork.poster,
+                backdropRef = resolved.artwork.backdrop,
+                logoRef = resolved.artwork.logo,
+                rating = display.toTitleRating(),
+                description = display.description,
+                genres = display.genres,
+                releaseInfo = display.releaseInfo,
+                tomatoesRating = display.tomatoesRating,
+                episodeDescription = mergedSource.episodeDescription,
+                episodeThumbnail = mergedSource.episodeThumbnail,
+                stableIds = resolved.stableIds,
+                textSourceRank = resolved.textSourceRank(),
+                textLanguageTag = resolved.displayLanguageTag,
+                source = mergedSource
+            )
+        }
 
         fun fromNextUp(
             resolved: ResolvedDisplayItem,
             source: ContinueWatchingItem.NextUp
-        ): NextUp = NextUp(
-            itemKey = resolved.itemKey,
-            contentId = resolved.contentId,
-            title = resolved.display.title,
-            posterRef = resolved.artwork.poster,
-            backdropRef = resolved.artwork.backdrop,
-            logoRef = resolved.artwork.logo,
-            rating = resolved.rating,
-            stableIds = resolved.stableIds,
-            textSourceRank = resolved.textSourceRank(),
-            textLanguageTag = resolved.displayLanguageTag,
-            source = source.withResolvedDisplayMetadata(resolved)
-        )
+        ): NextUp {
+            val mergedSource = source.withResolvedDisplayMetadata(resolved)
+            val display = mergedSource.info.displayMetadataOrFallback()
+            return NextUp(
+                itemKey = resolved.itemKey,
+                contentId = resolved.contentId,
+                title = resolved.display.title ?: display.title,
+                posterRef = resolved.artwork.poster,
+                backdropRef = resolved.artwork.backdrop,
+                logoRef = resolved.artwork.logo,
+                rating = display.toTitleRating(),
+                description = display.description,
+                genres = display.genres,
+                releaseInfo = display.releaseInfo,
+                tomatoesRating = display.tomatoesRating,
+                episodeDescription = mergedSource.info.episodeDescription,
+                episodeThumbnail = mergedSource.info.thumbnail,
+                stableIds = resolved.stableIds,
+                textSourceRank = resolved.textSourceRank(),
+                textLanguageTag = resolved.displayLanguageTag,
+                source = mergedSource
+            )
+        }
 
         /**
          * Best-effort projection from the legacy [ContinueWatchingItem.InProgress]
@@ -151,19 +189,28 @@ sealed class ContinueWatchingResolvedDisplayItem {
          */
         fun fromInProgressLegacy(
             source: ContinueWatchingItem.InProgress
-        ): InProgress = InProgress(
-            itemKey = homeDisplayItemKey(source.progress.contentType, source.progress.contentId),
-            contentId = source.progress.contentId,
-            title = source.progress.name,
-            posterRef = source.progress.poster.toLegacyArtworkRefOrNull(ArtworkType.POSTER),
-            backdropRef = source.progress.backdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
-            logoRef = source.progress.logo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
-            rating = null,
-            stableIds = providerIdsFromContinueWatchingContentId(source.progress.contentId),
-            textSourceRank = DisplaySourceRank.FIRST_PAINT,
-            textLanguageTag = null,
-            source = source
-        )
+        ): InProgress {
+            val display = source.displayMetadataOrFallback()
+            return InProgress(
+                itemKey = homeDisplayItemKey(source.progress.contentType, source.progress.contentId),
+                contentId = source.progress.contentId,
+                title = source.progress.name,
+                posterRef = source.progress.poster.toLegacyArtworkRefOrNull(ArtworkType.POSTER),
+                backdropRef = source.progress.backdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
+                logoRef = source.progress.logo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
+                rating = display.toTitleRating(),
+                description = display.description,
+                genres = display.genres,
+                releaseInfo = display.releaseInfo,
+                tomatoesRating = display.tomatoesRating,
+                episodeDescription = source.episodeDescription,
+                episodeThumbnail = source.episodeThumbnail,
+                stableIds = providerIdsFromContinueWatchingContentId(source.progress.contentId),
+                textSourceRank = DisplaySourceRank.FIRST_PAINT,
+                textLanguageTag = null,
+                source = source
+            )
+        }
 
         /**
          * Best-effort projection from the legacy [ContinueWatchingItem.NextUp]
@@ -174,20 +221,61 @@ sealed class ContinueWatchingResolvedDisplayItem {
          */
         fun fromNextUpLegacy(
             source: ContinueWatchingItem.NextUp
-        ): NextUp = NextUp(
-            itemKey = homeDisplayItemKey(source.info.contentType, source.info.contentId),
-            contentId = source.info.contentId,
-            title = source.info.name,
-            posterRef = source.info.displayPoster.toLegacyArtworkRefOrNull(ArtworkType.POSTER),
-            backdropRef = source.info.displayBackdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
-            logoRef = source.info.displayLogo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
-            rating = null,
-            stableIds = providerIdsFromContinueWatchingContentId(source.info.contentId),
-            textSourceRank = DisplaySourceRank.FIRST_PAINT,
-            textLanguageTag = null,
-            source = source
-        )
+        ): NextUp {
+            val display = source.info.displayMetadataOrFallback()
+            return NextUp(
+                itemKey = homeDisplayItemKey(source.info.contentType, source.info.contentId),
+                contentId = source.info.contentId,
+                title = source.info.name,
+                posterRef = source.info.displayPoster.toLegacyArtworkRefOrNull(ArtworkType.POSTER),
+                backdropRef = source.info.displayBackdrop.toLegacyArtworkRefOrNull(ArtworkType.BACKDROP),
+                logoRef = source.info.displayLogo.toLegacyArtworkRefOrNull(ArtworkType.LOGO),
+                rating = display.toTitleRating(),
+                description = display.description,
+                genres = display.genres,
+                releaseInfo = display.releaseInfo,
+                tomatoesRating = display.tomatoesRating,
+                episodeDescription = source.info.episodeDescription,
+                episodeThumbnail = source.info.thumbnail,
+                stableIds = providerIdsFromContinueWatchingContentId(source.info.contentId),
+                textSourceRank = DisplaySourceRank.FIRST_PAINT,
+                textLanguageTag = null,
+                source = source
+            )
+        }
     }
+}
+
+private fun ContinueWatchingItem.InProgress.displayMetadataOrFallback(): HomeDisplayMetadata =
+    displayMetadata ?: HomeDisplayMetadata(
+        title = progress.name,
+        logo = progress.displayLogo,
+        description = episodeDescription ?: progress.episodeTitle,
+        genres = genres,
+        releaseInfo = releaseInfo,
+        imdbRating = episodeImdbRating,
+        tomatoesRating = displayMetadata?.tomatoesRating,
+        poster = progress.displayPoster,
+        backdrop = progress.displayBackdrop
+    )
+
+private fun NextUpInfo.displayMetadataOrFallback(): HomeDisplayMetadata =
+    displayMetadata ?: HomeDisplayMetadata(
+        title = name,
+        logo = displayLogo,
+        description = episodeDescription ?: episodeTitle,
+        genres = genres,
+        releaseInfo = releaseInfo ?: released,
+        imdbRating = imdbRating,
+        tomatoesRating = displayMetadata?.tomatoesRating,
+        poster = displayPoster ?: displayThumbnail,
+        backdrop = displayBackdrop ?: displayThumbnail,
+        thumbnail = displayThumbnail
+    )
+
+private fun HomeDisplayMetadata.toTitleRating(): TitleRating? {
+    val value = imdbRating ?: return null
+    return TitleRating(value.toDouble(), ratingSource ?: TitleRatingSource.IMDB)
 }
 
 private fun ContinueWatchingItem.InProgress.withResolvedDisplayMetadata(

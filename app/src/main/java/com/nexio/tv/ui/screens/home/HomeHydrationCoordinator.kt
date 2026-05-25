@@ -1,10 +1,16 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver
+import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
-import com.nexio.tv.core.artwork.emptyOrNull
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.ContentTypeDefaults
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
+import com.nexio.tv.core.artwork.takeIfImageType
 import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -15,6 +21,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
@@ -30,10 +37,12 @@ import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.RatingValueValidator
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
+import com.nexio.tv.domain.model.strictlyContains
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.toSettingsSignature
 import javax.inject.Inject
@@ -53,7 +62,10 @@ class HomeHydrationCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val overlayStore: HydratedHomeOverlayStore,
     private val traceEvents: TraceMetadataEvents,
-    private val settingsSource: ArtworkProviderSettingsSource
+    private val settingsSource: ArtworkProviderSettingsSource,
+    private val artworkProviderResolver: ArtworkProviderResolver = ArtworkProviderResolver(
+        ArtworkProviderCapabilityResolver()
+    )
 ) {
     suspend fun hydrate(
         item: MetaPreview,
@@ -75,6 +87,65 @@ class HomeHydrationCoordinator @Inject constructor(
         )
 
         return try {
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
+
+            val currentSettings = settingsSource.settings.first()
+            val settingsSignature = currentSettings.toSettingsSignature()
+            val cachedOverlay = readValidCachedOverlay(
+                item = item,
+                itemKey = itemKey,
+                languageTag = languageTag,
+                settingsSignature = settingsSignature
+            )
+            if (cachedOverlay != null) {
+                val overlayForAlias = cachedOverlay.withRequestedItemKey(itemKey)
+                if (currentGeneration() != expectedGeneration) {
+                    traceEvents.emitHomeHydrationIgnored(
+                        itemKey = itemKey,
+                        reason = "generation_mismatch",
+                        trigger = trigger.name
+                    )
+                    return null
+                }
+                val firstPaintMetadata = item.toHomeDisplayMetadata()
+                val overlayAccepted = onOverlayApplied(overlayForAlias)
+                emitCacheHitRatingAndArtworkSurface(
+                    item = item,
+                    itemKey = itemKey,
+                    firstPaintMetadata = firstPaintMetadata,
+                    overlay = overlayForAlias,
+                    overlayAccepted = overlayAccepted
+                )
+                if (!overlayAccepted) {
+                    return null
+                }
+                traceEvents.emitHomeHydrationApplied(
+                    railId = item.firstPaintRailSource?.name,
+                    itemKey = itemKey,
+                    firstPaintSource = item.firstPaintSource.name,
+                    canonicalProvider = overlayForAlias.canonicalProvider.name,
+                    canonicalId = overlayForAlias.canonicalId,
+                    imdbId = overlayForAlias.imdbId,
+                    trigger = trigger.name,
+                    priority = priority.name,
+                    workClass = WORK_CLASS_BACKGROUND_HYDRATION,
+                    changedFields = changedFields(firstPaintMetadata, overlayForAlias.fields),
+                    displayHashBefore = firstPaintMetadata.hydratedHomeDisplayHash(),
+                    displayHashAfter = overlayForAlias.displayHash,
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    networkExecuted = false,
+                    cacheDecision = CACHE_DECISION_OVERLAY_HIT
+                )
+                return overlayForAlias
+            }
             if (currentGeneration() != expectedGeneration) {
                 traceEvents.emitHomeHydrationIgnored(
                     itemKey = itemKey,
@@ -106,8 +177,6 @@ class HomeHydrationCoordinator @Inject constructor(
             }
 
             val bundle = stableIds.bundle
-            val currentSettings = settingsSource.settings.first()
-            val settingsSignature = currentSettings.toSettingsSignature()
             val stableIdsSnapshot = bundle?.let { b ->
                 ProviderIds(
                     imdb = b.sidecars.imdbId ?: item.firstPaintStableIds.imdb,
@@ -124,7 +193,8 @@ class HomeHydrationCoordinator @Inject constructor(
                 bundle = bundle,
                 languageTag = languageTag,
                 stableIdsSnapshot = stableIdsSnapshot,
-                settingsSignature = settingsSignature
+                settingsSignature = settingsSignature,
+                currentSettings = currentSettings
             ) ?: return failed(itemKey, trigger, "canonical_identity_unresolved")
 
             if (currentGeneration() != expectedGeneration) {
@@ -150,11 +220,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 languageTag = overlay.languageTag,
                 policyVersion = overlay.policyVersion
             )
-            if (existingOverlay != null &&
-                existingOverlay.state != HomeItemHydrationState.STALE_READY &&
-                existingOverlay.displayHash == overlay.displayHash &&
-                existingOverlay.fields == overlay.fields
-            ) {
+            if (existingOverlay?.canReuseAsContentUnchangedOverlay(item, overlay) == true) {
                 traceEvents.emitHomeHydrationIgnored(
                     itemKey = itemKey,
                     reason = "overlay_content_unchanged",
@@ -260,19 +326,111 @@ class HomeHydrationCoordinator @Inject constructor(
         }
     }
 
+    private fun readValidCachedOverlay(
+        item: MetaPreview,
+        itemKey: String,
+        languageTag: String,
+        settingsSignature: String,
+        nowMs: Long = System.currentTimeMillis()
+    ): HydratedHomeOverlay? {
+        val overlay = overlayStore.readForItemKeys(
+            itemKeys = setOf(itemKey),
+            languageTag = languageTag,
+            policyVersion = HOME_OVERLAY_POLICY_VERSION,
+            nowMs = nowMs
+        )[itemKey] ?: return null
+        if (overlay.state == HomeItemHydrationState.STALE_READY) return null
+        if (overlay.isStale(nowMs)) return null
+        if (overlay.settingsSignature != settingsSignature) return null
+        if (item.firstPaintStableIds.strictlyContains(overlay.stableIdsSnapshot)) return null
+        if (item.requiresOriginalLanguageForVisibleHydration() && overlay.fields.originalLanguage.isNullOrBlank()) {
+            return null
+        }
+        return overlay
+    }
+
+    private fun MetaPreview.requiresOriginalLanguageForVisibleHydration(): Boolean =
+        type == ContentType.SERIES ||
+            apiType.equals("series", ignoreCase = true) ||
+            apiType.equals("tv", ignoreCase = true)
+
+    private fun HydratedHomeOverlay.canReuseAsContentUnchangedOverlay(
+        item: MetaPreview,
+        freshOverlay: HydratedHomeOverlay,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (state == HomeItemHydrationState.STALE_READY) return false
+        if (isStale(nowMs)) return false
+        if (settingsSignature != freshOverlay.settingsSignature) return false
+        if (stableIdsSnapshot != freshOverlay.stableIdsSnapshot) return false
+        if (item.firstPaintStableIds.strictlyContains(stableIdsSnapshot)) return false
+        if (item.requiresOriginalLanguageForVisibleHydration() && fields.originalLanguage.isNullOrBlank()) return false
+        return displayHash == freshOverlay.displayHash && fields == freshOverlay.fields
+    }
+
+    private fun HydratedHomeOverlay.withRequestedItemKey(itemKey: String): HydratedHomeOverlay =
+        if (this.itemKey == itemKey) this else copy(itemKey = itemKey)
+
+    private fun emitCacheHitRatingAndArtworkSurface(
+        item: MetaPreview,
+        itemKey: String,
+        firstPaintMetadata: HomeDisplayMetadata,
+        overlay: HydratedHomeOverlay,
+        overlayAccepted: Boolean
+    ) {
+        val previewRating = firstPaintMetadata.imdbRating
+        val acceptedPreviewRating = RatingValueValidator.validTitleRating(previewRating)
+        val sanitizedPreviewRating = RatingValueValidator.sanitizeTitleRating(previewRating)
+        val sanitizedHydratedRating = RatingValueValidator.sanitizeTitleRating(overlay.fields.imdbRating)
+        traceEvents.emitHomeRatingAndArtworkSurface(
+            surface = "HOME",
+            itemKeyHash = traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, itemKey),
+            firstPaintRatingValue = sanitizedPreviewRating,
+            firstPaintRatingAccepted = acceptedPreviewRating,
+            firstPaintRatingRejectReason = if (previewRating != null && !acceptedPreviewRating) {
+                "OUT_OF_RANGE_TITLE_RATING"
+            } else {
+                null
+            },
+            firstPaintLogoPresent = firstPaintMetadata.displayLogo != null,
+            firstPaintTmdbIdHash = item.firstPaintStableIds.tmdbOrPreviewId(item.id)
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            firstPaintTvdbIdHash = item.firstPaintStableIds.tvdb
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            firstPaintImdbIdHash = item.firstPaintStableIds.imdb
+                ?.let { traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it) },
+            hydrationStarted = true,
+            routeProvider = null,
+            tvdbIdHash = overlay.stableIdsSnapshot.tvdb?.let {
+                traceEvents.hashForActiveSession(HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE, it)
+            },
+            overlayApplied = overlayAccepted,
+            hydratedRatingValue = sanitizedHydratedRating,
+            hydratedRatingSource = overlay.fields.ratingSource?.name.takeIf { sanitizedHydratedRating != null },
+            hydratedLogoPresent = overlay.fields.displayLogo != null,
+            hydratedLogoSource = overlay.fields.artwork?.logo?.trace?.selectedProvider
+        )
+    }
+
     private suspend fun MetadataResolutionResult.toHydratedHomeOverlay(
         item: MetaPreview,
         itemKey: String,
         bundle: StableIdBundle?,
         languageTag: String,
         stableIdsSnapshot: ProviderIds,
-        settingsSignature: String
+        settingsSignature: String,
+        currentSettings: ArtworkProviderSettings
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
         val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
         val fields = displayMetadata
             .sanitizeHydratedTitleRating()
-            .mergeHydratedArtworkWithFirstPaintFallback(item.artwork)
+            .withHydratedOnlyArtwork(
+                item = item,
+                document = resolvedDocument,
+                stableIds = stableIdsSnapshot,
+                settings = currentSettings
+            )
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
@@ -302,26 +460,6 @@ class HomeHydrationCoordinator @Inject constructor(
         )
     }
 
-    private fun HomeDisplayMetadata.mergeHydratedArtworkWithFirstPaintFallback(
-        firstPaintArtwork: ArtworkBundle?
-    ): HomeDisplayMetadata {
-        val hydratedArtwork = artwork?.enforceArtworkTypeBoundaries()
-        val fallbackArtwork = firstPaintArtwork?.enforceArtworkTypeBoundaries()
-        val mergedOrNull = ArtworkBundle(
-            poster = hydratedArtwork?.poster ?: fallbackArtwork?.poster,
-            backdrop = hydratedArtwork?.backdrop ?: fallbackArtwork?.backdrop,
-            logo = hydratedArtwork?.logo ?: fallbackArtwork?.logo,
-            thumbnail = hydratedArtwork?.thumbnail ?: fallbackArtwork?.thumbnail
-        ).enforceArtworkTypeBoundaries().emptyOrNull()
-        return copy(
-            poster = mergedOrNull?.poster.toLegacyArtworkString() ?: poster,
-            backdrop = mergedOrNull?.backdrop.toLegacyArtworkString() ?: backdrop,
-            logo = mergedOrNull?.logo.toLegacyArtworkString() ?: logo,
-            thumbnail = mergedOrNull?.thumbnail.toLegacyArtworkString() ?: thumbnail,
-            artwork = mergedOrNull
-        )
-    }
-
     private fun HomeDisplayMetadata.sanitizeHydratedTitleRating(): HomeDisplayMetadata {
         val cleanRating = RatingValueValidator.sanitizeTitleRating(imdbRating)
         return copy(
@@ -329,6 +467,171 @@ class HomeHydrationCoordinator @Inject constructor(
             ratingSource = ratingSource.takeIf { cleanRating != null }
         )
     }
+
+    private fun HomeDisplayMetadata.withHydratedOnlyArtwork(
+        item: MetaPreview,
+        document: ResolvedMetadataDocument,
+        stableIds: ProviderIds,
+        settings: ArtworkProviderSettings
+    ): HomeDisplayMetadata {
+        val typed = artwork?.enforceArtworkTypeBoundaries()
+        val isAnime = item.isAnimeForArtworkRouting()
+        val posterFromPreview = document.isPreviewArtwork(ResolvedField.POSTER) ||
+            (poster != null && document.poster == null && poster == item.poster) ||
+            (document.poster == null && typed?.poster != null && typed.poster == item.artwork?.poster)
+        val backdropFromPreview = document.isPreviewArtwork(ResolvedField.BACKDROP) ||
+            (backdrop != null && document.backdrop == null && backdrop == item.background) ||
+            (document.backdrop == null && typed?.backdrop != null && typed.backdrop == item.artwork?.backdrop)
+        val logoFromPreview = document.isPreviewArtwork(ResolvedField.LOGO) ||
+            (logo != null && document.logo == null && logo == item.logo) ||
+            (document.logo == null && typed?.logo != null && typed.logo == item.artwork?.logo)
+        val thumbnailFromPreview = thumbnail != null &&
+            typed?.thumbnail == item.artwork?.thumbnail
+        val hydratedTyped = ArtworkBundle(
+            poster = typed?.poster.takeIf {
+                !posterFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.POSTER,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            backdrop = typed?.backdrop.takeIf {
+                !backdropFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.BACKDROP,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            logo = typed?.logo.takeIf {
+                !logoFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.LOGO,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            thumbnail = typed?.thumbnail.takeIf {
+                !thumbnailFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.THUMBNAIL,
+                    ref = it,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            }
+        ).enforceArtworkTypeBoundaries()
+        return copy(
+            poster = hydratedTyped.poster.toLegacyArtworkString() ?: poster.takeIf {
+                !posterFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.POSTER,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            backdrop = hydratedTyped.backdrop.toLegacyArtworkString() ?: backdrop.takeIf {
+                !backdropFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.BACKDROP,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            logo = hydratedTyped.logo.toLegacyArtworkString() ?: logo.takeIf {
+                !logoFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.LOGO,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            thumbnail = hydratedTyped.thumbnail.toLegacyArtworkString() ?: thumbnail.takeIf {
+                !thumbnailFromPreview && document.acceptsArtworkProvider(
+                    type = ArtworkType.THUMBNAIL,
+                    ref = null,
+                    contentType = item.type,
+                    isAnime = isAnime,
+                    stableIds = stableIds,
+                    settings = settings
+                )
+            },
+            artwork = hydratedTyped.takeIf {
+                it.poster.takeIfImageType(ArtworkType.POSTER) != null ||
+                    it.backdrop.takeIfImageType(ArtworkType.BACKDROP) != null ||
+                    it.logo.takeIfImageType(ArtworkType.LOGO) != null ||
+                    it.thumbnail.takeIfImageType(ArtworkType.THUMBNAIL) != null
+            }
+        )
+    }
+
+    private fun ResolvedMetadataDocument.isPreviewArtwork(field: ResolvedField): Boolean =
+        sourceRoles[field] == SourceRole.RAIL_PREVIEW ||
+            sourceRoles[field] == SourceRole.ADDON_PREVIEW
+
+    private fun ResolvedMetadataDocument.acceptsArtworkProvider(
+        type: ArtworkType,
+        ref: ArtworkDisplayRef?,
+        contentType: ContentType,
+        isAnime: Boolean,
+        stableIds: ProviderIds,
+        settings: ArtworkProviderSettings
+    ): Boolean {
+        val field = type.toResolvedField()
+        val actualProvider = ref.providerKey()
+            ?: field?.let { sourceProviders[it]?.trim()?.takeIf { value -> value.isNotBlank() } }
+            ?: return false
+        val preferred = artworkProviderResolver.resolve(
+            artworkType = type,
+            contentType = contentType,
+            isAnime = isAnime,
+            availableIds = stableIds,
+            settings = settings
+        ).key
+        if (actualProvider.equals(preferred, ignoreCase = true)) return true
+        val stock = ContentTypeDefaults.resolve(type, isAnime).key
+        if (actualProvider.equals(stock, ignoreCase = true)) return true
+        return field != null &&
+            actualProvider.equals("TVDB", ignoreCase = true) &&
+            preferred.equals(stock, ignoreCase = true) &&
+            type != ArtworkType.POSTER &&
+            !isPreviewArtwork(field)
+    }
+
+    private fun ArtworkDisplayRef?.providerKey(): String? =
+        when (this) {
+            is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key
+                ?: trace.selectedProvider?.trim()?.takeIf { it.isNotBlank() }
+            is ArtworkDisplayRef.LegacyString -> trace.selectedProvider?.trim()?.takeIf { it.isNotBlank() }
+            is ArtworkDisplayRef.Placeholder -> null
+            null -> null
+        }
+
+    private fun ArtworkType.toResolvedField(): ResolvedField? =
+        when (this) {
+            ArtworkType.POSTER -> ResolvedField.POSTER
+            ArtworkType.BACKDROP -> ResolvedField.BACKDROP
+            ArtworkType.LOGO -> ResolvedField.LOGO
+            ArtworkType.THUMBNAIL -> null
+        }
+
+    private fun MetaPreview.isAnimeForArtworkRouting(): Boolean =
+        apiType.equals("anime", ignoreCase = true) ||
+            firstPaintRailSource == RailSource.BUILT_IN_KITSU
 
     private fun failed(
         itemKey: String,
@@ -612,6 +915,7 @@ class HomeHydrationCoordinator @Inject constructor(
     private companion object {
         const val HOME_RATING_ARTWORK_TRACE_HASH_PURPOSE = "home-rating-artwork"
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
+        const val CACHE_DECISION_OVERLAY_HIT = "OVERLAY_CACHE_HIT"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L
         const val OVERLAY_EXPIRES_MS = 7L * 24L * 60L * 60L * 1000L
         val OBFUSCATED_CLASS_NAME = Regex("[a-z]\\d*")

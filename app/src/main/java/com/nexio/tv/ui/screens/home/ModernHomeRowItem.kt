@@ -27,10 +27,11 @@ data class ModernHomeRowItem(
     val description: String?,
     val genres: List<String>,
     val releaseInfo: String?,
+    val runtime: String? = null,
     val tomatoesRating: Double?,
-    val textSourceRank: DisplaySourceRank,
     val hydrationState: HydrationState,
     override val posterProviderTag: String?,
+    val textSourceRank: DisplaySourceRank = DisplaySourceRank.FIRST_PAINT,
     val textLanguageTag: String? = null
 ) : RailCardData {
     override val id: String get() = contentId
@@ -52,11 +53,12 @@ data class ModernHomeRowItem(
                 description = resolved.display.overview,
                 genres = resolved.display.genres,
                 releaseInfo = resolved.display.releaseDate,
+                runtime = resolved.display.runtimeText,
                 tomatoesRating = resolved.display.tomatoesRating,
-                textSourceRank = resolved.textSourceRank(),
-                textLanguageTag = resolved.displayLanguageTag,
                 hydrationState = resolved.hydrationState,
-                posterProviderTag = resolved.artwork.poster.deriveProviderTag()
+                posterProviderTag = resolved.artwork.poster.deriveProviderTag(),
+                textSourceRank = resolved.textSourceRank(),
+                textLanguageTag = resolved.displayLanguageTag
             )
 
         /**
@@ -84,6 +86,7 @@ data class ModernHomeRowItem(
             description = meta.description,
             genres = meta.genres,
             releaseInfo = meta.releaseInfo,
+            runtime = meta.runtime,
             tomatoesRating = meta.tomatoesRating,
             textSourceRank = DisplaySourceRank.FIRST_PAINT,
             textLanguageTag = null,
@@ -91,11 +94,6 @@ data class ModernHomeRowItem(
             posterProviderTag = meta.posterProviderTag
         )
     }
-}
-
-internal fun ArtworkDisplayRef?.deriveProviderTag(): String? = when (this) {
-    is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key?.lowercase()
-    is ArtworkDisplayRef.LegacyString, is ArtworkDisplayRef.Placeholder, null -> null
 }
 
 internal fun ResolvedDisplayItem.textSourceRank(): DisplaySourceRank {
@@ -112,6 +110,11 @@ internal fun ResolvedDisplayItem.textSourceRank(): DisplaySourceRank {
     if (slots.genres.rank.ordinal > best.ordinal) best = slots.genres.rank
     if (slots.releaseInfo.rank.ordinal > best.ordinal) best = slots.releaseInfo.rank
     return best
+}
+
+internal fun ArtworkDisplayRef?.deriveProviderTag(): String? = when (this) {
+    is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key?.lowercase()
+    is ArtworkDisplayRef.LegacyString, is ArtworkDisplayRef.Placeholder, null -> null
 }
 
 private fun String?.toLegacyHomeRailRefOrNull(type: ArtworkType): ArtworkDisplayRef? {

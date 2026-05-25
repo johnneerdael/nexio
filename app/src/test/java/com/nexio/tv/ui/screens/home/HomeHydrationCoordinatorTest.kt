@@ -32,17 +32,23 @@ import com.nexio.tv.core.metadata.router.StableIdEvidence
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
+import com.nexio.tv.domain.model.HOME_OVERLAY_POLICY_VERSION
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.hydratedHomeOverlayKey
+import com.nexio.tv.domain.model.toSettingsSignature
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -54,6 +60,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -296,7 +303,7 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
-    fun `preview logo survives when hydrated logo is absent`() = runTest {
+    fun `hydrated overlay does not persist preview logo when hydrated logo is absent`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
@@ -335,22 +342,29 @@ class HomeHydrationCoordinatorTest {
             onOverlayApplied = { true }
         )
 
-        assertSame(previewLogo, overlaySlot.captured.fields.artwork?.logo)
+        assertNull(overlaySlot.captured.fields.artwork?.logo)
         assertNotNull(overlaySlot.captured.fields.artwork?.backdrop)
     }
 
     @Test
-    fun `hydrated artwork merge keeps typed fallback refs even when legacy strings exist`() = runTest {
+    fun `hydrated artwork keeps only hydrated typed refs even when preview fallback exists`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
         coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
         val hydratedBackdrop = artworkRef("canonical-backdrop", ArtworkType.BACKDROP)
-        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+        val baseResult = resolutionResult(
             displayMetadata = HomeDisplayMetadata(
                 title = "Canonical title",
                 logo = "hydrated-logo-url-or-key",
                 artwork = ArtworkBundle(backdrop = hydratedBackdrop)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                logo = "hydrated-logo-url-or-key",
+                sourceRoles = baseResult.resolvedDocument.sourceRoles + (ResolvedField.LOGO to SourceRole.PRIMARY),
+                sourceProviders = baseResult.resolvedDocument.sourceProviders + (ResolvedField.LOGO to "TMDB")
             )
         )
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
@@ -380,8 +394,257 @@ class HomeHydrationCoordinatorTest {
         )
 
         assertSame(hydratedBackdrop, overlaySlot.captured.fields.artwork?.backdrop)
-        assertSame(previewLogo, overlaySlot.captured.fields.artwork?.logo)
-        assertEquals("nexio-artwork://decision/preview-logo", overlaySlot.captured.fields.displayLogo)
+        assertNull(overlaySlot.captured.fields.artwork?.logo)
+        assertEquals("hydrated-logo-url-or-key", overlaySlot.captured.fields.displayLogo)
+    }
+
+    @Test
+    fun `hydrated overlay strips artwork selected from preview source role`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val previewPoster = artworkRef("preview-poster", ArtworkType.POSTER)
+        val previewBackdrop = artworkRef("preview-backdrop", ArtworkType.BACKDROP)
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                poster = "nexio-artwork://decision/preview-poster",
+                backdrop = "nexio-artwork://decision/preview-backdrop",
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                )
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/preview-poster",
+                backdrop = "nexio-artwork://decision/preview-backdrop",
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                ),
+                sourceRoles = mapOf(
+                    ResolvedField.POSTER to SourceRole.RAIL_PREVIEW,
+                    ResolvedField.BACKDROP to SourceRole.ADDON_PREVIEW
+                ),
+                sourceProviders = mapOf(
+                    ResolvedField.POSTER to "TMDB",
+                    ResolvedField.BACKDROP to "ADDON"
+                )
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:tmdb:94997")
+
+        coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview(
+                id = "tmdb:94997",
+                type = ContentType.SERIES,
+                rating = 8.3f,
+                artwork = ArtworkBundle(
+                    poster = previewPoster,
+                    backdrop = previewBackdrop
+                )
+            ),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(overlaySlot.captured.fields.artwork)
+        assertNull(overlaySlot.captured.fields.poster)
+        assertNull(overlaySlot.captured.fields.backdrop)
+    }
+
+    @Test
+    fun `hydrated overlay keeps artwork selected by configured provider`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val rpdbPoster = artworkRef("rpdb-poster", ArtworkType.POSTER, provider = "RPDB")
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                artwork = ArtworkBundle(poster = rpdbPoster)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/rpdb-poster",
+                artwork = ArtworkBundle(poster = rpdbPoster),
+                sourceRoles = mapOf(ResolvedField.POSTER to SourceRole.ARTWORK),
+                sourceProviders = mapOf(ResolvedField.POSTER to "RPDB")
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coordinator(
+            facade = facade,
+            store = store,
+            sink = RecordingTraceSink(),
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertSame(rpdbPoster, overlaySlot.captured.fields.artwork?.poster)
+        assertEquals("nexio-artwork://decision/rpdb-poster", overlaySlot.captured.fields.displayPoster)
+    }
+
+    @Test
+    fun `hydrated overlay falls back to stock artwork when configured provider has no slot`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val stockPoster = artworkRef("tmdb-stock-poster", ArtworkType.POSTER, provider = "TMDB")
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                artwork = ArtworkBundle(poster = stockPoster)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/tmdb-stock-poster",
+                artwork = ArtworkBundle(poster = stockPoster),
+                sourceRoles = mapOf(ResolvedField.POSTER to SourceRole.PRIMARY),
+                sourceProviders = mapOf(ResolvedField.POSTER to "TMDB")
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coordinator(
+            facade = facade,
+            store = store,
+            sink = RecordingTraceSink(),
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertSame(stockPoster, overlaySlot.captured.fields.artwork?.poster)
+    }
+
+    @Test
+    fun `hydrated overlay rejects tvdb poster when explicit premium poster provider is active`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val tvdbPoster = artworkRef("tvdb-poster", ArtworkType.POSTER, provider = "TVDB")
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                artwork = ArtworkBundle(poster = tvdbPoster)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/tvdb-poster",
+                artwork = ArtworkBundle(poster = tvdbPoster),
+                sourceRoles = mapOf(ResolvedField.POSTER to SourceRole.ARTWORK),
+                sourceProviders = mapOf(ResolvedField.POSTER to "TVDB")
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coordinator(
+            facade = facade,
+            store = store,
+            sink = RecordingTraceSink(),
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(overlaySlot.captured.fields.artwork)
+        assertNull(overlaySlot.captured.fields.poster)
+    }
+
+    @Test
+    fun `hydrated overlay drops artwork from neither configured nor stock provider`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        val addonPoster = artworkRef("addon-poster", ArtworkType.POSTER, provider = "ADDON")
+        val baseResult = resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                artwork = ArtworkBundle(poster = addonPoster)
+            )
+        )
+        coEvery { facade.resolveRequest(any()) } returns baseResult.copy(
+            resolvedDocument = baseResult.resolvedDocument.copy(
+                poster = "nexio-artwork://decision/addon-poster",
+                artwork = ArtworkBundle(poster = addonPoster),
+                sourceRoles = mapOf(ResolvedField.POSTER to SourceRole.ARTWORK),
+                sourceProviders = mapOf(ResolvedField.POSTER to "ADDON")
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+
+        coordinator(
+            facade = facade,
+            store = store,
+            sink = RecordingTraceSink(),
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
+            item = preview(id = "550", stableIds = ProviderIds(imdb = "tt0137523", tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(overlaySlot.captured.fields.artwork)
+        assertNull(overlaySlot.captured.fields.poster)
     }
 
     @Test
@@ -572,6 +835,302 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `valid overlay cache hit applies cached overlay without provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val sink = RecordingTraceSink()
+        val preview = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550"))
+        val cached = cachedOverlay(
+            itemKey = "movie:tmdb:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature()
+        )
+        var applied: HydratedHomeOverlay? = null
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to cached)
+
+        val result = coordinator(facade, store, sink).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = {
+                applied = it
+                true
+            }
+        )
+
+        assertEquals("movie:550", result?.itemKey)
+        assertEquals("movie:550", applied?.itemKey)
+        coVerify(exactly = 0) { facade.resolveRequest(any()) }
+        coVerify(exactly = 0) { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) }
+        coVerify(exactly = 0) { store.upsert(any(), any()) }
+        assertTrue(sink.events.any { it.eventType == "home.rating_and_artwork_surface" })
+        val appliedEvent = sink.events.last { it.eventType == "home.hydration_applied" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = appliedEvent.payload as Map<String, Any?>
+        assertEquals("OVERLAY_CACHE_HIT", payload["cacheDecision"])
+        assertEquals(false, payload["networkExecuted"])
+    }
+
+    @Test
+    fun `stale overlay cache entry falls through to provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550"))
+        val stale = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature(),
+            staleAtMs = 0L
+        )
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to stale)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `settings signature mismatch falls through to provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550"))
+        val cached = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = "old-settings"
+        )
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to cached)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `STALE_READY overlay cache entry falls through to provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550"))
+        val cached = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature(),
+            state = HomeItemHydrationState.STALE_READY
+        )
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to cached)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `series overlay cache without original language falls through to provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(
+            id = "1399",
+            title = "Preview series",
+            stableIds = ProviderIds(tmdb = "1399"),
+            type = ContentType.SERIES
+        )
+        val cached = cachedOverlay(
+            itemKey = "series:1399",
+            stableIds = ProviderIds(tmdb = "1399"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature(),
+            contentType = ContentType.SERIES,
+            fields = HomeDisplayMetadata(
+                title = "Cached series title",
+                description = "Cached series overview",
+                poster = "cached-series-poster.jpg",
+                backdrop = "cached-series-backdrop.jpg",
+                imdbRating = 8.1f,
+                ratingSource = TitleRatingSource.TMDB,
+                genres = listOf("Cached Genre"),
+                originalLanguage = null
+            )
+        )
+
+        every {
+            store.readForItemKeys(setOf("series:1399"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("series:1399" to cached)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            canonicalId = "tmdb:1399",
+            displayMetadata = HomeDisplayMetadata(
+                title = "Hydrated series title",
+                originalLanguage = "en"
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("series:1399")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `broader first paint stable ids fall through to provider resolution`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(
+            id = "550",
+            title = "Preview title",
+            stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
+        )
+        val cached = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature()
+        )
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to cached)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `generation mismatch after overlay cache read does not apply or resolve provider`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val sink = RecordingTraceSink()
+        val preview = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550"))
+        val cached = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature()
+        )
+        var generation = 7L
+        var applied = false
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } answers {
+            generation = 8L
+            mapOf("movie:550" to cached)
+        }
+
+        val result = coordinator(facade, store, sink).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { generation },
+            onOverlayApplied = {
+                applied = true
+                true
+            }
+        )
+
+        assertNull(result)
+        assertFalse(applied)
+        coVerify(exactly = 0) { facade.resolveRequest(any()) }
+        coVerify(exactly = 0) { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) }
+        coVerify(exactly = 0) { store.upsert(any(), any()) }
+        assertEquals(
+            listOf("home.hydration_started", "home.hydration_ignored"),
+            sink.events.map { it.eventType }
+        )
+    }
+
+    @Test
     fun `generation mismatch after provider resolution avoids stable ids rating write and apply`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
@@ -648,6 +1207,7 @@ class HomeHydrationCoordinatorTest {
         var generation = 7L
         var applied = false
 
+        every { store.readForItemKeys(any(), any(), any(), any()) } returns emptyMap()
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
         every {
@@ -886,6 +1446,7 @@ class HomeHydrationCoordinatorTest {
         val sink = RecordingTraceSink()
         val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
 
+        every { store.readForItemKeys(any(), any(), any(), any()) } returns emptyMap()
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
         every {
@@ -1014,8 +1575,18 @@ class HomeHydrationCoordinatorTest {
                 releaseDate = "2019-07-26",
                 fieldOwners = mapOf(ResolvedField.TITLE to FieldOwner.PRIMARY),
                 ignoredOverwrites = emptyList(),
-                sourceRoles = mapOf(ResolvedField.TITLE to SourceRole.PRIMARY),
-                sourceProviders = mapOf(ResolvedField.TITLE to "TVDB")
+                sourceRoles = mapOf(
+                    ResolvedField.TITLE to SourceRole.PRIMARY,
+                    ResolvedField.POSTER to SourceRole.ARTWORK,
+                    ResolvedField.BACKDROP to SourceRole.ARTWORK,
+                    ResolvedField.LOGO to SourceRole.ARTWORK
+                ),
+                sourceProviders = mapOf(
+                    ResolvedField.TITLE to "TVDB",
+                    ResolvedField.POSTER to "RPDB",
+                    ResolvedField.BACKDROP to "TVDB",
+                    ResolvedField.LOGO to "TVDB"
+                )
             ),
             displayMetadata = HomeDisplayMetadata(
                 title = "The Boys",
@@ -1075,7 +1646,17 @@ class HomeHydrationCoordinatorTest {
             artwork = null
         )
 
-        val result = coordinator(facade, store, sink).hydrate(
+        val result = coordinator(
+            facade = facade,
+            store = store,
+            sink = sink,
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "test-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        ).hydrate(
             item = traktTvRow,
             trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
             priority = HomeHydrationPriority.VISIBLE,
@@ -1226,6 +1807,50 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `stale existing overlay with identical display fields does not short-circuit content-equality gate`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+
+        coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        val staleExisting = overlaySlot.captured.copy(staleAtMs = 0L)
+        val store2 = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        every {
+            store2.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns staleExisting
+        coEvery { store2.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store2, RecordingTraceSink()).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotSame(staleExisting, result)
+        coVerify(exactly = 1) { store2.upsert(any(), any()) }
+    }
+
+    @Test
     fun `non-STALE existing overlay with identical hash short-circuits via content-equality gate`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
@@ -1291,6 +1916,49 @@ class HomeHydrationCoordinatorTest {
         }
     )
 
+    private fun cachedOverlay(
+        itemKey: String,
+        stableIds: ProviderIds,
+        settingsSignature: String,
+        staleAtMs: Long = System.currentTimeMillis() + 60_000L,
+        state: HomeItemHydrationState = HomeItemHydrationState.CANONICAL_READY,
+        contentType: ContentType = ContentType.MOVIE,
+        fields: HomeDisplayMetadata = HomeDisplayMetadata(
+            title = "Cached title",
+            description = "Cached overview",
+            poster = "cached-poster.jpg",
+            backdrop = "cached-backdrop.jpg",
+            imdbRating = 8.1f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = listOf("Cached Genre")
+        )
+    ): HydratedHomeOverlay {
+        return HydratedHomeOverlay(
+            overlayKey = hydratedHomeOverlayKey(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "550",
+                contentType = contentType,
+                languageTag = "en-US",
+                policyVersion = HOME_OVERLAY_POLICY_VERSION
+            ),
+            itemKey = itemKey,
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            contentType = contentType,
+            languageTag = "en-US",
+            policyVersion = HOME_OVERLAY_POLICY_VERSION,
+            fields = fields,
+            fieldTrace = listOf(com.nexio.tv.domain.model.HydratedHomeFieldTrace("TITLE", "TMDB", "PRIMARY")),
+            updatedAtMs = System.currentTimeMillis(),
+            staleAtMs = staleAtMs,
+            expiresAtMs = System.currentTimeMillis() + 120_000L,
+            state = state,
+            stableIdsSnapshot = stableIds,
+            settingsSignature = settingsSignature
+        )
+    }
+
     private fun preview(
         id: String,
         title: String = "Preview title",
@@ -1324,14 +1992,15 @@ class HomeHydrationCoordinatorTest {
 
     private fun artworkRef(
         key: String,
-        imageType: ArtworkType
+        imageType: ArtworkType,
+        provider: String = "TMDB"
     ) = ArtworkDisplayRef.RuntimeAsset(
         decisionKey = ArtworkDecisionKey(key),
         assetKey = null,
         imageType = imageType,
         selectedProvider = null,
         sourceRole = ArtworkSourceRole.PREMIUM,
-        trace = ArtworkTrace.empty()
+        trace = ArtworkTrace(selectedProvider = provider)
     )
 
     private fun resolutionResult(
@@ -1377,7 +2046,11 @@ class HomeHydrationCoordinatorTest {
             fieldOwners = mapOf(ResolvedField.TITLE to FieldOwner.PRIMARY),
             ignoredOverwrites = emptyList(),
             sourceRoles = mapOf(ResolvedField.TITLE to SourceRole.PRIMARY),
-            sourceProviders = mapOf(ResolvedField.TITLE to "TMDB")
+            sourceProviders = mapOf(
+                ResolvedField.TITLE to "TMDB",
+                ResolvedField.POSTER to "TMDB",
+                ResolvedField.BACKDROP to "TMDB"
+            )
         ),
         displayMetadata = displayMetadata,
         trace = emptyList()

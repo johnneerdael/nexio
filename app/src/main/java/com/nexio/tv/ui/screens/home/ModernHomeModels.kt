@@ -18,7 +18,6 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RatingDisplayFormatter
 import com.nexio.tv.domain.model.TitleRatingSource
-import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toArtworkBundleFromDisplayFields
 import com.nexio.tv.ui.components.ContinueWatchingResolvedDisplayItem
 
@@ -387,15 +386,15 @@ internal fun selectForegroundHeroPreview(
     val candidateLanguageMatches = candidate.textLanguageTag.matchesPreferredLanguage(preferredLanguageTag)
     return when {
         candidate.textSourceRank.ordinal > current.textSourceRank.ordinal -> candidate
-        candidate.textSourceRank.ordinal < current.textSourceRank.ordinal -> candidate.withForegroundTextFrom(current)
+        candidate.textSourceRank.ordinal < current.textSourceRank.ordinal -> candidate.withVisibleDisplayFrom(current)
         candidateLanguageMatches && !currentLanguageMatches -> candidate
-        currentLanguageMatches && !candidateLanguageMatches -> candidate.withForegroundTextFrom(current)
-        candidate.textLanguageTag != current.textLanguageTag -> candidate.withForegroundTextFrom(current)
+        currentLanguageMatches && !candidateLanguageMatches -> candidate.withVisibleDisplayFrom(current)
+        candidate.textLanguageTag != current.textLanguageTag -> candidate.withVisibleDisplayFrom(current)
         else -> candidate
     }
 }
 
-private fun HeroPreview.withForegroundTextFrom(source: HeroPreview): HeroPreview =
+private fun HeroPreview.withVisibleDisplayFrom(source: HeroPreview): HeroPreview =
     copy(
         title = source.title,
         logo = source.logo,
@@ -406,6 +405,9 @@ private fun HeroPreview.withForegroundTextFrom(source: HeroPreview): HeroPreview
         ratingSource = if (!source.imdbText.isNullOrBlank()) source.ratingSource else ratingSource,
         tomatoesText = source.tomatoesText ?: tomatoesText,
         genres = source.genres,
+        poster = source.poster,
+        backdrop = source.backdrop,
+        imageUrl = source.imageUrl,
         frozenLogoUrl = source.frozenLogoUrl,
         textSourceRank = source.textSourceRank,
         textLanguageTag = source.textLanguageTag
@@ -485,31 +487,25 @@ internal fun buildContinueWatchingItem(
     airsDateTemplate: String,
     upcomingLabel: String
 ): ModernCarouselItem {
-    // The resolved projection drives both the rendered CW row card AND the
-    // Modern carousel's HERO PREVIEW (this function). poster/backdrop/logo/title
-    // read from the typed `resolved.posterRef` / `backdropRef` / `logoRef` /
-    // `title` slots — rule #1 compliant. Other display fields (description,
-    // releaseInfo, imdbRating, tomatoesRating, genres) still come from the
-    // legacy `displayMetadata` chain on the embedded ContinueWatchingItem;
-    // migrating those is Phase 3 (catalog pipeline restructure) of
-    // docs/superpowers/specs/2026-05-10-home-metapreview-elimination-design.md.
+    // The resolved projection drives both the rendered CW row card and the
+    // Modern carousel hero preview. The embedded legacy item is kept for
+    // episode-specific structure and callbacks, not as the display authority.
     val item = resolved.toContinueWatchingItem()
-    // Phase 2A migration: poster/backdrop/logo/title now read from the typed
-    // projection (rule #1) instead of the legacy displayMetadata chain. Other
-    // fields (description, releaseInfo, imdbRating, tomatoesRating, genres)
-    // stay on displayMetadata for now — those typed equivalents land in Phase 3
-    // (catalog pipeline restructure).
     val resolvedPoster: String? = resolved.posterRef.toLegacyArtworkString()
     val resolvedBackdrop: String? = resolved.backdropRef.toLegacyArtworkString()
     val resolvedLogo: String? = resolved.logoRef.toLegacyArtworkString()
-    val resolvedTitle: String? = resolved.title
-    val displayMetadata = item.displayMetadata()
+    val resolvedTitle: String = resolved.title.orEmpty()
+    val resolvedRatingValue = resolved.rating?.value
+    val resolvedRatingSource = resolved.rating?.source
+    val resolvedRatingText = resolvedRatingValue?.let { RatingDisplayFormatter.formatTitleRating(it) }
+    val resolvedYearText = extractYear(resolved.releaseInfo)
+    val resolvedTomatoesText = resolved.tomatoesRating?.let(::formatPreviewTomatoesRating)
+    val resolvedGenres = resolved.genres
     val heroPreview = when (item) {
         is ContinueWatchingItem.InProgress -> {
             val isSeries = isSeriesType(item.progress.contentType)
             val episodeCode = item.progress.episodeDisplayString
             val episodeTitle = item.progress.episodeTitle?.takeIf { it.isNotBlank() }
-            val episodeImdbRating = item.episodeImdbRating.takeIf { isSeries }
             val episodeLabel = when {
                 isSeries && episodeCode != null && episodeTitle != null -> "$episodeCode · $episodeTitle"
                 isSeries && episodeCode != null -> episodeCode
@@ -517,18 +513,17 @@ internal fun buildContinueWatchingItem(
                 else -> item.progress.contentType.replaceFirstChar { ch -> ch.uppercase() }
             }
             HeroPreview(
-                title = resolvedTitle ?: item.progress.name,
+                title = resolvedTitle,
                 logo = resolvedLogo,
-                description = item.episodeDescription
-                    ?: displayMetadata.description
+                description = resolved.episodeDescription
+                    ?: resolved.description
                     ?: item.progress.episodeTitle,
                 contentTypeText = episodeLabel,
-                yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
-                imdbText = (episodeImdbRating ?: displayMetadata.imdbRating)
-                    ?.let { RatingDisplayFormatter.formatTitleRating(it) },
-                ratingSource = if (episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
-                tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
-                genres = item.genres.ifEmpty { displayMetadata.genres },
+                yearText = resolvedYearText,
+                imdbText = resolvedRatingText,
+                ratingSource = resolvedRatingSource,
+                tomatoesText = resolvedTomatoesText,
+                genres = resolvedGenres,
                 poster = resolvedPoster,
                 backdrop = resolvedBackdrop,
                 imageUrl = if (useLandscapePosters) {
@@ -550,26 +545,25 @@ internal fun buildContinueWatchingItem(
             val episodeTitle = item.info.episodeTitle?.takeIf { it.isNotBlank() }
             val episodeLabel = if (episodeTitle != null) "$episodeCode · $episodeTitle" else episodeCode
             HeroPreview(
-                title = resolvedTitle ?: item.info.name,
+                title = resolvedTitle,
                 logo = resolvedLogo,
-                description = item.info.episodeDescription
-                    ?: displayMetadata.description
+                description = resolved.episodeDescription
+                    ?: resolved.description
                     ?: item.info.episodeTitle
                     ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
                 contentTypeText = episodeLabel,
-                yearText = extractYear(displayMetadata.releaseInfo ?: item.info.releaseInfo),
-                imdbText = (item.info.imdbRating ?: displayMetadata.imdbRating)
-                    ?.let { RatingDisplayFormatter.formatTitleRating(it) },
-                ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
-                tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
-                genres = item.info.genres.ifEmpty { displayMetadata.genres },
+                yearText = resolvedYearText,
+                imdbText = resolvedRatingText,
+                ratingSource = resolvedRatingSource,
+                tomatoesText = resolvedTomatoesText,
+                genres = resolvedGenres,
                 poster = resolvedPoster,
                 backdrop = resolvedBackdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
                         resolvedBackdrop,
                         resolvedPoster,
-                        item.info.thumbnail
+                        resolved.episodeThumbnail
                     )
                 } else {
                     // Portrait poster cards: poster sources only. Episode thumbnails are also
@@ -577,7 +571,7 @@ internal fun buildContinueWatchingItem(
                     // but backdrop/logo are NOT valid fallbacks here.
                     firstNonBlank(
                         resolvedPoster,
-                        item.info.thumbnail
+                        resolved.episodeThumbnail
                     )
                 },
                 textSourceRank = resolved.textSourceRank,
@@ -590,7 +584,7 @@ internal fun buildContinueWatchingItem(
         is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
-                    item.episodeThumbnail,
+                    resolved.episodeThumbnail,
                     resolvedPoster,
                     resolvedBackdrop
                 )
@@ -607,7 +601,7 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     heroPreview.poster,
                     resolvedPoster,
-                    item.episodeThumbnail
+                    resolved.episodeThumbnail
                 )
             } else {
                 resolvedPoster
@@ -616,7 +610,7 @@ internal fun buildContinueWatchingItem(
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
             if (item.info.hasAired) {
                 firstNonBlank(
-                    item.info.thumbnail,
+                    resolved.episodeThumbnail,
                     resolvedPoster,
                     resolvedBackdrop
                 )
@@ -624,7 +618,7 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     resolvedBackdrop,
                     resolvedPoster,
-                    item.info.thumbnail
+                    resolved.episodeThumbnail
                 )
             }
         } else {
@@ -632,7 +626,7 @@ internal fun buildContinueWatchingItem(
             // backdrop/logo are NOT valid fallbacks here.
             firstNonBlank(
                 resolvedPoster,
-                item.info.thumbnail
+                resolved.episodeThumbnail
             )
         }
     }
@@ -640,10 +634,7 @@ internal fun buildContinueWatchingItem(
     return ModernCarouselItem(
         key = continueWatchingItemKey(item),
         itemKey = resolved.itemKey,
-        title = when (item) {
-            is ContinueWatchingItem.InProgress -> resolvedTitle ?: item.progress.name
-            is ContinueWatchingItem.NextUp -> resolvedTitle ?: item.info.name
-        },
+        title = resolvedTitle,
         subtitle = when (item) {
             is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
             is ContinueWatchingItem.NextUp -> {
@@ -749,26 +740,24 @@ internal fun buildCatalogItem(
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
         ?: resolvedLogoUrl
 
-    val resolvedTitle = resolved.title ?: item?.name ?: ""
-    val resolvedYearText = resolved.year?.toString() ?: extractYear(displayMetadata.releaseInfo ?: item?.releaseInfo)
+    val resolvedTitle = resolved.title.orEmpty()
+    val resolvedYearText = resolved.year?.toString() ?: extractYear(resolved.releaseInfo)
     val resolvedRatingValue = resolved.rating?.value
     // Only surface a ratingSource when there is an actual rating value to show; otherwise
     // the UI would render an IMDB chip without a number.
     val resolvedRatingSource: TitleRatingSource? = if (resolvedRatingValue != null) {
-        resolved.rating?.source ?: TitleRatingSource.IMDB
+        resolved.rating.source
     } else {
         null
     }
     val imdbText = resolvedRatingValue?.let { RatingDisplayFormatter.formatTitleRating(it) }
 
-    // Description / genres / tomatoes / contentTypeText still come from MetaPreview
-    // (Plan B Task 4 minimum scope: ResolvedDisplayItem does not yet expose these via
-    // ModernHomeRowItem). When MetaPreview is unavailable, fall back to the empty values.
-    val description = resolved.description ?: displayMetadata.description ?: item?.description
+    // MetaPreview stays available for callback identity only. Visible display fields
+    // must come from ModernHomeRowItem, which is projected from ResolvedDisplayItem.
+    val description = resolved.description
     val contentTypeText = (item?.apiType ?: row.apiType).replaceFirstChar { ch -> ch.uppercase() }
-    val tomatoesText = (resolved.tomatoesRating ?: displayMetadata.tomatoesRating ?: item?.tomatoesRating)
-        ?.let(::formatPreviewTomatoesRating)
-    val genres = resolved.genres.ifEmpty { displayMetadata.genres.ifEmpty { item?.genres ?: emptyList() } }.take(3)
+    val tomatoesText = resolved.tomatoesRating?.let(::formatPreviewTomatoesRating)
+    val genres = resolved.genres.take(3)
 
     val heroImageUrl = if (useLandscapePosters) {
         firstNonBlank(resolvedBackdropUrl, resolvedPosterUrl)
@@ -801,7 +790,7 @@ internal fun buildCatalogItem(
     val itemId = item?.id ?: resolved.contentId
     val itemType = item?.apiType ?: row.apiType
     val trailerTitle = resolvedTitle
-    val trailerReleaseInfo = resolved.releaseInfo ?: displayMetadata.releaseInfo ?: item?.releaseInfo
+    val trailerReleaseInfo = resolved.releaseInfo
 
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${itemId}_${occurrence}",

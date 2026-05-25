@@ -226,6 +226,37 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolved continue watching projection owns episode thumbnail rendering`() {
+        val nextUp = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tt456",
+                contentType = "series",
+                name = "Raw Show",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt456:1:2",
+                season = 1,
+                episode = 2,
+                episodeTitle = "Episode 2",
+                thumbnail = "raw-source-thumbnail",
+                lastWatched = 1L
+            )
+        )
+        val resolved = resolvedCwNextUp(nextUp).copy(episodeThumbnail = "projection-thumbnail")
+
+        val built = buildContinueWatchingItem(
+            resolved = resolved,
+            useLandscapePosters = true,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+
+        assertEquals("projection-thumbnail", built.imageUrl)
+        assertEquals("projection-thumbnail", built.heroPreview.imageUrl)
+    }
+
+    @Test
     fun `heroPreviewContentKey changes when tomatoes text changes for the active item`() {
         val withoutTomatoes = buildModernCarouselItem(tomatoesText = null)
         val withTomatoes = buildModernCarouselItem(tomatoesText = "88")
@@ -281,13 +312,18 @@ class ModernHomeModelsTest {
     }
 
     @Test
-    fun `resolveDisplayedHeroPreview keeps foreground text set when fallback metadata races later`() {
-        val localizedPreview = buildModernCarouselItem(tomatoesText = null).heroPreview.copy(
+    fun `resolveDisplayedHeroPreview keeps visible display set when fallback metadata races later`() {
+        val localizedPreview = buildModernCarouselItem(tomatoesText = "91").heroPreview.copy(
             title = "Berlijn",
             description = "Nederlandse beschrijving",
             contentTypeText = "Drama",
             yearText = "2026",
+            imdbText = "8.1",
+            ratingSource = TitleRatingSource.TMDB,
             genres = listOf("Drama"),
+            poster = "resolved-poster",
+            backdrop = "resolved-backdrop",
+            imageUrl = "resolved-backdrop",
             textSourceRank = DisplaySourceRank.RESOLVED
         )
         val fallbackPreview = buildModernCarouselItem(tomatoesText = "88").heroPreview.copy(
@@ -295,7 +331,12 @@ class ModernHomeModelsTest {
             description = "English overview",
             contentTypeText = "Series",
             yearText = "2026",
+            imdbText = "6.2",
+            ratingSource = TitleRatingSource.IMDB,
             genres = listOf("Crime"),
+            poster = "fallback-poster",
+            backdrop = "fallback-backdrop",
+            imageUrl = "fallback-backdrop",
             textSourceRank = DisplaySourceRank.FIRST_PAINT
         )
 
@@ -310,7 +351,12 @@ class ModernHomeModelsTest {
         assertEquals("Nederlandse beschrijving", resolved?.description)
         assertEquals("Drama", resolved?.contentTypeText)
         assertEquals(listOf("Drama"), resolved?.genres)
-        assertEquals("88", resolved?.tomatoesText)
+        assertEquals("8.1", resolved?.imdbText)
+        assertEquals(TitleRatingSource.TMDB, resolved?.ratingSource)
+        assertEquals("91", resolved?.tomatoesText)
+        assertEquals("resolved-poster", resolved?.poster)
+        assertEquals("resolved-backdrop", resolved?.backdrop)
+        assertEquals("resolved-backdrop", resolved?.imageUrl)
     }
 
     @Test
@@ -430,6 +476,77 @@ class ModernHomeModelsTest {
         assertEquals("original-logo", rebuilt.heroPreview.frozenLogoUrl)
         assertEquals("enriched-backdrop", rebuilt.heroPreview.backdrop)
         assertEquals("enriched-logo", rebuilt.heroPreview.logo)
+    }
+
+    @Test
+    fun `buildCatalogItem ignores stale metapreview display fields`() {
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "catalog",
+            catalogName = "Catalog",
+            type = ContentType.MOVIE,
+            items = emptyList()
+        )
+        val staleMeta = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Stale title",
+            poster = "stale-poster",
+            posterShape = PosterShape.POSTER,
+            background = "stale-backdrop",
+            logo = "stale-logo",
+            description = "Stale description",
+            releaseInfo = "1999",
+            runtime = null,
+            imdbRating = 4.0f,
+            tomatoesRating = 44.0,
+            genres = listOf("Stale")
+        )
+        val resolved = ModernHomeRowItem.from(
+            resolvedDisplayItemForCw(
+                contentId = "tt123",
+                contentType = "movie",
+                title = "Resolved title",
+                overview = "Resolved description",
+                genres = listOf("Drama", "Thriller"),
+                rating = TitleRating(8.8, TitleRatingSource.IMDB),
+                posterUrl = "resolved-poster",
+                backdropUrl = "resolved-backdrop",
+                logoUrl = "resolved-logo"
+            ).copy(
+                display = ResolvedDisplayFields(
+                    title = "Resolved title",
+                    originalTitle = null,
+                    year = 2025,
+                    releaseDate = "2025-05-24",
+                    overview = "Resolved description",
+                    genres = listOf("Drama", "Thriller"),
+                    runtimeText = "120m",
+                    tomatoesRating = 91.0
+                ),
+                hydrationState = HydrationState.CANONICAL_READY
+            )
+        )
+
+        val built = buildCatalogItem(
+            resolved = resolved,
+            metaPreview = staleMeta,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0
+        )
+
+        assertEquals("Resolved title", built.heroPreview.title)
+        assertEquals("Resolved description", built.heroPreview.description)
+        assertEquals("2025", built.heroPreview.yearText)
+        assertEquals("91", built.heroPreview.tomatoesText)
+        assertEquals(listOf("Drama", "Thriller"), built.heroPreview.genres)
+        assertEquals("8.8", built.heroPreview.imdbText)
+        assertEquals("2025-05-24", built.subtitle)
+        assertEquals("resolved-backdrop", built.heroPreview.backdrop)
+        assertEquals("resolved-logo", built.heroPreview.logo)
     }
 
     private fun resolvedCwInProgress(item: ContinueWatchingItem.InProgress): ContinueWatchingResolvedDisplayItem.InProgress {

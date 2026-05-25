@@ -362,7 +362,7 @@ fun GridHomeContent(
                                     )
                                 },
                                 onLongPress = {
-                                    onCatalogItemLongPress(originalItem, gridItem.addonBaseUrl)
+                                    onCatalogItemLongPress(effectiveItem, gridItem.addonBaseUrl)
                                 }
                             )
                         }

@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.skipStep
@@ -127,13 +128,16 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     internal suspend fun hydrateAndPrefetchRows(
         rows: List<CatalogRow>,
         existingRowsByKey: Map<String, CatalogRow> = emptyMap(),
+        hasResolvedAuthority: (String) -> Boolean = { false },
         telemetryEnabled: Boolean,
         onLog: (String, String?) -> Unit
     ): List<CatalogRow> {
         if (rows.isEmpty()) return rows
         val artworkProviderSettings = posterRatingsUrlResolver.currentSettings()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
-        val hydratedRows = rows.map { row ->
+        val hydratedRows = ArrayList<CatalogRow>(rows.size)
+        for (rowIndex in rows.indices) {
+            val row = rows[rowIndex]
             val rowKey = homeCatalogGlobalKey(row)
             val oldItems = existingRowsByKey[rowKey]?.items.orEmpty()
             val diff = diffCatalogItems(oldItems = oldItems, newItems = row.items)
@@ -143,15 +147,22 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 .toHashSet()
             val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
 
-            val hydratedItems = row.items.map { item ->
+            val hydratedItems = ArrayList<MetaPreview>(row.items.size)
+            for (itemIndex in row.items.indices) {
+                val item = row.items[itemIndex]
                 val itemKey = "${item.apiType}:${item.id}"
+                if (hasResolvedAuthority(itemKey)) {
+                    hydratedItems += item
+                    continue
+                }
                 val persistedFallback = oldItemsByKey[itemKey]
                 if (shouldReusePersistedHomeItem(
                         itemChanged = itemKey in changedKeys,
                         persistedFallback = persistedFallback
                     )
                 ) {
-                    return@map persistedFallback!!
+                    hydratedItems += persistedFallback!!
+                    continue
                 }
                 val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
                     itemKey = itemKey,
@@ -168,7 +179,33 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     persistedFallback = persistedFallback,
                     externalMeta = null
                 )
-                val localized = overlayProviderLocalizedMetadata(merged, onLog)
+                val cachedDisplayMetadata = metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(
+                    itemKey = itemKey,
+                    languageTag = languageTag
+                )?.takeIf { it.hasRefreshDisplayFields() }
+                val localized = if (cachedDisplayMetadata != null) {
+                    if (telemetryEnabled) {
+                        onLog(
+                            "home_display_cache_hit",
+                            "catalogKey=$rowKey itemKey=$itemKey"
+                        )
+                    }
+                    mergePersistedHomeDisplayMetadata(
+                        currentItem = merged,
+                        persistedFallback = null,
+                        externalMeta = cachedDisplayMetadata.toMetaForRefresh(merged)
+                    )
+                } else {
+                    val providerLocalized = overlayProviderLocalizedMetadata(merged, onLog)
+                    if (providerLocalized != merged) {
+                        metadataDiskCacheStore.writeHomeDisplayMetadata(
+                            itemKey = itemKey,
+                            languageTag = languageTag,
+                            metadata = providerLocalized.toHomeDisplayMetadata()
+                        )
+                    }
+                    providerLocalized
+                }
                 posterRatingsUrlResolver.applyArtworkRef(
                     localized.withCompatiblePersistedInternalPoster(
                         persistedFallback = persistedFallback,
@@ -176,8 +213,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     ),
                     artworkProviderSettings
                 )
+                    .also { hydratedItems += it }
             }
-            row.copy(items = hydratedItems)
+            hydratedRows += row.copy(items = hydratedItems)
         }
 
         val flattenedItems = hydratedRows.flatMap { it.items }
@@ -207,6 +245,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         isCatalogDisabled: (Addon, CatalogDescriptor) -> Boolean,
         getCurrentRow: suspend (String) -> CatalogRow?,
         isItemReferencedElsewhere: suspend (String, String) -> Boolean,
+        hasResolvedAuthority: (String) -> Boolean = { false },
         onCatalogReady: suspend (String, CatalogRow, CatalogItemDiff) -> Unit,
         onRawCatalogBatchComplete: suspend () -> Unit = {},
         onLog: (String, String?) -> Unit
@@ -274,6 +313,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 existingRowsByKey = refreshedEntries.associate { entry ->
                     entry.catalogKey to entry.row.copy(items = entry.oldItems)
                 },
+                hasResolvedAuthority = hasResolvedAuthority,
                 telemetryEnabled = telemetryEnabled,
                 onLog = onLog
             )
@@ -333,6 +373,33 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         val catalogKey = "visible_home"
 
         val imageTelemetry = buildImagePrefetchTelemetry(uniqueItems)
+        onLog(
+            "image_prefetch_start",
+            "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
+        )
+        if (telemetryEnabled) {
+            imageTelemetry.itemEvents.forEach { itemEvent ->
+                onLog(itemEvent.first, "catalogKey=$catalogKey ${itemEvent.second}")
+            }
+        }
+        prefetchImageEntries(imageTelemetry.entriesToFetch)
+        onLog(
+            "image_prefetch_end",
+            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+                "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
+        )
+    }
+
+    internal suspend fun prefetchResolvedVisibleImagesOnly(
+        items: List<ResolvedDisplayItem>,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        val uniqueItems = items.distinctBy { it.itemKey }
+        if (uniqueItems.isEmpty()) return
+
+        val catalogKey = "visible_home_resolved"
+        val imageTelemetry = buildResolvedImagePrefetchTelemetry(uniqueItems)
         onLog(
             "image_prefetch_start",
             "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
@@ -426,8 +493,73 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         )
     }
 
+    private fun buildResolvedImagePrefetchTelemetry(items: List<ResolvedDisplayItem>): ImagePrefetchTelemetry {
+        val orderedEntries = linkedSetOf<ImageCacheEntry>()
+        val itemEvents = mutableListOf<Pair<String, String>>()
+        var cachedUrls = 0
+        var missingUrls = 0
+        var itemsFullyCached = 0
+        var itemsNeedingFetch = 0
+
+        items.forEach { item ->
+            val entries = buildList {
+                item.artwork.poster.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.poster(item.contentId, item.artwork.poster.deriveProviderTag(), model)))
+                    }
+                item.artwork.backdrop.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.backdrop(item.contentId, model)))
+                    }
+                item.artwork.logo.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.logo(item.contentId, model)))
+                    }
+            }
+            if (entries.isEmpty()) {
+                itemEvents += "item_image_skipped_no_urls" to "itemKey=${item.itemKey}"
+                return@forEach
+            }
+            val missingForItem = entries.filterNot { hasImageCached(it.diskCacheKey) }
+            cachedUrls += (entries.size - missingForItem.size)
+            missingUrls += missingForItem.size
+            orderedEntries.addAll(missingForItem)
+            if (missingForItem.isEmpty()) {
+                itemsFullyCached += 1
+                itemEvents += "item_image_cached" to "itemKey=${item.itemKey} urls=${entries.size}"
+            } else {
+                itemsNeedingFetch += 1
+                itemEvents += "item_image_fetch" to "itemKey=${item.itemKey} urls=${missingForItem.size}/${entries.size}"
+            }
+        }
+
+        return ImagePrefetchTelemetry(
+            entriesToFetch = orderedEntries.toList(),
+            totalUrls = cachedUrls + missingUrls,
+            cachedUrls = cachedUrls,
+            missingUrls = missingUrls,
+            itemsConsidered = items.size,
+            itemsFullyCached = itemsFullyCached,
+            itemsNeedingFetch = itemsNeedingFetch,
+            itemEvents = itemEvents
+        )
+    }
+
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
+
+    private fun ArtworkDisplayRef?.toPrefetchModelString(): String? =
+        when (this) {
+            null,
+            is ArtworkDisplayRef.Placeholder -> null
+            is ArtworkDisplayRef.RuntimeAsset,
+            is ArtworkDisplayRef.LegacyString -> toLegacyArtworkString()
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+        }
+
+    private fun ArtworkDisplayRef?.deriveProviderTag(): String? =
+        (this as? ArtworkDisplayRef.RuntimeAsset)?.selectedProvider?.key?.lowercase()
 
     @Deprecated(
         message = "redundant after reducer; remove once Plan B (UI consumption migration) lands",
@@ -514,6 +646,46 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     }
 }
 
+private fun HomeDisplayMetadata.toMetaForRefresh(base: MetaPreview): Meta =
+    Meta(
+        id = base.id,
+        type = base.type,
+        rawType = base.rawType,
+        name = title ?: base.name,
+        poster = poster,
+        posterShape = base.posterShape,
+        background = backdrop,
+        logo = logo,
+        description = description,
+        releaseInfo = releaseInfo,
+        runtime = runtime,
+        imdbRating = imdbRating,
+        ratingSource = ratingSource,
+        genres = genres,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        originalLanguage = originalLanguage,
+        links = emptyList(),
+        posterProviderTag = posterProviderTag,
+        artwork = artwork
+    )
+
+private fun HomeDisplayMetadata.hasRefreshDisplayFields(): Boolean =
+    !title.isNullOrBlank() ||
+        !description.isNullOrBlank() ||
+        genres.isNotEmpty() ||
+        !releaseInfo.isNullOrBlank() ||
+        !runtime.isNullOrBlank() ||
+        imdbRating != null ||
+        !poster.isNullOrBlank() ||
+        !backdrop.isNullOrBlank() ||
+        !logo.isNullOrBlank() ||
+        artwork != null
+
 /**
  * Projects a freshly-emitted rail row against the persisted (overlay-applied) row using
  * [HomeRailProjectionReducer]. The rail row is FIRST_PAINT input; the persisted row
@@ -534,13 +706,14 @@ internal fun mergePersistedHomeDisplayMetadata(
     if (persistedFallback == null && externalMeta == null) return currentItem
     val externalAsPreview: MetaPreview? = externalMeta?.let { meta ->
         currentItem.copy(
-            name = meta.name ?: currentItem.name,
+            name = meta.name,
             description = meta.description,
             genres = meta.genres,
             releaseInfo = meta.releaseInfo,
             runtime = meta.runtime,
             imdbRating = meta.imdbRating,
             ratingSource = meta.ratingSource ?: currentItem.ratingSource,
+            originalLanguage = meta.originalLanguage ?: currentItem.originalLanguage,
             poster = meta.poster ?: currentItem.poster,
             background = meta.background ?: currentItem.background,
             logo = meta.logo ?: currentItem.logo,
@@ -581,6 +754,8 @@ private fun projectRailRowAgainstPersisted(
         merged.copy(
             poster = strongerDurablePoster(firstPaintSlots.poster, merged.poster)
         )
+    ).copy(
+        originalLanguage = resolvedRow.originalLanguage ?: rawRailItem.originalLanguage
     )
 }
 

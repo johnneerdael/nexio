@@ -104,6 +104,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
 private const val POSTER_PREFETCH_DISTANCE = 8
 
+private fun ModernCarouselItem.artworkCacheOwnerId(): String = when (val payload = payload) {
+    is ModernPayload.Catalog -> payload.itemId
+    is ModernPayload.ContinueWatching -> itemKey
+}
+
 internal fun resolveModernCarouselCardImageUrl(
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
@@ -115,7 +120,7 @@ internal fun resolveModernCarouselCardImageUrl(
     return if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         heroBackdrop ?: itemImageUrl ?: heroPoster
     } else {
-        itemImageUrl ?: heroPoster ?: frozenBackdropUrl ?: heroBackdrop
+        itemImageUrl ?: heroPoster
     }
 }
 
@@ -130,11 +135,10 @@ internal fun resolveModernCarouselCardImageUrl(
  * 2. Resolved-authority legacy URL on [item.heroPreview] — same provenance,
  *    just stringly-typed. Used when the resolved row never produced a typed
  *    ref (cold-start restore items pre-Phase-3.7).
- * 3. `metaPreview.artwork.*` typed ref — addon-side artwork that bypasses
- *    the merge boundary; last resort only, so it cannot win over a resolved
- *    upgrade.
- * 4. `metaPreview.poster` / `metaPreview.background` legacy URL — final
- *    fallback for items where nothing resolved.
+ * There is intentionally no direct `MetaPreview` fallback here. First paint
+ * must enter the resolved display authority before it can render, otherwise raw
+ * addon metadata can bypass the non-downgrade merge and reintroduce poster /
+ * backdrop popping.
  *
  * Inverting this priority away from `metaPreview.artwork.*` is what stops
  * the RPDB↔addon popping: previously the addon's `metaPreview.artwork.poster`
@@ -144,7 +148,6 @@ internal fun resolveModernCarouselCardImageUrl(
  */
 internal fun resolveModernCarouselCardArtworkModel(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
@@ -169,17 +172,7 @@ internal fun resolveModernCarouselCardArtworkModel(
         imageType = resolvedLegacyType
     )
     if (resolvedLegacyModel != null) return resolvedLegacyModel
-
-    val artwork = metaPreview.artwork
-    val metaTypedModel = if (useBackdrop) {
-        artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
-    } else {
-        artwork?.poster.toCoilModelOrNull()
-    }
-    if (metaTypedModel != null) return metaTypedModel
-
-    val metaLegacyUrl = if (useBackdrop) fallbackModel else metaPreview.poster
-    return metaLegacyUrl.toLegacyArtworkCoilModelOrNull(
+    return fallbackModel.toLegacyArtworkCoilModelOrNull(
         ownerKey = "${item.key}:${resolvedLegacyType.name.lowercase()}",
         imageType = resolvedLegacyType
     )
@@ -187,7 +180,6 @@ internal fun resolveModernCarouselCardArtworkModel(
 
 internal fun resolveModernCarouselCardFallbackArtworkModel(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean
@@ -197,15 +189,10 @@ internal fun resolveModernCarouselCardFallbackArtworkModel(
     val legacyFallback = if (useBackdrop) {
         firstNonBlank(
             item.heroPreview.backdrop,
-            item.heroPreview.poster,
-            metaPreview.background,
-            metaPreview.poster
+            item.heroPreview.poster
         )
     } else {
-        firstNonBlank(
-            item.heroPreview.poster,
-            metaPreview.poster
-        )
+        item.heroPreview.poster
     }
     return legacyFallback.toLegacyArtworkCoilModelOrNull(
         ownerKey = "${item.key}:fallback:${fallbackType.name.lowercase()}",
@@ -273,7 +260,7 @@ private fun ModernContinueWatchingRowItem(
 private fun ModernCatalogRowItem(
     rowKey: String,
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
+    metaPreview: MetaPreview?,
     payload: ModernPayload.Catalog,
     requester: FocusRequester,
     useLandscapePosters: Boolean,
@@ -320,7 +307,7 @@ private fun ModernCatalogRowItem(
         if (!isCardFocused || focusEventId != targetEventId) return@LaunchedEffect
 
         latestOnFocused()
-        latestOnItemFocus(metaPreview)
+        metaPreview?.let(latestOnItemFocus)
         latestOnPreloadAdjacentItem()
         latestOnCatalogSelectionFocused(
             FocusedCatalogSelection(
@@ -333,7 +320,6 @@ private fun ModernCatalogRowItem(
 
     ModernCarouselCard(
         item = item,
-        metaPreview = metaPreview,
         useLandscapePosters = useLandscapePosters,
         showLabels = showLabels,
         cardCornerRadius = posterCardCornerRadius,
@@ -407,7 +393,7 @@ internal fun ModernRowSection(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingResolvedDisplayItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit,
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
     onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
@@ -558,14 +544,8 @@ internal fun ModernRowSection(
             val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
 
             fun enqueueIfNeeded(item: ModernCarouselItem) {
-                // Skip prefetch when the surface metaByItemKey lookup misses; this is
-                // expected for CW items (different keyspace) and for transient races
-                // where the MetaPreview isn't yet attached. The visible-render path
-                // tolerates the miss identically (return@itemsIndexed).
-                val meta = metaByItemKey[item.itemKey] ?: return
                 val model = resolveModernCarouselCardArtworkModel(
                     item = item,
-                    metaPreview = meta,
                     useLandscapePosters = useLandscapePosters,
                     focusedPosterBackdropExpandEnabled = false,
                     isBackdropExpanded = false
@@ -711,10 +691,12 @@ internal fun ModernRowSection(
                         }
 
                         is ModernPayload.Catalog -> {
-                            val metaPreview = metaByItemKey[item.itemKey] ?: return@itemsIndexed
+                            val metaPreview = metaByItemKey[item.itemKey]
                             val nextCatalogItem = row.items.getOrNull(index + 1)
                                 ?.let { metaByItemKey[it.itemKey] }
-                            val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
+                            val isWatched = remember(metaPreview) {
+                                metaPreview?.let(isCatalogItemWatched) ?: false
+                            }
                             val playTrailerInExpandedCard =
                                 focusedPosterBackdropTrailerPlaybackTarget ==
                                     FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
@@ -786,8 +768,8 @@ internal fun ModernRowSection(
                                 },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
-                                onLongPress = remember(metaPreview, payload.addonBaseUrl) {
-                                    { onCatalogItemLongPress(metaPreview, payload.addonBaseUrl) }
+                                onLongPress = remember(metaPreview, payload.addonBaseUrl, item.heroPreview) {
+                                    { metaPreview?.let { onCatalogItemLongPress(it, payload.addonBaseUrl, item.heroPreview) } }
                                 },
                                 canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
                                 fullscreenTrailerActive = fullscreenTrailerActive,
@@ -835,7 +817,6 @@ private fun ModernCatalogLoadingPlaceholder(
 @Composable
 private fun ModernCarouselCard(
     item: ModernCarouselItem,
-    metaPreview: MetaPreview,
     useLandscapePosters: Boolean,
     showLabels: Boolean,
     cardCornerRadius: Dp,
@@ -915,32 +896,32 @@ private fun ModernCarouselCard(
     val requestHeightPx = remember(cardHeight, density) {
         with(density) { cardHeight.roundToPx() }
     }
-    val coilModel = remember(item, metaPreview, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+    val coilModel = remember(item, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
         resolveModernCarouselCardArtworkModel(
             item = item,
-            metaPreview = metaPreview,
             useLandscapePosters = useLandscapePosters,
             focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
             isBackdropExpanded = isBackdropExpanded,
             fallbackModel = imageUrl
         )
     }
-    val fallbackArtworkModel = remember(item, metaPreview, useLandscapePosters, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
+    val fallbackArtworkModel = remember(item, useLandscapePosters, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
         resolveModernCarouselCardFallbackArtworkModel(
             item = item,
-            metaPreview = metaPreview,
             useLandscapePosters = useLandscapePosters,
             focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
             isBackdropExpanded = isBackdropExpanded
         )
     }
-    val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, metaPreview.id, metaPreview.posterProviderTag) {
+    val artworkOwnerId = remember(item) { item.artworkCacheOwnerId() }
+    val posterProviderTag = remember(item.posterRef) { item.posterRef.deriveProviderTag() }
+    val imageModel = remember(context, coilModel, requestWidthPx, requestHeightPx, artworkOwnerId, posterProviderTag) {
         coilModel?.let { model ->
             val modelKey = model.toString()
             val diskKey = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-                ArtworkImageCacheKeys.backdrop(metaPreview.id, modelKey)
+                ArtworkImageCacheKeys.backdrop(artworkOwnerId, modelKey)
             } else {
-                ArtworkImageCacheKeys.poster(metaPreview.id, metaPreview.posterProviderTag, modelKey)
+                ArtworkImageCacheKeys.poster(artworkOwnerId, posterProviderTag, modelKey)
             }
             ImageRequest.Builder(context)
                 .data(model)
@@ -959,15 +940,14 @@ private fun ModernCarouselCard(
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
     val effectiveLogoUrl = frozenLogoUrl.value
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, metaPreview.id) {
-        (metaPreview.artwork?.logo.toCoilModelOrNull()
-            ?: effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO))?.let {
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, artworkOwnerId) {
+        effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO)?.let {
             val modelKey = it.toString()
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${modelKey}_${maxLogoWidthPx}x${logoHeightPx}")
-                .diskCacheKey(ArtworkImageCacheKeys.logo(metaPreview.id, modelKey))
+                .diskCacheKey(ArtworkImageCacheKeys.logo(artworkOwnerId, modelKey))
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }

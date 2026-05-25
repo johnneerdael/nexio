@@ -73,18 +73,19 @@ class ArtworkProviderResolver @Inject constructor(
 }
 
 internal object ContentTypeDefaults {
-    private val addonProvider =
-        ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON)
+    private val tmdbProvider =
+        ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+    private val kitsuProvider =
+        ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU)
 
     fun resolve(artworkType: ArtworkType, isAnime: Boolean): ArtworkProviderId =
         when (artworkType) {
             ArtworkType.POSTER,
             ArtworkType.BACKDROP,
-            ArtworkType.LOGO ->
-                if (isAnime) addonProvider else addonProvider
-                //  ↑ fanart.tv lands → else fanartProvider
-            ArtworkType.THUMBNAIL -> addonProvider
+            ArtworkType.LOGO,
+            ArtworkType.THUMBNAIL ->
+                if (isAnime) kitsuProvider else tmdbProvider
         }
 }
 
-const val DEFAULTS_TABLE_VERSION = 1
+const val DEFAULTS_TABLE_VERSION = 2
