@@ -80,6 +80,21 @@ class ModernHomeRowsArtworkModelTest {
     }
 
     @Test
+    fun `portrait card image url does not fall back to backdrop when poster is missing`() {
+        assertEquals(
+            null,
+            resolveModernCarouselCardImageUrl(
+                focusedPosterBackdropExpandEnabled = false,
+                isBackdropExpanded = false,
+                frozenBackdropUrl = "stock-backdrop",
+                itemImageUrl = null,
+                heroPoster = null,
+                heroBackdrop = "hero-backdrop"
+            )
+        )
+    }
+
+    @Test
     fun `portrait cards do not use typed backdrop when poster is missing`() {
         val item = carouselItem(
             ArtworkBundle(

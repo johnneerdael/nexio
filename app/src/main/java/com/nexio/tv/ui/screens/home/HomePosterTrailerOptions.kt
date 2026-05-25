@@ -35,6 +35,7 @@ internal fun playableHomeTrailerFor(
     itemId: String,
     title: String,
     item: com.nexio.tv.domain.model.MetaPreview? = null,
+    heroPreview: HeroPreview? = item?.toHomeHeroPreview(),
     previewUrls: Map<String, String>,
     previewAudioUrls: Map<String, String>,
     previewUserAgents: Map<String, String> = emptyMap(),
@@ -52,7 +53,7 @@ internal fun playableHomeTrailerFor(
         signingClientKey = previewSigningClientKeys[itemId]?.takeIf { it.isNotBlank() },
         streamingDataPoToken = previewStreamingDataPoTokens[itemId]?.takeIf { it.isNotBlank() },
         captions = previewCaptions[itemId].orEmpty(),
-        heroPreview = item?.toHomeHeroPreview()
+        heroPreview = heroPreview
     )
 }
 

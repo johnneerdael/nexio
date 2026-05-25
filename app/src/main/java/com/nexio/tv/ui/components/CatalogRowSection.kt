@@ -73,10 +73,8 @@ internal fun catalogRowItemContentType(item: MetaPreview): String = item.apiType
 
 /**
  * Layers the resolved display authority ([ModernHomeRowItem]) onto a legacy [MetaPreview]
- * so the rendered card pulls poster/backdrop/logo, title, and rating from the resolved
- * surface while preserving identity, description, genres, runtime, and other fields the
- * resolved projection does not yet expose. Mirrors the Modern presentation pipeline's
- * `buildCatalogItem` overlay shape (Plan B Task 4) at the Classic/Grid call sites.
+ * so the rendered card pulls visible display fields from the resolved surface while
+ * preserving callback identity and non-display routing fields from the raw row item.
  *
  * Callers must still pass the original [MetaPreview] to `(MetaPreview) -> Unit`
  * callbacks — only display fields are layered here.
@@ -92,23 +90,25 @@ internal fun overlayResolvedDisplay(
     val thumbnailRef = resolved.thumbnailRef
     val resolvedRating = resolved.rating
     val mergedArtwork = ArtworkBundle(
-        poster = posterRef.takeIfImageType(ArtworkType.POSTER) ?: item.artwork?.poster,
-        backdrop = backdropRef.takeIfImageType(ArtworkType.BACKDROP) ?: item.artwork?.backdrop,
-        logo = logoRef.takeIfImageType(ArtworkType.LOGO) ?: item.artwork?.logo,
-        thumbnail = thumbnailRef.takeIfImageType(ArtworkType.THUMBNAIL) ?: item.artwork?.thumbnail
+        poster = posterRef.takeIfImageType(ArtworkType.POSTER),
+        backdrop = backdropRef.takeIfImageType(ArtworkType.BACKDROP),
+        logo = logoRef.takeIfImageType(ArtworkType.LOGO),
+        thumbnail = thumbnailRef.takeIfImageType(ArtworkType.THUMBNAIL)
     ).enforceArtworkTypeBoundaries().emptyOrNull()
     val resolvedRatingFloat = resolvedRating?.value?.toFloat()
-    val resolvedRatingSource: TitleRatingSource? = when {
-        resolvedRating != null -> resolvedRating.source
-        else -> item.ratingSource
-    }
+    val resolvedRatingSource: TitleRatingSource? = resolvedRating?.source
     return item.copy(
         name = resolved.title ?: item.name,
-        poster = posterRef.toLegacyArtworkString() ?: item.poster,
-        background = backdropRef.toLegacyArtworkString() ?: item.background,
-        logo = logoRef.toLegacyArtworkString() ?: item.logo,
-        imdbRating = resolvedRatingFloat ?: item.imdbRating,
+        poster = posterRef.toLegacyArtworkString(),
+        background = backdropRef.toLegacyArtworkString(),
+        logo = logoRef.toLegacyArtworkString(),
+        description = resolved.description,
+        genres = resolved.genres,
+        releaseInfo = resolved.releaseInfo,
+        runtime = resolved.runtime,
+        imdbRating = resolvedRatingFloat,
         ratingSource = resolvedRatingSource,
+        tomatoesRating = resolved.tomatoesRating,
         artwork = mergedArtwork
     )
 }
@@ -333,7 +333,7 @@ fun CatalogRowSection(
                         }
                     },
                     onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
-                    onLongPress = { onItemLongPress(item, catalogRow.addonBaseUrl) },
+                    onLongPress = { onItemLongPress(effectiveItem, catalogRow.addonBaseUrl) },
                     modifier = Modifier.then(directionalFocusModifier),
                     focusRequester = itemFocusRequestersByKey.getOrPut(
                         rowItemFocusKey(index, item)

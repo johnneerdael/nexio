@@ -7,6 +7,7 @@ import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.takeIfImageType
@@ -29,6 +30,7 @@ import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.skipStep
@@ -388,6 +390,33 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         )
     }
 
+    internal suspend fun prefetchResolvedVisibleImagesOnly(
+        items: List<ResolvedDisplayItem>,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        val uniqueItems = items.distinctBy { it.itemKey }
+        if (uniqueItems.isEmpty()) return
+
+        val catalogKey = "visible_home_resolved"
+        val imageTelemetry = buildResolvedImagePrefetchTelemetry(uniqueItems)
+        onLog(
+            "image_prefetch_start",
+            "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
+        )
+        if (telemetryEnabled) {
+            imageTelemetry.itemEvents.forEach { itemEvent ->
+                onLog(itemEvent.first, "catalogKey=$catalogKey ${itemEvent.second}")
+            }
+        }
+        prefetchImageEntries(imageTelemetry.entriesToFetch)
+        onLog(
+            "image_prefetch_end",
+            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+                "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
+        )
+    }
+
     private data class ImageCacheEntry(
         val url: String,
         val diskCacheKey: String
@@ -464,8 +493,73 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         )
     }
 
+    private fun buildResolvedImagePrefetchTelemetry(items: List<ResolvedDisplayItem>): ImagePrefetchTelemetry {
+        val orderedEntries = linkedSetOf<ImageCacheEntry>()
+        val itemEvents = mutableListOf<Pair<String, String>>()
+        var cachedUrls = 0
+        var missingUrls = 0
+        var itemsFullyCached = 0
+        var itemsNeedingFetch = 0
+
+        items.forEach { item ->
+            val entries = buildList {
+                item.artwork.poster.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.poster(item.contentId, item.artwork.poster.deriveProviderTag(), model)))
+                    }
+                item.artwork.backdrop.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.backdrop(item.contentId, model)))
+                    }
+                item.artwork.logo.toPrefetchModelString()
+                    ?.let { model ->
+                        add(ImageCacheEntry(model, ArtworkImageCacheKeys.logo(item.contentId, model)))
+                    }
+            }
+            if (entries.isEmpty()) {
+                itemEvents += "item_image_skipped_no_urls" to "itemKey=${item.itemKey}"
+                return@forEach
+            }
+            val missingForItem = entries.filterNot { hasImageCached(it.diskCacheKey) }
+            cachedUrls += (entries.size - missingForItem.size)
+            missingUrls += missingForItem.size
+            orderedEntries.addAll(missingForItem)
+            if (missingForItem.isEmpty()) {
+                itemsFullyCached += 1
+                itemEvents += "item_image_cached" to "itemKey=${item.itemKey} urls=${entries.size}"
+            } else {
+                itemsNeedingFetch += 1
+                itemEvents += "item_image_fetch" to "itemKey=${item.itemKey} urls=${missingForItem.size}/${entries.size}"
+            }
+        }
+
+        return ImagePrefetchTelemetry(
+            entriesToFetch = orderedEntries.toList(),
+            totalUrls = cachedUrls + missingUrls,
+            cachedUrls = cachedUrls,
+            missingUrls = missingUrls,
+            itemsConsidered = items.size,
+            itemsFullyCached = itemsFullyCached,
+            itemsNeedingFetch = itemsNeedingFetch,
+            itemEvents = itemEvents
+        )
+    }
+
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
+
+    private fun ArtworkDisplayRef?.toPrefetchModelString(): String? =
+        when (this) {
+            null,
+            is ArtworkDisplayRef.Placeholder -> null
+            is ArtworkDisplayRef.RuntimeAsset,
+            is ArtworkDisplayRef.LegacyString -> toLegacyArtworkString()
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+        }
+
+    private fun ArtworkDisplayRef?.deriveProviderTag(): String? =
+        (this as? ArtworkDisplayRef.RuntimeAsset)?.selectedProvider?.key?.lowercase()
 
     @Deprecated(
         message = "redundant after reducer; remove once Plan B (UI consumption migration) lands",

@@ -486,12 +486,13 @@ class HomeViewModel @Inject constructor(
      */
     internal fun currentTypedItemsByKey(): Map<String, MetaPreview> {
         val activeProfileId = profileManager.activeProfileId.value
-        val items = resolvedDisplaySurfaceRepository.snapshotNow(activeProfileId)
-        if (items.isEmpty()) return emptyMap()
-        val out = HashMap<String, MetaPreview>(items.size)
-        for (i in items.indices) {
-            val item = items[i]
-            out[item.itemKey] = item.toMetaPreview()
+        val itemsByAlias = resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(activeProfileId)
+        if (itemsByAlias.isEmpty()) return emptyMap()
+        val out = HashMap<String, MetaPreview>(itemsByAlias.size)
+        val projectedByItemKey = HashMap<String, MetaPreview>(itemsByAlias.size)
+        for ((alias, item) in itemsByAlias) {
+            val preview = projectedByItemKey.getOrPut(item.itemKey) { item.toMetaPreview() }
+            out[alias] = preview
         }
         return out
     }

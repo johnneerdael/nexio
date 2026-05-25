@@ -120,7 +120,7 @@ internal fun resolveModernCarouselCardImageUrl(
     return if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         heroBackdrop ?: itemImageUrl ?: heroPoster
     } else {
-        itemImageUrl ?: heroPoster ?: frozenBackdropUrl ?: heroBackdrop
+        itemImageUrl ?: heroPoster
     }
 }
 
@@ -393,7 +393,7 @@ internal fun ModernRowSection(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingResolvedDisplayItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit,
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
     onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
@@ -768,8 +768,8 @@ internal fun ModernRowSection(
                                 },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
-                                onLongPress = remember(metaPreview, payload.addonBaseUrl) {
-                                    { metaPreview?.let { onCatalogItemLongPress(it, payload.addonBaseUrl) } }
+                                onLongPress = remember(metaPreview, payload.addonBaseUrl, item.heroPreview) {
+                                    { metaPreview?.let { onCatalogItemLongPress(it, payload.addonBaseUrl, item.heroPreview) } }
                                 },
                                 canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
                                 fullscreenTrailerActive = fullscreenTrailerActive,

@@ -27,7 +27,6 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HOME_OVERLAY_POLICY_VERSION
 import com.nexio.tv.domain.model.HomeCatalogRail
-import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
@@ -615,6 +614,10 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     // suspending homeHydrationCoordinator.hydrate(...) call inside the body would
     // otherwise save the iterator into the continuation's L$N field, pinning the
     // uniqueItems list for the lifetime of the (possibly cancelled) coroutine.
+    val authorityAliasKeys = resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
+        profileId = capturedProfileSession.profileId,
+        includePreviewOnly = false
+    )
     for (i in uniqueItems.indices) {
         val item = uniqueItems[i]
         if (!isNonPlaybackHomeWorkAllowed()) return
@@ -628,6 +631,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             return
         }
         val itemKey = homeDisplayItemKey(item.apiType, item.id)
+        if (itemKey in authorityAliasKeys) continue
         if (hydratedHomeOverlaysByItemKey.value[itemKey]?.satisfiesVisibleHydrationFor(item, languageTag) == true) continue
         if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) continue
         try {
@@ -1638,12 +1642,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                 try {
                     val addons = addonsCache
                     var rawFirstPaintBatchActive = catalogInventoryRepository.isEmpty()
-                    val resolvedAuthorityItemKeys = resolvedDisplaySurfaceRepository
-                        .snapshotNow(expectedProfileSession.profileId)
-                        .asSequence()
-                        .filter { resolved -> resolved.hydrationState != HydrationState.PREVIEW_ONLY }
-                        .map { resolved -> resolved.itemKey }
-                        .toHashSet()
+                    val resolvedAuthorityAliasKeys = resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
+                        profileId = expectedProfileSession.profileId,
+                        includePreviewOnly = false
+                    )
                     refreshedCatalogCount.set(
                         homeCatalogRefreshCoordinator.refreshSerially(
                             addons = addons,
@@ -1676,7 +1678,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                                 }
                             },
                             hasResolvedAuthority = { itemKey ->
-                                itemKey in resolvedAuthorityItemKeys
+                                itemKey in resolvedAuthorityAliasKeys
                             },
                             onCatalogReady = { catalogKey, row, diff ->
                                 withContext(Dispatchers.Main.immediate) {
@@ -1815,8 +1817,20 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible prefetch generation=$expectedGeneration")
             return
         }
-        homeCatalogRefreshCoordinator.prefetchVisibleImagesOnly(
-            items = visibleItems,
+        val visibleItemKeys = visibleItems
+            .asSequence()
+            .map { item -> homeDisplayItemKey(item.apiType, item.id) }
+            .toSet()
+        val resolvedVisibleItemsByAlias = resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(
+            profileId = expectedProfileSession.profileId
+        )
+        val resolvedVisibleItems = visibleItemKeys
+            .asSequence()
+            .mapNotNull(resolvedVisibleItemsByAlias::get)
+            .distinctBy { it.itemKey }
+            .toList()
+        homeCatalogRefreshCoordinator.prefetchResolvedVisibleImagesOnly(
+            items = resolvedVisibleItems,
             telemetryEnabled = startupPerfTelemetryEnabled,
             onLog = { event, details -> logStartupPerf(event, details) }
         )

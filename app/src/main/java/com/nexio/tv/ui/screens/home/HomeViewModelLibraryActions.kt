@@ -67,7 +67,11 @@ internal fun HomeViewModel.observeLibraryState() {
     }
 }
 
-fun HomeViewModel.togglePosterLibrary(item: MetaPreview, addonBaseUrl: String?) {
+fun HomeViewModel.togglePosterLibrary(
+    item: MetaPreview,
+    addonBaseUrl: String?,
+    heroPreview: HeroPreview? = null
+) {
     val statusKey = homeItemStatusKey(item.id, item.apiType)
     if (statusKey in _uiState.value.posterLibraryPending) return
 
@@ -77,7 +81,7 @@ fun HomeViewModel.togglePosterLibrary(item: MetaPreview, addonBaseUrl: String?) 
 
     viewModelScope.launch {
         runCatching {
-            libraryRepository.toggleDefault(item.toLibraryEntryInput(addonBaseUrl))
+            libraryRepository.toggleDefault(item.toLibraryEntryInput(addonBaseUrl, heroPreview))
         }.onFailure { error ->
             Log.w(HomeViewModel.TAG, "Failed to toggle poster library for ${item.id}: ${error.message}")
         }
@@ -87,18 +91,22 @@ fun HomeViewModel.togglePosterLibrary(item: MetaPreview, addonBaseUrl: String?) 
     }
 }
 
-fun HomeViewModel.openPosterListPicker(item: MetaPreview, addonBaseUrl: String?) {
+fun HomeViewModel.openPosterListPicker(
+    item: MetaPreview,
+    addonBaseUrl: String?,
+    heroPreview: HeroPreview? = null
+) {
     if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) {
-        togglePosterLibrary(item, addonBaseUrl)
+        togglePosterLibrary(item, addonBaseUrl, heroPreview)
         return
     }
-    val input = item.toLibraryEntryInput(addonBaseUrl)
+    val input = item.toLibraryEntryInput(addonBaseUrl, heroPreview)
     activePosterListPickerInput = input
 
     _uiState.update { state ->
         state.copy(
             showPosterListPicker = true,
-            posterListPickerTitle = item.name,
+            posterListPickerTitle = input.title,
             posterListPickerPending = true,
             posterListPickerError = null,
             posterListPickerMembership = mergeMembershipWithTabs(
@@ -262,7 +270,7 @@ fun HomeViewModel.dismissPosterListPicker() {
     }
 }
 
-fun HomeViewModel.togglePosterMovieWatched(item: MetaPreview) {
+fun HomeViewModel.togglePosterMovieWatched(item: MetaPreview, heroPreview: HeroPreview? = null) {
     if (!item.apiType.equals("movie", ignoreCase = true)) return
     val statusKey = homeItemStatusKey(item.id, item.apiType)
     if (statusKey in _uiState.value.movieWatchedPending) return
@@ -279,7 +287,7 @@ fun HomeViewModel.togglePosterMovieWatched(item: MetaPreview) {
             } else {
                 watchProgressRepository.markAsCompleted(
                     profileManager.activeProfileSession.value,
-                    buildCompletedMovieProgress(item)
+                    buildCompletedMovieProgress(item, heroPreview)
                 )
             }
         }.onFailure { error ->
@@ -291,14 +299,14 @@ fun HomeViewModel.togglePosterMovieWatched(item: MetaPreview) {
     }
 }
 
-private fun buildCompletedMovieProgress(item: MetaPreview): WatchProgress {
+private fun buildCompletedMovieProgress(item: MetaPreview, heroPreview: HeroPreview?): WatchProgress {
     return WatchProgress(
         contentId = item.id,
         contentType = item.apiType,
-        name = item.name,
-        poster = item.displayPoster,
-        backdrop = item.displayBackground,
-        logo = item.displayLogo,
+        name = heroPreview.resolvedTitleOr(item.name),
+        poster = heroPreview?.poster ?: item.displayPoster.takeIf { heroPreview == null },
+        backdrop = heroPreview?.backdrop ?: item.displayBackground.takeIf { heroPreview == null },
+        logo = heroPreview?.logo ?: item.displayLogo.takeIf { heroPreview == null },
         videoId = item.id,
         season = null,
         episode = null,
@@ -310,8 +318,9 @@ private fun buildCompletedMovieProgress(item: MetaPreview): WatchProgress {
     )
 }
 
-private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntryInput {
-    val year = Regex("(\\d{4})").find(releaseInfo ?: "")
+private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?, heroPreview: HeroPreview?): LibraryEntryInput {
+    val displayReleaseInfo = heroPreview?.yearText ?: releaseInfo
+    val year = Regex("(\\d{4})").find(displayReleaseInfo ?: "")
         ?.groupValues
         ?.getOrNull(1)
         ?.toIntOrNull()
@@ -319,22 +328,25 @@ private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntry
     return LibraryEntryInput(
         itemId = id,
         itemType = apiType,
-        title = name,
+        title = heroPreview.resolvedTitleOr(name),
         year = year,
         traktId = parsedIds.trakt,
         imdbId = parsedIds.imdb,
         tmdbId = parsedIds.tmdb,
-        poster = displayPoster,
+        poster = heroPreview?.poster ?: displayPoster.takeIf { heroPreview == null },
         posterShape = posterShape,
-        background = displayBackground,
-        logo = displayLogo,
-        description = description,
-        releaseInfo = releaseInfo,
-        imdbRating = imdbRating,
-        genres = genres,
+        background = heroPreview?.backdrop ?: displayBackground.takeIf { heroPreview == null },
+        logo = heroPreview?.logo ?: displayLogo.takeIf { heroPreview == null },
+        description = heroPreview?.description ?: description.takeIf { heroPreview == null },
+        releaseInfo = displayReleaseInfo,
+        imdbRating = heroPreview?.imdbText?.toFloatOrNull() ?: imdbRating.takeIf { heroPreview == null },
+        genres = heroPreview?.genres?.takeIf { it.isNotEmpty() } ?: genres.takeIf { heroPreview == null }.orEmpty(),
         addonBaseUrl = addonBaseUrl
     )
 }
+
+private fun HeroPreview?.resolvedTitleOr(fallback: String): String =
+    this?.title?.takeIf { it.isNotBlank() } ?: fallback
 
 private fun ContinueWatchingItem.toLibraryEntryInput(): LibraryEntryInput {
     val itemId: String

@@ -72,11 +72,13 @@ private data class HomePosterOptionsTarget(
     val item: MetaPreview,
     val addonBaseUrl: String,
     val statusKey: String,
-    val recommendationRef: TraktRecommendationRef?
+    val recommendationRef: TraktRecommendationRef?,
+    val heroPreview: HeroPreview?
 )
 
 private data class HomePosterTrailerPendingResolution(
-    val item: MetaPreview
+    val item: MetaPreview,
+    val heroPreview: HeroPreview?
 )
 
 private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
@@ -195,14 +197,15 @@ fun HomeScreen(
     val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
         { item -> latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true }
     }
-    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
-        { item, addonBaseUrl ->
+    val onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit = remember(Unit) {
+        { item, addonBaseUrl, heroPreview ->
             val statusKey = homeItemStatusKey(item.id, item.apiType)
             posterOptionsTarget = HomePosterOptionsTarget(
                 item = item,
                 addonBaseUrl = addonBaseUrl,
                 statusKey = statusKey,
-                recommendationRef = latestTraktRecommendationRefs[statusKey]
+                recommendationRef = latestTraktRecommendationRefs[statusKey],
+                heroPreview = heroPreview
             )
         }
     }
@@ -428,6 +431,8 @@ fun HomeScreen(
     }
     if (selectedPoster != null) {
         val item = selectedPoster.item
+        val selectedHeroPreview = selectedPoster.heroPreview ?: item.toHomeHeroPreview()
+        val selectedDisplayTitle = selectedHeroPreview.title.takeIf { it.isNotBlank() } ?: item.name
         val statusKey = homeItemStatusKey(item.id, item.apiType)
         val isMovie = item.apiType.equals("movie", ignoreCase = true)
         val hasTrailerAction = hasHomeTrailerAction(
@@ -439,8 +444,9 @@ fun HomeScreen(
         )
         val trailerPlayback = playableHomeTrailerFor(
             itemId = item.id,
-            title = item.name,
+            title = selectedDisplayTitle,
             item = item,
+            heroPreview = selectedHeroPreview,
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
@@ -449,7 +455,7 @@ fun HomeScreen(
             previewCaptions = viewModel.trailerPreviewCaptions
         )
         HomePosterOptionsDialog(
-            title = item.name,
+            title = selectedDisplayTitle,
             isInLibrary = uiState.posterLibraryMembership[statusKey] == true,
             isLibraryPending = statusKey in uiState.posterLibraryPending,
             showManageLists = uiState.librarySourceMode == LibrarySourceMode.TRAKT || uiState.librarySourceMode == LibrarySourceMode.SIMKL,
@@ -476,11 +482,11 @@ fun HomeScreen(
                 if (trailerPlayback != null) {
                     posterTrailerPlayback = trailerPlayback
                 } else {
-                    pendingPosterTrailerResolution = HomePosterTrailerPendingResolution(item)
+                    pendingPosterTrailerResolution = HomePosterTrailerPendingResolution(item, selectedHeroPreview)
                     if (item.id in viewModel.trailerPreviewNegativeCacheIds) {
                         viewModel.retryTrailerPreview(
                             itemId = item.id,
-                            title = item.name,
+                            title = selectedDisplayTitle,
                             releaseInfo = item.releaseInfo,
                             apiType = item.apiType,
                             fallbackYtId = viewModel.trailerSelectedFallbackYtIds[
@@ -495,14 +501,14 @@ fun HomeScreen(
             },
             onToggleLibrary = {
                 if (uiState.librarySourceMode == LibrarySourceMode.TRAKT || uiState.librarySourceMode == LibrarySourceMode.SIMKL) {
-                    viewModel.openPosterListPicker(item, selectedPoster.addonBaseUrl)
+                    viewModel.openPosterListPicker(item, selectedPoster.addonBaseUrl, selectedHeroPreview)
                 } else {
-                    viewModel.togglePosterLibrary(item, selectedPoster.addonBaseUrl)
+                    viewModel.togglePosterLibrary(item, selectedPoster.addonBaseUrl, selectedHeroPreview)
                 }
                 posterOptionsTarget = null
             },
             onToggleWatched = {
-                viewModel.togglePosterMovieWatched(item)
+                viewModel.togglePosterMovieWatched(item, selectedHeroPreview)
                 posterOptionsTarget = null
             },
             onToggleTvEpisodeOrderProvider = {
@@ -536,8 +542,9 @@ fun HomeScreen(
         val pendingRequest = pendingPosterTrailerResolution ?: return@LaunchedEffect
         val playback = playableHomeTrailerFor(
             itemId = pendingRequest.item.id,
-            title = pendingRequest.item.name,
+            title = pendingRequest.heroPreview?.title?.takeIf { it.isNotBlank() } ?: pendingRequest.item.name,
             item = pendingRequest.item,
+            heroPreview = pendingRequest.heroPreview,
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls,
             previewUserAgents = viewModel.trailerPreviewUserAgents,
@@ -634,13 +641,11 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            val takeoverModel = pendingPosterTrailer.item.artwork?.backdrop.toCoilModelOrNull()
-                ?: pendingPosterTrailer.item.artwork?.poster.toCoilModelOrNull()
-                ?: pendingPosterTrailer.item.displayBackground.toLegacyArtworkCoilModelOrNull(
+            val takeoverModel = pendingPosterTrailer.heroPreview?.backdrop.toLegacyArtworkCoilModelOrNull(
                     "${pendingPosterTrailer.item.id}:backdrop",
                     ArtworkType.BACKDROP
                 )
-                ?: pendingPosterTrailer.item.displayPoster.toLegacyArtworkCoilModelOrNull(
+                ?: pendingPosterTrailer.heroPreview?.poster.toLegacyArtworkCoilModelOrNull(
                     "${pendingPosterTrailer.item.id}:poster",
                     ArtworkType.POSTER
                 )
@@ -691,7 +696,7 @@ private fun ClassicHomeRoute(
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val requestTrailerPreview = remember(viewModel) {
@@ -736,7 +741,7 @@ private fun ClassicHomeRoute(
             viewModel.toggleHomeTvEpisodeOrderProvider(action)
         },
         isCatalogItemWatched = isCatalogItemWatched,
-        onCatalogItemLongPress = onCatalogItemLongPress,
+        onCatalogItemLongPress = { item, addonBaseUrl -> onCatalogItemLongPress(item, addonBaseUrl, null) },
         onRequestTrailerPreview = requestTrailerPreview,
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
@@ -760,7 +765,7 @@ private fun GridHomeRoute(
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit
 ) {
     val gridFocusState by viewModel.gridFocusState.collectAsStateWithLifecycle()
     // Plan B Task 5f.3 — collect grid items off-UiState (CLAUDE.md rule #2).
@@ -798,7 +803,7 @@ private fun GridHomeRoute(
             viewModel.toggleHomeTvEpisodeOrderProvider(action)
         },
         isCatalogItemWatched = isCatalogItemWatched,
-        onCatalogItemLongPress = onCatalogItemLongPress,
+        onCatalogItemLongPress = { item, addonBaseUrl -> onCatalogItemLongPress(item, addonBaseUrl, null) },
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
         },
@@ -823,7 +828,7 @@ private fun ModernHomeRoute(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val homeProfileSession by viewModel.activeHomeProfileSession.collectAsStateWithLifecycle()

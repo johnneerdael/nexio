@@ -61,6 +61,45 @@ class ResolvedDisplaySurfaceRepository(
     fun observeItem(profileId: Int, itemKey: String): Flow<ResolvedDisplayItem?> =
         observeHomeSurface(profileId).map { items -> items.firstOrNull { it.matchesAuthorityAlias(itemKey) } }
 
+    fun hasHomeAuthorityItem(
+        profileId: Int,
+        itemKey: String,
+        includePreviewOnly: Boolean = false
+    ): Boolean =
+        snapshotNow(profileId).any { item ->
+            item.matchesAuthorityAlias(itemKey) &&
+                (includePreviewOnly || item.hydrationState != HydrationState.PREVIEW_ONLY)
+        }
+
+    fun homeAuthorityItemsByAlias(profileId: Int): Map<String, ResolvedDisplayItem> {
+        val items = snapshotNow(profileId)
+        if (items.isEmpty()) return emptyMap()
+        val out = HashMap<String, ResolvedDisplayItem>(items.size * 2)
+        for (i in items.indices) {
+            val item = items[i]
+            val aliases = item.toDisplayBundle().aliases
+            for (alias in aliases) {
+                out[alias] = item
+            }
+        }
+        return out
+    }
+
+    fun homeAuthorityAliasKeys(
+        profileId: Int,
+        includePreviewOnly: Boolean = false
+    ): Set<String> {
+        val items = snapshotNow(profileId)
+        if (items.isEmpty()) return emptySet()
+        val out = HashSet<String>(items.size * 2)
+        for (i in items.indices) {
+            val item = items[i]
+            if (!includePreviewOnly && item.hydrationState == HydrationState.PREVIEW_ONLY) continue
+            out += item.toDisplayBundle().aliases
+        }
+        return out
+    }
+
     suspend fun getSnapshot(profileId: Int): List<ResolvedDisplayItem> =
         getSnapshot(HOME_SURFACE_KEY, profileId)
 
@@ -516,16 +555,31 @@ private fun applyNonDowngradeMerge(
         existing = existingSlots,
         profile = null
     )
+    val stableSignatureChanged = incoming.displayLanguageTag != existing.displayLanguageTag ||
+        incoming.preferredArtworkProviders != existing.preferredArtworkProviders ||
+        incoming.rating?.source != existing.rating?.source
+    val canonicalContentChanged = incoming.hydrationState != HydrationState.PREVIEW_ONLY &&
+        existing.hydrationState != HydrationState.PREVIEW_ONLY &&
+        incoming.updatedAtMs != existing.updatedAtMs
+    val allowSameRankReplacement = stableSignatureChanged || canonicalContentChanged
 
     // Apply preferred-provider tie-break for artwork slots only.
     // Reducer stays pure: settings/preferences are consulted only at this
     // merge boundary, not inside pickHigherRanked. (Bug A — Task 12)
     val itemKey = incoming.itemKey
     val mergedSlots = reducerMerged.copy(
-        poster    = preferredAwareSlot(incomingSlots.poster,    existingSlots.poster,    incoming.preferredArtworkProviders[ArtworkType.POSTER],    itemKey, "POSTER", traceEvents),
-        backdrop  = preferredAwareSlot(incomingSlots.backdrop,  existingSlots.backdrop,  incoming.preferredArtworkProviders[ArtworkType.BACKDROP],  itemKey, "BACKDROP", traceEvents),
-        logo      = preferredAwareSlot(incomingSlots.logo,      existingSlots.logo,      incoming.preferredArtworkProviders[ArtworkType.LOGO],      itemKey, "LOGO", traceEvents),
-        thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL], itemKey, "THUMBNAIL", traceEvents)
+        title = stableSameRankSlot(reducerMerged.title, incomingSlots.title, existingSlots.title, allowSameRankReplacement),
+        originalTitle = stableSameRankSlot(reducerMerged.originalTitle, incomingSlots.originalTitle, existingSlots.originalTitle, allowSameRankReplacement),
+        overview = stableSameRankSlot(reducerMerged.overview, incomingSlots.overview, existingSlots.overview, allowSameRankReplacement),
+        genres = stableSameRankSlot(reducerMerged.genres, incomingSlots.genres, existingSlots.genres, allowSameRankReplacement),
+        releaseInfo = stableSameRankSlot(reducerMerged.releaseInfo, incomingSlots.releaseInfo, existingSlots.releaseInfo, allowSameRankReplacement),
+        runtime = stableSameRankSlot(reducerMerged.runtime, incomingSlots.runtime, existingSlots.runtime, allowSameRankReplacement),
+        rating = stableSameRankSlot(reducerMerged.rating, incomingSlots.rating, existingSlots.rating, allowSameRankReplacement),
+        poster = preferredAwareSlot(incomingSlots.poster, existingSlots.poster, incoming.preferredArtworkProviders[ArtworkType.POSTER], itemKey, "POSTER", traceEvents),
+        backdrop = preferredAwareSlot(incomingSlots.backdrop, existingSlots.backdrop, incoming.preferredArtworkProviders[ArtworkType.BACKDROP], itemKey, "BACKDROP", traceEvents),
+        logo = preferredAwareSlot(incomingSlots.logo, existingSlots.logo, incoming.preferredArtworkProviders[ArtworkType.LOGO], itemKey, "LOGO", traceEvents),
+        thumbnail = preferredAwareSlot(incomingSlots.thumbnail, existingSlots.thumbnail, incoming.preferredArtworkProviders[ArtworkType.THUMBNAIL], itemKey, "THUMBNAIL", traceEvents),
+        posterProviderTag = stableSameRankSlot(reducerMerged.posterProviderTag, incomingSlots.posterProviderTag, existingSlots.posterProviderTag, allowSameRankReplacement)
     )
 
     // Strengthen-only ProviderIds union. The cross-id enricher publishes the
@@ -565,6 +619,17 @@ private fun applyNonDowngradeMerge(
         canonicalProvider = mergedCanonicalProvider,
         canonicalId = mergedCanonicalId
     )
+}
+
+private fun <T> stableSameRankSlot(
+    selected: ResolvedSlot<T>,
+    incoming: ResolvedSlot<T>,
+    existing: ResolvedSlot<T>,
+    allowSameRankReplacement: Boolean
+): ResolvedSlot<T> {
+    if (allowSameRankReplacement) return selected
+    if (incoming.rank == existing.rank && incoming.value != existing.value) return existing
+    return selected
 }
 
 private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayItem): Boolean =

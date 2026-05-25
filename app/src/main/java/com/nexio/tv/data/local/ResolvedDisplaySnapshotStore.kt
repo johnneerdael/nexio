@@ -16,7 +16,9 @@ import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.PersistedProviderTemplate
 import com.nexio.tv.core.artwork.PlaceholderType
+import com.nexio.tv.core.artwork.RejectedArtworkCandidate
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -490,21 +492,100 @@ private fun ArtworkProviderId.toPersisted(): PersistedArtworkProviderId =
 private data class PersistedArtworkTrace(
     val selectedProvider: String?,
     val sourceRole: String?,
-    val reason: String?
+    val reason: String?,
+    val rejectedCandidates: List<PersistedRejectedArtworkCandidate>? = null
 ) {
     fun toDomain(): ArtworkTrace = ArtworkTrace(
         selectedProvider = selectedProvider,
         sourceRole = sourceRole,
         reason = reason,
-        rejectedCandidates = emptyList()
+        rejectedCandidates = rejectedCandidates.orEmpty().mapNotNull { it.toDomain() }
     )
 }
 
 private fun ArtworkTrace.toPersisted(): PersistedArtworkTrace = PersistedArtworkTrace(
     selectedProvider = selectedProvider,
     sourceRole = sourceRole,
-    reason = reason
+    reason = reason,
+    rejectedCandidates = rejectedCandidates.map { it.toPersisted() }
 )
+
+private data class PersistedRejectedArtworkCandidate(
+    val provider: PersistedArtworkProviderId?,
+    val sourceRole: String?,
+    val reason: String?,
+    val sourceHash: String?,
+    val redactedSourceForTrace: String?,
+    val providerTemplate: PersistedArtworkProviderTemplate?,
+    val priority: Int
+) {
+    fun toDomain(): RejectedArtworkCandidate? =
+        runCatching {
+            RejectedArtworkCandidate(
+                provider = provider?.toDomain(),
+                sourceRole = ArtworkSourceRole.valueOf(requireNotNull(sourceRole)),
+                reason = requireNotNull(reason),
+                sourceHash = sourceHash,
+                redactedSourceForTrace = redactedSourceForTrace,
+                providerTemplate = providerTemplate?.toDomain(),
+                priority = priority
+            )
+        }.getOrNull()
+}
+
+private fun RejectedArtworkCandidate.toPersisted(): PersistedRejectedArtworkCandidate =
+    PersistedRejectedArtworkCandidate(
+        provider = provider?.toPersisted(),
+        sourceRole = sourceRole.name,
+        reason = reason,
+        sourceHash = sourceHash,
+        redactedSourceForTrace = redactedSourceForTrace,
+        providerTemplate = providerTemplate?.toPersisted(),
+        priority = priority
+    )
+
+private data class PersistedArtworkProviderTemplate(
+    val provider: PersistedArtworkProviderId,
+    val imageType: String,
+    val idType: String,
+    val mediaId: String,
+    val providerPathHash: String?,
+    val settingsHash: String?,
+    val credentialHash: String?,
+    val imageLanguage: String,
+    val policyVersion: Int,
+    val pathParams: Map<String, String> = emptyMap()
+) {
+    fun toDomain(): PersistedProviderTemplate? =
+        runCatching {
+            PersistedProviderTemplate(
+                provider = requireNotNull(provider.toDomain()),
+                imageType = ArtworkType.valueOf(imageType),
+                idType = idType,
+                mediaId = mediaId,
+                providerPathHash = providerPathHash,
+                settingsHash = settingsHash,
+                credentialHash = credentialHash,
+                imageLanguage = imageLanguage,
+                policyVersion = policyVersion,
+                pathParams = pathParams
+            )
+        }.getOrNull()
+}
+
+private fun PersistedProviderTemplate.toPersisted(): PersistedArtworkProviderTemplate =
+    PersistedArtworkProviderTemplate(
+        provider = provider.toPersisted(),
+        imageType = imageType.name,
+        idType = idType,
+        mediaId = mediaId,
+        providerPathHash = providerPathHash,
+        settingsHash = settingsHash,
+        credentialHash = credentialHash,
+        imageLanguage = imageLanguage,
+        policyVersion = policyVersion,
+        pathParams = pathParams
+    )
 
 private data class PersistedTrailerDisplayState(
     val fallbackTrailerYtIds: List<String>,

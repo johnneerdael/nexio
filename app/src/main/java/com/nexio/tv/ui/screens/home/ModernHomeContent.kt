@@ -373,7 +373,7 @@ internal fun ModernHomeContent(
     resolveContinueWatchingTvEpisodeOrderAction: suspend (ContinueWatchingResolvedDisplayItem) -> HomeTvEpisodeOrderMenuAction? = { null },
     onToggleTvEpisodeOrderProvider: (HomeTvEpisodeOrderMenuAction) -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
-    onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
+    onCatalogItemLongPress: (MetaPreview, String, HeroPreview?) -> Unit = { _, _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
     onRequestTrailerPreview: (String, String, String?, String, String?) -> Unit,

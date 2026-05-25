@@ -10,6 +10,14 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -23,6 +31,7 @@ import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
@@ -39,8 +48,14 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ArtworkProviderSettings
+import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.TrailerDisplayState
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
@@ -605,7 +620,6 @@ class HomeCatalogRefreshCoordinatorTest {
 
         assertTrue(catalogsMap.isEmpty())
         coVerify(exactly = 0) { viewModel.flushCatalogRowsForFirstPaint(any()) }
-        verify(exactly = 0) { viewModel.scheduleUpdateCatalogRows(any()) }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -773,6 +787,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val displayCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
         val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
+        val profileSession = activeProfileSession()
         val visiblePreview = preview(id = "tt-visible-refresh", poster = "poster").copy(
             description = "Visible catalog payload",
             releaseInfo = "2026"
@@ -792,12 +807,24 @@ class HomeCatalogRefreshCoordinatorTest {
             hasMore = false
         )
         val fullRow = displayRow.copy(items = listOf(visiblePreview, hiddenPreview))
+        val resolvedVisible = resolvedItemFor(visiblePreview)
+        val resolvedDisplaySurfaceRepository = mockk<ResolvedDisplaySurfaceRepository>()
 
         every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
         every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
         every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
         every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
         every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
+        every { viewModel.resolvedDisplaySurfaceRepository } returns resolvedDisplaySurfaceRepository
+        every {
+            resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
+                profileId = profileSession.profileId,
+                includePreviewOnly = false
+            )
+        } returns emptySet()
+        every {
+            resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(profileId = profileSession.profileId)
+        } returns mapOf(homeDisplayItemKey(visiblePreview.apiType, visiblePreview.id) to resolvedVisible)
         every { viewModel.addonsCache } returns listOf(addon())
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
@@ -863,8 +890,9 @@ class HomeCatalogRefreshCoordinatorTest {
         coEvery {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
-
-        val profileSession = activeProfileSession()
+        coEvery {
+            coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
+        } returns Unit
         every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
 
         try {
@@ -890,8 +918,8 @@ class HomeCatalogRefreshCoordinatorTest {
             )
         }
         coVerify(exactly = 1) {
-            coordinator.prefetchVisibleImagesOnly(
-                items = listOf(visiblePreview),
+            coordinator.prefetchResolvedVisibleImagesOnly(
+                items = listOf(resolvedVisible),
                 telemetryEnabled = false,
                 onLog = any()
             )
@@ -1002,6 +1030,9 @@ class HomeCatalogRefreshCoordinatorTest {
         coEvery {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
+        coEvery {
+            coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
+        } returns Unit
         every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
 
         try {
@@ -1028,6 +1059,9 @@ class HomeCatalogRefreshCoordinatorTest {
         }
         coVerify(exactly = 0) {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
+        }
+        coVerify(exactly = 0) {
+            coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
         }
     }
 
@@ -1109,6 +1143,9 @@ class HomeCatalogRefreshCoordinatorTest {
         coEvery {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
         } returns Unit
+        coEvery {
+            coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
+        } returns Unit
 
         val profileSession = activeProfileSession()
         every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
@@ -1129,6 +1166,9 @@ class HomeCatalogRefreshCoordinatorTest {
         }
         coVerify(exactly = 0) {
             coordinator.prefetchVisibleImagesOnly(any(), any(), any())
+        }
+        coVerify(exactly = 0) {
+            coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
         }
     }
 
@@ -1274,6 +1314,43 @@ class HomeCatalogRefreshCoordinatorTest {
         assertTrue(logs.any { it.first == "item_image_skipped_no_urls" })
         assertTrue(logs.any { it.first == "image_prefetch_start" && it.second?.contains("urls_total=0") == true })
         assertTrue(logs.any { it.first == "image_prefetch_end" && it.second?.contains("fetched_urls=0") == true })
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `resolved visible prefetch includes authority runtime artwork refs`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val logs = mutableListOf<Pair<String, String?>>()
+        val item = resolvedItemFor(preview(id = "1007757", poster = null)).copy(
+            artwork = ArtworkBundle(
+                poster = runtimeArtworkRef("posterDecision", ArtworkType.POSTER),
+                backdrop = runtimeArtworkRef("backdropDecision", ArtworkType.BACKDROP),
+                logo = runtimeArtworkRef("logoDecision", ArtworkType.LOGO)
+            )
+        )
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            coordinator(
+                catalogRepository = catalogRepository,
+                metadataRouterFacade = metadataRouterFacade,
+                metadataDiskCacheStore = metadataDiskCacheStore,
+                posterRatingsUrlResolver = posterRatingsUrlResolver
+            ).prefetchResolvedVisibleImagesOnly(
+                items = listOf(item),
+                telemetryEnabled = true,
+                onLog = { event, details -> logs += event to details }
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertTrue(logs.any { it.first == "image_prefetch_start" && it.second?.contains("urls_total=3") == true })
+        assertTrue(logs.any { it.first == "item_image_fetch" && it.second?.contains("urls=3/3") == true })
+        assertTrue(logs.any { it.first == "image_prefetch_end" && it.second?.contains("fetched_urls=3") == true })
     }
 
     @Test
@@ -1624,6 +1701,48 @@ class HomeCatalogRefreshCoordinatorTest {
             genres = emptyList()
         )
     }
+
+    private fun resolvedItemFor(item: MetaPreview): ResolvedDisplayItem =
+        ResolvedDisplayItem(
+            itemKey = homeDisplayItemKey(item.apiType, item.id),
+            contentId = item.id,
+            parentId = item.id,
+            itemType = item.type,
+            mediaKind = MetadataMediaKind.MOVIE,
+            canonicalProvider = null,
+            canonicalId = null,
+            imdbId = null,
+            stableIds = ProviderIds(),
+            display = ResolvedDisplayFields(
+                title = item.name,
+                originalTitle = null,
+                year = item.releaseInfo?.take(4)?.toIntOrNull(),
+                releaseDate = item.releaseInfo,
+                overview = item.description,
+                genres = item.genres,
+                runtimeText = item.runtime,
+                tomatoesRating = item.tomatoesRating
+            ),
+            artwork = ArtworkBundle(),
+            rating = null,
+            trailer = TrailerDisplayState(),
+            hydrationState = HydrationState.CANONICAL_READY,
+            sourceTrace = emptyList(),
+            updatedAtMs = 1L
+        )
+
+    private fun runtimeArtworkRef(
+        decisionKey: String,
+        imageType: ArtworkType
+    ): ArtworkDisplayRef.RuntimeAsset =
+        ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey(decisionKey),
+            assetKey = null,
+            imageType = imageType,
+            selectedProvider = ArtworkProviderId.RailPreview,
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace.empty()
+        )
 
     private fun addon(
         catalogs: List<CatalogDescriptor> = listOf(

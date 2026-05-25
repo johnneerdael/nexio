@@ -312,13 +312,18 @@ class ModernHomeModelsTest {
     }
 
     @Test
-    fun `resolveDisplayedHeroPreview keeps foreground text set when fallback metadata races later`() {
-        val localizedPreview = buildModernCarouselItem(tomatoesText = null).heroPreview.copy(
+    fun `resolveDisplayedHeroPreview keeps visible display set when fallback metadata races later`() {
+        val localizedPreview = buildModernCarouselItem(tomatoesText = "91").heroPreview.copy(
             title = "Berlijn",
             description = "Nederlandse beschrijving",
             contentTypeText = "Drama",
             yearText = "2026",
+            imdbText = "8.1",
+            ratingSource = TitleRatingSource.TMDB,
             genres = listOf("Drama"),
+            poster = "resolved-poster",
+            backdrop = "resolved-backdrop",
+            imageUrl = "resolved-backdrop",
             textSourceRank = DisplaySourceRank.RESOLVED
         )
         val fallbackPreview = buildModernCarouselItem(tomatoesText = "88").heroPreview.copy(
@@ -326,7 +331,12 @@ class ModernHomeModelsTest {
             description = "English overview",
             contentTypeText = "Series",
             yearText = "2026",
+            imdbText = "6.2",
+            ratingSource = TitleRatingSource.IMDB,
             genres = listOf("Crime"),
+            poster = "fallback-poster",
+            backdrop = "fallback-backdrop",
+            imageUrl = "fallback-backdrop",
             textSourceRank = DisplaySourceRank.FIRST_PAINT
         )
 
@@ -341,7 +351,12 @@ class ModernHomeModelsTest {
         assertEquals("Nederlandse beschrijving", resolved?.description)
         assertEquals("Drama", resolved?.contentTypeText)
         assertEquals(listOf("Drama"), resolved?.genres)
-        assertEquals("88", resolved?.tomatoesText)
+        assertEquals("8.1", resolved?.imdbText)
+        assertEquals(TitleRatingSource.TMDB, resolved?.ratingSource)
+        assertEquals("91", resolved?.tomatoesText)
+        assertEquals("resolved-poster", resolved?.poster)
+        assertEquals("resolved-backdrop", resolved?.backdrop)
+        assertEquals("resolved-backdrop", resolved?.imageUrl)
     }
 
     @Test

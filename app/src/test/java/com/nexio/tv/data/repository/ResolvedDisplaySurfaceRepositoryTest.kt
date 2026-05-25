@@ -10,10 +10,13 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
@@ -662,6 +665,111 @@ class ResolvedDisplaySurfaceRepositoryTest {
     }
 
     @Test
+    fun `hasHomeAuthorityItem matches aliases and ignores preview-only entries by default`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val hydrated = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Hydrated Title"
+        )
+        val previewOnly = resolvedItem(
+            itemKey = "movie:tmdb:551",
+            title = "Preview Title"
+        ).copy(
+            contentId = "tmdb:551",
+            parentId = "tmdb:551",
+            canonicalId = "551",
+            imdbId = null,
+            stableIds = ProviderIds(tmdb = "551", imdb = "tt-preview"),
+            hydrationState = HydrationState.PREVIEW_ONLY
+        )
+
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(hydrated, previewOnly)
+        )
+
+        assertTrue(repository.hasHomeAuthorityItem(profileId = 1, itemKey = "movie:imdb:tt0137523"))
+        assertTrue(repository.hasHomeAuthorityItem(profileId = 1, itemKey = "movie:tmdb:550"))
+        assertFalse(repository.hasHomeAuthorityItem(profileId = 1, itemKey = "movie:imdb:tt-preview"))
+        assertTrue(
+            repository.hasHomeAuthorityItem(
+                profileId = 1,
+                itemKey = "movie:imdb:tt-preview",
+                includePreviewOnly = true
+            )
+        )
+        assertFalse(repository.hasHomeAuthorityItem(profileId = 2, itemKey = "movie:imdb:tt0137523"))
+    }
+
+    @Test
+    fun `homeAuthorityItemsByAlias indexes all aliases to the authority item`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val item = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Hydrated Title"
+        )
+
+        repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(item)
+        )
+
+        val aliases = repository.homeAuthorityItemsByAlias(profileId = 1)
+        assertEquals("Hydrated Title", aliases["movie:tmdb:550"]?.display?.title)
+        assertEquals("Hydrated Title", aliases["movie:imdb:tt0137523"]?.display?.title)
+    }
+
+    @Test
+    fun `same-rank display update keeps existing fields when feature signature is unchanged`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val first = resolvedItem(itemKey = "movie:tmdb:550", title = "Stable Title")
+            .withResolvedSlots(title = "Stable Title", overview = "Stable Overview")
+            .copy(displayLanguageTag = "en-US")
+        val second = resolvedItem(itemKey = "movie:tmdb:550", title = "Racing Title")
+            .withResolvedSlots(title = "Racing Title", overview = "Racing Overview")
+            .copy(displayLanguageTag = "en-US")
+
+        repository.publishResolvedItems(activeSession.value, listOf(first))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(second),
+            replace = false
+        )
+
+        val published = repository.getSnapshot(profileId = 1).single()
+        assertEquals("Stable Title", published.display.title)
+        assertEquals("Stable Overview", published.display.overview)
+    }
+
+    @Test
+    fun `same-rank display update can replace fields when feature signature changes`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val first = resolvedItem(itemKey = "movie:tmdb:550", title = "English Title")
+            .withResolvedSlots(title = "English Title", overview = "English Overview")
+            .copy(displayLanguageTag = "en-US")
+        val second = resolvedItem(itemKey = "movie:tmdb:550", title = "Nederlandse Titel")
+            .withResolvedSlots(title = "Nederlandse Titel", overview = "Nederlandse Beschrijving")
+            .copy(displayLanguageTag = "nl-NL")
+
+        repository.publishResolvedItems(activeSession.value, listOf(first))
+        repository.publishResolvedItems(
+            surfaceKey = ResolvedDisplaySurfaceRepository.HOME_SURFACE_KEY,
+            profileSession = activeSession.value,
+            items = listOf(second),
+            replace = false
+        )
+
+        val published = repository.getSnapshot(profileId = 1).single()
+        assertEquals("Nederlandse Titel", published.display.title)
+        assertEquals("Nederlandse Beschrijving", published.display.overview)
+    }
+
+    @Test
     fun `incremental publish preserves existing trailer state when incoming update has no trailer state`() = runTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
@@ -774,6 +882,39 @@ class ResolvedDisplaySurfaceRepositoryTest {
         sourceTrace = emptyList(),
         updatedAtMs = 1L
     )
+
+    private fun ResolvedDisplayItem.withResolvedSlots(
+        title: String,
+        overview: String = display.overview.orEmpty()
+    ): ResolvedDisplayItem {
+        val nowMs = 1L
+        val slots = ResolvedDisplayFieldSlots(
+            title = slot(title, nowMs),
+            originalTitle = slot(display.originalTitle, nowMs),
+            overview = slot(overview, nowMs),
+            genres = slot(display.genres, nowMs),
+            releaseInfo = slot(display.releaseDate, nowMs),
+            runtime = slot(display.runtimeText, nowMs),
+            rating = slot(rating, nowMs),
+            poster = slot(artwork.poster, nowMs),
+            backdrop = slot(artwork.backdrop, nowMs),
+            logo = slot(artwork.logo, nowMs),
+            thumbnail = slot(artwork.thumbnail, nowMs),
+            posterProviderTag = slot(null, nowMs)
+        )
+        return copy(slots = slots)
+    }
+
+    private fun <T> slot(value: T?, nowMs: Long): ResolvedSlot<T> =
+        ResolvedSlot(
+            value = value,
+            rank = DisplaySourceRank.RESOLVED,
+            provider = "test",
+            role = "test",
+            updatedAtMs = nowMs,
+            expiresAtMs = null,
+            trace = emptyList()
+        )
 
     private fun artworkRef(
         key: String,

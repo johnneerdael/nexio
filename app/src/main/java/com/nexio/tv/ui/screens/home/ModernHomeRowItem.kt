@@ -27,6 +27,7 @@ data class ModernHomeRowItem(
     val description: String?,
     val genres: List<String>,
     val releaseInfo: String?,
+    val runtime: String? = null,
     val tomatoesRating: Double?,
     val hydrationState: HydrationState,
     override val posterProviderTag: String?,
@@ -52,6 +53,7 @@ data class ModernHomeRowItem(
                 description = resolved.display.overview,
                 genres = resolved.display.genres,
                 releaseInfo = resolved.display.releaseDate,
+                runtime = resolved.display.runtimeText,
                 tomatoesRating = resolved.display.tomatoesRating,
                 hydrationState = resolved.hydrationState,
                 posterProviderTag = resolved.artwork.poster.deriveProviderTag(),
@@ -84,6 +86,7 @@ data class ModernHomeRowItem(
             description = meta.description,
             genres = meta.genres,
             releaseInfo = meta.releaseInfo,
+            runtime = meta.runtime,
             tomatoesRating = meta.tomatoesRating,
             hydrationState = HydrationState.PREVIEW_ONLY,
             posterProviderTag = meta.posterProviderTag

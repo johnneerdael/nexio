@@ -11,6 +11,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.PlaceholderType
+import com.nexio.tv.core.artwork.RejectedArtworkCandidate
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.resolver.TrailerPlaybackRef
@@ -94,7 +95,21 @@ class ResolvedDisplaySnapshotStoreTest {
             trace = ArtworkTrace(
                 selectedProvider = "FANART_TV",
                 sourceRole = "PREMIUM",
-                reason = "preferred_provider"
+                reason = "preferred_provider",
+                rejectedCandidates = listOf(
+                    RejectedArtworkCandidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        sourceRole = ArtworkSourceRole.PRIMARY,
+                        reason = "missing",
+                        sourceHash = "tmdb:missing"
+                    ),
+                    RejectedArtworkCandidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV),
+                        sourceRole = ArtworkSourceRole.PREMIUM,
+                        reason = "wrong-type",
+                        sourceHash = "fanart:wrong-type"
+                    )
+                )
             ),
             displayHints = ArtworkDisplayHints(embedsRatingOverlay = true)
         )
@@ -190,6 +205,10 @@ class ResolvedDisplaySnapshotStoreTest {
         assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.FANART_TV), restoredPoster?.selectedProvider)
         assertEquals(true, restoredPoster?.displayHints?.embedsRatingOverlay)
         assertEquals("preferred_provider", restoredPoster?.trace?.reason)
+        assertEquals(
+            listOf("tmdb:missing", "fanart:wrong-type"),
+            restoredPoster?.trace?.rejectedCandidates?.map { it.sourceHash }
+        )
         val restoredBackdrop = restored?.artwork?.backdrop as? ArtworkDisplayRef.LegacyString
         assertEquals("https://image.tmdb.org/t/p/original/backdrop.jpg", restoredBackdrop?.value)
         val restoredLogo = restored?.artwork?.logo as? ArtworkDisplayRef.Placeholder

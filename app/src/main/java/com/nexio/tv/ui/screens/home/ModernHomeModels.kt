@@ -386,22 +386,28 @@ internal fun selectForegroundHeroPreview(
     val candidateLanguageMatches = candidate.textLanguageTag.matchesPreferredLanguage(preferredLanguageTag)
     return when {
         candidate.textSourceRank.ordinal > current.textSourceRank.ordinal -> candidate
-        candidate.textSourceRank.ordinal < current.textSourceRank.ordinal -> candidate.withForegroundTextFrom(current)
+        candidate.textSourceRank.ordinal < current.textSourceRank.ordinal -> candidate.withVisibleDisplayFrom(current)
         candidateLanguageMatches && !currentLanguageMatches -> candidate
-        currentLanguageMatches && !candidateLanguageMatches -> candidate.withForegroundTextFrom(current)
-        candidate.textLanguageTag != current.textLanguageTag -> candidate.withForegroundTextFrom(current)
+        currentLanguageMatches && !candidateLanguageMatches -> candidate.withVisibleDisplayFrom(current)
+        candidate.textLanguageTag != current.textLanguageTag -> candidate.withVisibleDisplayFrom(current)
         else -> candidate
     }
 }
 
-private fun HeroPreview.withForegroundTextFrom(source: HeroPreview): HeroPreview =
+private fun HeroPreview.withVisibleDisplayFrom(source: HeroPreview): HeroPreview =
     copy(
         title = source.title,
         logo = source.logo,
         description = source.description,
         contentTypeText = source.contentTypeText,
         yearText = source.yearText,
+        imdbText = source.imdbText,
+        ratingSource = source.ratingSource,
+        tomatoesText = source.tomatoesText,
         genres = source.genres,
+        poster = source.poster,
+        backdrop = source.backdrop,
+        imageUrl = source.imageUrl,
         frozenLogoUrl = source.frozenLogoUrl,
         textSourceRank = source.textSourceRank,
         textLanguageTag = source.textLanguageTag
