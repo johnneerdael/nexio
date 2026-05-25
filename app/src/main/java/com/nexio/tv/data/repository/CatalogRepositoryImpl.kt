@@ -26,10 +26,12 @@ class CatalogRepositoryImpl @Inject constructor(
     private val addonCatalogIntegrationProvider: AddonCatalogIntegrationProvider,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val catalogDiskCacheStore: CatalogDiskCacheStore,
-    private val catalogItemCrossIdEnricher: CatalogItemCrossIdEnricher
+    private val catalogItemCrossIdEnricher: CatalogItemCrossIdEnricher,
+    private val nowMsProvider: () -> Long = { System.currentTimeMillis() }
 ) : CatalogRepository {
     companion object {
         private const val TAG = "CatalogRepository"
+        internal const val ADDON_CATALOG_FRESH_TTL_MS = 24L * 60L * 60L * 1000L
     }
 
     private val catalogCache = ConcurrentHashMap<String, CatalogRow>()
@@ -169,6 +171,17 @@ class CatalogRepositoryImpl @Inject constructor(
             extraArgs = extraArgs,
             providerCacheToken = providerCacheToken
         )
+        val cachedEntry = catalogDiskCacheStore.read(cacheKey)
+        if (cachedEntry != null && isFreshCatalogEntry(cachedEntry, nowMsProvider())) {
+            val cachedRow = cachedEntry.catalogRow
+            catalogCache[cacheKey] = cachedRow
+            Log.d(
+                TAG,
+                "Skipping addon catalog refresh for fresh disk row addonId=$addonId type=$type catalogId=$catalogId"
+            )
+            return kotlin.Result.success(cachedRow)
+        }
+        val staleCachedRow = cachedEntry?.catalogRow
 
         return when (
             val refreshed = fetchCatalogFromNetwork(
@@ -194,9 +207,18 @@ class CatalogRepositoryImpl @Inject constructor(
                 kotlin.Result.success(refreshed.row)
             }
 
-            is Result.Failure -> kotlin.Result.failure(
-                IllegalStateException(refreshed.error.message)
-            )
+            is Result.Failure -> {
+                if (staleCachedRow != null) {
+                    catalogCache[cacheKey] = staleCachedRow
+                    Log.w(
+                        TAG,
+                        "Catalog refresh failed; returning stale disk row addonId=$addonId type=$type catalogId=$catalogId code=${refreshed.error.code} message=${refreshed.error.message}"
+                    )
+                    kotlin.Result.success(staleCachedRow)
+                } else {
+                    kotlin.Result.failure(IllegalStateException(refreshed.error.message))
+                }
+            }
         }
     }
 
@@ -250,6 +272,12 @@ class CatalogRepositoryImpl @Inject constructor(
             .joinToString("&") { "${it.key}=${it.value}" }
         val normalizedBaseUrl = addonBaseUrl.trim().trimEnd('/').lowercase()
         return "${normalizedBaseUrl}_${addonId}_${type}_${catalogId}_${skip}_${skipStep}_${normalizedArgs}_${providerCacheToken}"
+    }
+
+    private fun isFreshCatalogEntry(entry: CatalogDiskCacheStore.Entry, nowMs: Long): Boolean {
+        if (entry.updatedAtMs <= 0L) return false
+        val ageMs = nowMs - entry.updatedAtMs
+        return ageMs >= 0L && ageMs < ADDON_CATALOG_FRESH_TTL_MS
     }
 
     override fun clearCache() {

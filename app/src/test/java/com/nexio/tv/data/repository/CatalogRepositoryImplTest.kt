@@ -17,6 +17,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -26,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 class CatalogRepositoryImplTest {
 
@@ -46,6 +48,255 @@ class CatalogRepositoryImplTest {
         overlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true)
     )
 
+    private fun repository(
+        provider: AddonCatalogIntegrationProvider,
+        posterResolver: PosterRatingsUrlResolver,
+        diskCacheStore: CatalogDiskCacheStore,
+        nowMsProvider: () -> Long = { 2_000_000_000L }
+    ): CatalogRepositoryImpl = CatalogRepositoryImpl(
+        addonCatalogIntegrationProvider = provider,
+        posterRatingsUrlResolver = posterResolver,
+        catalogDiskCacheStore = diskCacheStore,
+        catalogItemCrossIdEnricher = noopEnricher(),
+        nowMsProvider = nowMsProvider
+    )
+
+    private fun catalogRow(
+        name: String,
+        itemId: String = "tt-cached",
+        addonId: String = "community.addon",
+        catalogId: String = "trending",
+        catalogName: String = "Trending",
+        addonBaseUrl: String = "https://addon.example",
+        type: ContentType = ContentType.MOVIE,
+        rawType: String = "movie"
+    ): CatalogRow = CatalogRow(
+        addonId = addonId,
+        addonName = "Community Addon",
+        addonBaseUrl = addonBaseUrl,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        rawType = rawType,
+        items = listOf(
+            MetaPreview(
+                id = itemId,
+                name = name,
+                type = type,
+                rawType = rawType,
+                poster = null,
+                posterShape = com.nexio.tv.domain.model.PosterShape.POSTER,
+                background = null,
+                logo = null,
+                description = null,
+                releaseInfo = null,
+                imdbRating = null,
+                genres = emptyList()
+            )
+        ),
+        isLoading = false,
+        hasMore = false
+    )
+
+    private fun diskEntry(row: CatalogRow, updatedAtMs: Long): CatalogDiskCacheStore.Entry =
+        CatalogDiskCacheStore.Entry(
+            catalogRow = row,
+            catalogVersionHash = "version-${row.items.single().id}",
+            updatedAtMs = updatedAtMs
+        )
+
+    @Test
+    fun `refreshCatalogToDisk returns fresh disk row without network or disk rewrite`() = runTest {
+        val nowMs = 2_000_000_000L
+        val cachedRow = catalogRow("Fresh Cached Row")
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val repository = repository(provider, posterResolver, diskCacheStore) { nowMs }
+
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { diskCacheStore.read(any()) } returns diskEntry(
+            row = cachedRow,
+            updatedAtMs = nowMs - TimeUnit.HOURS.toMillis(23)
+        )
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://addon.example",
+            addonId = "community.addon",
+            addonName = "Community Addon",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = "movie",
+            skip = 0,
+            skipStep = 20,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(cachedRow, result.getOrThrow())
+        coVerify(exactly = 0) { provider.getCatalog(any(), any()) }
+        verify(exactly = 0) { diskCacheStore.write(any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshCatalogToDisk refreshes stale disk row and writes refreshed row`() = runTest {
+        val nowMs = 2_000_000_000L
+        val staleRow = catalogRow("Stale Cached Row")
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val writtenRow = slot<CatalogRow>()
+        val repository = repository(provider, posterResolver, diskCacheStore) { nowMs }
+
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { diskCacheStore.read(any()) } returns diskEntry(
+            row = staleRow,
+            updatedAtMs = nowMs - TimeUnit.HOURS.toMillis(24)
+        )
+        every { diskCacheStore.write(any(), capture(writtenRow), any()) } returns Unit
+        coEvery { provider.getCatalog(any(), any()) } returns NetworkResult.Success(
+            CatalogResponseDto(
+                metas = listOf(
+                    MetaPreviewDto(
+                        id = "tt-fresh",
+                        type = "movie",
+                        name = "Fresh Network Row"
+                    )
+                )
+            )
+        )
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://addon.example",
+            addonId = "community.addon",
+            addonName = "Community Addon",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = "movie",
+            skip = 0,
+            skipStep = 20,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("Fresh Network Row", result.getOrThrow().items.single().name)
+        assertEquals("Fresh Network Row", writtenRow.captured.items.single().name)
+        coVerify(exactly = 1) { provider.getCatalog(any(), any()) }
+        verify(exactly = 1) { diskCacheStore.write(any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshCatalogToDisk returns stale disk row when stale refresh fails`() = runTest {
+        val nowMs = 2_000_000_000L
+        val staleRow = catalogRow("Stale Cached Row")
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val repository = repository(provider, posterResolver, diskCacheStore) { nowMs }
+
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { diskCacheStore.read(any()) } returns diskEntry(
+            row = staleRow,
+            updatedAtMs = nowMs - TimeUnit.DAYS.toMillis(2)
+        )
+        coEvery { provider.getCatalog(any(), any()) } returns NetworkResult.Error("provider unavailable", 503)
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://addon.example",
+            addonId = "community.addon",
+            addonName = "Community Addon",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = "movie",
+            skip = 0,
+            skipStep = 20,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(staleRow, result.getOrThrow())
+        coVerify(exactly = 1) { provider.getCatalog(any(), any()) }
+        verify(exactly = 0) { diskCacheStore.write(any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshCatalogToDisk returns failure when network fails and no cache exists`() = runTest {
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val repository = repository(provider, posterResolver, diskCacheStore)
+
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { diskCacheStore.read(any()) } returns null
+        coEvery { provider.getCatalog(any(), any()) } returns NetworkResult.Error("boom", 503)
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://addon.example",
+            addonId = "community.addon",
+            addonName = "Community Addon",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = "movie",
+            skip = 0,
+            skipStep = 20,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals("boom", result.exceptionOrNull()?.message)
+        verify(exactly = 0) { diskCacheStore.write(any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshCatalogToDisk includes poster provider token in freshness cache key`() = runTest {
+        val provider = mockk<AddonCatalogIntegrationProvider>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<CatalogDiskCacheStore>()
+        val readKey = slot<String>()
+        val repository = repository(provider, posterResolver, diskCacheStore)
+
+        coEvery { posterResolver.getActiveProvider() } returns PosterRatingsUrlResolver.ActiveProvider(
+            provider = PosterRatingsProvider.TOP_POSTERS,
+            apiKey = "secret"
+        )
+        every { diskCacheStore.read(capture(readKey)) } returns null
+        every { diskCacheStore.write(any(), any(), any()) } returns Unit
+        coEvery { provider.getCatalog(any(), any()) } returns NetworkResult.Success(
+            CatalogResponseDto(
+                metas = listOf(
+                    MetaPreviewDto(
+                        id = "tt-fresh",
+                        type = "movie",
+                        name = "Fresh Network Row"
+                    )
+                )
+            )
+        )
+
+        val result = repository.refreshCatalogToDisk(
+            addonBaseUrl = "https://addon.example",
+            addonId = "community.addon",
+            addonName = "Community Addon",
+            catalogId = "trending",
+            catalogName = "Trending",
+            type = "movie",
+            skip = 0,
+            skipStep = 20,
+            extraArgs = emptyMap(),
+            supportsSkip = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertTrue(readKey.captured.contains("TOP_POSTERS"))
+        assertTrue(readKey.captured.contains("community.addon"))
+        assertTrue(readKey.captured.contains("movie_trending_0_20"))
+        coVerify(exactly = 1) { provider.getCatalog(any(), any()) }
+    }
+
     @Test
     fun `catalog refresh does not apply premium poster resolver to preview rows`() = runTest {
         val provider = mockk<AddonCatalogIntegrationProvider>()
@@ -60,6 +311,7 @@ class CatalogRepositoryImplTest {
         )
 
         every { diskCacheStore.write(any(), capture(rowSlot), any()) } returns Unit
+        every { diskCacheStore.read(any()) } returns null
         coEvery { posterResolver.getActiveProvider() } returns PosterRatingsUrlResolver.ActiveProvider(
             provider = PosterRatingsProvider.TOP_POSTERS,
             apiKey = "secret"
