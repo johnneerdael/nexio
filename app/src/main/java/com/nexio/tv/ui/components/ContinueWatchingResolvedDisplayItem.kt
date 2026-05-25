@@ -47,6 +47,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
     abstract val genres: List<String>
     abstract val releaseInfo: String?
     abstract val tomatoesRating: Double?
+    abstract val episodeDescription: String?
+    abstract val episodeThumbnail: String?
     abstract val stableIds: ProviderIds
     abstract val textSourceRank: DisplaySourceRank
     abstract val textLanguageTag: String?
@@ -69,6 +71,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val genres: List<String>,
         override val releaseInfo: String?,
         override val tomatoesRating: Double?,
+        override val episodeDescription: String?,
+        override val episodeThumbnail: String?,
         override val stableIds: ProviderIds,
         override val textSourceRank: DisplaySourceRank,
         override val textLanguageTag: String?,
@@ -91,6 +95,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
         override val genres: List<String>,
         override val releaseInfo: String?,
         override val tomatoesRating: Double?,
+        override val episodeDescription: String?,
+        override val episodeThumbnail: String?,
         override val stableIds: ProviderIds,
         override val textSourceRank: DisplaySourceRank,
         override val textLanguageTag: String?,
@@ -133,6 +139,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
                 genres = display.genres,
                 releaseInfo = display.releaseInfo,
                 tomatoesRating = display.tomatoesRating,
+                episodeDescription = mergedSource.episodeDescription,
+                episodeThumbnail = mergedSource.episodeThumbnail,
                 stableIds = resolved.stableIds,
                 textSourceRank = resolved.textSourceRank(),
                 textLanguageTag = resolved.displayLanguageTag,
@@ -158,6 +166,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
                 genres = display.genres,
                 releaseInfo = display.releaseInfo,
                 tomatoesRating = display.tomatoesRating,
+                episodeDescription = mergedSource.info.episodeDescription,
+                episodeThumbnail = mergedSource.info.thumbnail,
                 stableIds = resolved.stableIds,
                 textSourceRank = resolved.textSourceRank(),
                 textLanguageTag = resolved.displayLanguageTag,
@@ -193,6 +203,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
                 genres = display.genres,
                 releaseInfo = display.releaseInfo,
                 tomatoesRating = display.tomatoesRating,
+                episodeDescription = source.episodeDescription,
+                episodeThumbnail = source.episodeThumbnail,
                 stableIds = providerIdsFromContinueWatchingContentId(source.progress.contentId),
                 textSourceRank = DisplaySourceRank.FIRST_PAINT,
                 textLanguageTag = null,
@@ -223,6 +235,8 @@ sealed class ContinueWatchingResolvedDisplayItem {
                 genres = display.genres,
                 releaseInfo = display.releaseInfo,
                 tomatoesRating = display.tomatoesRating,
+                episodeDescription = source.info.episodeDescription,
+                episodeThumbnail = source.info.thumbnail,
                 stableIds = providerIdsFromContinueWatchingContentId(source.info.contentId),
                 textSourceRank = DisplaySourceRank.FIRST_PAINT,
                 textLanguageTag = null,

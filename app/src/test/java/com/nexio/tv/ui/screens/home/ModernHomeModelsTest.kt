@@ -226,6 +226,37 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolved continue watching projection owns episode thumbnail rendering`() {
+        val nextUp = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tt456",
+                contentType = "series",
+                name = "Raw Show",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt456:1:2",
+                season = 1,
+                episode = 2,
+                episodeTitle = "Episode 2",
+                thumbnail = "raw-source-thumbnail",
+                lastWatched = 1L
+            )
+        )
+        val resolved = resolvedCwNextUp(nextUp).copy(episodeThumbnail = "projection-thumbnail")
+
+        val built = buildContinueWatchingItem(
+            resolved = resolved,
+            useLandscapePosters = true,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+
+        assertEquals("projection-thumbnail", built.imageUrl)
+        assertEquals("projection-thumbnail", built.heroPreview.imageUrl)
+    }
+
+    @Test
     fun `heroPreviewContentKey changes when tomatoes text changes for the active item`() {
         val withoutTomatoes = buildModernCarouselItem(tomatoesText = null)
         val withTomatoes = buildModernCarouselItem(tomatoesText = "88")

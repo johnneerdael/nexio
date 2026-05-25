@@ -509,7 +509,7 @@ internal fun buildContinueWatchingItem(
             HeroPreview(
                 title = resolvedTitle,
                 logo = resolvedLogo,
-                description = item.episodeDescription
+                description = resolved.episodeDescription
                     ?: resolved.description
                     ?: item.progress.episodeTitle,
                 contentTypeText = episodeLabel,
@@ -541,7 +541,7 @@ internal fun buildContinueWatchingItem(
             HeroPreview(
                 title = resolvedTitle,
                 logo = resolvedLogo,
-                description = item.info.episodeDescription
+                description = resolved.episodeDescription
                     ?: resolved.description
                     ?: item.info.episodeTitle
                     ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
@@ -557,7 +557,7 @@ internal fun buildContinueWatchingItem(
                     firstNonBlank(
                         resolvedBackdrop,
                         resolvedPoster,
-                        item.info.thumbnail
+                        resolved.episodeThumbnail
                     )
                 } else {
                     // Portrait poster cards: poster sources only. Episode thumbnails are also
@@ -565,7 +565,7 @@ internal fun buildContinueWatchingItem(
                     // but backdrop/logo are NOT valid fallbacks here.
                     firstNonBlank(
                         resolvedPoster,
-                        item.info.thumbnail
+                        resolved.episodeThumbnail
                     )
                 },
                 textSourceRank = resolved.textSourceRank,
@@ -578,7 +578,7 @@ internal fun buildContinueWatchingItem(
         is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
-                    item.episodeThumbnail,
+                    resolved.episodeThumbnail,
                     resolvedPoster,
                     resolvedBackdrop
                 )
@@ -595,7 +595,7 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     heroPreview.poster,
                     resolvedPoster,
-                    item.episodeThumbnail
+                    resolved.episodeThumbnail
                 )
             } else {
                 resolvedPoster
@@ -604,7 +604,7 @@ internal fun buildContinueWatchingItem(
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
             if (item.info.hasAired) {
                 firstNonBlank(
-                    item.info.thumbnail,
+                    resolved.episodeThumbnail,
                     resolvedPoster,
                     resolvedBackdrop
                 )
@@ -612,7 +612,7 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     resolvedBackdrop,
                     resolvedPoster,
-                    item.info.thumbnail
+                    resolved.episodeThumbnail
                 )
             }
         } else {
@@ -620,7 +620,7 @@ internal fun buildContinueWatchingItem(
             // backdrop/logo are NOT valid fallbacks here.
             firstNonBlank(
                 resolvedPoster,
-                item.info.thumbnail
+                resolved.episodeThumbnail
             )
         }
     }
