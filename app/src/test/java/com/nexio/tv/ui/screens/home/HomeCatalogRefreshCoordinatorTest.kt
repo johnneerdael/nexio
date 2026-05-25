@@ -375,6 +375,82 @@ class HomeCatalogRefreshCoordinatorTest {
         coVerify(exactly = 2) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
+    @Test
+    fun `refresh publishes cached repository row before provider hydration`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val events = mutableListOf<String>()
+        val cachedPreview = preview(id = "tt-cached-daily", poster = null).copy(
+            name = "Cached catalog title",
+            description = "Cached catalog description",
+            releaseInfo = "2026"
+        )
+        val cachedRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            items = listOf(cachedPreview),
+            hasMore = false
+        )
+
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://addon.example",
+                addonId = "addon",
+                addonName = "Addon",
+                catalogId = "popular",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                supportsSkip = false
+            )
+        } returns Result.success(cachedRow)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } coAnswers {
+            events += "provider"
+            TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = TvMetadataEnrichment(
+                    seriesTvdbId = null,
+                    localizedTitle = "Hydrated title",
+                    description = "Hydrated description",
+                    releaseInfo = "2027"
+                )
+            )
+        }
+
+        val refreshed = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter
+        ).refreshSerially(
+            addons = listOf(addon()),
+            telemetryEnabled = true,
+            isCatalogDisabled = { _, _ -> false },
+            getCurrentRow = { null },
+            isItemReferencedElsewhere = { _, _ -> false },
+            onCatalogReady = { catalogKey, row, _ ->
+                events += "publish:$catalogKey:${row.items.single().name}"
+            },
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(1, refreshed)
+        assertEquals(
+            listOf(
+                "publish:addon_movie_popular:Cached catalog title",
+                "provider",
+                "publish:addon_movie_popular:Hydrated title"
+            ),
+            events
+        )
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun `home serialized refresh immediately publishes every raw first paint row before hydrated republish`() = runTest {
