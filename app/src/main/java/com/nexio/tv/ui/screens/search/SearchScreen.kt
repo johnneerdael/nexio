@@ -128,7 +128,9 @@ internal fun resolveSearchFieldDownTarget(
 
 internal data class SearchManualStreamSelectionTarget(
     val item: MetaPreview,
-    val addonBaseUrl: String
+    val addonBaseUrl: String,
+    val tvEpisodeOrderAction: SearchTvEpisodeOrderMenuAction? = null,
+    val manualStreamSelectionAvailable: Boolean = true
 )
 
 private const val TMDB_PERSON_ID_PREFIX = TmdbDiscoveryService.TMDB_PERSON_ID_PREFIX
@@ -765,16 +767,21 @@ fun SearchScreen(
                                     }
                                 },
                                 onItemLongPress = { item, addonBaseUrl ->
-                                    if (
-                                        shouldShowSearchManualStreamSelection(
-                                            deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
-                                            apiType = item.apiType
-                                        )
-                                    ) {
-                                        searchManualStreamSelectionTarget = SearchManualStreamSelectionTarget(
-                                            item = item,
-                                            addonBaseUrl = addonBaseUrl
-                                        )
+                                    coroutineScope.launch {
+                                        val manualStreamSelectionAvailable =
+                                            shouldShowSearchManualStreamSelection(
+                                                deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
+                                                apiType = item.apiType
+                                            )
+                                        val tvEpisodeOrderAction = viewModel.resolveSearchTvEpisodeOrderMenuAction(item)
+                                        if (manualStreamSelectionAvailable || tvEpisodeOrderAction != null) {
+                                            searchManualStreamSelectionTarget = SearchManualStreamSelectionTarget(
+                                                item = item,
+                                                addonBaseUrl = addonBaseUrl,
+                                                tvEpisodeOrderAction = tvEpisodeOrderAction,
+                                                manualStreamSelectionAvailable = manualStreamSelectionAvailable
+                                            )
+                                        }
                                     }
                                 },
                                 onSeeAll = {
@@ -805,6 +812,8 @@ fun SearchScreen(
     if (selectedManualTarget != null) {
         SearchManualStreamSelectionDialog(
             title = selectedManualTarget.item.name,
+            manualStreamSelectionAvailable = selectedManualTarget.manualStreamSelectionAvailable,
+            tvEpisodeOrderActionLabelRes = selectedManualTarget.tvEpisodeOrderAction?.labelRes,
             onDismiss = { searchManualStreamSelectionTarget = null },
             onPlayWithManualStreamSelection = {
                 onPlayWithManualStreamSelection(
@@ -819,6 +828,10 @@ fun SearchScreen(
                     selectedManualTarget.item.apiType,
                     selectedManualTarget.addonBaseUrl
                 )
+                searchManualStreamSelectionTarget = null
+            },
+            onToggleTvEpisodeOrderProvider = {
+                selectedManualTarget.tvEpisodeOrderAction?.let(viewModel::toggleSearchTvEpisodeOrderProvider)
                 searchManualStreamSelectionTarget = null
             }
         )
@@ -998,11 +1011,19 @@ private fun RecentSearchesSection(
 @Composable
 internal fun SearchManualStreamSelectionDialog(
     title: String,
+    manualStreamSelectionAvailable: Boolean = true,
+    tvEpisodeOrderActionLabelRes: Int? = null,
     onDismiss: () -> Unit,
     onPlayWithManualStreamSelection: () -> Unit,
+    onToggleTvEpisodeOrderProvider: () -> Unit = {},
     onDetails: () -> Unit
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
+    val focusTarget = when {
+        manualStreamSelectionAvailable -> SearchManualDialogFocusTarget.ManualStreamSelection
+        tvEpisodeOrderActionLabelRes != null -> SearchManualDialogFocusTarget.TvEpisodeOrder
+        else -> SearchManualDialogFocusTarget.Details
+    }
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
@@ -1013,22 +1034,59 @@ internal fun SearchManualStreamSelectionDialog(
         title = title,
         subtitle = stringResource(R.string.cw_dialog_subtitle)
     ) {
-        Button(
-            onClick = onPlayWithManualStreamSelection,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
-            colors = ButtonDefaults.colors(
-                containerColor = NexioColors.BackgroundCard,
-                contentColor = NexioColors.TextPrimary
-            )
-        ) {
-            Text(stringResource(R.string.play_with_manual_stream_selection))
+        if (manualStreamSelectionAvailable) {
+            Button(
+                onClick = onPlayWithManualStreamSelection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (focusTarget == SearchManualDialogFocusTarget.ManualStreamSelection) {
+                            Modifier.focusRequester(primaryFocusRequester)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.play_with_manual_stream_selection))
+            }
+        }
+
+        if (tvEpisodeOrderActionLabelRes != null) {
+            Button(
+                onClick = onToggleTvEpisodeOrderProvider,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (focusTarget == SearchManualDialogFocusTarget.TvEpisodeOrder) {
+                            Modifier.focusRequester(primaryFocusRequester)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(tvEpisodeOrderActionLabelRes))
+            }
         }
 
         Button(
             onClick = onDetails,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (focusTarget == SearchManualDialogFocusTarget.Details) {
+                        Modifier.focusRequester(primaryFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                ),
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
                 contentColor = NexioColors.TextPrimary
@@ -1037,6 +1095,12 @@ internal fun SearchManualStreamSelectionDialog(
             Text(stringResource(R.string.cw_action_go_to_details))
         }
     }
+}
+
+private enum class SearchManualDialogFocusTarget {
+    ManualStreamSelection,
+    TvEpisodeOrder,
+    Details
 }
 
 @Composable

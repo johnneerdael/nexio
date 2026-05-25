@@ -4,6 +4,7 @@ import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.ImdbPosterLookupService
+import com.nexio.tv.R
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -13,6 +14,9 @@ import com.nexio.tv.data.remote.api.TmdbMediaResult
 import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AddonResource
@@ -22,6 +26,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -37,6 +42,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -169,11 +175,56 @@ class SearchViewModelTmdbTest {
         )
     }
 
+    @Test
+    fun `series search result resolves episode order action from tmdb stable id`() = runTest(dispatcher) {
+        val viewModel = createViewModel()
+        val item = preview(
+            id = "tmdb:16395",
+            name = "MasterChef Australia",
+            type = ContentType.SERIES,
+            stableIds = ProviderIds(tmdb = "16395")
+        )
+
+        val action = viewModel.resolveSearchTvEpisodeOrderMenuAction(item)
+
+        assertEquals(R.string.detail_use_tvdb_season_numbering, action?.labelRes)
+        assertEquals("tmdb:tv:16395", action?.tmdbTvOrderKey)
+    }
+
+    @Test
+    fun `search episode order toggle clears tvdb override back to tmdb`() = runTest(dispatcher) {
+        val overrideRepository = RecordingTvEpisodeOrderOverrideRepository()
+        val viewModel = createViewModel(tvEpisodeOrderOverrideRepository = overrideRepository)
+        val item = preview(
+            id = "tmdb:16395",
+            name = "MasterChef Australia",
+            type = ContentType.SERIES,
+            stableIds = ProviderIds(tmdb = "16395")
+        )
+
+        val enableTvdb = viewModel.resolveSearchTvEpisodeOrderMenuAction(item)
+        requireNotNull(enableTvdb)
+        viewModel.toggleSearchTvEpisodeOrderProvider(enableTvdb)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(TvEpisodeOrderProvider.TVDB_DEFAULT, overrideRepository.getOrder("tmdb:tv:16395"))
+
+        val resetToTmdb = viewModel.resolveSearchTvEpisodeOrderMenuAction(item)
+        assertEquals(R.string.detail_use_tmdb_season_numbering, resetToTmdb?.labelRes)
+
+        requireNotNull(resetToTmdb)
+        viewModel.toggleSearchTvEpisodeOrderProvider(resetToTmdb)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(TvEpisodeOrderProvider.TMDB_DEFAULT, overrideRepository.getOrder("tmdb:tv:16395"))
+    }
+
     private fun TestScope.createViewModel(
         addonRepository: AddonRepository = FakeAddonRepository(emptyList()),
         catalogRepository: CatalogRepository = FakeCatalogRepository(),
         tmdbDiscoveryService: TmdbDiscoveryService = FakeTmdbDiscoveryClient().createService(),
-        tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore = tmdbSettingsDataStoreForTest()
+        tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore = tmdbSettingsDataStoreForTest(),
+        tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository = RecordingTvEpisodeOrderOverrideRepository()
     ): SearchViewModel {
         return SearchViewModel(
             addonRepository = addonRepository,
@@ -191,7 +242,8 @@ class SearchViewModelTmdbTest {
                 every { searchPosterPreviewEnabled } returns flowOf(false)
             },
             tmdbDiscoveryService = tmdbDiscoveryService,
-            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+            tvEpisodeOrderOverrideRepository = tvEpisodeOrderOverrideRepository
         )
     }
 
@@ -327,10 +379,15 @@ class SearchViewModelTmdbTest {
         )
     }
 
-    private fun preview(id: String, name: String): MetaPreview {
+    private fun preview(
+        id: String,
+        name: String,
+        type: ContentType = ContentType.MOVIE,
+        stableIds: ProviderIds = ProviderIds()
+    ): MetaPreview {
         return MetaPreview(
             id = id,
-            type = ContentType.MOVIE,
+            type = type,
             name = name,
             poster = null,
             posterShape = PosterShape.POSTER,
@@ -340,8 +397,40 @@ class SearchViewModelTmdbTest {
             releaseInfo = null,
             imdbRating = null,
             ratingSource = TitleRatingSource.IMDB,
-            genres = emptyList()
+            genres = emptyList(),
+            firstPaintStableIds = stableIds
         )
+    }
+
+    private class RecordingTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+        private val overrides = linkedMapOf<String, TvEpisodeOrderProvider>()
+        private val state = MutableStateFlow<Map<String, TvEpisodeOrderProvider>>(emptyMap())
+
+        override fun observeOrders(): Flow<Map<String, TvEpisodeOrderProvider>> = state
+
+        override fun observeOrder(tmdbTvId: String): Flow<TvEpisodeOrderProvider> =
+            flowOf(overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT)
+
+        override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider =
+            overrides[normalizeTmdbTvEpisodeOrderKey(tmdbTvId)] ?: TvEpisodeOrderProvider.TMDB_DEFAULT
+
+        override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) {
+            val key = normalizeTmdbTvEpisodeOrderKey(tmdbTvId) ?: return
+            if (provider == TvEpisodeOrderProvider.TMDB_DEFAULT) {
+                overrides.remove(key)
+            } else {
+                overrides[key] = provider
+            }
+            state.value = overrides.toMap()
+        }
+
+        override suspend fun clearOrder(tmdbTvId: String) {
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::remove)
+            state.value = overrides.toMap()
+        }
+
+        override suspend fun hasOverride(tmdbTvId: String): Boolean =
+            normalizeTmdbTvEpisodeOrderKey(tmdbTvId)?.let(overrides::containsKey) == true
     }
 
     private fun tmdbMultiResult(id: Int, mediaType: String, title: String): TmdbMultiSearchResult {

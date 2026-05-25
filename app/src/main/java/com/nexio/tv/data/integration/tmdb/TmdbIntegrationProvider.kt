@@ -74,6 +74,7 @@ private const val TMDB_IDENTITY_TTL_MS = 30L * 24L * 60L * 60L * 1000L
 private const val TMDB_IDENTITY_NEGATIVE_TTL_MS = 24L * 60L * 60L * 1000L
 private const val TMDB_IDENTITY_STALE_MS = 180L * 24L * 60L * 60L * 1000L
 private const val TMDB_EXTERNAL_IDS_APPEND = "external_ids"
+private const val TMDB_TV_CORE_SEASONS_CACHE_SCHEMA = "seasons-v1"
 
 private data class TmdbFindNegativeCacheEntry(
     val missing: Boolean = true
@@ -252,11 +253,12 @@ class TmdbIntegrationProvider private constructor(
             ContentType.SERIES, ContentType.TV -> "tv"
             else -> "movie"
         }
+        val seasonSchemaSegment = tmdbTvCoreSeasonSchemaSegment(tmdbType)
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TMDB,
             apiShapeId = if (tmdbType == "tv") TmdbApiShapes.TV_CORE else TmdbApiShapes.MOVIE_CORE,
             operationKey = "tmdb.fetch_enrichment",
-            cacheKey = "tmdb:$tmdbType:$tmdbId:$normalizedLanguage:enrichment:$providerToken",
+            cacheKey = "tmdb:$tmdbType:$tmdbId:$normalizedLanguage:enrichment:$providerToken$seasonSchemaSegment",
             codec = gsonCodec<TmdbEnrichment>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 7L * 24L * 60L * 60L * 1000L,
@@ -323,12 +325,13 @@ class TmdbIntegrationProvider private constructor(
         localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TmdbEnrichment? {
         val providerToken = posterProviderCacheToken(activePosterProvider)
+        val seasonSchemaSegment = tmdbTvCoreSeasonSchemaSegment("tv")
         return runtime.get(
             IntegrationSpec(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.TV_CORE,
                 operationKey = "tmdb.tv.core:$tvId:$normalizedLanguage:policy:$localizationPolicyVersion",
-                cacheKey = "tmdb:tv:$tvId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion",
+                cacheKey = "tmdb:tv:$tvId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion$seasonSchemaSegment",
                 codec = gsonCodec<TmdbEnrichment>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(
                     ttlMs = 7L * 24L * 60L * 60L * 1000L,
@@ -1689,6 +1692,9 @@ private fun posterProviderCacheToken(
     if (activeProvider == null) return "native"
     return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
 }
+
+private fun tmdbTvCoreSeasonSchemaSegment(tmdbType: String): String =
+    if (tmdbType == "tv") ":$TMDB_TV_CORE_SEASONS_CACHE_SCHEMA" else ""
 
 private fun TmdbReviewResult.toMetaReview(): MetaReview? {
     val text = content?.trim()?.takeIf { it.isNotBlank() } ?: return null

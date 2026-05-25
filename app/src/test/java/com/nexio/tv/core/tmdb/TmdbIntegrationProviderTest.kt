@@ -1,8 +1,14 @@
 package com.nexio.tv.core.tmdb
 
 import com.nexio.tv.core.integration.IntegrationRuntime
+import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.IntegrationSpec
+import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.byteArrayRuntimeFixture
+import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
@@ -26,6 +32,7 @@ import com.nexio.tv.data.remote.api.TmdbPersonSearchResult
 import com.nexio.tv.data.remote.api.TmdbReviewAuthorDetails
 import com.nexio.tv.data.remote.api.TmdbReviewResult
 import com.nexio.tv.data.remote.api.TmdbReviewsResponse
+import com.nexio.tv.data.remote.api.TmdbSeasonSummary
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
 import com.nexio.tv.domain.model.ContentType
 import io.mockk.coEvery
@@ -123,7 +130,7 @@ class TmdbIntegrationProviderTest {
                 tvId = 273240,
                 apiKey = "tmdb-key",
                 language = null,
-                appendToResponse = "external_ids,videos,images,reviews,similar,translations",
+                appendToResponse = "external_ids",
                 includeImageLanguage = null
             )
         } coAnswers {
@@ -153,7 +160,87 @@ class TmdbIntegrationProviderTest {
         assertEquals("tt3213210", second.await())
         assertEquals("tt3213210", provider.findImdbIdByTmdbId(273240, "tv"))
         coVerify(exactly = 1) {
-            tmdbApi.getTvDetails(273240, "tmdb-key", null, "external_ids,videos,images,reviews,similar,translations", null)
+            tmdbApi.getTvDetails(273240, "tmdb-key", null, "external_ids", null)
+        }
+    }
+
+    @Test
+    fun `tv core cache key bypasses stale enrichment entries without seasons`() = runTest {
+        val fixture = byteArrayRuntimeFixture()
+        val tmdbApi = mockk<TmdbApi>()
+        val staleCacheSpec = IntegrationSpec(
+            provider = IntegrationProvider.TMDB,
+            apiShapeId = TmdbApiShapes.TV_CORE,
+            operationKey = "tmdb.tv.core:16395:en-US:policy:2",
+            cacheKey = "tmdb:tv:16395:en-US:core:native:policy:2",
+            codec = gsonCodec<TmdbEnrichment>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                staleAfterExpiryMs = 30L * 24L * 60L * 60L * 1000L
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                IntegrationLoadResult.Success(
+                    tmdbEnrichment(
+                        description = "unused old loader",
+                        seasons = emptyList()
+                    )
+                )
+            }
+        )
+        fixture.cacheStore.write(
+            staleCacheSpec,
+            tmdbEnrichment(
+                description = "old cached core without seasons",
+                seasons = emptyList()
+            )
+        )
+        coEvery {
+            tmdbApi.getTvDetails(
+                tvId = 16395,
+                apiKey = "tmdb-key",
+                language = "en-US",
+                appendToResponse = any(),
+                includeImageLanguage = any()
+            )
+        } returns Response.success(
+            TmdbDetailsResponse(
+                id = 16395,
+                name = "MasterChef Australia",
+                overview = "fresh core with seasons",
+                seasons = listOf(
+                    TmdbSeasonSummary(seasonNumber = 1, episodeCount = 72),
+                    TmdbSeasonSummary(seasonNumber = 18, episodeCount = 14)
+                )
+            )
+        )
+
+        val provider = TmdbIntegrationProvider(
+            runtime = fixture.runtime,
+            tmdbApi = tmdbApi,
+            tmdbCredentialProvider = {
+                MetadataProviderCredential(apiKey = "tmdb-key", source = MetadataCredentialSource.CUSTOM)
+            }
+        )
+
+        val result = provider.fetchTvCore(
+            tvId = 16395,
+            normalizedLanguage = "en-US",
+            activePosterProvider = null
+        )
+
+        assertEquals("fresh core with seasons", result?.description)
+        assertEquals(listOf(1, 18), result?.seasons?.map { it.seasonNumber })
+        assertTrue(fixture.cacheStore.contains("tmdb:tv:16395:en-US:core:native:policy:2"))
+        assertTrue(fixture.cacheStore.contains("tmdb:tv:16395:en-US:core:native:policy:2:seasons-v1"))
+        coVerify(exactly = 1) {
+            tmdbApi.getTvDetails(
+                tvId = 16395,
+                apiKey = "tmdb-key",
+                language = "en-US",
+                appendToResponse = any(),
+                includeImageLanguage = any()
+            )
         }
     }
 
@@ -847,4 +934,34 @@ class TmdbIntegrationProviderTest {
             tmdbApi.getTvSeasonDetails(100, 1, "tmdb-key", "en-US")
         }
     }
+
+    private fun tmdbEnrichment(
+        description: String,
+        seasons: List<TmdbSeasonEnrichment>
+    ): TmdbEnrichment = TmdbEnrichment(
+        localizedTitle = "MasterChef Australia",
+        description = description,
+        genres = emptyList(),
+        backdrop = null,
+        logo = null,
+        poster = null,
+        directorMembers = emptyList(),
+        writerMembers = emptyList(),
+        castMembers = emptyList(),
+        releaseInfo = null,
+        rating = null,
+        runtimeMinutes = null,
+        director = emptyList(),
+        writer = emptyList(),
+        productionCompanies = emptyList(),
+        networks = emptyList(),
+        ageRating = null,
+        countries = null,
+        language = "en",
+        collectionId = null,
+        collectionName = null,
+        imdbId = "tt1433870",
+        tvdbId = 92091,
+        seasons = seasons
+    )
 }

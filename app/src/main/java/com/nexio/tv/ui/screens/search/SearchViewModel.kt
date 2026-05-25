@@ -15,10 +15,14 @@ import com.nexio.tv.data.local.SearchHistoryDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.repository.TmdbDiscoveryService
+import com.nexio.tv.data.repository.TvEpisodeOrderOverrideRepository
+import com.nexio.tv.data.repository.TvEpisodeOrderProvider
+import com.nexio.tv.data.repository.normalizeTmdbTvEpisodeOrderKey
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.repository.AddonRepository
@@ -27,17 +31,29 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private object DefaultSearchTvEpisodeOrderOverrideRepository : TvEpisodeOrderOverrideRepository {
+    override fun observeOrders(): Flow<Map<String, TvEpisodeOrderProvider>> = flowOf(emptyMap())
+    override fun observeOrder(tmdbTvId: String): Flow<TvEpisodeOrderProvider> =
+        flowOf(TvEpisodeOrderProvider.TMDB_DEFAULT)
+    override suspend fun getOrder(tmdbTvId: String): TvEpisodeOrderProvider = TvEpisodeOrderProvider.TMDB_DEFAULT
+    override suspend fun setOrder(tmdbTvId: String, provider: TvEpisodeOrderProvider) = Unit
+    override suspend fun clearOrder(tmdbTvId: String) = Unit
+    override suspend fun hasOverride(tmdbTvId: String): Boolean = false
+}
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
@@ -51,6 +67,8 @@ class SearchViewModel @Inject constructor(
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val tmdbDiscoveryService: TmdbDiscoveryService,
     private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    private val tvEpisodeOrderOverrideRepository: TvEpisodeOrderOverrideRepository =
+        DefaultSearchTvEpisodeOrderOverrideRepository,
     private val searchSuggestionPosterRegistry: SearchSuggestionPosterRegistry = SearchSuggestionPosterRegistry()
 ) : ViewModel() {
 
@@ -227,6 +245,43 @@ class SearchViewModel @Inject constructor(
             SearchEvent.LoadNextDiscoverResults -> loadNextDiscoverResults()
             SearchEvent.Retry -> performSearch(uiState.value.submittedQuery.ifBlank { uiState.value.query })
         }
+    }
+
+    suspend fun resolveSearchTvEpisodeOrderMenuAction(item: MetaPreview): SearchTvEpisodeOrderMenuAction? {
+        if (!item.apiType.equals("series", ignoreCase = true) && !item.apiType.equals("tv", ignoreCase = true)) {
+            return null
+        }
+        val tmdbTvOrderKey = searchTmdbTvOrderKey(item) ?: return null
+        val selectedProvider = try {
+            tvEpisodeOrderOverrideRepository.getOrder(tmdbTvOrderKey)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            TvEpisodeOrderProvider.TMDB_DEFAULT
+        }
+        return resolveSearchTvEpisodeOrderMenuAction(
+            provider = selectedProvider,
+            tmdbTvOrderKey = tmdbTvOrderKey
+        )
+    }
+
+    fun toggleSearchTvEpisodeOrderProvider(action: SearchTvEpisodeOrderMenuAction) {
+        viewModelScope.launch {
+            if (action.provider == TvEpisodeOrderProvider.TVDB_DEFAULT) {
+                tvEpisodeOrderOverrideRepository.clearOrder(action.tmdbTvOrderKey)
+            } else {
+                tvEpisodeOrderOverrideRepository.setOrder(
+                    tmdbTvId = action.tmdbTvOrderKey,
+                    provider = TvEpisodeOrderProvider.TVDB_DEFAULT
+                )
+            }
+        }
+    }
+
+    private fun searchTmdbTvOrderKey(item: MetaPreview): String? {
+        return normalizeTmdbTvEpisodeOrderKey(item.firstPaintStableIds.tmdb)
+            ?: normalizeTmdbTvEpisodeOrderKey(item.firstPaintSourceItemId)
+            ?: normalizeTmdbTvEpisodeOrderKey(item.id)
     }
 
     private fun onQueryChanged(query: String) {
