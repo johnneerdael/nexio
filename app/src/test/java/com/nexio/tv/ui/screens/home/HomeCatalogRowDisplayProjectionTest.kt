@@ -53,11 +53,55 @@ class HomeCatalogRowDisplayProjectionTest {
         assertEquals(25, projected.items.size)
     }
 
+    @Test
+    fun `visible home hydration candidates exclude only tekenfilms row items`() {
+        val tekenfilmsRow = row(
+            addonId = "org.nexio.tekenfilms",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            catalogId = "tekenfilms_nl",
+            itemCount = 1,
+            itemIdPrefix = "tekenfilms"
+        )
+        val ordinaryRow = row(
+            addonId = "other",
+            addonBaseUrl = "https://example.test",
+            catalogId = "movies",
+            itemCount = 1,
+            itemIdPrefix = "ordinary"
+        )
+
+        val filtered = filterVisibleHomeHydrationCandidates(
+            items = tekenfilmsRow.items + ordinaryRow.items,
+            rows = listOf(tekenfilmsRow, ordinaryRow)
+        )
+
+        assertEquals(listOf(ordinaryRow.items.single()), filtered)
+    }
+
+    @Test
+    fun `visible home hydration candidates stay unchanged without tekenfilms row`() {
+        val ordinaryRow = row(
+            addonId = "other",
+            addonBaseUrl = "https://example.test",
+            catalogId = "movies",
+            itemCount = 2,
+            itemIdPrefix = "ordinary"
+        )
+
+        val filtered = filterVisibleHomeHydrationCandidates(
+            items = ordinaryRow.items,
+            rows = listOf(ordinaryRow)
+        )
+
+        assertSame(ordinaryRow.items, filtered)
+    }
+
     private fun row(
         addonId: String,
         addonBaseUrl: String,
         catalogId: String,
-        itemCount: Int
+        itemCount: Int,
+        itemIdPrefix: String = "tekenfilms"
     ): CatalogRow {
         return CatalogRow(
             addonId = addonId,
@@ -67,14 +111,14 @@ class HomeCatalogRowDisplayProjectionTest {
             catalogName = "Catalog",
             type = ContentType.MOVIE,
             rawType = "movie",
-            items = (0 until itemCount).map { index -> item(index) },
+            items = (0 until itemCount).map { index -> item(itemIdPrefix, index) },
             supportsSkip = false
         )
     }
 
-    private fun item(index: Int): MetaPreview {
+    private fun item(idPrefix: String, index: Int): MetaPreview {
         return MetaPreview(
-            id = "tekenfilms:$index",
+            id = "$idPrefix:$index",
             type = ContentType.MOVIE,
             rawType = "movie",
             name = "Movie $index",

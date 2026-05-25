@@ -100,6 +100,21 @@ internal fun projectCatalogRowForHomeDisplay(
     }
 }
 
+internal fun filterVisibleHomeHydrationCandidates(
+    items: List<MetaPreview>,
+    rows: List<CatalogRow>
+): List<MetaPreview> {
+    if (items.isEmpty() || rows.isEmpty()) return items
+    val tekenfilmsItemKeys = rows
+        .asSequence()
+        .filter { row -> TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row) }
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> homeDisplayItemKey(item.apiType, item.id) }
+        .toHashSet()
+    if (tekenfilmsItemKeys.isEmpty()) return items
+    return items.filterNot { item -> homeDisplayItemKey(item.apiType, item.id) in tekenfilmsItemKeys }
+}
+
 internal fun resolveEffectiveHomeOrderForCatalogRails(
     configuredRails: List<HomeCatalogRail>,
     liveDefinitions: List<HomeRailDefinition>,
@@ -1793,7 +1808,8 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             "tmdbGroups=${persistedTmdbSyntheticGroups.size} tmdbRows=${persistedTmdbSyntheticGroups.sumOf { it.rows.size }}"
     )
 
-    val visibleItemsBeforeSettle = _internalCatalogRows.value
+    val visibleRowsBeforeSettle = _internalCatalogRows.value
+    val visibleItemsBeforeSettle = visibleRowsBeforeSettle
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
@@ -1816,14 +1832,24 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             .flatMap { row -> row.items.asSequence() }
             .map { item -> "${item.apiType}:${item.id}" }
             .toSet()
-    val visibleItems = _internalCatalogRows.value
+    val visibleRowsAfterSettle = _internalCatalogRows.value
+    val visibleItemsAfterSettle = visibleRowsAfterSettle
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .toList()
-        .ifEmpty { visibleItemsBeforeSettle }
-    if (visibleItems.isNotEmpty()) {
+    val visibleItems = visibleItemsAfterSettle.ifEmpty { visibleItemsBeforeSettle }
+    val visibleRowsForHydration = if (visibleItemsAfterSettle.isNotEmpty()) {
+        visibleRowsAfterSettle
+    } else {
+        visibleRowsBeforeSettle
+    }
+    val visibleHydrationItems = filterVisibleHomeHydrationCandidates(
+        items = visibleItems,
+        rows = visibleRowsForHydration
+    )
+    if (visibleHydrationItems.isNotEmpty()) {
         hydrateVisibleHomeItemsWithCoordinator(
-            items = visibleItems,
+            items = visibleHydrationItems,
             expectedGeneration = expectedGeneration,
             expectedProfileSession = expectedProfileSession
         )
@@ -1831,7 +1857,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible prefetch generation=$expectedGeneration")
             return
         }
-        val visibleItemKeys = visibleItems
+        val visibleItemKeys = visibleHydrationItems
             .asSequence()
             .map { item -> homeDisplayItemKey(item.apiType, item.id) }
             .toSet()
