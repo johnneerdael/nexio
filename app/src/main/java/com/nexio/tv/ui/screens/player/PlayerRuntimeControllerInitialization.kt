@@ -513,6 +513,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     )
                 ) {
                     audioFfmpegPreferredStreamUrls.add(url)
+                    safeAudioForcedStreamUrls.remove(url)
+                    audioDisabledForcedStreamUrls.remove(url)
                     Log.i(
                         PlayerRuntimeController.TAG,
                         "AUDIO_RENDERER: deterministic FFmpeg audio preference " +
@@ -523,7 +525,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 }
             }
             val safeAudioModeEnabled =
-                !kodiCustomAudioSinkEnabled && safeAudioForcedStreamUrls.contains(url)
+                !kodiCustomAudioSinkEnabled &&
+                    safeAudioForcedStreamUrls.contains(url) &&
+                    !audioFfmpegPreferredStreamUrls.contains(url)
             val audioDisabledForStream =
                 !kodiCustomAudioSinkEnabled && audioDisabledForcedStreamUrls.contains(url)
             val audioFfmpegFallbackActive = audioFfmpegPreferredStreamUrls.contains(url)

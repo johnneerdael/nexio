@@ -176,4 +176,15 @@ class PlayerPlaybackErrorRecoveryTest {
             )
         )
     }
+
+    @Test
+    fun `ffmpeg audio preference disables safe audio tunneling`() {
+        assertFalse(
+            shouldEnableTrackSelectorTunneling(
+                requestedTunneling = true,
+                safeAudioModeEnabled = false,
+                audioFfmpegFallbackActive = true
+            )
+        )
+    }
 }

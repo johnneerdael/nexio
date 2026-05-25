@@ -99,6 +99,8 @@ object CometProxyUrlResolver {
         "/_/strem/",  // StremThru
     )
 
+    private const val DIRECT_FILE_ADDON_HOST_TEKENFILMS = "tekenfilms.nexioapp.org"
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val lock = Any()
@@ -147,6 +149,8 @@ object CometProxyUrlResolver {
      * - **Gate A (host match):** [addonHost] is provided and [url]'s host equals
      *   it (case-insensitive). This covers self-hosted instances not in the
      *   static list — we trust the addon to redirect us off its own host.
+     *   Tekenfilms is the exception: it serves direct media files from its addon
+     *   host, so only known proxy path markers are eligible there.
      * - **Gate B (known host + path marker):** [url]'s host is in the static
      *   [knownProxyHosts] list **and** the path contains a known proxy marker
      *   (`/playback/`, `/play/`, or `/_/strem/`). Path markers prevent false
@@ -156,13 +160,19 @@ object CometProxyUrlResolver {
         val parsed = runCatching { url.toHttpUrlOrNull() }.getOrNull() ?: return false
         val host = parsed.host.lowercase(Locale.ROOT)
 
+        val path = parsed.encodedPath.lowercase(Locale.ROOT)
+        val hasProxyPathMarker = proxyPathMarkers.any { marker -> marker in path }
+
         if (!addonHost.isNullOrBlank() && host == addonHost.lowercase(Locale.ROOT)) {
-            return true
+            return if (host == DIRECT_FILE_ADDON_HOST_TEKENFILMS) {
+                hasProxyPathMarker
+            } else {
+                true
+            }
         }
 
         if (host !in knownProxyHosts) return false
-        val path = parsed.encodedPath.lowercase(Locale.ROOT)
-        return proxyPathMarkers.any { marker -> marker in path }
+        return hasProxyPathMarker
     }
 
     /**

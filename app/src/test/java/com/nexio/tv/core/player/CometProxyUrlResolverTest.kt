@@ -124,6 +124,22 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
+    fun `isCometProxy rejects tekenfilms direct files even when addonHost matches`() {
+        assertFalse(
+            CometProxyUrlResolver.isCometProxy(
+                url = "https://tekenfilms.nexioapp.org/nl-gesproken/movie.avi",
+                addonHost = "tekenfilms.nexioapp.org"
+            )
+        )
+        assertTrue(
+            CometProxyUrlResolver.isCometProxy(
+                url = "https://tekenfilms.nexioapp.org/cfg/playback/h/0/0/n/n",
+                addonHost = "tekenfilms.nexioapp.org"
+            )
+        )
+    }
+
+    @Test
     fun `resolve returns null for non-Comet urls`() = runBlocking {
         CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected("should not be called") }
         val result = CometProxyUrlResolver.resolve(
