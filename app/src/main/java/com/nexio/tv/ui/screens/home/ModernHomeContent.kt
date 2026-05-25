@@ -361,6 +361,7 @@ internal fun ModernHomeContent(
     focusState: HomeScreenFocusState,
     enrichingItemIdState: State<String?>,
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview) -> Unit = {},
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
@@ -1475,6 +1476,7 @@ internal fun ModernHomeContent(
                             onPreloadAdjacentItem = onPreloadAdjacentItem,
                             onCatalogSelectionFocused = onCatalogSelectionFocused,
                             onNavigateToDetail = onNavigateToDetail,
+                            onPlayTekenfilmsDirect = onPlayTekenfilmsDirect,
                             onLoadMoreCatalog = onLoadMoreCatalog,
                             canPromoteHeroTrailerToFullscreen = heroTrailerInternalPlaying &&
                                 effectiveTrailerPlaybackTarget ==

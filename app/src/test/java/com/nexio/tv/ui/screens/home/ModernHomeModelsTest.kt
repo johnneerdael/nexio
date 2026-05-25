@@ -29,6 +29,65 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModernHomeModelsTest {
+    @Test
+    fun `resolveModernCatalogClickAction uses direct playback for exact tekenfilms item`() {
+        val row = HeroCarouselRow(
+            key = "tekenfilms",
+            title = "Tekenfilms",
+            globalRowIndex = 0,
+            items = emptyList(),
+            catalogId = "tekenfilms_nl",
+            addonId = "org.nexio.tekenfilms",
+            apiType = "movie"
+        )
+        val payload = ModernPayload.Catalog(
+            focusKey = "tekenfilms:movie-1",
+            itemId = "tekenfilms:movie-1",
+            itemType = "movie",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            trailerTitle = "Movie",
+            trailerReleaseInfo = null,
+            trailerApiType = "movie"
+        )
+
+        val action = resolveModernCatalogClickAction(
+            row = row,
+            payload = payload,
+            item = metaPreview(id = "tekenfilms:movie-1")
+        )
+
+        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+    }
+
+    @Test
+    fun `resolveModernCatalogClickAction keeps detail navigation for other addons`() {
+        val row = HeroCarouselRow(
+            key = "other",
+            title = "Other",
+            globalRowIndex = 0,
+            items = emptyList(),
+            catalogId = "tekenfilms_nl",
+            addonId = "other.addon",
+            apiType = "movie"
+        )
+        val payload = ModernPayload.Catalog(
+            focusKey = "tekenfilms:movie-1",
+            itemId = "tekenfilms:movie-1",
+            itemType = "movie",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            trailerTitle = "Movie",
+            trailerReleaseInfo = null,
+            trailerApiType = "movie"
+        )
+
+        val action = resolveModernCatalogClickAction(
+            row = row,
+            payload = payload,
+            item = metaPreview(id = "tekenfilms:movie-1")
+        )
+
+        assertEquals(ModernCatalogClickAction.Detail, action)
+    }
 
     @Test
     fun `buildContinueWatchingItem prefers shared display metadata for in progress items`() {
@@ -846,6 +905,23 @@ class ModernHomeModelsTest {
         assertEquals(112L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Up))
         assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Left))
         assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Right))
+    }
+
+    private fun metaPreview(id: String): MetaPreview {
+        return MetaPreview(
+            id = id,
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Movie",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList()
+        )
     }
 
     private fun buildModernCarouselItem(tomatoesText: String?): ModernCarouselItem {

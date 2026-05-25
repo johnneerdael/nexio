@@ -284,7 +284,7 @@ private fun ModernCatalogRowItem(
     onItemFocus: (MetaPreview) -> Unit,
     onPreloadAdjacentItem: () -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
-    onNavigateToDetail: (String, String, String) -> Unit,
+    onCatalogClick: () -> Unit,
     onLongPress: () -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean,
     fullscreenTrailerActive: Boolean,
@@ -341,13 +341,7 @@ private fun ModernCatalogRowItem(
         focusRequester = requester,
         onFocused = { focusEventId += 1 },
         onFocusStateChanged = { focused -> isCardFocused = focused },
-        onClick = {
-            onNavigateToDetail(
-                payload.itemId,
-                payload.itemType,
-                payload.addonBaseUrl
-            )
-        },
+        onClick = onCatalogClick,
         onLongPress = onLongPress,
         canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
         fullscreenTrailerActive = fullscreenTrailerActive,
@@ -398,6 +392,7 @@ internal fun ModernRowSection(
     onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean,
     fullscreenTrailerActive: Boolean,
@@ -736,6 +731,25 @@ internal fun ModernRowSection(
                             } else {
                                 null
                             }
+                            val onCatalogClick = remember(row, payload, metaPreview, onNavigateToDetail, onPlayTekenfilmsDirect) {
+                                {
+                                    when (resolveModernCatalogClickAction(row, payload, metaPreview)) {
+                                        ModernCatalogClickAction.Detail -> {
+                                            onNavigateToDetail(
+                                                payload.itemId,
+                                                payload.itemType,
+                                                payload.addonBaseUrl
+                                            )
+                                        }
+
+                                        ModernCatalogClickAction.TekenfilmsDirectPlayback -> {
+                                            if (metaPreview != null) {
+                                                onPlayTekenfilmsDirect(metaPreview)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             ModernCatalogRowItem(
                                 rowKey = row.key,
                                 item = item,
@@ -767,7 +781,7 @@ internal fun ModernRowSection(
                                     { nextCatalogItem?.let(onPreloadAdjacentItem) }
                                 },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
-                                onNavigateToDetail = onNavigateToDetail,
+                                onCatalogClick = onCatalogClick,
                                 onLongPress = remember(metaPreview, payload.addonBaseUrl, item.heroPreview) {
                                     { metaPreview?.let { onCatalogItemLongPress(it, payload.addonBaseUrl, item.heroPreview) } }
                                 },

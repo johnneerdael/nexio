@@ -143,6 +143,7 @@ fun HomeScreen(
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview) -> Unit = {},
     onPlayWithManualStreamSelection: (MetaPreview) -> Unit = {},
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
@@ -411,6 +412,7 @@ fun HomeScreen(
                             onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
                             onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                             onNavigateToDetail = onNavigateToDetail,
+                            onPlayTekenfilmsDirect = onPlayTekenfilmsDirect,
                             onContinueWatchingClick = onContinueWatchingClick,
                             onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
                             onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
@@ -824,6 +826,7 @@ private fun ModernHomeRoute(
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
@@ -972,6 +975,7 @@ private fun ModernHomeRoute(
         focusState = focusState,
         enrichingItemIdState = enrichingItemIdState,
         onNavigateToDetail = onNavigateToDetail,
+        onPlayTekenfilmsDirect = onPlayTekenfilmsDirect,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
         onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,

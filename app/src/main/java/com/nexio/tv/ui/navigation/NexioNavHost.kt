@@ -163,6 +163,7 @@ fun NexioNavHost(
 
         composable(Screen.Home.route) {
             val homeViewModel: HomeViewModel = hiltViewModel()
+            val tekenfilmsDirectPlaybackViewModel: TekenfilmsDirectPlaybackViewModel = hiltViewModel()
             val homeUiState by homeViewModel.uiState.collectAsState()
             val homeScope = rememberCoroutineScope()
             HomeScreen(
@@ -174,6 +175,14 @@ fun NexioNavHost(
                 onModernHomeTrailerFullscreenActiveChanged = onModernHomeTrailerFullscreenActiveChanged,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                },
+                onPlayTekenfilmsDirect = { item ->
+                    homeScope.launch {
+                        val route = tekenfilmsDirectPlaybackViewModel.buildPlayerRoute(item)
+                        if (route != null) {
+                            navController.navigate(route)
+                        }
+                    }
                 },
                 onPlayWithManualStreamSelection = { item ->
                     navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
