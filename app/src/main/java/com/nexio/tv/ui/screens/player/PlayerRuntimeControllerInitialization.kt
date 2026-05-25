@@ -51,6 +51,7 @@ import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
+import com.nexio.tv.core.player.FfmpegStreamMetadataProbeResult
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.PlayProbeCache
 import com.nexio.tv.core.player.auth.PlaybackErrorClassifier
@@ -488,6 +489,36 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         "AUDIO_INIT: disk spool active; cleared stale safe-audio " +
                             "flags for host=${Uri.parse(url).host ?: "unknown"} " +
                             "(safeAudio=$hadSafeAudio audioDisabled=$hadAudioDisabled)"
+                    )
+                }
+            }
+            if (!audioFfmpegPreferredStreamUrls.contains(url) &&
+                shouldRunDeterministicAudioFfmpegProbe(
+                    url = url,
+                    ffmpegAvailable = FfmpegLibrary.isAvailable()
+                )
+            ) {
+                val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(addonBaseUrl)
+                val cached = PlayProbeCache.get(url, headers)
+                val metadata = cached ?: withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
+                    FfmpegStreamMetadataProbe.probe(
+                        url = url,
+                        headers = headers,
+                        addonHost = addonHost
+                    )?.also { PlayProbeCache.put(url, headers, it) }
+                }
+                if (shouldPreferFfmpegAudioFromProbe(
+                        ffmpegAvailable = FfmpegLibrary.isAvailable(),
+                        metadata = metadata
+                    )
+                ) {
+                    audioFfmpegPreferredStreamUrls.add(url)
+                    Log.i(
+                        PlayerRuntimeController.TAG,
+                        "AUDIO_RENDERER: deterministic FFmpeg audio preference " +
+                            "reason=legacy_avi_mp3 " +
+                            "format=${metadata?.formatName ?: "unknown"} " +
+                            "host=${url.safeHost()}"
                     )
                 }
             }
@@ -1233,6 +1264,21 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onPlayerError(error: PlaybackException) {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "PLAYBACK_ERROR: code=${error.errorCode} " +
+                                "message=${error.message ?: "n/a"} " +
+                                "positionMs=$currentPosition " +
+                                "bufferedPositionMs=$bufferedPosition " +
+                                "state=$playbackState " +
+                                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
+                                "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
+                                "audioFfmpeg=$isAudioFfmpegFallbackActiveForCurrentPlayback " +
+                                "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                                "details=${error.describeCauseChain()} " +
+                                "host=${currentStreamUrl.safeHost()}"
+                        )
                         if (error.isVc1DecoderFailure() &&
                             !isVc1SoftwareFallbackActiveForCurrentPlayback
                         ) {
@@ -1344,6 +1390,29 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                         "positionMs=$currentPosition"
                                 )
                             } else {
+                                if (shouldRetryStuckPlaybackWithAudioFfmpeg(
+                                        ffmpegAvailable = FfmpegLibrary.isAvailable(),
+                                        audioFfmpegFallbackActive =
+                                            isAudioFfmpegFallbackActiveForCurrentPlayback,
+                                        audioDisabledForStream = isAudioDisabledForCurrentPlayback
+                                    )
+                                ) {
+                                    val retryPositionMs =
+                                        audioFfmpegFallbackRetryPositionMs(currentPosition)
+                                    Log.w(
+                                        PlayerRuntimeController.TAG,
+                                        "Stuck player detected, retrying with FFmpeg audio " +
+                                            "preference before disabling audio " +
+                                            "host=${currentStreamUrl.safeHost()} " +
+                                            "positionMs=$currentPosition " +
+                                            "retryPositionMs=$retryPositionMs " +
+                                            "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                                            "audioCodecs=${currentAudioTrackCodecs ?: "unknown"}"
+                                    )
+                                    audioFfmpegPreferredStreamUrls.add(currentStreamUrl)
+                                    retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
+                                    return
+                                }
                                 if (!isSafeAudioModeActiveForCurrentPlayback) {
                                     Log.w(
                                         PlayerRuntimeController.TAG,
@@ -1936,6 +2005,7 @@ private class SubtitleOffsetRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<Renderer>
     ) {
+        val audioRendererStartIndex = out.size
         val audioExtensionRendererMode = if (preferFfmpegAudio) {
             Log.i(
                 PlayerRuntimeController.TAG,
@@ -1954,6 +2024,12 @@ private class SubtitleOffsetRenderersFactory(
             eventHandler,
             eventListener,
             out
+        )
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "AUDIO_RENDERER: mode=${describeExtensionRendererMode(audioExtensionRendererMode)} " +
+                "preferFfmpeg=$preferFfmpegAudio " +
+                "renderers=${out.drop(audioRendererStartIndex).joinToString { it::class.java.name }}"
         )
     }
 }
@@ -2051,6 +2127,32 @@ internal fun shouldEnableTrackSelectorTunneling(
     audioFfmpegFallbackActive: Boolean
 ): Boolean {
     return requestedTunneling && !safeAudioModeEnabled && !audioFfmpegFallbackActive
+}
+
+internal fun shouldRetryStuckPlaybackWithAudioFfmpeg(
+    ffmpegAvailable: Boolean,
+    audioFfmpegFallbackActive: Boolean,
+    audioDisabledForStream: Boolean
+): Boolean {
+    return ffmpegAvailable && !audioFfmpegFallbackActive && !audioDisabledForStream
+}
+
+internal fun shouldRunDeterministicAudioFfmpegProbe(
+    url: String,
+    ffmpegAvailable: Boolean
+): Boolean {
+    if (!ffmpegAvailable) return false
+    val path = runCatching { Uri.parse(url).path.orEmpty() }
+        .getOrDefault(url.substringBefore('?'))
+        .lowercase(Locale.US)
+    return path.endsWith(".avi")
+}
+
+internal fun shouldPreferFfmpegAudioFromProbe(
+    ffmpegAvailable: Boolean,
+    metadata: FfmpegStreamMetadataProbeResult?
+): Boolean {
+    return ffmpegAvailable && metadata?.hasLegacyAviMp3Audio == true
 }
 
 private fun Exception.isAudioSinkInitializationFailure(): Boolean {
@@ -2213,10 +2315,33 @@ private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog
                 "bufferedPositionMs=$initialBufferedPosition->$observedBufferedPosition " +
                 "totalBufferedDurationMs=$initialTotalBufferedDuration->$observedTotalBufferedDuration " +
                 "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
+                "audioFfmpeg=$isAudioFfmpegFallbackActiveForCurrentPlayback " +
                 "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
                 "diskSpool=$observedDiskSpoolActive " +
                 "host=${currentStreamUrl.safeHost()}"
         )
+        if (shouldRetryStuckPlaybackWithAudioFfmpeg(
+                ffmpegAvailable = FfmpegLibrary.isAvailable(),
+                audioFfmpegFallbackActive = isAudioFfmpegFallbackActiveForCurrentPlayback,
+                audioDisabledForStream = isAudioDisabledForCurrentPlayback
+            )
+        ) {
+            val retryPositionMs = audioFfmpegFallbackRetryPositionMs(observedPosition)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "POST_FIRST_FRAME_BUFFERING: retrying with FFmpeg audio preference " +
+                    "before safe-audio/audio-disabled fallback " +
+                    "positionMs=$observedPosition retryPositionMs=$retryPositionMs " +
+                    "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
+                    "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
+                    "host=${currentStreamUrl.safeHost()}"
+            )
+            audioFfmpegPreferredStreamUrls.add(currentStreamUrl)
+            retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
+            return@launch
+        }
         handleAudioTrackInitializationFailure(
             kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
             fromPositionMs = observedPosition,

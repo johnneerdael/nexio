@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.PlaybackException
+import com.nexio.tv.core.player.FfmpegStreamMetadata
+import com.nexio.tv.core.player.FfmpegStreamMetadataProbeResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -97,6 +99,80 @@ class PlayerPlaybackErrorRecoveryTest {
                 requestedTunneling = true,
                 safeAudioModeEnabled = false,
                 audioFfmpegFallbackActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `stuck playback retries ffmpeg audio before disabling audio`() {
+        assertTrue(
+            shouldRetryStuckPlaybackWithAudioFfmpeg(
+                ffmpegAvailable = true,
+                audioFfmpegFallbackActive = false,
+                audioDisabledForStream = false
+            )
+        )
+    }
+
+    @Test
+    fun `stuck playback does not repeat ffmpeg audio fallback`() {
+        assertFalse(
+            shouldRetryStuckPlaybackWithAudioFfmpeg(
+                ffmpegAvailable = true,
+                audioFfmpegFallbackActive = true,
+                audioDisabledForStream = false
+            )
+        )
+    }
+
+    @Test
+    fun `stuck playback skips ffmpeg audio when audio is already disabled`() {
+        assertFalse(
+            shouldRetryStuckPlaybackWithAudioFfmpeg(
+                ffmpegAvailable = true,
+                audioFfmpegFallbackActive = false,
+                audioDisabledForStream = true
+            )
+        )
+    }
+
+    @Test
+    fun `avi urls run deterministic ffmpeg audio probe when ffmpeg is available`() {
+        assertTrue(
+            shouldRunDeterministicAudioFfmpegProbe(
+                url = "https://tekenfilms.nexioapp.org/nl/Atlantis%20de%20verzonken%20stad.avi",
+                ffmpegAvailable = true
+            )
+        )
+    }
+
+    @Test
+    fun `non avi urls skip deterministic ffmpeg audio probe`() {
+        assertFalse(
+            shouldRunDeterministicAudioFfmpegProbe(
+                url = "https://cdn.example.test/movie.mkv",
+                ffmpegAvailable = true
+            )
+        )
+    }
+
+    @Test
+    fun `legacy avi mp3 probe prefers ffmpeg audio immediately`() {
+        val metadata = FfmpegStreamMetadataProbeResult(
+            streams = listOf(
+                FfmpegStreamMetadata(
+                    codecType = "audio",
+                    codecName = "mp3",
+                    codecTag = "0x0055"
+                )
+            ),
+            formatName = "avi"
+        )
+
+        assertTrue(
+            shouldPreferFfmpegAudioFromProbe(
+                ffmpegAvailable = true,
+                metadata = metadata
             )
         )
     }

@@ -11,18 +11,30 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 data class FfmpegStreamMetadataProbeResult(
-    val streams: List<FfmpegStreamMetadata>
+    val streams: List<FfmpegStreamMetadata>,
+    val formatName: String? = null
 ) {
     val hasEmbeddedAssSsaSubtitleStream: Boolean
         get() = streams.any { stream ->
             stream.codecType.equals("subtitle", ignoreCase = true) &&
                 stream.codecName.normalizedCodecName() in ASS_SSA_SUBTITLE_CODECS
         }
+
+    val hasLegacyAviMp3Audio: Boolean
+        get() = formatName
+            ?.split(',')
+            ?.any { it.trim().equals("avi", ignoreCase = true) } == true &&
+            streams.any { stream ->
+                stream.codecType.equals("audio", ignoreCase = true) &&
+                    (stream.codecName.normalizedCodecName() == "mp3" ||
+                        stream.codecTag.normalizedCodecTag() == "0x0055")
+            }
 }
 
 data class FfmpegStreamMetadata(
     val codecType: String,
     val codecName: String?,
+    val codecTag: String? = null,
     val width: Int? = null,
     val height: Int? = null,
     val avgFrameRate: String? = null,
@@ -272,6 +284,7 @@ object FfmpegStreamMetadataProbe {
                     FfmpegStreamMetadata(
                         codecType = obj.get("codec_type")?.asString ?: return@mapNotNull null,
                         codecName = obj.get("codec_name")?.asString,
+                        codecTag = obj.get("codec_tag")?.asStringOrNull(),
                         width = obj.get("width")?.asIntOrNull(),
                         height = obj.get("height")?.asIntOrNull(),
                         avgFrameRate = obj.get("avg_frame_rate")?.asStringOrNull(),
@@ -285,7 +298,14 @@ object FfmpegStreamMetadataProbe {
                 }
                 .orEmpty()
         }.getOrNull() ?: return null
-        return FfmpegStreamMetadataProbeResult(streams)
+        val formatName = runCatching {
+            JsonParser.parseString(json)
+                .asJsonObject
+                .getAsJsonObject("format")
+                ?.get("format_name")
+                ?.asStringOrNull()
+        }.getOrNull()
+        return FfmpegStreamMetadataProbeResult(streams, formatName)
     }
 
     private fun buildProbeDebugCommand(url: String, requestHeadersBlob: String?): String {
@@ -296,8 +316,8 @@ object FfmpegStreamMetadataProbe {
         return "ffprobe -v error -rw_timeout $READ_WRITE_TIMEOUT_US " +
             "-probesize $PROBE_SIZE_BYTES -analyzeduration $ANALYZE_DURATION_US" +
             headersArg +
-            " -select_streams v:0,s " +
-            "-show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate:" +
+            " -show_entries stream=index,codec_type,codec_name,codec_tag,width,height,avg_frame_rate,r_frame_rate:" +
+            "format=format_name:" +
             "stream_side_data=side_data_type,dv_profile -of json ${url.shellQuoteForLog()}"
     }
 
@@ -343,6 +363,19 @@ private fun String?.normalizedCodecName(): String {
         ?.trim()
         ?.lowercase(Locale.US)
         .orEmpty()
+}
+
+private fun String?.normalizedCodecTag(): String {
+    val raw = this
+        ?.trim()
+        ?.lowercase(Locale.US)
+        .orEmpty()
+    return when {
+        raw.startsWith("0x") -> raw
+        raw == "55" -> "0x0055"
+        raw == "0055" -> "0x0055"
+        else -> raw
+    }
 }
 
 private fun Map<String, String>.toProbeHeaderBlob(): String? {

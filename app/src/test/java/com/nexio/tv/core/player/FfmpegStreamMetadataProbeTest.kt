@@ -53,6 +53,39 @@ class FfmpegStreamMetadataProbeTest {
     }
 
     @Test
+    fun detectsLegacyAviMp3AudioFromContainerAndWaveformTag() {
+        val result = FfmpegStreamMetadataProbe.parseForTesting(
+            """
+            {
+              "streams": [
+                {"codec_type": "video", "codec_name": "mpeg4", "codec_tag": "0x58564944"},
+                {"codec_type": "audio", "codec_name": "mp3", "codec_tag": "0x0055"}
+              ],
+              "format": {"format_name": "avi"}
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(result.hasLegacyAviMp3Audio)
+    }
+
+    @Test
+    fun doesNotTreatMp3OutsideAviAsLegacyAviAudio() {
+        val result = FfmpegStreamMetadataProbe.parseForTesting(
+            """
+            {
+              "streams": [
+                {"codec_type": "audio", "codec_name": "mp3", "codec_tag": "0x0055"}
+              ],
+              "format": {"format_name": "mp3"}
+            }
+            """.trimIndent()
+        )
+
+        assertFalse(result.hasLegacyAviMp3Audio)
+    }
+
+    @Test
     fun emptyNativeResultDoesNotPopulateCacheAndNextSuccessCanRecover() {
         var calls = 0
         FfmpegStreamMetadataProbe.setBackendForTesting(
