@@ -746,26 +746,24 @@ internal fun buildCatalogItem(
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
         ?: resolvedLogoUrl
 
-    val resolvedTitle = resolved.title ?: item?.name ?: ""
-    val resolvedYearText = resolved.year?.toString() ?: extractYear(displayMetadata.releaseInfo ?: item?.releaseInfo)
+    val resolvedTitle = resolved.title.orEmpty()
+    val resolvedYearText = resolved.year?.toString() ?: extractYear(resolved.releaseInfo)
     val resolvedRatingValue = resolved.rating?.value
     // Only surface a ratingSource when there is an actual rating value to show; otherwise
     // the UI would render an IMDB chip without a number.
     val resolvedRatingSource: TitleRatingSource? = if (resolvedRatingValue != null) {
-        resolved.rating?.source ?: TitleRatingSource.IMDB
+        resolved.rating.source
     } else {
         null
     }
     val imdbText = resolvedRatingValue?.let { RatingDisplayFormatter.formatTitleRating(it) }
 
-    // Description / genres / tomatoes / contentTypeText still come from MetaPreview
-    // (Plan B Task 4 minimum scope: ResolvedDisplayItem does not yet expose these via
-    // ModernHomeRowItem). When MetaPreview is unavailable, fall back to the empty values.
-    val description = resolved.description ?: displayMetadata.description ?: item?.description
+    // MetaPreview stays available for callback identity only. Visible display fields
+    // must come from ModernHomeRowItem, which is projected from ResolvedDisplayItem.
+    val description = resolved.description
     val contentTypeText = (item?.apiType ?: row.apiType).replaceFirstChar { ch -> ch.uppercase() }
-    val tomatoesText = (resolved.tomatoesRating ?: displayMetadata.tomatoesRating ?: item?.tomatoesRating)
-        ?.let(::formatPreviewTomatoesRating)
-    val genres = resolved.genres.ifEmpty { displayMetadata.genres.ifEmpty { item?.genres ?: emptyList() } }.take(3)
+    val tomatoesText = resolved.tomatoesRating?.let(::formatPreviewTomatoesRating)
+    val genres = resolved.genres.take(3)
 
     val heroImageUrl = if (useLandscapePosters) {
         firstNonBlank(resolvedBackdropUrl, resolvedPosterUrl)
@@ -798,7 +796,7 @@ internal fun buildCatalogItem(
     val itemId = item?.id ?: resolved.contentId
     val itemType = item?.apiType ?: row.apiType
     val trailerTitle = resolvedTitle
-    val trailerReleaseInfo = resolved.releaseInfo ?: displayMetadata.releaseInfo ?: item?.releaseInfo
+    val trailerReleaseInfo = resolved.releaseInfo
 
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${itemId}_${occurrence}",

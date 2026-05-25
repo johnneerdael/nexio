@@ -406,6 +406,77 @@ class ModernHomeModelsTest {
         assertEquals("enriched-logo", rebuilt.heroPreview.logo)
     }
 
+    @Test
+    fun `buildCatalogItem ignores stale metapreview display fields`() {
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "catalog",
+            catalogName = "Catalog",
+            type = ContentType.MOVIE,
+            items = emptyList()
+        )
+        val staleMeta = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Stale title",
+            poster = "stale-poster",
+            posterShape = PosterShape.POSTER,
+            background = "stale-backdrop",
+            logo = "stale-logo",
+            description = "Stale description",
+            releaseInfo = "1999",
+            runtime = null,
+            imdbRating = 4.0f,
+            tomatoesRating = 44.0,
+            genres = listOf("Stale")
+        )
+        val resolved = ModernHomeRowItem.from(
+            resolvedDisplayItemForCw(
+                contentId = "tt123",
+                contentType = "movie",
+                title = "Resolved title",
+                overview = "Resolved description",
+                genres = listOf("Drama", "Thriller"),
+                rating = TitleRating(8.8, TitleRatingSource.IMDB),
+                posterUrl = "resolved-poster",
+                backdropUrl = "resolved-backdrop",
+                logoUrl = "resolved-logo"
+            ).copy(
+                display = ResolvedDisplayFields(
+                    title = "Resolved title",
+                    originalTitle = null,
+                    year = 2025,
+                    releaseDate = "2025-05-24",
+                    overview = "Resolved description",
+                    genres = listOf("Drama", "Thriller"),
+                    runtimeText = "120m",
+                    tomatoesRating = 91.0
+                ),
+                hydrationState = HydrationState.CANONICAL_READY
+            )
+        )
+
+        val built = buildCatalogItem(
+            resolved = resolved,
+            metaPreview = staleMeta,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0
+        )
+
+        assertEquals("Resolved title", built.heroPreview.title)
+        assertEquals("Resolved description", built.heroPreview.description)
+        assertEquals("2025", built.heroPreview.yearText)
+        assertEquals("91", built.heroPreview.tomatoesText)
+        assertEquals(listOf("Drama", "Thriller"), built.heroPreview.genres)
+        assertEquals("8.8", built.heroPreview.imdbText)
+        assertEquals("2025-05-24", built.subtitle)
+        assertEquals("resolved-backdrop", built.heroPreview.backdrop)
+        assertEquals("resolved-logo", built.heroPreview.logo)
+    }
+
     private fun resolvedCwInProgress(item: ContinueWatchingItem.InProgress): ContinueWatchingResolvedDisplayItem.InProgress {
         val display = item.displayMetadata()
         return ContinueWatchingResolvedDisplayItem.fromInProgress(
