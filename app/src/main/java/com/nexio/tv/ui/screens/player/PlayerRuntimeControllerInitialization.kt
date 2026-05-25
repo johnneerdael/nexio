@@ -51,7 +51,6 @@ import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
-import com.nexio.tv.core.player.FfmpegStreamMetadataProbeResult
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.PlayProbeCache
 import com.nexio.tv.core.player.auth.PlaybackErrorClassifier
@@ -492,26 +491,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     )
                 }
             }
-            if (!audioFfmpegPreferredStreamUrls.contains(url) &&
-                shouldUseDeterministicAudioFfmpegRouting(
-                    url = url,
-                    ffmpegAvailable = FfmpegLibrary.isAvailable()
-                )
-            ) {
-                audioFfmpegPreferredStreamUrls.add(url)
-                safeAudioForcedStreamUrls.remove(url)
-                audioDisabledForcedStreamUrls.remove(url)
-                Log.i(
-                    PlayerRuntimeController.TAG,
-                    "AUDIO_RENDERER: deterministic FFmpeg audio preference " +
-                        "reason=legacy_avi_container " +
-                        "host=${url.safeHost()}"
-                )
-            }
             val safeAudioModeEnabled =
-                !kodiCustomAudioSinkEnabled &&
-                    safeAudioForcedStreamUrls.contains(url) &&
-                    !audioFfmpegPreferredStreamUrls.contains(url)
+                !kodiCustomAudioSinkEnabled && safeAudioForcedStreamUrls.contains(url)
             val audioDisabledForStream =
                 !kodiCustomAudioSinkEnabled && audioDisabledForcedStreamUrls.contains(url)
             val audioFfmpegFallbackActive = audioFfmpegPreferredStreamUrls.contains(url)
@@ -1252,21 +1233,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onPlayerError(error: PlaybackException) {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
-                        Log.w(
-                            PlayerRuntimeController.TAG,
-                            "PLAYBACK_ERROR: code=${error.errorCode} " +
-                                "message=${error.message ?: "n/a"} " +
-                                "positionMs=$currentPosition " +
-                                "bufferedPositionMs=$bufferedPosition " +
-                                "state=$playbackState " +
-                                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
-                                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
-                                "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
-                                "audioFfmpeg=$isAudioFfmpegFallbackActiveForCurrentPlayback " +
-                                "audioDisabled=$isAudioDisabledForCurrentPlayback " +
-                                "details=${error.describeCauseChain()} " +
-                                "host=${currentStreamUrl.safeHost()}"
-                        )
                         if (error.isVc1DecoderFailure() &&
                             !isVc1SoftwareFallbackActiveForCurrentPlayback
                         ) {
@@ -1378,37 +1344,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                         "positionMs=$currentPosition"
                                 )
                             } else {
-                                if (shouldRetryStuckPlaybackWithAudioFfmpeg(
-                                        ffmpegAvailable = FfmpegLibrary.isAvailable(),
-                                        audioFfmpegFallbackActive =
-                                            isAudioFfmpegFallbackActiveForCurrentPlayback,
-                                        audioDisabledForStream = isAudioDisabledForCurrentPlayback
-                                    )
-                                ) {
-                                    val retryPositionMs =
-                                        audioFfmpegFallbackRetryPositionMs(currentPosition)
-                                    Log.w(
-                                        PlayerRuntimeController.TAG,
-                                        "Stuck player detected, retrying with FFmpeg audio " +
-                                            "preference before disabling audio " +
-                                            "host=${currentStreamUrl.safeHost()} " +
-                                            "positionMs=$currentPosition " +
-                                            "retryPositionMs=$retryPositionMs " +
-                                            "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
-                                            "audioCodecs=${currentAudioTrackCodecs ?: "unknown"}"
-                                    )
-                                    audioFfmpegPreferredStreamUrls.add(currentStreamUrl)
-                                    retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
-                                    return
-                                }
-                                if (shouldRetryStuckPlaybackWithSafeAudio(
-                                        safeAudioModeActive =
-                                            isSafeAudioModeActiveForCurrentPlayback,
-                                        audioFfmpegFallbackActive =
-                                            isAudioFfmpegFallbackActiveForCurrentPlayback,
-                                        audioDisabledForStream = isAudioDisabledForCurrentPlayback
-                                    )
-                                ) {
+                                if (!isSafeAudioModeActiveForCurrentPlayback) {
                                     Log.w(
                                         PlayerRuntimeController.TAG,
                                         "Stuck player detected, retrying with safe audio mode " +
@@ -2000,7 +1936,6 @@ private class SubtitleOffsetRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<Renderer>
     ) {
-        val audioRendererStartIndex = out.size
         val audioExtensionRendererMode = if (preferFfmpegAudio) {
             Log.i(
                 PlayerRuntimeController.TAG,
@@ -2019,12 +1954,6 @@ private class SubtitleOffsetRenderersFactory(
             eventHandler,
             eventListener,
             out
-        )
-        Log.i(
-            PlayerRuntimeController.TAG,
-            "AUDIO_RENDERER: mode=${describeExtensionRendererMode(audioExtensionRendererMode)} " +
-                "preferFfmpeg=$preferFfmpegAudio " +
-                "renderers=${out.drop(audioRendererStartIndex).joinToString { it::class.java.name }}"
         )
     }
 }
@@ -2122,53 +2051,6 @@ internal fun shouldEnableTrackSelectorTunneling(
     audioFfmpegFallbackActive: Boolean
 ): Boolean {
     return requestedTunneling && !safeAudioModeEnabled && !audioFfmpegFallbackActive
-}
-
-internal fun shouldRetryStuckPlaybackWithAudioFfmpeg(
-    ffmpegAvailable: Boolean,
-    audioFfmpegFallbackActive: Boolean,
-    audioDisabledForStream: Boolean
-): Boolean {
-    return ffmpegAvailable && !audioFfmpegFallbackActive && !audioDisabledForStream
-}
-
-internal fun shouldRetryStuckPlaybackWithSafeAudio(
-    safeAudioModeActive: Boolean,
-    audioFfmpegFallbackActive: Boolean,
-    audioDisabledForStream: Boolean
-): Boolean {
-    return !safeAudioModeActive && !audioFfmpegFallbackActive && !audioDisabledForStream
-}
-
-internal fun shouldRunDeterministicAudioFfmpegProbe(
-    url: String,
-    ffmpegAvailable: Boolean
-): Boolean {
-    return shouldUseDeterministicAudioFfmpegRouting(
-        url = url,
-        ffmpegAvailable = ffmpegAvailable
-    )
-}
-
-internal fun shouldUseDeterministicAudioFfmpegRouting(
-    url: String,
-    ffmpegAvailable: Boolean
-): Boolean {
-    return ffmpegAvailable && isLegacyAviContainerUrl(url)
-}
-
-private fun isLegacyAviContainerUrl(url: String): Boolean {
-    val path = runCatching { Uri.parse(url).path.orEmpty() }
-        .getOrDefault(url.substringBefore('?'))
-        .lowercase(Locale.US)
-    return path.endsWith(".avi")
-}
-
-internal fun shouldPreferFfmpegAudioFromProbe(
-    ffmpegAvailable: Boolean,
-    metadata: FfmpegStreamMetadataProbeResult?
-): Boolean {
-    return ffmpegAvailable && metadata?.hasLegacyAviMp3Audio == true
 }
 
 private fun Exception.isAudioSinkInitializationFailure(): Boolean {
@@ -2331,33 +2213,10 @@ private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog
                 "bufferedPositionMs=$initialBufferedPosition->$observedBufferedPosition " +
                 "totalBufferedDurationMs=$initialTotalBufferedDuration->$observedTotalBufferedDuration " +
                 "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
-                "audioFfmpeg=$isAudioFfmpegFallbackActiveForCurrentPlayback " +
                 "audioDisabled=$isAudioDisabledForCurrentPlayback " +
-                "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
-                "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
                 "diskSpool=$observedDiskSpoolActive " +
                 "host=${currentStreamUrl.safeHost()}"
         )
-        if (shouldRetryStuckPlaybackWithAudioFfmpeg(
-                ffmpegAvailable = FfmpegLibrary.isAvailable(),
-                audioFfmpegFallbackActive = isAudioFfmpegFallbackActiveForCurrentPlayback,
-                audioDisabledForStream = isAudioDisabledForCurrentPlayback
-            )
-        ) {
-            val retryPositionMs = audioFfmpegFallbackRetryPositionMs(observedPosition)
-            Log.w(
-                PlayerRuntimeController.TAG,
-                "POST_FIRST_FRAME_BUFFERING: retrying with FFmpeg audio preference " +
-                    "before safe-audio/audio-disabled fallback " +
-                    "positionMs=$observedPosition retryPositionMs=$retryPositionMs " +
-                    "audioMime=${currentAudioTrackMimeType ?: "unknown"} " +
-                    "audioCodecs=${currentAudioTrackCodecs ?: "unknown"} " +
-                    "host=${currentStreamUrl.safeHost()}"
-            )
-            audioFfmpegPreferredStreamUrls.add(currentStreamUrl)
-            retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
-            return@launch
-        }
         handleAudioTrackInitializationFailure(
             kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
             fromPositionMs = observedPosition,
