@@ -551,11 +551,19 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithAudioDisabled(fromPos
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamWithPlatformAudioFromBeginning() {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = 0L, clearResumeProgress = true)
+}
+
 internal fun PlayerRuntimeController.retryCurrentStreamWithVc1SoftwareFallback(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
 internal fun PlayerRuntimeController.retryCurrentStreamWithAv1FfmpegFallback(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithAudioFfmpegFallback(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 

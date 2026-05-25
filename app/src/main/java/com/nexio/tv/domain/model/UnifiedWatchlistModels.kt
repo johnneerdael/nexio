@@ -40,7 +40,14 @@ data class UnifiedWatchlistSourceItem(
     val showSimklId: Int? = null,
     val season: Int? = null,
     val episode: Int? = null,
-    val listKey: String? = null
+    val listKey: String? = null,
+    val poster: String? = null,
+    val posterShape: PosterShape = PosterShape.POSTER,
+    val background: String? = null,
+    val logo: String? = null,
+    val description: String? = null,
+    val imdbRating: Float? = null,
+    val genres: List<String> = emptyList()
 ) {
     companion object {
         fun traktMovie(
@@ -168,7 +175,14 @@ data class UnifiedWatchlistMembership(
     val simklId: Int? = null,
     val showTmdbId: Int? = null,
     val season: Int? = null,
-    val episode: Int? = null
+    val episode: Int? = null,
+    val poster: String? = null,
+    val posterShape: PosterShape = PosterShape.POSTER,
+    val background: String? = null,
+    val logo: String? = null,
+    val description: String? = null,
+    val imdbRating: Float? = null,
+    val genres: List<String> = emptyList()
 )
 
 @Immutable

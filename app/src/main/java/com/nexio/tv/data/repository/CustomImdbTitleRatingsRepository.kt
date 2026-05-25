@@ -95,11 +95,15 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
         for (i in missing.indices) {
             val imdbId = missing[i]
             val rating = fetched[imdbId]
-            cache[imdbId] = CacheEntry(
-                rating = rating,
-                expiresAtMs = expiresAt
-            )
-            rating?.let { out[imdbId] = it }
+            if (rating != null) {
+                cache[imdbId] = CacheEntry(
+                    rating = rating,
+                    expiresAtMs = expiresAt
+                )
+                out[imdbId] = rating
+            } else {
+                cache.remove(imdbId)
+            }
         }
 
         return out

@@ -5,6 +5,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import retrofit2.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import com.nexio.tv.data.integration.mdblist.MDBListRateLimitGuard
 
 @RunWith(RobolectricTestRunner::class)
 class IntegrationBackoffManagerTest {
@@ -52,5 +55,25 @@ class IntegrationBackoffManagerTest {
             "blockMs $blockMs should be within [$expectedMin, $expectedMax] (±100ms drift tolerance)",
             blockMs in (expectedMin - 100L)..(expectedMax + 100L)
         )
+    }
+
+    @Test
+    fun `mdblist daily limit response records at least twenty four hour provider backoff`() = runTest {
+        val dao = InMemoryIntegrationProviderBackoffDao()
+        val guard = MDBListRateLimitGuard(
+            IntegrationBackoffManager(
+                dao = dao,
+                baseMs = 1_000L,
+                capMs = 30_000L,
+                jitterMs = 0L
+            )
+        )
+        val before = System.currentTimeMillis()
+
+        guard.noteResponse(Response.error<Unit>(429, """{"error":"Daily API limit exceeded!"}""".toResponseBody()))
+
+        val stored = dao.get("MDBLIST", "provider-config:mdblist:daily-api-limit")
+            ?: error("expected MDBList daily backoff to be persisted")
+        assertTrue(stored.blockedUntilEpochMs - before >= 24L * 60L * 60L * 1000L)
     }
 }

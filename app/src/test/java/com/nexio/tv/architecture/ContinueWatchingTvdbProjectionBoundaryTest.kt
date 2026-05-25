@@ -2,10 +2,25 @@ package com.nexio.tv.architecture
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 
 class ContinueWatchingTvdbProjectionBoundaryTest {
+    @Test
+    fun `production code does not use tvdb language mapper`() {
+        val offenders = File("app/src/main/java/com/nexio/tv")
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.readText().contains("TvdbLanguageMapper") }
+            .map { it.invariantSeparatorsPath }
+            .toList()
+
+        if (offenders.isNotEmpty()) {
+            fail("TVDB language mapping is forbidden; TVDB may only be used for season episode projection: $offenders")
+        }
+    }
+
     @Test
     fun `continue watching season projection uses projection-only tvdb episode API`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt")

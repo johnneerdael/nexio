@@ -355,6 +355,8 @@ class PlayerRuntimeController(
     internal val dv5SoftwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val dv5HardwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val av1FfmpegPreferredStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val platformAudioRestartedFromBeginningStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val audioFfmpegPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
@@ -369,6 +371,7 @@ class PlayerRuntimeController(
     internal var isCurrentDisplayDolbyVisionCapable: Boolean = false
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
     internal var isAv1FfmpegFallbackActiveForCurrentPlayback: Boolean = false
+    internal var isAudioFfmpegFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1SoftwareFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false

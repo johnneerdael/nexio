@@ -441,10 +441,45 @@ private fun preferredAwareSlot(
             )
             existing
         }
-        incomingMatches && existingMatches  -> incoming   // both preferred → newer wins
+        incomingMatches && existingMatches  -> {
+            val incomingEvidence = incoming.preferredProviderEvidence(preferred)
+            val existingEvidence = existing.preferredProviderEvidence(preferred)
+            when {
+                incomingEvidence > existingEvidence -> incoming
+                existingEvidence > incomingEvidence -> existing
+                else -> incoming   // both preferred with equivalent evidence → newer wins
+            }
+        }
         else                                -> existing   // neither preferred → existing stays
     }
 }
+
+private fun ResolvedSlot<ArtworkDisplayRef>.preferredProviderEvidence(
+    preferred: ArtworkProviderId
+): Int {
+    if (provider != preferred.key) return 0
+    return when (val ref = value) {
+        is ArtworkDisplayRef.RuntimeAsset -> {
+            if (ref.selectedProvider?.key == preferred.key) PREFERRED_PROVIDER_DECISION_EVIDENCE else PREFERRED_PROVIDER_LABEL_EVIDENCE
+        }
+        is ArtworkDisplayRef.LegacyString -> {
+            val value = ref.value
+            when {
+                value.isDecisionUriFor(preferred) -> PREFERRED_PROVIDER_DECISION_EVIDENCE
+                value.startsWith(ARTWORK_DECISION_URI_PREFIX) -> PREFERRED_PROVIDER_DECISION_EVIDENCE
+                else -> PREFERRED_PROVIDER_LABEL_EVIDENCE
+            }
+        }
+        is ArtworkDisplayRef.Placeholder, null -> PREFERRED_PROVIDER_LABEL_EVIDENCE
+    }
+}
+
+private fun String.isDecisionUriFor(preferred: ArtworkProviderId): Boolean =
+    startsWith(ARTWORK_DECISION_URI_PREFIX) && contains("provider:${preferred.key}")
+
+private const val ARTWORK_DECISION_URI_PREFIX = "nexio-artwork://decision/"
+private const val PREFERRED_PROVIDER_LABEL_EVIDENCE = 1
+private const val PREFERRED_PROVIDER_DECISION_EVIDENCE = 2
 
 /**
  * Wholesale-replace path: the surface becomes exactly [incoming], but per-item

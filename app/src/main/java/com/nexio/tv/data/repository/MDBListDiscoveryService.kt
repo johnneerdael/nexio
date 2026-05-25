@@ -8,6 +8,7 @@ import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
+import com.nexio.tv.data.integration.mdblist.MDBListDailyLimitException
 import com.nexio.tv.data.integration.railpreview.MDBListRailPreviewMapper
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
@@ -410,10 +411,13 @@ class MDBListDiscoveryService @Inject constructor(
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode}")
+                    if (result.statusCode == 429) throw MDBListDailyLimitException()
                     null
                 }
                 else -> null
             }
+        } catch (error: MDBListDailyLimitException) {
+            throw error
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
@@ -438,10 +442,13 @@ class MDBListDiscoveryService @Inject constructor(
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode} query=${query.keys.joinToString(",")}")
+                    if (result.statusCode == 429) throw MDBListDailyLimitException()
                     null
                 }
                 else -> null
             }
+        } catch (error: MDBListDailyLimitException) {
+            throw error
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
@@ -465,10 +472,13 @@ class MDBListDiscoveryService @Inject constructor(
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $url code=${result.statusCode}")
+                    if (result.statusCode == 429) throw MDBListDailyLimitException()
                     null
                 }
                 else -> null
             }
+        } catch (error: MDBListDailyLimitException) {
+            throw error
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $url (${error.message})")
             null

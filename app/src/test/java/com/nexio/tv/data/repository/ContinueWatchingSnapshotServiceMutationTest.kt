@@ -30,6 +30,8 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -464,6 +466,57 @@ class ContinueWatchingSnapshotServiceMutationTest {
             coVerify(exactly = 0) {
                 tvEpisodeOrderResolver.resolve(any(), any())
             }
+        }
+
+    @Test
+    fun `resolved display surface preserves custom imdb rating over tmdb rating`() =
+        runTest {
+            val service = buildService()
+            val progress = resume(
+                contentId = "tmdb:308014",
+                videoId = "tmdb:308014:1:4",
+                season = 1,
+                episode = 4,
+                lastWatched = 1778611202000L,
+                source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+            )
+            val snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(progress),
+                displayMetadataByItemKey = mapOf(
+                    "series:tmdb:308014" to HomeDisplayMetadata(
+                        title = "Berlin and the Lady with an Ermine",
+                        description = "English overview",
+                        imdbRating = 7.0f,
+                        ratingSource = TitleRatingSource.IMDB,
+                        imdbId = "tt42178219"
+                    )
+                ),
+                updatedAtMs = 1778611202000L
+            )
+            val resolved = berlinResolvedDisplayItem().copy(
+                itemKey = "series:tmdb:308014",
+                contentId = "tmdb:308014",
+                parentId = "tmdb:308014",
+                canonicalProvider = "TMDB",
+                canonicalId = "308014",
+                display = berlinResolvedDisplayItem().display.copy(
+                    title = "Berlín y la dama del armiño",
+                    overview = "Berlijn zint op een nieuwe overval."
+                ),
+                rating = TitleRating(8.04, TitleRatingSource.TMDB)
+            )
+
+            val hydrated = service.mergeResolvedDisplaySnapshot(
+                snapshot = snapshot,
+                profileId = 1,
+                resolvedItems = listOf(resolved)
+            )
+
+            val metadata = hydrated.displayMetadataByItemKey.getValue("series:tmdb:308014")
+            assertEquals("Berlín y la dama del armiño", metadata.title)
+            assertEquals("Berlijn zint op een nieuwe overval.", metadata.description)
+            assertEquals(7.0f, metadata.imdbRating ?: 0f, 0f)
+            assertEquals(TitleRatingSource.IMDB, metadata.ratingSource)
         }
 
     @Test

@@ -14,6 +14,7 @@ class MDBListScrobbleService @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
     private val profileManager: ProfileManager,
+    private val rateLimitGuard: MDBListRateLimitGuard,
 ) {
     suspend fun scrobbleStart(
         item: TrackingScrobbleItem,
@@ -53,10 +54,12 @@ class MDBListScrobbleService @Inject constructor(
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) return
         if (!MDBListIdMapper.hasScrobbleIdentity(item)) return
-        api.scrobble(
+        if (rateLimitGuard.isBlocked()) return
+        val response = api.scrobble(
             action = action,
             apiKey = apiKey,
             body = MDBListIdMapper.scrobblePayloadFor(item, progressPercent),
         )
+        rateLimitGuard.noteResponse(response)
     }
 }

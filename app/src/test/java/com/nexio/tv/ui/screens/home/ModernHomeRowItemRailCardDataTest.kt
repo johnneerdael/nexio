@@ -66,6 +66,7 @@ class ModernHomeRowItemRailCardDataTest {
         genres = emptyList(),
         releaseInfo = null,
         tomatoesRating = null,
+        textSourceRank = com.nexio.tv.domain.model.DisplaySourceRank.FIRST_PAINT,
         hydrationState = HydrationState.PREVIEW_ONLY,
         posterProviderTag = posterRef.deriveProviderTag()
     )

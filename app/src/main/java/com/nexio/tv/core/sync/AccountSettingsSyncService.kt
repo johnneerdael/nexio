@@ -193,7 +193,8 @@ private val SUBTITLE_TRANSLATION_SECRET_SECTION_KEYS = setOf(
 
 data class AccountSnapshotPullResult(
     val remoteAddonConfigs: List<AddonPreferences.AddonInstallConfig>,
-    val addonsChanged: Boolean
+    val addonsChanged: Boolean,
+    val refreshRequired: Boolean = addonsChanged
 )
 
 private fun Set<AccountSettingsSectionKey>?.includesSection(section: AccountSettingsSectionKey): Boolean {
@@ -1068,7 +1069,9 @@ class AccountSettingsSyncService @Inject constructor(
             if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
-            val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
+            val (pendingPathsAtPullStart, pullStartedGeneration) = synchronized(pendingChangedPaths) {
+                pendingChangedPaths.toList() to pendingChangedPathsGeneration
+            }
             val switchGenAtPullStart = suppressPushForSwitchGeneration
             val envelope = withJwtRefreshRetry {
                 postgrest.rpc("sync_pull_account_snapshot_v13")
@@ -1089,19 +1092,34 @@ class AccountSettingsSyncService @Inject constructor(
             val localSettingsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SETTINGS, profileId = null)
             val localAddonsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null)
             val localSecretsWatermark = syncWatermarkStore.get(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null)
+            val localSectionWatermarks = syncWatermarkStore.getAccountSettingsSectionWatermarks()
             val delta = accountSnapshotDelta(
                 remoteSettingsUpdatedAtMs = envelope.settings.updatedAtMs,
                 localSettingsUpdatedAtMs = localSettingsWatermark,
                 remoteSectionStamps = appliedSections.map { (key, updatedAtMs) ->
                     AccountSettingsSectionRemoteStamp(sectionKey = key, updatedAtMs = updatedAtMs)
                 },
-                localSectionWatermarks = syncWatermarkStore.getAccountSettingsSectionWatermarks(),
+                localSectionWatermarks = localSectionWatermarks,
                 remoteAddonsUpdatedAtMs = envelope.addons.updatedAtMs,
                 localAddonsUpdatedAtMs = localAddonsWatermark,
                 remoteSecretsUpdatedAtMs = envelope.secrets.updatedAtMs,
                 localSecretsUpdatedAtMs = localSecretsWatermark
             )
+            val unchangedByRemote = !delta.settingsChanged && !delta.addonsChanged && !delta.secretsChanged
+            val localHydrationDriftSectionKeys = if (unchangedByRemote) {
+                localHydrationDriftSectionKeys(
+                    pendingPathsAtPullStart = pendingPathsAtPullStart,
+                    preserveLocalSectionKeys = preserveLocalSectionKeys
+                )
+            } else {
+                emptySet()
+            }
+            if (localHydrationDriftSectionKeys.isNotEmpty()) {
+                Log.w(TAG, "Remote watermarks matched but local account state drifted; reapplying sections=$localHydrationDriftSectionKeys")
+            }
             val settingsRevision = envelope.settings.sections.maxOfOrNull { it.syncRevision } ?: lastAppliedRemoteRevision
+            val effectiveSecretsChanged = delta.secretsChanged ||
+                localHydrationDriftSectionKeys.any { it in ACCOUNT_SECRET_SECTION_KEYS }
             val changedAccountSecretSectionKeys = if (delta.secretsChanged) {
                 changedAccountSecretSectionKeysSince(envelope.secrets.items, localSecretsWatermark)
             } else {
@@ -1110,7 +1128,7 @@ class AccountSettingsSyncService @Inject constructor(
             val addonSecretsChanged = delta.secretsChanged &&
                 addonCredentialSecretsChanged(envelope.secrets.items, localSecretsWatermark)
             val addonPayloadsChanged = delta.addonsChanged || addonSecretsChanged
-            if (!delta.settingsChanged && !addonPayloadsChanged && !delta.secretsChanged) {
+            if (!delta.settingsChanged && !addonPayloadsChanged && !effectiveSecretsChanged && localHydrationDriftSectionKeys.isEmpty()) {
                 markWatermarksFromEnvelope(envelope, appliedSections)
                 clearSuppression(switchGenAtPullStart)
                 if (clearPendingChanges) {
@@ -1132,14 +1150,15 @@ class AccountSettingsSyncService @Inject constructor(
             for ((key, updatedAtMs) in appliedSections) {
                 syncWatermarkStore.setAccountSettingsSection(key, updatedAtMs)
             }
-            val sectionKeysToApply = delta.changedSectionKeys - preserveLocalSectionKeys
-            val changedSecretSectionKeys = delta.changedSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
+            val sectionKeysToApply = (delta.changedSectionKeys + localHydrationDriftSectionKeys) - preserveLocalSectionKeys
+            val changedSecretSectionKeys = (delta.changedSectionKeys + localHydrationDriftSectionKeys).intersect(ACCOUNT_SECRET_SECTION_KEYS)
             val preservedPullSecretSectionKeys = preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)
-            val sectionKeysToResolveSecretsFor = if (delta.secretsChanged) {
+            val sectionKeysToResolveSecretsFor = if (effectiveSecretsChanged) {
                 changedSecretSectionKeys + changedAccountSecretSectionKeys + preservedPullSecretSectionKeys
             } else {
                 preservedPullSecretSectionKeys
             }
+            val sectionKeysToApplyResolvedSecrets = sectionKeysToResolveSecretsFor - preservedPullSecretSectionKeys
             val resolveSession = AccountSecretResolveSession()
             val resolvedSecrets = resolveRemoteSecretsForApply(
                 settings = settings,
@@ -1169,10 +1188,10 @@ class AccountSettingsSyncService @Inject constructor(
                         resolveRemoteInlineSecrets = false,
                         sectionKeys = sectionKeysToApply
                     )
-                    applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)
+                    applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApplyResolvedSecrets)
                     updateLastSyncedAccountSecretBaselineAfterPull(
                         current = buildAccountSecretPushSnapshot(),
-                        appliedSectionKeys = sectionKeysToApply,
+                        appliedSectionKeys = sectionKeysToApply + sectionKeysToApplyResolvedSecrets,
                         preserveLocalSectionKeys = secretBaselinePreserveSectionKeys
                     )
                     syncWatermarkStore.setAccountSettingsSectionBaselines(
@@ -1234,7 +1253,8 @@ class AccountSettingsSyncService @Inject constructor(
             Result.success(
                 AccountSnapshotPullResult(
                     remoteAddonConfigs = remoteAddonConfigs,
-                    addonsChanged = addonPayloadsChanged
+                    addonsChanged = addonPayloadsChanged,
+                    refreshRequired = delta.settingsChanged || addonPayloadsChanged || effectiveSecretsChanged
                 )
             )
         } catch (e: Exception) {
@@ -1253,6 +1273,21 @@ class AccountSettingsSyncService @Inject constructor(
         }
         syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_ADDONS, profileId = null, ms = envelope.addons.updatedAtMs)
         syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS, profileId = null, ms = envelope.secrets.updatedAtMs)
+    }
+
+    private suspend fun localHydrationDriftSectionKeys(
+        pendingPathsAtPullStart: List<String>,
+        preserveLocalSectionKeys: Set<AccountSettingsSectionKey>
+    ): Set<AccountSettingsSectionKey> {
+        val baselines = syncWatermarkStore.getAccountSettingsSectionBaselines()
+        if (baselines.isEmpty()) return emptySet()
+        val pendingSectionKeys = pendingPathsAtPullStart
+            .mapNotNull { changedPath -> AccountSettingsSectionKey.fromChangedPath(changedPath) }
+            .toSet()
+        return dirtyAccountSettingsSectionKeys(
+            current = buildLocalPayload(),
+            baseline = baselines
+        ) - pendingSectionKeys - preserveLocalSectionKeys
     }
 
     private fun changedAccountSecretSectionKeysSince(

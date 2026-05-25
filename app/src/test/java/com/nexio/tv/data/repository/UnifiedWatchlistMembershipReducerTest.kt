@@ -64,4 +64,40 @@ class UnifiedWatchlistMembershipReducerTest {
         assertTrue(rows.any { it.contentType == ContentType.MOVIE && it.authorityKey == "movie:tmdb:100" })
         assertTrue(rows.any { it.contentType == ContentType.SERIES && it.authorityKey == "series:tmdb:100" })
     }
+
+    @Test
+    fun `membership keeps first available provider display metadata`() {
+        val rows = UnifiedWatchlistMembershipReducer.reduce(
+            listOf(
+                UnifiedWatchlistSourceItem(
+                    source = UnifiedWatchlistSource.TRAKT,
+                    rawKey = "tt32820897",
+                    contentType = ContentType.MOVIE,
+                    title = "Demon Slayer",
+                    year = 2025,
+                    imdbId = "tt32820897",
+                    tmdbId = 1311031,
+                    poster = "nexio-artwork://decision/poster",
+                    background = "https://image.tmdb.org/t/p/w1280/backdrop.jpg",
+                    logo = "https://image.tmdb.org/t/p/w500/logo.png",
+                    description = "The Corps are drawn into the Infinity Castle.",
+                    imdbRating = 7.7f,
+                    genres = listOf("Animation", "Action")
+                ),
+                UnifiedWatchlistSourceItem.simklMovie(
+                    imdb = "tt32820897",
+                    tmdb = 1311031,
+                    title = "Demon Slayer"
+                )
+            )
+        )
+
+        val row = rows.single()
+        assertEquals("nexio-artwork://decision/poster", row.poster)
+        assertEquals("https://image.tmdb.org/t/p/w1280/backdrop.jpg", row.background)
+        assertEquals("https://image.tmdb.org/t/p/w500/logo.png", row.logo)
+        assertEquals("The Corps are drawn into the Infinity Castle.", row.description)
+        assertEquals(7.7f, row.imdbRating)
+        assertEquals(listOf("Animation", "Action"), row.genres)
+    }
 }

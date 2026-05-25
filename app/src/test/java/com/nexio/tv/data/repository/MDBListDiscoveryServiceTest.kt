@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.data.integration.mdblist.MDBListDailyLimitException
 import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
@@ -138,13 +140,56 @@ class MDBListDiscoveryServiceTest {
         assert(customCatalog.itemRecords.isNotEmpty())
     }
 
+    @Test
+    fun `daily rate limit preserves cached discovery snapshot`() = runTest {
+        val api = mockk<MDBListApi>()
+        coEvery { api.getRaw(relativeUrl = "lists/user", apiKey = "api-key") } returns Response.error(
+            429,
+            """{"error":"Daily API limit exceeded!"}""".toResponseBody()
+        )
+        val cached = MDBListDiscoverySnapshot(
+            personalLists = listOf(
+                MDBListListOption(
+                    key = "personal:mdblist/cached",
+                    owner = "mdblist",
+                    listId = "cached",
+                    title = "Cached",
+                    itemCount = 1,
+                    isPersonal = true
+                )
+            ),
+            updatedAtMs = 123L
+        )
+        val snapshotStore = mockk<MDBListDiscoverySnapshotStore>(relaxed = true)
+        every { snapshotStore.read(any()) } returns cached
+        val service = buildService(
+            api = api,
+            selectedTopListKeys = emptySet(),
+            snapshotStore = snapshotStore
+        )
+
+        val result = runCatching { service.ensureFresh(force = true) }
+
+        assertTrue(result.exceptionOrNull() is MDBListDailyLimitException)
+        assertEquals(cached, service.observeSnapshot(autoRefreshOnStart = false).first())
+        io.mockk.verify(exactly = 0) { snapshotStore.write(any(), any()) }
+    }
+
     private fun buildService(
         api: MDBListApi,
-        selectedTopListKeys: Set<String>
+        selectedTopListKeys: Set<String>,
+        snapshotStore: MDBListDiscoverySnapshotStore? = null
     ): MDBListDiscoveryService {
         val dataStore = mockk<MDBListSettingsDataStore>()
         every { dataStore.settings } returns flowOf(MDBListSettings(enabled = true, apiKey = "api-key"))
+        every { dataStore.settingsForProfile(any()) } returns flowOf(MDBListSettings(enabled = true, apiKey = "api-key"))
         every { dataStore.catalogPreferences } returns flowOf(
+            MDBListCatalogPreferences(
+                selectedTopListKeys = selectedTopListKeys,
+                catalogOrder = selectedTopListKeys.toList()
+            )
+        )
+        every { dataStore.catalogPreferencesForProfile(any()) } returns flowOf(
             MDBListCatalogPreferences(
                 selectedTopListKeys = selectedTopListKeys,
                 catalogOrder = selectedTopListKeys.toList()
@@ -158,8 +203,9 @@ class MDBListDiscoveryServiceTest {
         coEvery { posterResolver.getActiveProvider() } returns null
         every { posterResolver.apply(any<MetaPreview>(), null) } answers { firstArg() }
 
-        val snapshotStore = mockk<MDBListDiscoverySnapshotStore>(relaxed = true)
-        every { snapshotStore.read(any()) } returns null
+        val resolvedSnapshotStore = snapshotStore ?: mockk<MDBListDiscoverySnapshotStore>(relaxed = true).also {
+            every { it.read(any()) } returns null
+        }
         val debugSettings = mockk<DebugSettingsDataStore>()
         every { debugSettings.diskFirstHomeStartupEnabled } returns flowOf(false)
 
@@ -167,7 +213,7 @@ class MDBListDiscoveryServiceTest {
             mdbListIntegrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
             mdbListSettingsDataStore = dataStore,
             posterRatingsUrlResolver = posterResolver,
-            snapshotStore = snapshotStore,
+            snapshotStore = resolvedSnapshotStore,
             debugSettingsDataStore = debugSettings,
             profileManager = testProfileManager()
         )

@@ -267,7 +267,9 @@ class StartupSyncService @Inject constructor(
                     removeMissingLocal = true
                 )
             }
-            accountSyncRefreshNotifier.notifyRefreshRequired()
+            if (pullResult.refreshRequired) {
+                accountSyncRefreshNotifier.notifyRefreshRequired()
+            }
             Log.d(TAG, "Pulled account snapshot with ${pullResult.remoteAddonConfigs.size} addons from remote changed=${pullResult.addonsChanged}")
             Result.success(Unit)
         } catch (e: Exception) {

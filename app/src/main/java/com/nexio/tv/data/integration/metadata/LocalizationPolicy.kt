@@ -1,7 +1,6 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import java.util.Locale
 
 internal data class NormalizedLanguage(
@@ -24,10 +23,7 @@ internal data class LocalizationPolicy(
      */
     val fallbackLanguageEmbeddedInResponse: Boolean = false,
     /**
-     * F2-E-01: `true` when the requested locale tag was not on the provider whitelist and was
-     * silently collapsed to the English fallback by [TvdbLanguageMapper]. Propagated to the
-     * `metadata.localization_plan` trace event so diagnostic bundles surface the collapse for
-     * Italian, Portuguese, Polish, Russian, Korean, Arabic, Japanese, etc. users.
+     * Legacy trace flag retained for compatibility.
      */
     val localeCollapsedToFallback: Boolean = false
 ) {
@@ -47,15 +43,18 @@ internal data class LocalizationPolicy(
             requestedLanguage: String?,
             maxPerEpisodeTranslationFallbacksPerRequest: Int = DEFAULT_PER_EPISODE_TRANSLATION_FALLBACK_CAP
         ): LocalizationPolicy {
-            val normalizedResult = TvdbLanguageMapper.normalize(requestedLanguage)
+            val normalized = requestedLanguage
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: "en"
             return LocalizationPolicy(
-                requestedLanguage = NormalizedLanguage(requestedLanguage.orEmpty(), normalizedResult.code),
-                fallbackLanguage = NormalizedLanguage("en", "eng"),
+                requestedLanguage = NormalizedLanguage(requestedLanguage.orEmpty(), normalized),
+                fallbackLanguage = NormalizedLanguage("en", "en"),
                 provider = MetadataPrimaryProvider.TVDB,
                 policyVersion = CURRENT_VERSION,
                 allowProviderFallbackForMissingLocalizedFields = false,
                 maxPerEpisodeTranslationFallbacksPerRequest = maxPerEpisodeTranslationFallbacksPerRequest.coerceAtLeast(0),
-                localeCollapsedToFallback = normalizedResult.isCollapsedToFallback  // F2-E-01
+                localeCollapsedToFallback = false
             )
         }
 

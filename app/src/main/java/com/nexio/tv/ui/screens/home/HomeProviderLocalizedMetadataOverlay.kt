@@ -10,7 +10,6 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
@@ -49,7 +48,7 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
     providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     profileBoundary: ProfileBoundary
 ): TvMetadataDecision<TvMetadataEnrichment> {
-    val language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+    val language = profileBoundary.currentLanguageTag()
     val metadataRequest = MetadataRequest(
         contentId = item.id,
         contentType = item.type,

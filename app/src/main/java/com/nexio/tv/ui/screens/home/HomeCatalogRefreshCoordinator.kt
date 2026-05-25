@@ -7,6 +7,7 @@ import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.takeIfImageType
@@ -576,8 +577,29 @@ private fun projectRailRowAgainstPersisted(
         existing = resolvedSlots,
         profile = null
     )
-    return rawRailItem.applyMergedSlotsForRefresh(merged)
+    return rawRailItem.applyMergedSlotsForRefresh(
+        merged.copy(
+            poster = strongerDurablePoster(firstPaintSlots.poster, merged.poster)
+        )
+    )
 }
+
+private fun strongerDurablePoster(
+    firstPaint: ResolvedSlot<ArtworkDisplayRef>,
+    merged: ResolvedSlot<ArtworkDisplayRef>
+): ResolvedSlot<ArtworkDisplayRef> {
+    val firstPaintEvidence = firstPaint.posterEvidence()
+    val mergedEvidence = merged.posterEvidence()
+    return if (firstPaintEvidence > mergedEvidence) firstPaint else merged
+}
+
+private fun ResolvedSlot<ArtworkDisplayRef>.posterEvidence(): Int =
+    when (val ref = value) {
+        is ArtworkDisplayRef.RuntimeAsset -> 2
+        is ArtworkDisplayRef.LegacyString ->
+            if (ref.value.startsWith("nexio-artwork://decision/")) 2 else 1
+        is ArtworkDisplayRef.Placeholder, null -> 0
+    }
 
 private fun MetaPreview.applyMergedSlotsForRefresh(
     slots: ResolvedDisplayFieldSlots

@@ -32,6 +32,7 @@ private const val MDBLIST_RAIL_APPEND_TO_RESPONSE = "genres,poster,description,r
 class MDBListIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
     private val mdbListApi: MDBListApi,
+    private val rateLimitGuard: MDBListRateLimitGuard = noOpMDBListRateLimitGuard(),
     private val ownershipFactory: IntegrationCacheOwnershipFactory = IntegrationCacheOwnershipFactory(
         RailMediaIdentityResolver()
     )
@@ -75,28 +76,40 @@ class MDBListIntegrationProvider @Inject constructor(
     private suspend fun getRawWithinRuntimeLoad(
         relativeUrl: String,
         apiKey: String
-    ): IntegrationCallResult<String> =
-        runCatching {
+    ): IntegrationCallResult<String> {
+        if (rateLimitGuard.isBlocked()) {
+            return IntegrationCallResult.HttpError(429, reason = "mdblist_daily_api_limit_backoff")
+        }
+        val response = runCatching {
             mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
-        }.fold(
-            onSuccess = ::rawStringResult,
-            onFailure = { error -> IntegrationCallResult.NetworkError(error) }
-        )
+        }.getOrElse { error ->
+            return IntegrationCallResult.NetworkError(error)
+        }
+        return rawStringResult(response)
+    }
 
     private suspend fun getRawWithQueryWithinRuntimeLoad(
         relativeUrl: String,
         query: Map<String, String>
-    ): IntegrationCallResult<String> =
-        runCatching {
+    ): IntegrationCallResult<String> {
+        if (rateLimitGuard.isBlocked()) {
+            return IntegrationCallResult.HttpError(429, reason = "mdblist_daily_api_limit_backoff")
+        }
+        val response = runCatching {
             mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
-        }.fold(
-            onSuccess = ::rawStringResult,
-            onFailure = { error -> IntegrationCallResult.NetworkError(error) }
-        )
+        }.getOrElse { error ->
+            return IntegrationCallResult.NetworkError(error)
+        }
+        return rawStringResult(response)
+    }
 
-    private fun rawStringResult(response: retrofit2.Response<okhttp3.ResponseBody>): IntegrationCallResult<String> =
+    private suspend fun rawStringResult(response: retrofit2.Response<okhttp3.ResponseBody>): IntegrationCallResult<String> =
         if (!response.isSuccessful) {
-            IntegrationCallResult.HttpError(response.code())
+            IntegrationCallResult.HttpError(
+                statusCode = response.code(),
+                retryAfterMs = rateLimitGuard.noteResponse(response),
+                reason = "mdblist_raw_${response.code()}"
+            )
         } else {
             IntegrationCallResult.Success(response.body()?.string().orEmpty())
         }
@@ -176,6 +189,7 @@ class MDBListIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
+                rateLimitGuard.throwIfBlocked()
                 val requestBody = MDBListRatingRequestDto(
                     ids = listOf(ratingId),
                     provider = requestProvider
@@ -197,6 +211,14 @@ class MDBListIntegrationProvider @Inject constructor(
                     }
 
                     if (!response.isSuccessful) {
+                        val retryAfterMs = rateLimitGuard.noteResponse(response)
+                        if (response.code() == 429) {
+                            return@IntegrationSpec IntegrationLoadResult.HttpError(
+                                statusCode = 429,
+                                retryAfterMs = retryAfterMs,
+                                reason = "mdblist_rating_429"
+                            )
+                        }
                         ratingsByProvider[provider] = null
                     } else {
                         ratingsByProvider[provider] = response.body()?.ratings?.firstOrNull()?.rating
@@ -249,6 +271,12 @@ class MDBListIntegrationProvider @Inject constructor(
                 scope = IntegrationScope.ProviderConfig("mdblist:$credentialHash"),
                 coalesceConcurrent = true,
                 call = {
+                    if (rateLimitGuard.isBlocked()) {
+                        return@IntegrationCallSpec IntegrationCallResult.HttpError(
+                            statusCode = 429,
+                            reason = "mdblist_daily_api_limit_backoff"
+                        )
+                    }
                     runCatching {
                         mdbListApi.getRating(
                             mediaType = mediaType,
@@ -264,7 +292,8 @@ class MDBListIntegrationProvider @Inject constructor(
                             if (!response.isSuccessful) {
                                 return@IntegrationCallSpec IntegrationCallResult.HttpError(
                                     statusCode = response.code(),
-                                    retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                                    retryAfterMs = rateLimitGuard.noteResponse(response)
+                                        ?: response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
                                     reason = "mdblist_rating_${response.code()}"
                                 )
                             }
@@ -302,9 +331,20 @@ class MDBListIntegrationProvider @Inject constructor(
             cachePolicy = IntegrationCachePolicy.Disabled,
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
+                rateLimitGuard.throwIfBlocked()
                 runCatching { mdbListApi.getUser(apiKey) }
                     .fold(
-                        onSuccess = { IntegrationLoadResult.Success(it.isSuccessful.toString()) },
+                        onSuccess = {
+                            if (!it.isSuccessful) {
+                                IntegrationLoadResult.HttpError(
+                                    statusCode = it.code(),
+                                    retryAfterMs = rateLimitGuard.noteResponse(it),
+                                    reason = "mdblist_validate_${it.code()}"
+                                )
+                            } else {
+                                IntegrationLoadResult.Success(true.toString())
+                            }
+                        },
                         onFailure = { IntegrationLoadResult.NetworkError(it) }
                     )
             }

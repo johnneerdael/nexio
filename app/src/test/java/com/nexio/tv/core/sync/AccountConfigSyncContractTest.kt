@@ -129,6 +129,35 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `unchanged account snapshot pull self heals local hydration drift`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val markStart = source.indexOf("private suspend fun markWatermarksFromEnvelope", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, markStart)
+
+        assertTrue(pullBlock.contains("val unchangedByRemote = !delta.settingsChanged && !delta.addonsChanged && !delta.secretsChanged"))
+        assertTrue(pullBlock.contains("localHydrationDriftSectionKeys("))
+        assertTrue(pullBlock.contains("val effectiveSecretsChanged = delta.secretsChanged ||"))
+        assertTrue(pullBlock.contains("localHydrationDriftSectionKeys.any { it in ACCOUNT_SECRET_SECTION_KEYS }"))
+        assertTrue(pullBlock.contains("val addonPayloadsChanged = delta.addonsChanged || addonSecretsChanged"))
+        assertTrue(pullBlock.contains("val sectionKeysToApply = (delta.changedSectionKeys + localHydrationDriftSectionKeys) - preserveLocalSectionKeys"))
+    }
+
+    @Test
+    fun `local hydration drift ignores pending local edits and preserved sections`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val helperStart = source.indexOf("private suspend fun localHydrationDriftSectionKeys")
+        val helperEnd = source.indexOf("private fun changedAccountSecretSectionKeysSince", startIndex = helperStart)
+        val helperBlock = source.substring(helperStart, helperEnd)
+
+        assertTrue(helperBlock.contains("getAccountSettingsSectionBaselines()"))
+        assertTrue(helperBlock.contains("if (baselines.isEmpty()) return emptySet()"))
+        assertTrue(helperBlock.contains("AccountSettingsSectionKey.fromChangedPath(changedPath)"))
+        assertTrue(helperBlock.contains("dirtyAccountSettingsSectionKeys("))
+        assertTrue(helperBlock.contains(") - pendingSectionKeys - preserveLocalSectionKeys"))
+    }
+
+    @Test
     fun `sync watermark store exposes all account settings section watermarks`() {
         val source = File("app/src/main/java/com/nexio/tv/data/local/SyncWatermarkDataStore.kt").readText()
 
@@ -533,7 +562,7 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(
             "v13 pull must allow stale recovery to preserve locally dirty sections",
-            pullBlock.contains("val sectionKeysToApply = delta.changedSectionKeys - preserveLocalSectionKeys")
+            pullBlock.contains("val sectionKeysToApply = (delta.changedSectionKeys + localHydrationDriftSectionKeys) - preserveLocalSectionKeys")
         )
         assertFalse(
             "v13 pull must not apply the default-backed sparse payload as a complete payload",
@@ -567,7 +596,11 @@ class AccountConfigSyncContractTest {
 
         assertTrue(
             "unchanged snapshot should avoid apply and secret resolves",
-            source.indexOf("if (!delta.settingsChanged && !addonPayloadsChanged && !delta.secretsChanged)", pullStart) > pullStart
+            source.indexOf("if (!delta.settingsChanged && !addonPayloadsChanged && !effectiveSecretsChanged", pullStart) > pullStart
+        )
+        assertTrue(
+            "unchanged snapshot fast path must still be bypassed when local hydration drift is detected",
+            source.indexOf("localHydrationDriftSectionKeys.isEmpty()", pullStart) > pullStart
         )
     }
 
@@ -1279,11 +1312,26 @@ class AccountConfigSyncContractTest {
         val secretsWatermarkIndex = pullBlock.indexOf("syncWatermarkStore.set(SyncWatermarkSurface.ACCOUNT_SECRETS")
 
         assertTrue("account secrets watermark must be decided after secret resolution", secretsWatermarkIndex > resolveIndex)
-        assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = if (delta.secretsChanged)"))
+        assertTrue(pullBlock.contains("val sectionKeysToResolveSecretsFor = if (effectiveSecretsChanged)"))
         assertTrue(pullBlock.contains("changedSecretSectionKeys + changedAccountSecretSectionKeys + preservedPullSecretSectionKeys"))
         assertTrue(pullBlock.contains("preserveLocalSectionKeys.intersect(ACCOUNT_SECRET_SECTION_KEYS)"))
         assertTrue(pullBlock.contains("resolvedSecrets.unresolvedRemoteSecretSectionKeys.isEmpty()"))
-        assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApply)"))
+        assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApplyResolvedSecrets)"))
+    }
+
+    @Test
+    fun `secret only account pull applies resolved auth secrets even when settings section is unchanged`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val refreshStart = source.indexOf("private suspend fun refreshDebridAccountStatesForAppliedSections", startIndex = pullStart)
+        val pullBlock = source.substring(pullStart, refreshStart)
+
+        assertTrue(pullBlock.contains("val sectionKeysToApply = (delta.changedSectionKeys + localHydrationDriftSectionKeys) - preserveLocalSectionKeys"))
+        assertTrue(pullBlock.contains("val sectionKeysToApplyResolvedSecrets = sectionKeysToResolveSecretsFor - preservedPullSecretSectionKeys"))
+        assertTrue(pullBlock.contains("applySharedAccountConfigSyncSettings("))
+        assertTrue(pullBlock.contains("sectionKeys = sectionKeysToApply"))
+        assertTrue(pullBlock.contains("applyResolvedRemoteSecrets(resolvedSecrets, sectionKeysToApplyResolvedSecrets)"))
+        assertTrue(pullBlock.contains("appliedSectionKeys = sectionKeysToApply + sectionKeysToApplyResolvedSecrets"))
     }
 
     @Test

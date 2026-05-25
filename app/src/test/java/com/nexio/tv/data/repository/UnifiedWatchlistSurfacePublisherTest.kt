@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.artwork.ArtworkProviderCapabilityResolver
 import com.nexio.tv.core.artwork.ArtworkProviderResolver
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -104,6 +105,48 @@ class UnifiedWatchlistSurfacePublisherTest {
         assertEquals("536500", capturedPreview.captured.firstPaintStableIds.simkl)
         assertEquals("Arrival", capturedResolvedItems.captured.single().display.title)
         assertEquals("tt2543164", capturedResolvedItems.captured.single().stableIds.imdb)
+    }
+
+    @Test
+    fun `publish uses membership display metadata for first preview rows`() = runTest {
+        val session = testProfileSession()
+        val publishedBatches = mutableListOf<List<ResolvedDisplayItem>>()
+        val publisher = publisher(
+            session = session,
+            onHydrateStarted = { delay(10) },
+            onPublishBatch = { publishedBatches += it }
+        )
+
+        publisher.publish(
+            profileSession = session,
+            memberships = listOf(
+                UnifiedWatchlistMembership(
+                    authorityKey = "movie:imdb:tt32820897",
+                    contentType = ContentType.MOVIE,
+                    presentIn = setOf(UnifiedWatchlistSource.TRAKT),
+                    sourceRefs = emptyList(),
+                    confidence = UnifiedWatchlistMembershipConfidence.STRONG,
+                    title = "Demon Slayer",
+                    year = 2025,
+                    imdbId = "tt32820897",
+                    tmdbId = 1311031,
+                    poster = "nexio-artwork://decision/poster",
+                    background = "https://image.tmdb.org/t/p/w1280/backdrop.jpg",
+                    logo = "https://image.tmdb.org/t/p/w500/logo.png",
+                    description = "The Corps are drawn into the Infinity Castle.",
+                    imdbRating = 7.7f,
+                    genres = listOf("Animation", "Action")
+                )
+            )
+        )
+
+        val firstPaint = publishedBatches.first().single()
+        assertEquals("Demon Slayer", firstPaint.display.title)
+        assertEquals("The Corps are drawn into the Infinity Castle.", firstPaint.display.overview)
+        assertEquals(listOf("Animation", "Action"), firstPaint.display.genres)
+        assertEquals("nexio-artwork://decision/poster", firstPaint.artwork.poster.toLegacyArtworkString())
+        assertEquals("https://image.tmdb.org/t/p/w1280/backdrop.jpg", firstPaint.artwork.backdrop.toLegacyArtworkString())
+        assertEquals("https://image.tmdb.org/t/p/w500/logo.png", firstPaint.artwork.logo.toLegacyArtworkString())
     }
 
     @Test

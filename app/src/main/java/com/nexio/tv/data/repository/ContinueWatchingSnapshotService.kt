@@ -41,6 +41,8 @@ import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TitleRating
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
@@ -3584,6 +3586,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         sidecarImdbOverride: String? = null
     ): HomeDisplayMetadata {
         val current = this
+        val rating = selectMergedDisplayRating(current, resolved.rating)
         return HomeDisplayMetadata(
             title = resolved.display.title ?: current?.title,
             logo = resolved.artwork.logo.toLegacyArtworkString() ?: current?.logo,
@@ -3591,8 +3594,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
             genres = resolved.display.genres.ifEmpty { current?.genres.orEmpty() },
             releaseInfo = resolved.display.releaseDate ?: resolved.display.year?.toString() ?: current?.releaseInfo,
             runtime = resolved.display.runtimeText ?: current?.runtime,
-            imdbRating = resolved.rating?.value?.toFloat() ?: current?.imdbRating,
-            ratingSource = resolved.rating?.source ?: current?.ratingSource,
+            imdbRating = rating?.value,
+            ratingSource = rating?.source,
             tomatoesRating = resolved.display.tomatoesRating ?: current?.tomatoesRating,
             originalLanguage = current?.originalLanguage,
             imdbId = sidecarImdbOverride ?: resolved.imdbId ?: resolved.stableIds.imdb ?: current?.imdbId,
@@ -3602,6 +3605,26 @@ class ContinueWatchingSnapshotService @Inject constructor(
             thumbnail = resolved.artwork.thumbnail.toLegacyArtworkString() ?: current?.thumbnail,
             artwork = resolved.artwork
         )
+    }
+
+    private data class MergedDisplayRating(
+        val value: Float,
+        val source: TitleRatingSource
+    )
+
+    private fun selectMergedDisplayRating(
+        current: HomeDisplayMetadata?,
+        resolvedRating: TitleRating?
+    ): MergedDisplayRating? {
+        val currentRating = current?.imdbRating
+        val currentSource = current?.ratingSource
+        return when {
+            currentRating != null && currentSource == TitleRatingSource.IMDB &&
+                resolvedRating?.source != TitleRatingSource.IMDB -> MergedDisplayRating(currentRating, TitleRatingSource.IMDB)
+            resolvedRating != null -> MergedDisplayRating(resolvedRating.value.toFloat(), resolvedRating.source)
+            currentRating != null && currentSource != null -> MergedDisplayRating(currentRating, currentSource)
+            else -> null
+        }
     }
 
     private suspend fun WatchProgress.toResolvedContinueWatchingRecord(

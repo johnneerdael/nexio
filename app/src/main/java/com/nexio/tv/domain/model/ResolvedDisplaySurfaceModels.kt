@@ -25,6 +25,7 @@ data class ResolvedDisplayItem(
     val hydrationState: HydrationState,
     val sourceTrace: List<HydratedHomeFieldTrace>,
     val updatedAtMs: Long,
+    val displayLanguageTag: String? = null,
     /**
      * Per-field rank-aware slots. Populated by [HomeRailProjectionReducer]; null
      * when the item was constructed by legacy paths that haven't migrated yet.

@@ -495,9 +495,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 !kodiCustomAudioSinkEnabled && safeAudioForcedStreamUrls.contains(url)
             val audioDisabledForStream =
                 !kodiCustomAudioSinkEnabled && audioDisabledForcedStreamUrls.contains(url)
+            val audioFfmpegFallbackActive = audioFfmpegPreferredStreamUrls.contains(url)
             val vc1TrackSelectionBypassActive = vc1TrackSelectionBypassStreamUrls.contains(url)
             isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
+            isAudioFfmpegFallbackActiveForCurrentPlayback = audioFfmpegFallbackActive
             isVc1TrackSelectionBypassActiveForCurrentPlayback = vc1TrackSelectionBypassActive
             isKodiCustomAudioSinkActiveForCurrentPlayback = kodiCustomAudioSinkEnabled
 
@@ -507,11 +509,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     buildUponParameters()
                         .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
                 )
-                if (playerSettings.tunnelingEnabled && !safeAudioModeEnabled) {
+                if (shouldEnableTrackSelectorTunneling(
+                        requestedTunneling = playerSettings.tunnelingEnabled,
+                        safeAudioModeEnabled = safeAudioModeEnabled,
+                        audioFfmpegFallbackActive = audioFfmpegFallbackActive
+                    )
+                ) {
                     setParameters(
                         buildUponParameters().setTunnelingEnabled(true)
                     )
-                } else if (safeAudioModeEnabled) {
+                } else if (safeAudioModeEnabled || audioFfmpegFallbackActive) {
                     setParameters(
                         buildUponParameters()
                             .setTunnelingEnabled(false)
@@ -661,6 +668,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 experimentalFireOsIecPassthroughEnabled =
                     playerSettings.experimentalDtsIecPassthroughEnabled,
                 disableDav1dForAv1 = av1FfmpegFallbackActive,
+                preferFfmpegAudio = audioFfmpegFallbackActive,
                 experimentalDv5HardwareToneMapEnabled = false,
                 experimentalDv5HardwareToneMapCpuFallbackEnabled = false,
                 assSsaRenderControllerProvider = { assSsaRenderController }
@@ -688,6 +696,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "dv5HwToneMapActive=$dv5HardwareToneMapActive " +
                     "dv5ToneMapActive=$dv5SoftwareToneMapActive " +
                     "av1FfmpegFallbackActive=$av1FfmpegFallbackActive " +
+                    "audioFfmpegFallbackActive=$audioFfmpegFallbackActive " +
                     "vc1FallbackActive=$vc1SoftwareFallbackActive " +
                     "vc1TrackBypassActive=$vc1TrackSelectionBypassActive " +
                     "dynamicVideoScheduling=${playerSettings.dynamicVideoSchedulingEnabled} " +
@@ -1252,6 +1261,44 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             return
                         }
 
+                        if (error.isMediaCodecAudioDecoderFailure() &&
+                            shouldRetryPlatformAudioFromBeginningBeforeFfmpeg(
+                                positionMs = currentPosition,
+                                alreadyRetried = platformAudioRestartedFromBeginningStreamUrls
+                                    .contains(currentStreamUrl)
+                            )
+                        ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Platform audio decoder failure near resume point, retrying " +
+                                    "current stream from beginning before FFmpeg audio fallback " +
+                                    "host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            platformAudioRestartedFromBeginningStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithPlatformAudioFromBeginning()
+                            return
+                        }
+
+                        if (error.isMediaCodecAudioDecoderFailure() &&
+                            FfmpegLibrary.isAvailable() &&
+                            !isAudioFfmpegFallbackActiveForCurrentPlayback
+                        ) {
+                            val retryPositionMs =
+                                audioFfmpegFallbackRetryPositionMs(currentPosition)
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Platform audio decoder failure detected, retrying current " +
+                                    "stream with FFmpeg audio preference " +
+                                    "host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition " +
+                                    "retryPositionMs=$retryPositionMs"
+                            )
+                            audioFfmpegPreferredStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithAudioFfmpegFallback(retryPositionMs)
+                            return
+                        }
+
                         if (error.isVc1DecoderFailure() &&
                             isVc1SoftwareFallbackActiveForCurrentPlayback &&
                             !isVc1TrackSelectionBypassActiveForCurrentPlayback
@@ -1687,6 +1734,7 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
     isAv1FfmpegFallbackActiveForCurrentPlayback = false
+    isAudioFfmpegFallbackActiveForCurrentPlayback = false
     isVc1SoftwareFallbackActiveForCurrentPlayback = false
     isVc1TrackSelectionBypassActiveForCurrentPlayback = false
     isSafeAudioModeActiveForCurrentPlayback = false
@@ -1728,6 +1776,7 @@ private class SubtitleOffsetRenderersFactory(
     private val cueGroupSubtitleTranslator: CueGroupSubtitleTranslator?,
     private val experimentalFireOsIecPassthroughEnabled: Boolean,
     private val disableDav1dForAv1: Boolean,
+    private val preferFfmpegAudio: Boolean,
     private val experimentalDv5HardwareToneMapEnabled: Boolean,
     private val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean,
     private val assSsaRenderControllerProvider: () -> AssSsaRenderController?
@@ -1815,18 +1864,22 @@ private class SubtitleOffsetRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioOutputPlaybackParams: Boolean
     ): AudioSink {
+        val effectiveEnableFloatOutput = shouldEnableAudioSinkFloatOutput(
+            requestedEnableFloatOutput = enableFloatOutput,
+            preferFfmpegAudio = preferFfmpegAudio
+        )
         if (experimentalFireOsIecPassthroughEnabled) {
             fun createBaselineKodiSink(): KodiNativeAudioSink =
                 KodiNativeAudioSink(
                     DefaultAudioSink.Builder(context)
-                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableFloatOutput(effectiveEnableFloatOutput)
                         .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
                         .build()
                 )
             fun createTrueHdKodiSink(): KodiTrueHdNativeAudioSink =
                 KodiTrueHdNativeAudioSink(
                     DefaultAudioSink.Builder(context)
-                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableFloatOutput(effectiveEnableFloatOutput)
                         .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
                         .build()
                 )
@@ -1837,14 +1890,14 @@ private class SubtitleOffsetRenderersFactory(
         }
         if (!safeAudioModeEnabled) {
             val builder = DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableFloatOutput(effectiveEnableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
             return builder.build()
         }
         val filteredCapabilities = buildStableAudioCapabilities(context)
         return DefaultAudioSink.Builder()
             .setAudioCapabilities(filteredCapabilities)
-            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableFloatOutput(effectiveEnableFloatOutput)
             .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
             .build()
     }
@@ -1883,9 +1936,18 @@ private class SubtitleOffsetRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<Renderer>
     ) {
+        val audioExtensionRendererMode = if (preferFfmpegAudio) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "AUDIO_RENDERER: forcing FFmpeg audio renderer preference"
+            )
+            EXTENSION_RENDERER_MODE_PREFER
+        } else {
+            extensionRendererMode
+        }
         super.buildAudioRenderers(
             context,
-            extensionRendererMode,
+            audioExtensionRendererMode,
             mediaCodecSelector,
             enableDecoderFallback,
             audioSink,
@@ -1955,6 +2017,40 @@ private fun PlaybackException.isAudioTrackInitializationFailure(): Boolean {
         append(cause?.cause?.message ?: "")
     }
     return details.contains("audiotrack init failed", ignoreCase = true)
+}
+
+internal fun PlaybackException.isMediaCodecAudioDecoderFailure(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_DECODING_FAILED) return false
+    val details = describeCauseChain()
+    return details.contains("MediaCodecAudioRenderer", ignoreCase = true) &&
+        details.contains("Decoder failed:", ignoreCase = true)
+}
+
+internal fun audioFfmpegFallbackRetryPositionMs(positionMs: Long): Long {
+    if (positionMs < 30_000L) return 0L
+    return (positionMs - 5_000L).coerceAtLeast(0L)
+}
+
+internal fun shouldRetryPlatformAudioFromBeginningBeforeFfmpeg(
+    positionMs: Long,
+    alreadyRetried: Boolean
+): Boolean {
+    return !alreadyRetried && positionMs > 0L
+}
+
+internal fun shouldEnableAudioSinkFloatOutput(
+    requestedEnableFloatOutput: Boolean,
+    preferFfmpegAudio: Boolean
+): Boolean {
+    return requestedEnableFloatOutput && !preferFfmpegAudio
+}
+
+internal fun shouldEnableTrackSelectorTunneling(
+    requestedTunneling: Boolean,
+    safeAudioModeEnabled: Boolean,
+    audioFfmpegFallbackActive: Boolean
+): Boolean {
+    return requestedTunneling && !safeAudioModeEnabled && !audioFfmpegFallbackActive
 }
 
 private fun Exception.isAudioSinkInitializationFailure(): Boolean {

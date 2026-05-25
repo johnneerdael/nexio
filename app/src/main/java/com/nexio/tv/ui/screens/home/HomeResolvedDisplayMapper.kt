@@ -347,6 +347,7 @@ internal object HomeResolvedDisplayMapper {
             },
             sourceTrace = overlay?.fieldTrace.orEmpty(),
             updatedAtMs = overlay?.updatedAtMs ?: nowMs,
+            displayLanguageTag = overlay?.languageTag,
             slots = mergedSlots,
             preferredArtworkProviders = preferred
         )
@@ -539,6 +540,7 @@ internal fun HydratedHomeOverlay.toResolvedDisplayItem(
         },
         sourceTrace = fieldTrace,
         updatedAtMs = updatedAtMs,
+        displayLanguageTag = languageTag,
         slots = overlaySlots,
         // TODO(artwork-routing): overlay-only path lacks the MetaPreview row
         // context (apiType / firstPaintRailSource) needed for anime detection,

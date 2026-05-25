@@ -4,6 +4,7 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.MDBListProgressSyncState
 import com.nexio.tv.data.local.MDBListProgressSyncStateStore
 import com.nexio.tv.data.integration.mdblist.MDBListProgressService
+import com.nexio.tv.data.integration.mdblist.MDBListRateLimitGuard
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListPlaybackResponseDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListSyncIdsDto
@@ -92,7 +93,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore())
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore(), rateLimitGuard())
 
         service.refreshNowImmediate()
 
@@ -132,7 +133,7 @@ class MDBListProgressServiceTest {
         coEvery { api.getWatched(apiKey = "mdb-key", limit = 1000, offset = 0) } returns Response.success(
             MDBListWatchedResponseDto()
         )
-        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore())
+        val service = MDBListProgressService(api, flowSettingsReader(settings), profileManager(), syncStateStore(), rateLimitGuard())
 
         service.refreshNowImmediate()
 
@@ -172,7 +173,8 @@ class MDBListProgressServiceTest {
             api,
             flowSettingsReader(settings),
             profileManager(),
-            syncStateStore
+            syncStateStore,
+            rateLimitGuard()
         )
 
         service.refreshNowImmediate()
@@ -207,5 +209,12 @@ class MDBListProgressServiceTest {
             every { write(any(), any()) } answers { state = firstArg() }
             every { clear(any()) } answers { state = MDBListProgressSyncState() }
         }
+    }
+
+    private fun rateLimitGuard(): MDBListRateLimitGuard {
+        val guard = mockk<MDBListRateLimitGuard>(relaxed = true)
+        coEvery { guard.throwIfBlocked() } returns Unit
+        coEvery { guard.noteResponse(any()) } returns null
+        return guard
     }
 }

@@ -165,22 +165,100 @@ class WatchProgressPreferences @Inject constructor(
             if (season != null && episode != null) {
                 // Remove specific episode progress + the series-level entry
                 // so the item disappears from continue watching
+                val keysToRemove = progressKeysToRemove(map, contentId, season, episode)
+                for (i in keysToRemove.indices) {
+                    map.remove(keysToRemove[i])
+                }
                 val key = "${contentId}_s${season}e${episode}"
-                map.remove(key)
-                map.remove(contentId)
                 Log.d(TAG, "removeProgress episodeKey=$key existsAfter=${map.containsKey(key)}")
             } else {
                 // Remove all progress for this content
-                val keysToRemove = map.keys.filter { key ->
-                    key == contentId || key.startsWith("${contentId}_s")
-                }
+                val keysToRemove = progressKeysToRemove(map, contentId, season = null, episode = null)
                 Log.d(TAG, "removeProgress removingKeys=${keysToRemove.joinToString()}")
-                keysToRemove.forEach { map.remove(it) }
+                for (i in keysToRemove.indices) {
+                    map.remove(keysToRemove[i])
+                }
             }
 
             Log.d(TAG, "removeProgress complete contentId=$contentId entriesAfter=${map.size}")
             preferences[watchProgressKey] = gson.toJson(map)
         }
+    }
+
+    private fun progressKeysToRemove(
+        map: Map<String, WatchProgress>,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): List<String> {
+        val target = contentId.trim()
+        if (target.isBlank()) return emptyList()
+        val aliases = localSlugAliases(target)
+        return map.filter { (key, progress) ->
+            val keyMatches = progressKeyMatches(key, target, aliases, season, episode)
+            val progressMatches = progressContentMatches(progress, target, aliases, season, episode)
+            keyMatches || progressMatches
+        }.keys.toList()
+    }
+
+    private fun progressKeyMatches(
+        key: String,
+        target: String,
+        aliases: Set<String>,
+        season: Int?,
+        episode: Int?
+    ): Boolean {
+        if (season != null && episode != null) {
+            return key == "${target}_s${season}e${episode}" ||
+                key == target ||
+                aliases.any { alias ->
+                    idMatchesLocalSlugAlias(key, alias) ||
+                        key == "${alias}_s${season}e${episode}" ||
+                        key.endsWith(":${alias}_s${season}e${episode}")
+                }
+        }
+        return key == target ||
+            key.startsWith("${target}_s") ||
+            aliases.any { alias ->
+                idMatchesLocalSlugAlias(key, alias) || key.startsWith("${alias}_s")
+            }
+    }
+
+    private fun progressContentMatches(
+        progress: WatchProgress,
+        target: String,
+        aliases: Set<String>,
+        season: Int?,
+        episode: Int?
+    ): Boolean {
+        if (season != null && episode != null) {
+            if (progress.season != season || progress.episode != episode) return false
+        }
+        return progress.contentId == target ||
+            progress.videoId == target ||
+            aliases.any { alias ->
+                idMatchesLocalSlugAlias(progress.contentId, alias) ||
+                    idMatchesLocalSlugAlias(progress.videoId, alias) ||
+                    progress.videoId.startsWith("${alias}:")
+            }
+    }
+
+    private fun localSlugAliases(contentId: String): Set<String> {
+        val normalized = contentId.trim()
+        val slug = normalized.substringAfter(':', missingDelimiterValue = "")
+            .takeIf { it.isStableLocalSlug() }
+            ?: return emptySet()
+        return setOf(slug)
+    }
+
+    private fun String.isStableLocalSlug(): Boolean {
+        if (isBlank()) return false
+        if (all { it.isDigit() }) return false
+        return any { it.isLetter() } && '-' in this
+    }
+
+    private fun idMatchesLocalSlugAlias(value: String, alias: String): Boolean {
+        return value == alias || value.endsWith(":$alias")
     }
 
     /**

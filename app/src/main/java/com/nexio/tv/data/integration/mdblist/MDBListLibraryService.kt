@@ -32,6 +32,7 @@ class MDBListLibraryService @Inject constructor(
     private val settingsReader: MDBListSettingsReader,
     private val snapshotStore: MDBListLibrarySnapshotStore,
     private val profileManager: ProfileManager,
+    private val rateLimitGuard: MDBListRateLimitGuard,
 ) {
     private class RuntimeState(
         snapshot: MDBListLibrarySnapshotStore.Snapshot? = null
@@ -79,11 +80,15 @@ class MDBListLibraryService @Inject constructor(
         val settings = settingsReader.settingsForProfile(profileId).first()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) return
-        api.mutateWatchlistItems(
+        rateLimitGuard.throwIfBlocked()
+        val response = api.mutateWatchlistItems(
             action = "remove",
             apiKey = apiKey,
             body = com.nexio.tv.data.repository.mdblist.MDBListIdMapper.watchlistPayloadFor(item),
         )
+        if (rateLimitGuard.noteResponse(response) != null) {
+            throw IllegalStateException("MDBList library request rate limited")
+        }
         runtime.rows.value = removeItem(runtime.rows.value, item)
         persistSnapshot(profileId, runtime)
     }
@@ -120,33 +125,44 @@ class MDBListLibraryService @Inject constructor(
                     return
                 }
 
+                rateLimitGuard.throwIfBlocked()
                 val listsResponse = api.getMyLists(apiKey = apiKey, sort = "ranked", unified = false)
-                val userLists = if (listsResponse.isSuccessful) listsResponse.body().orEmpty() else emptyList()
+                if (rateLimitGuard.noteResponse(listsResponse) != null) {
+                    throw IllegalStateException("MDBList library request rate limited")
+                }
+                if (!listsResponse.isSuccessful) {
+                    throw IllegalStateException("MDBList list tabs request failed (${listsResponse.code()})")
+                }
+                val userLists = listsResponse.body().orEmpty()
                 runtime.tabs.value = buildTabs(userLists)
 
                 val body = if (selectedListId != null) {
-                    api.getListItems(
+                    val response = api.getListItems(
                         listId = selectedListId,
                         apiKey = apiKey,
                         limit = WATCHLIST_LIMIT,
                         offset = 0,
                         unified = true
-                    ).toWatchlistBody()
+                    )
+                    if (rateLimitGuard.noteResponse(response) != null) {
+                        throw IllegalStateException("MDBList library request rate limited")
+                    }
+                    response.toWatchlistBody()
                 } else {
-                    api.getWatchlistItems(
+                    val response = api.getWatchlistItems(
                         apiKey = apiKey,
                         limit = WATCHLIST_LIMIT,
                         offset = 0,
                         unified = true,
-                    ).bodyIfSuccessful()
+                    )
+                    if (rateLimitGuard.noteResponse(response) != null) {
+                        throw IllegalStateException("MDBList library request rate limited")
+                    }
+                    response.bodyIfSuccessful()
                 }
 
                 if (body == null) {
-                    runtime.rows.value = emptyList()
-                    runtime.cachedListKey = listKey
-                    runtime.lastRefreshMs = now
-                    persistSnapshot(profileId, runtime, now)
-                    return
+                    throw IllegalStateException("MDBList library request failed")
                 }
 
                 runtime.rows.value = buildRows(body.movies.orEmpty(), body.shows.orEmpty(), listKey = listKey)
@@ -162,7 +178,11 @@ class MDBListLibraryService @Inject constructor(
     suspend fun createStaticList(name: String, private: Boolean) {
         val profileId = activeProfileId()
         val apiKey = requireApiKey(profileId) ?: return
-        api.createStaticList(apiKey, MDBListCreateListRequestDto(name = name, private = private))
+        rateLimitGuard.throwIfBlocked()
+        val response = api.createStaticList(apiKey, MDBListCreateListRequestDto(name = name, private = private))
+        if (rateLimitGuard.noteResponse(response) != null) {
+            throw IllegalStateException("MDBList library request rate limited")
+        }
         ensureFreshForProfile(profileId = profileId, force = true)
     }
 
@@ -170,7 +190,11 @@ class MDBListLibraryService @Inject constructor(
         val profileId = activeProfileId()
         val apiKey = requireApiKey(profileId) ?: return
         val id = listId.toLongOrNull() ?: listIdFromKey(listId) ?: return
-        api.updateStaticList(id, apiKey, MDBListUpdateListRequestDto(name = name, private = private))
+        rateLimitGuard.throwIfBlocked()
+        val response = api.updateStaticList(id, apiKey, MDBListUpdateListRequestDto(name = name, private = private))
+        if (rateLimitGuard.noteResponse(response) != null) {
+            throw IllegalStateException("MDBList library request rate limited")
+        }
         ensureFreshForProfile(profileId = profileId, force = true, selectedListKey = personalListKey(id))
     }
 
@@ -178,7 +202,11 @@ class MDBListLibraryService @Inject constructor(
         val profileId = activeProfileId()
         val apiKey = requireApiKey(profileId) ?: return
         val id = listId.toLongOrNull() ?: listIdFromKey(listId) ?: return
-        api.deleteStaticList(id, apiKey)
+        rateLimitGuard.throwIfBlocked()
+        val response = api.deleteStaticList(id, apiKey)
+        if (rateLimitGuard.noteResponse(response) != null) {
+            throw IllegalStateException("MDBList library request rate limited")
+        }
         ensureFreshForProfile(profileId = profileId, force = true)
     }
 

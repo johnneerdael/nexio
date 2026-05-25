@@ -5,7 +5,6 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.ui.navigation.continueWatchingRuntimeMinutes
@@ -24,7 +23,7 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     val episode = item.episode()
 
     if (isSeriesType(contentType)) {
-        val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+        val metadataLanguage = profileBoundary.currentLanguageTag()
         val isTvdbContent = contentId.startsWith("tvdb:", ignoreCase = true)
         if (season != null && episode != null) {
             val contentTypeValue = parseContinueWatchingContentType(contentType)
@@ -52,7 +51,7 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                         contentId = contentId,
                         contentType = contentTypeValue,
                         sourceContext = MetadataSourceContext(itemType = contentType),
-                        language = tvdbLanguage,
+                        language = metadataLanguage,
                         seasonNumber = season,
                         depth = MetadataDepth.SEASON
                     ),
@@ -60,7 +59,7 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                         contentId = contentId,
                         fallbackContentId = item.videoId(),
                         contentType = contentTypeValue,
-                        language = tvdbLanguage,
+                        language = metadataLanguage,
                         seasonNumbers = listOf(season)
                     )
                 )
@@ -72,14 +71,14 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                     contentId = contentId,
                     contentType = parseContinueWatchingContentType(contentType),
                     sourceContext = MetadataSourceContext(itemType = contentType),
-                    language = tvdbLanguage,
+                    language = metadataLanguage,
                     depth = MetadataDepth.DETAIL_CORE
                 ),
                 tvRequest = TvMetadataRequest(
                     contentId = contentId,
                     fallbackContentId = item.videoId(),
                     contentType = parseContinueWatchingContentType(contentType),
-                    language = tvdbLanguage
+                    language = metadataLanguage
                 )
             ).value
             val runtime = enrichment?.runtimeMinutes ?: enrichment?.averageRuntimeMinutes
@@ -94,14 +93,14 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
             contentId = contentId,
             contentType = parseContinueWatchingContentType(contentType),
             sourceContext = MetadataSourceContext(itemType = contentType),
-            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code,
+            language = profileBoundary.currentLanguageTag(),
             depth = MetadataDepth.DETAIL_CORE
         ),
         tvRequest = TvMetadataRequest(
             contentId = contentId,
             fallbackContentId = item.videoId(),
             contentType = parseContinueWatchingContentType(contentType),
-            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
+            language = profileBoundary.currentLanguageTag()
         )
     ).value
     val runtime = enrichment?.runtimeMinutes ?: enrichment?.averageRuntimeMinutes

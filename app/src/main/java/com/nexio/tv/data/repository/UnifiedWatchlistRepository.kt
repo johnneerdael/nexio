@@ -59,7 +59,14 @@ class UnifiedWatchlistRepository @Inject constructor(
             imdbId = imdbId ?: id.takeIf { it.startsWith("tt", ignoreCase = true) },
             tmdbId = tmdbId,
             traktId = traktId,
-            listKey = listKey
+            listKey = listKey,
+            poster = poster,
+            posterShape = posterShape,
+            background = background,
+            logo = logo,
+            description = description,
+            imdbRating = imdbRating,
+            genres = genres
         )
     }
 

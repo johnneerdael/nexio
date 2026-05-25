@@ -27,6 +27,7 @@ class MDBListProgressService @Inject constructor(
     private val settingsReader: MDBListSettingsReader,
     private val profileManager: ProfileManager,
     private val syncStateStore: MDBListProgressSyncStateStore,
+    private val rateLimitGuard: MDBListRateLimitGuard,
 ) {
     private class RuntimeState(
         persisted: MDBListProgressSyncState = MDBListProgressSyncState()
@@ -88,17 +89,24 @@ class MDBListProgressService @Inject constructor(
             syncStateStore.clear(profileId)
             return
         }
+        rateLimitGuard.throwIfBlocked()
 
         val watchedSince = runtime.lastWatchedSyncAt
         val watchedCursorForNextSync = Instant.now().toString()
         val playback = runCatching { api.getPlayback(apiKey = apiKey) }
             .onFailure { Log.w(TAG, "Failed to load MDBList playback: ${it.message}") }
             .getOrNull()
+            ?.also {
+                if (rateLimitGuard.noteResponse(it) != null) throw MDBListDailyLimitException()
+            }
         val watched = runCatching {
             api.getWatched(apiKey = apiKey, limit = 1000, offset = 0, since = watchedSince)
         }
             .onFailure { Log.w(TAG, "Failed to load MDBList watched: ${it.message}") }
             .getOrNull()
+            ?.also {
+                if (rateLimitGuard.noteResponse(it) != null) throw MDBListDailyLimitException()
+            }
 
         val playbackRows = playback?.body()?.toPlaybackProgress().orEmpty()
         val watchedRows = watched?.body()?.toWatchedProgress().orEmpty()

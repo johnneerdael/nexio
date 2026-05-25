@@ -477,13 +477,18 @@ class DurableArtworkDecisionCache(
      * and blocked main-thread readers (`get`, `lookup`, `loadState`).
      */
     private fun executeScheduledFlush() {
-        val storeJson = synchronized(lock) {
+        val snapshot = synchronized(lock) {
             pendingFlush = null
             if (!dirty) return
             dirty = false
-            toStoreJson()
+            StoreSnapshot(
+                decisions = decisions.values.toList(),
+                previewLinks = previewToCanonical.entries.map { (previewKey, canonicalKey) ->
+                    previewKey to canonicalKey
+                }
+            )
         }
-        persistJsonToFile(storeJson)
+        persistJsonToFile(snapshot.toStoreJson())
     }
 
     private fun flushPendingWritesLocked() {
@@ -497,6 +502,11 @@ class DurableArtworkDecisionCache(
     private fun persistLocked() {
         persistJsonToFile(toStoreJson())
     }
+
+    private data class StoreSnapshot(
+        val decisions: List<ArtworkDecision>,
+        val previewLinks: List<Pair<ArtworkDecisionKey, ArtworkDecisionKey>>
+    )
 
     /**
      * Writes the supplied store JSON to disk atomically. Callable from any thread; does
@@ -732,6 +742,21 @@ class DurableArtworkDecisionCache(
         })
         add("previewLinks", JsonArray().apply {
             previewToCanonical.forEach { (previewKey, canonicalKey) ->
+                add(JsonObject().apply {
+                    addProperty("previewKey", previewKey.value)
+                    addProperty("canonicalKey", canonicalKey.value)
+                })
+            }
+        })
+    }
+
+    private fun StoreSnapshot.toStoreJson(): JsonObject = JsonObject().apply {
+        addProperty("schemaVersion", SCHEMA_VERSION)
+        add("decisions", JsonArray().apply {
+            decisions.forEach { decision -> add(decision.toJson()) }
+        })
+        add("previewLinks", JsonArray().apply {
+            previewLinks.forEach { (previewKey, canonicalKey) ->
                 add(JsonObject().apply {
                     addProperty("previewKey", previewKey.value)
                     addProperty("canonicalKey", canonicalKey.value)

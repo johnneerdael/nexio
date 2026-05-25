@@ -3,6 +3,7 @@ package com.nexio.tv.core.auth
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.AccountSettingsSyncService
 import com.nexio.tv.data.local.AddonPreferences
+import com.nexio.tv.data.local.SyncWatermarkDataStore
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.mockk
@@ -15,10 +16,12 @@ class LocalAccountResetCoordinatorTest {
         val profileManager = mockk<ProfileManager>(relaxed = true)
         val addonPreferences = mockk<AddonPreferences>(relaxed = true)
         val accountSettingsSyncService = mockk<AccountSettingsSyncService>(relaxed = true)
+        val syncWatermarkDataStore = mockk<SyncWatermarkDataStore>(relaxed = true)
         val coordinator = LocalAccountResetCoordinator(
             profileManager = profileManager,
             addonPreferences = addonPreferences,
-            accountSettingsSyncService = javax.inject.Provider { accountSettingsSyncService }
+            accountSettingsSyncService = javax.inject.Provider { accountSettingsSyncService },
+            syncWatermarkDataStore = syncWatermarkDataStore
         )
 
         coordinator.resetToSignedOutStockState()
@@ -26,6 +29,7 @@ class LocalAccountResetCoordinatorTest {
         coVerify { profileManager.resetToSingleDefaultProfile() }
         coVerify { addonPreferences.resetToDefaultAddons() }
         coVerify { accountSettingsSyncService.resetLocalAccountConfigToDefaults() }
+        coVerify { syncWatermarkDataStore.clearAll() }
     }
 
     @Test
@@ -33,10 +37,12 @@ class LocalAccountResetCoordinatorTest {
         val profileManager = mockk<ProfileManager>(relaxed = true)
         val addonPreferences = mockk<AddonPreferences>(relaxed = true)
         val accountSettingsSyncService = mockk<AccountSettingsSyncService>(relaxed = true)
+        val syncWatermarkDataStore = mockk<SyncWatermarkDataStore>(relaxed = true)
         val coordinator = LocalAccountResetCoordinator(
             profileManager = profileManager,
             addonPreferences = addonPreferences,
-            accountSettingsSyncService = javax.inject.Provider { accountSettingsSyncService }
+            accountSettingsSyncService = javax.inject.Provider { accountSettingsSyncService },
+            syncWatermarkDataStore = syncWatermarkDataStore
         )
 
         coordinator.resetToSignedOutStockState()
@@ -45,6 +51,7 @@ class LocalAccountResetCoordinatorTest {
             profileManager.resetToSingleDefaultProfile()
             addonPreferences.resetToDefaultAddons()
             accountSettingsSyncService.resetLocalAccountConfigToDefaults()
+            syncWatermarkDataStore.clearAll()
         }
     }
 }

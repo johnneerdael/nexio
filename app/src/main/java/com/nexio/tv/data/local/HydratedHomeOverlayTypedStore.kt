@@ -23,10 +23,15 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 class HydratedHomeOverlayTypedStore(
     private val file: File,
-    private val gson: Gson
+    private val gson: Gson,
+    private val writeDebounceMs: Long = 0L
 ) {
     data class StoredOverlayRecord(
         val schemaVersion: Int,
@@ -62,6 +67,16 @@ class HydratedHomeOverlayTypedStore(
     }
 
     private val state = stateFor(file)
+    private val flushExecutor: ScheduledExecutorService? =
+        if (writeDebounceMs > 0L) {
+            Executors.newSingleThreadScheduledExecutor { runnable ->
+                Thread(runnable, "HydratedHomeOverlayFlush").apply { isDaemon = true }
+            }
+        } else {
+            null
+        }
+    private var pendingFlush: ScheduledFuture<*>? = null
+    private var dirty = false
 
     fun upsert(overlay: HydratedHomeOverlay, aliasKeys: Set<String>): Boolean = synchronized(state.lock) {
         val overlayKey = cleanKey(overlay.overlayKey) ?: return false
@@ -515,16 +530,63 @@ class HydratedHomeOverlayTypedStore(
         aliases: Map<String, String>,
         overlays: Map<String, StoredOverlayRecord>
     ): Boolean {
-        return if (writeLocked(aliases, overlays)) {
-            state.aliases.clear()
-            state.aliases.putAll(aliases)
-            state.overlays.clear()
-            state.overlays.putAll(overlays)
-            state.loaded = true
-            true
-        } else {
-            false
+        if (writeDebounceMs <= 0L && !writeLocked(aliases, overlays)) {
+            return false
         }
+
+        state.aliases.clear()
+        state.aliases.putAll(aliases)
+        state.overlays.clear()
+        state.overlays.putAll(overlays)
+        state.loaded = true
+
+        if (writeDebounceMs > 0L) {
+            schedulePersistLocked()
+        }
+        return true
+    }
+
+    private fun schedulePersistLocked() {
+        dirty = true
+        val currentFlush = pendingFlush
+        if (currentFlush != null && !currentFlush.isDone && !currentFlush.isCancelled) return
+
+        val executor = flushExecutor
+        if (executor == null) {
+            dirty = false
+            val aliases = linkedMapOf<String, String>().also { it.putAll(state.aliases) }
+            val overlays = linkedMapOf<String, StoredOverlayRecord>().also { it.putAll(state.overlays) }
+            writeLocked(aliases, overlays)
+            return
+        }
+
+        pendingFlush = executor.schedule(
+            ::executeScheduledFlush,
+            writeDebounceMs,
+            TimeUnit.MILLISECONDS
+        )
+    }
+
+    private fun executeScheduledFlush() {
+        val snapshot = synchronized(state.lock) {
+            pendingFlush = null
+            if (!dirty) return
+            dirty = false
+            val aliases = linkedMapOf<String, String>().also { it.putAll(state.aliases) }
+            val overlays = linkedMapOf<String, StoredOverlayRecord>().also { it.putAll(state.overlays) }
+            aliases to overlays
+        }
+        writeLocked(snapshot.first, snapshot.second)
+    }
+
+    internal fun flushPendingWritesForTest() = synchronized(state.lock) {
+        pendingFlush?.cancel(false)
+        pendingFlush = null
+        if (!dirty) return@synchronized
+        dirty = false
+        val aliases = linkedMapOf<String, String>().also { it.putAll(state.aliases) }
+        val overlays = linkedMapOf<String, StoredOverlayRecord>().also { it.putAll(state.overlays) }
+        writeLocked(aliases, overlays)
     }
 
     private fun writeLocked(

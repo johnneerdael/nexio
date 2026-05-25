@@ -79,7 +79,14 @@ object UnifiedWatchlistMembershipReducer {
             simklId = firstNotNullOfOrNull { it.showSimklId ?: it.simklId },
             showTmdbId = firstNotNullOfOrNull { it.showTmdbId },
             season = null,
-            episode = null
+            episode = null,
+            poster = firstNonBlank { it.poster },
+            posterShape = firstOrNull { !it.poster.isNullOrBlank() }?.posterShape ?: representative.posterShape,
+            background = firstNonBlank { it.background },
+            logo = firstNonBlank { it.logo },
+            description = firstNonBlank { it.description },
+            imdbRating = firstNotNullOfOrNull { it.imdbRating },
+            genres = firstNotEmpty { it.genres }
         )
     }
 
@@ -127,6 +134,26 @@ object UnifiedWatchlistMembershipReducer {
         } else {
             contentType
         }
+
+    private fun List<UnifiedWatchlistSourceItem>.firstNonBlank(
+        selector: (UnifiedWatchlistSourceItem) -> String?
+    ): String? {
+        for (i in indices) {
+            val value = selector(this[i])?.takeIf { it.isNotBlank() }
+            if (value != null) return value
+        }
+        return null
+    }
+
+    private fun <T> List<UnifiedWatchlistSourceItem>.firstNotEmpty(
+        selector: (UnifiedWatchlistSourceItem) -> List<T>
+    ): List<T> {
+        for (i in indices) {
+            val value = selector(this[i])
+            if (value.isNotEmpty()) return value
+        }
+        return emptyList()
+    }
 
     private fun ContentType.toAuthorityTypeKey(): String =
         when (this) {

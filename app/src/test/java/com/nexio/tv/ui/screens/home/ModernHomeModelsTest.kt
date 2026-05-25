@@ -314,6 +314,32 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolveDisplayedHeroPreview keeps foreground imdb rating when fallback metadata races later`() {
+        val resolvedPreview = buildModernCarouselItem(tomatoesText = null).heroPreview.copy(
+            title = "La Brea",
+            imdbText = "5.8",
+            ratingSource = TitleRatingSource.IMDB,
+            textSourceRank = DisplaySourceRank.RESOLVED
+        )
+        val fallbackPreview = buildModernCarouselItem(tomatoesText = null).heroPreview.copy(
+            title = "La Brea",
+            imdbText = "7.4",
+            ratingSource = TitleRatingSource.TMDB,
+            textSourceRank = DisplaySourceRank.FIRST_PAINT
+        )
+
+        val resolved = resolveDisplayedHeroPreview(
+            displayedHeroItemKey = "item_1",
+            activeHeroItemKey = "item_1",
+            displayedHeroPreview = resolvedPreview,
+            liveActiveHeroPreview = fallbackPreview
+        )
+
+        assertEquals("5.8", resolved?.imdbText)
+        assertEquals(TitleRatingSource.IMDB, resolved?.ratingSource)
+    }
+
+    @Test
     fun `selectForegroundHeroPreview prefers requested language when equal rank metadata races`() {
         val englishPreview = buildModernCarouselItem(tomatoesText = "70").heroPreview.copy(
             title = "Berlin and the Lady with an Ermine",

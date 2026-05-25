@@ -39,7 +39,8 @@ class HydratedHomeOverlayStore @Inject constructor(
     private val entryStore by lazy {
         HydratedHomeOverlayTypedStore(
             file = File(context.filesDir, "hydrated-home-overlay-v2/entries.json"),
-            gson = gson
+            gson = gson,
+            writeDebounceMs = 1_500L
         ).also { store ->
             migrateV1FileIfNeeded(store)
             migrateLegacyPrefsIfNeeded(store)

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.domain.model.DisplaySourceRank
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.ResolvedDisplayItem
@@ -27,8 +28,10 @@ data class ModernHomeRowItem(
     val genres: List<String>,
     val releaseInfo: String?,
     val tomatoesRating: Double?,
+    val textSourceRank: DisplaySourceRank,
     val hydrationState: HydrationState,
-    override val posterProviderTag: String?
+    override val posterProviderTag: String?,
+    val textLanguageTag: String? = null
 ) : RailCardData {
     override val id: String get() = contentId
     override val name: String? get() = title
@@ -50,6 +53,8 @@ data class ModernHomeRowItem(
                 genres = resolved.display.genres,
                 releaseInfo = resolved.display.releaseDate,
                 tomatoesRating = resolved.display.tomatoesRating,
+                textSourceRank = resolved.textSourceRank(),
+                textLanguageTag = resolved.displayLanguageTag,
                 hydrationState = resolved.hydrationState,
                 posterProviderTag = resolved.artwork.poster.deriveProviderTag()
             )
@@ -80,6 +85,8 @@ data class ModernHomeRowItem(
             genres = meta.genres,
             releaseInfo = meta.releaseInfo,
             tomatoesRating = meta.tomatoesRating,
+            textSourceRank = DisplaySourceRank.FIRST_PAINT,
+            textLanguageTag = null,
             hydrationState = HydrationState.PREVIEW_ONLY,
             posterProviderTag = meta.posterProviderTag
         )
@@ -89,6 +96,22 @@ data class ModernHomeRowItem(
 internal fun ArtworkDisplayRef?.deriveProviderTag(): String? = when (this) {
     is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key?.lowercase()
     is ArtworkDisplayRef.LegacyString, is ArtworkDisplayRef.Placeholder, null -> null
+}
+
+internal fun ResolvedDisplayItem.textSourceRank(): DisplaySourceRank {
+    val slots = slots ?: return when (hydrationState) {
+        HydrationState.PREVIEW_ONLY -> DisplaySourceRank.FIRST_PAINT
+        HydrationState.IDENTITY_READY,
+        HydrationState.HYDRATING,
+        HydrationState.FAILED_USING_PREVIEW -> DisplaySourceRank.FIRST_PAINT
+        HydrationState.CANONICAL_READY,
+        HydrationState.STALE_READY -> DisplaySourceRank.STALE_RESOLVED
+    }
+    var best = slots.title.rank
+    if (slots.overview.rank.ordinal > best.ordinal) best = slots.overview.rank
+    if (slots.genres.rank.ordinal > best.ordinal) best = slots.genres.rank
+    if (slots.releaseInfo.rank.ordinal > best.ordinal) best = slots.releaseInfo.rank
+    return best
 }
 
 private fun String?.toLegacyHomeRailRefOrNull(type: ArtworkType): ArtworkDisplayRef? {

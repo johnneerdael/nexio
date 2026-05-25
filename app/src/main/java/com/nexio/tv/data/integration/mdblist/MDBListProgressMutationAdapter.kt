@@ -34,13 +34,20 @@ import kotlinx.coroutines.flow.first
 class MDBListProgressMutationAdapter @Inject constructor(
     private val api: MDBListApi,
     private val settingsReader: MDBListSettingsReader,
-    private val progressService: MDBListProgressService
+    private val progressService: MDBListProgressService,
+    private val rateLimitGuard: MDBListRateLimitGuard,
 ) : TraktMutationAdapter {
     override val adapterKey: String = ADAPTER_KEY
 
     override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) = Unit
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        if (rateLimitGuard.isBlocked()) {
+            return TraktMutationExecutionResult.Failure(
+                httpStatusCode = 429,
+                reason = "MDBList daily API limit backoff is active"
+            )
+        }
         val apiKey = currentApiKey(envelope.profileId)
         val response = when (envelope.mutationKind) {
             MUTATION_KIND_HISTORY_ADD -> api.addWatched(apiKey, envelope.watchedBody())
@@ -56,6 +63,7 @@ class MDBListProgressMutationAdapter @Inject constructor(
         return if (response.isSuccessful) {
             TraktMutationExecutionResult.Success(httpStatusCode = response.code())
         } else {
+            rateLimitGuard.noteResponse(response)
             TraktMutationExecutionResult.Failure(
                 httpStatusCode = response.code(),
                 retryAfterHeader = response.headers()["Retry-After"],

@@ -41,6 +41,7 @@ class ResolvedDisplaySurfaceRepositoryTieBreakerTest {
     private val repo = ResolvedDisplaySurfaceRepository(activeProfileSession = { testSession })
     private val rpdb = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
     private val addon = ArtworkProviderId.RuntimeProvider(IntegrationProvider.ADDON)
+    private val topPosters = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
 
     private val nowMs = 1L
 
@@ -146,6 +147,29 @@ class ResolvedDisplaySurfaceRepositoryTieBreakerTest {
         val surface = repo.snapshotNow(profileId = 1).single()
         val posterValue = (surface.slots?.poster?.value as? ArtworkDisplayRef.LegacyString)?.value
         assertEquals("rpdb://B", posterValue)
+    }
+
+    @Test
+    fun `tie both preferred keeps existing decision ref over mislabeled remote url`() {
+        val existing = itemWithPoster(
+            posterSlot(
+                "nexio-artwork://decision/artwork-decision:poster:canonical:tmdb:series-241609:provider:TOP_POSTERS:premium:true",
+                topPosters
+            )
+        ).copy(preferredArtworkProviders = mapOf(ArtworkType.POSTER to topPosters))
+        repo.publishResolvedItems(testSession, listOf(existing))
+        val incoming = itemWithPoster(
+            posterSlot("https://image.tmdb.org/t/p/w500/lcp63INKEsVHUly9eayx7gEEOcG.jpg", topPosters)
+        ).copy(preferredArtworkProviders = mapOf(ArtworkType.POSTER to topPosters))
+
+        repo.publishResolvedItems(testSession, listOf(incoming))
+
+        val surface = repo.snapshotNow(profileId = 1).single()
+        val posterValue = (surface.slots?.poster?.value as? ArtworkDisplayRef.LegacyString)?.value
+        assertEquals(
+            "nexio-artwork://decision/artwork-decision:poster:canonical:tmdb:series-241609:provider:TOP_POSTERS:premium:true",
+            posterValue
+        )
     }
 
     @Test

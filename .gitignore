@@ -114,3 +114,23 @@ benchmarks/
 # --- live graph data (still ignored) ---
 graphify-out/
 .claude/settings.local.json
+
+# Local agent/editor artifacts
+.cursorrules
+.gemini/
+.github/code-review-graph.instruction.md
+.kiro/
+.opencode.json
+.qoder/
+.understand-anything/
+.vscode/
+.windsurfrules
+QODER.md
+
+# Local investigation outputs
+HEAPTRAIL_FEATURE_GUIDE.md
+MEDIUM_HEAPTRAIL_BLOG_DRAFT.md
+artifacts/
+graphs.md
+knowledge-graph.json
+vault/

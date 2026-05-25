@@ -66,4 +66,55 @@ class HomeCatalogRefreshNonDowngradeTest {
         assertNotNull(merged.artwork?.poster)
         assertEquals("rpdb", merged.posterProviderTag)
     }
+
+    @Test
+    fun `refresh does not let stale mislabeled premium url replace fresh premium decision poster`() {
+        val topPostersRef = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey(
+                "artwork-decision:poster:canonical:tmdb:series-128839:provider:TOP_POSTERS:premium:true"
+            ),
+            assetKey = null,
+            imageType = ArtworkType.POSTER,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty(),
+            displayHints = ArtworkDisplayHints()
+        )
+        val rawTopPostersItem = MetaPreview(
+            id = "tt11640018",
+            type = ContentType.SERIES,
+            name = "La Brea",
+            poster = "nexio-artwork://decision/artwork-decision:poster:canonical:tmdb:series-128839:provider:TOP_POSTERS:premium:true",
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            genres = emptyList(),
+            releaseInfo = null,
+            runtime = null,
+            imdbRating = null,
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintSourceProvider = null,
+            firstPaintStableIds = ProviderIds(imdb = "tt11640018", tmdb = "128839"),
+            firstPaintRailSource = null,
+            firstPaintSourceItemId = "tt11640018",
+            artwork = ArtworkBundle(poster = topPostersRef),
+            posterProviderTag = "top_posters"
+        )
+        val staleMislabeledFallback = rawTopPostersItem.copy(
+            poster = "https://image.tmdb.org/t/p/w500/wEo5pzSZ3MF4EzNvY2R1OZNX266.jpg",
+            artwork = null,
+            posterProviderTag = "top_posters"
+        )
+
+        val merged = HomeCatalogRefreshCoordinator.projectRailRowAgainstPersistedForTest(
+            rawRailItem = rawTopPostersItem,
+            persistedFallback = staleMislabeledFallback,
+            externalMeta = null
+        )
+
+        assertEquals(rawTopPostersItem.poster, merged.poster)
+        assertNotNull(merged.artwork?.poster)
+        assertEquals("top_posters", merged.posterProviderTag)
+    }
 }

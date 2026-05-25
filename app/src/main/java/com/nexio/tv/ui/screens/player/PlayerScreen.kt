@@ -140,8 +140,8 @@ internal fun applySubtitleStyle(
 
 internal fun PlayerView.ensureExternalSubtitleOverlay(): SubtitleView? {
     val overlayFrameLayout = overlayFrameLayout ?: return null
-    val existing = overlayFrameLayout.findViewWithTag<SubtitleView>(EXTERNAL_SUBTITLE_OVERLAY_TAG)
-    if (existing != null) {
+    val existing = overlayFrameLayout.findViewWithTag<View>(EXTERNAL_SUBTITLE_OVERLAY_TAG)
+    if (existing is SubtitleView) {
         return existing
     }
 

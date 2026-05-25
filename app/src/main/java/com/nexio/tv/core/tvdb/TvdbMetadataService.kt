@@ -625,9 +625,8 @@ class TvdbMetadataService @Inject constructor(
         return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
     }
 
-    private fun normalizeLanguage(language: String?): String {
-        return TvdbLanguageMapper.normalize(language).code
-    }
+    private fun normalizeLanguage(language: String?): String =
+        language?.trim()?.takeIf { it.isNotBlank() } ?: "en"
 
     private fun String?.trimmed(): String? = this?.trim()?.takeIf { it.isNotBlank() }
 

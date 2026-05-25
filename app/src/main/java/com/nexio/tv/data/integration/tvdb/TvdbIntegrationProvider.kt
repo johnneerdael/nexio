@@ -21,7 +21,6 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbReferenceKind
 import com.nexio.tv.core.tvdb.TvdbRemoteIdSource
 import com.nexio.tv.core.tvdb.TvdbSeriesIdentity

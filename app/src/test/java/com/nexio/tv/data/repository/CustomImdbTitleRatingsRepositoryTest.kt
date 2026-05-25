@@ -62,6 +62,28 @@ class CustomImdbTitleRatingsRepositoryTest {
     }
 
     @Test
+    fun `empty custom imdb bulk result is not cached as a long lived miss`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        coEvery { client.fetchTitleRatings(listOf("tt30459041")) } returnsMany listOf(
+            emptyMap(),
+            mapOf("tt30459041" to 8.4)
+        )
+
+        assertEquals(
+            emptyMap<String, Double>(),
+            repository.getTitleRatingsByImdbIds(listOf("tt30459041"), cacheOnly = false)
+        )
+        assertEquals(
+            mapOf("tt30459041" to 8.4),
+            repository.getTitleRatingsByImdbIds(listOf("tt30459041"), cacheOnly = false)
+        )
+        coVerify(exactly = 2) { client.fetchTitleRatings(listOf("tt30459041")) }
+    }
+
+    @Test
     fun `fetches configured imdb title rating by imdb id`() = runTest {
         val client = mockk<CustomImdbClient>()
         val tmdbService = mockk<TmdbService>(relaxed = true)

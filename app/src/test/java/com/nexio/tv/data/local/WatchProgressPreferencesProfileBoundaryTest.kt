@@ -99,6 +99,26 @@ class WatchProgressPreferencesProfileBoundaryTest {
         assertEquals("profile two episode", profileTwoEpisode?.name)
     }
 
+    @Test
+    fun `remove progress clears local slug aliases from resolved provider ids`() = runTest {
+        val preferences = WatchProgressPreferences(factory)
+        val localContentId = uniqueContentId("tekenfilms:bolt-2008")
+        val resolvedContentId = localContentId.replace("tekenfilms:", "tmdb:")
+
+        preferences.saveProgress(
+            1,
+            sampleProgress(
+                contentId = localContentId,
+                name = "Bolt"
+            )
+        )
+
+        preferences.removeProgress(1, resolvedContentId)
+
+        assertEquals(null, preferences.getProgress(1, localContentId).first())
+        assertEquals(emptyList<WatchProgress>(), preferences.observeProgress(1).first())
+    }
+
     private suspend fun <T> Flow<T>.awaitValue(predicate: (T) -> Boolean): T =
         withContext(Dispatchers.Default.limitedParallelism(1)) {
             withTimeout(5_000L) {
