@@ -20,6 +20,13 @@ class TekenfilmsHomePlaybackPolicyTest {
     }
 
     @Test
+    fun `matches current imdb catalog ids for exact tekenfilms row`() {
+        val row = tekenfilmsRow()
+
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(row, preview("tt0103639")))
+    }
+
+    @Test
     fun `normalizes manifest url and trailing slash`() {
         val row = tekenfilmsRow(
             addonBaseUrl = "https://tekenfilms.nexioapp.org/manifest.json/"
@@ -44,10 +51,10 @@ class TekenfilmsHomePlaybackPolicyTest {
     }
 
     @Test
-    fun `rejects wrong catalog type catalog id and item prefix`() {
+    fun `rejects wrong catalog type catalog id and unsupported item id`() {
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(catalogId = "other")))
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(rawType = "series")))
-        assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(tekenfilmsRow(), preview("tt123")))
+        assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(tekenfilmsRow(), preview("tmdb:123")))
     }
 
     private fun tekenfilmsRow(

@@ -10,6 +10,7 @@ object TekenfilmsHomePlaybackPolicy {
     const val CATALOG_ID: String = "tekenfilms_nl"
     const val TYPE: String = "movie"
     const val ITEM_ID_PREFIX: String = "tekenfilms:"
+    private val IMDB_ID_REGEX = Regex("""tt\d+""", RegexOption.IGNORE_CASE)
 
     fun isTekenfilmsRow(row: CatalogRow): Boolean {
         return normalizeBaseUrl(row.addonBaseUrl) == BASE_URL &&
@@ -21,7 +22,7 @@ object TekenfilmsHomePlaybackPolicy {
     fun isTekenfilmsItem(row: CatalogRow, item: MetaPreview): Boolean {
         return isTekenfilmsRow(row) &&
             item.apiType.equals(TYPE, ignoreCase = true) &&
-            item.id.startsWith(ITEM_ID_PREFIX)
+            isSupportedItemId(item.id)
     }
 
     fun isTekenfilmsItem(
@@ -35,7 +36,12 @@ object TekenfilmsHomePlaybackPolicy {
             addonId == ADDON_ID &&
             catalogId == CATALOG_ID &&
             itemType.equals(TYPE, ignoreCase = true) &&
-            itemId.startsWith(ITEM_ID_PREFIX)
+            isSupportedItemId(itemId)
+    }
+
+    fun isSupportedItemId(itemId: String): Boolean {
+        val normalized = itemId.trim()
+        return normalized.startsWith(ITEM_ID_PREFIX) || IMDB_ID_REGEX.matches(normalized)
     }
 
     fun normalizeBaseUrl(value: String): String {

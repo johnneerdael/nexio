@@ -6,6 +6,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.AioStrictFileParser
@@ -1245,6 +1247,21 @@ class StreamScreenViewModel @Inject constructor(
         isFinalPass: Boolean
     ): StreamPlaybackInfo? {
         if (organizedStreams.isEmpty()) return null
+        selectDutchTekenfilmsDeterministicAutoplayCandidate(
+            deterministicAutoplay = deterministicAutoplay,
+            dutchInterfaceLanguage = isDutchInterfaceLanguage(),
+            streams = organizedStreams
+        )?.let { tekenfilmsCandidate ->
+            Log.i(
+                TAG,
+                "DETERMINISTIC_TEKENFILMS_PREFERRED stream=" +
+                    (tekenfilmsCandidate.stream.wrappedOriginalStreamKey ?: tekenfilmsCandidate.parsed.exactDuplicateKey)
+            )
+            return buildStreamPlaybackInfo(
+                item = tekenfilmsCandidate,
+                fallbackCandidates = emptyList()
+            )
+        }
         val languageFiltered = applyDeterministicOriginalLanguageGuard(
             originalLanguage = originalLanguage,
             streams = organizedStreams
@@ -1343,6 +1360,11 @@ class StreamScreenViewModel @Inject constructor(
             item = selectedCandidate.selectedItem,
             fallbackCandidates = selectedCandidate.fallbackCandidateItems
         )
+    }
+
+    private fun isDutchInterfaceLanguage(): Boolean {
+        return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+            .startsWith("nl", ignoreCase = true)
     }
 
     private fun toAutoPlayAlternative(candidate: StreamCardModel): AutoPlayStreamAlternative {
@@ -2158,6 +2180,19 @@ internal fun applyDeterministicOriginalLanguageGuard(
             originalLanguage = originalLanguage,
             parsedLanguages = stream.parsed.languages
         )
+    }
+}
+
+internal fun selectDutchTekenfilmsDeterministicAutoplayCandidate(
+    deterministicAutoplay: Boolean,
+    dutchInterfaceLanguage: Boolean,
+    streams: List<StreamCardModel>
+): StreamCardModel? {
+    if (!deterministicAutoplay || !dutchInterfaceLanguage) return null
+    return streams.firstOrNull { item ->
+        val addonBaseUrl = item.stream.addonBaseUrl ?: return@firstOrNull false
+        TekenfilmsHomePlaybackPolicy.normalizeBaseUrl(addonBaseUrl) == TekenfilmsHomePlaybackPolicy.BASE_URL &&
+            !item.stream.getStreamUrl().isNullOrBlank()
     }
 }
 

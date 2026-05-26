@@ -55,7 +55,7 @@ class TekenfilmsDirectPlaybackViewModelTest {
         val streamRepository = mockk<StreamRepository>()
 
         val route = TekenfilmsDirectPlaybackViewModel(streamRepository).buildPlayerRoute(
-            item(id = "tt1234567")
+            item(id = "tmdb:1234567")
         )
 
         assertNull(route)
@@ -65,17 +65,21 @@ class TekenfilmsDirectPlaybackViewModelTest {
     }
 
     @Test
-    fun `buildPlayerRoute returns null when no stream url is available`() = runTest {
+    fun `buildPlayerRoute falls back to deterministic stream route when no stream url is available`() = runTest {
         val streamRepository = mockk<StreamRepository>()
         coEvery {
             streamRepository.getStreamsFromAddon(any(), any(), any())
         } returns NetworkResult.Success(listOf(stream(url = null)))
 
         val route = TekenfilmsDirectPlaybackViewModel(streamRepository).buildPlayerRoute(
-            item(id = "tekenfilms:movie-1")
+            item(id = "tt0103639")
         )
 
-        assertNull(route)
+        assertNotNull(route)
+        assertTrue(route!!, route.startsWith("stream/"))
+        assertTrue(route, route.contains("deterministicAutoplay=true"))
+        assertTrue(route, route.contains("addonBaseUrl=https%3A%2F%2Ftekenfilms.nexioapp.org"))
+        assertTrue(route, route.contains("streamVideoId=tt0103639"))
     }
 
     private fun item(id: String): MetaPreview {

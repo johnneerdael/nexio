@@ -60,6 +60,36 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolveModernCatalogClickAction uses direct playback for current imdb tekenfilms item`() {
+        val row = HeroCarouselRow(
+            key = "tekenfilms",
+            title = "Tekenfilms",
+            globalRowIndex = 0,
+            items = emptyList(),
+            catalogId = "tekenfilms_nl",
+            addonId = "org.nexio.tekenfilms",
+            apiType = "movie"
+        )
+        val payload = ModernPayload.Catalog(
+            focusKey = "tt0103639",
+            itemId = "tt0103639",
+            itemType = "movie",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            trailerTitle = "Aladdin",
+            trailerReleaseInfo = null,
+            trailerApiType = "movie"
+        )
+
+        val action = resolveModernCatalogClickAction(
+            row = row,
+            payload = payload,
+            item = metaPreview(id = "tt0103639")
+        )
+
+        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+    }
+
+    @Test
     fun `resolveModernCatalogClickAction keeps detail navigation for other addons`() {
         val row = HeroCarouselRow(
             key = "other",
