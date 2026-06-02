@@ -1106,6 +1106,66 @@ class StreamPresentationEngineTest {
         assertEquals(listOf(Int.MAX_VALUE, Int.MAX_VALUE), result.items.map { it.addonPriorityRank })
     }
 
+    @Test
+    fun `grouped sorting pins local cartoon addon streams above other links`() {
+        val generic = stream(
+            filename = "Aladdin.1992.2160p.WEB-DL.Generic.mkv",
+            addonName = "Generic Addon",
+            name = "Generic",
+            videoSizeBytes = 30L * 1024L * 1024L * 1024L
+        )
+        val local = stream(
+            filename = "Aladdin.1992.1080p.WEB-DL.Local.mkv",
+            addonName = "Tekenfilms",
+            name = "NL Gesproken",
+            videoSizeBytes = 8L * 1024L * 1024L * 1024L,
+            addonBaseUrl = "https://cartoons.nexioapp.org/manifest.json"
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(generic, local),
+            availableAddons = listOf("Generic Addon", "Tekenfilms"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(
+            listOf("Tekenfilms", "Generic Addon"),
+            result.items.map { it.stream.addonName }
+        )
+    }
+
+    @Test
+    fun `manual sorting pins local cartoon addon streams above other links`() {
+        val generic = stream(
+            filename = "Aladdin.1992.2160p.WEB-DL.Generic.mkv",
+            addonName = "Generic Addon",
+            name = "Generic",
+            videoSizeBytes = 30L * 1024L * 1024L * 1024L
+        )
+        val local = stream(
+            filename = "Aladdin.1992.1080p.WEB-DL.Local.mkv",
+            addonName = "Tekenfilms",
+            name = "NL Gesproken",
+            videoSizeBytes = 8L * 1024L * 1024L * 1024L,
+            addonBaseUrl = "https://tekenfilms.nexioapp.org/manifest.json"
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(generic, local),
+            availableAddons = listOf("Generic Addon", "Tekenfilms"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = false),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(
+            listOf("Tekenfilms", "Generic Addon"),
+            result.items.map { it.stream.addonName }
+        )
+    }
+
     private fun organize(stream: Stream) = StreamPresentationEngine.organize(
         streams = listOf(stream),
         availableAddons = listOf(stream.addonName),
@@ -1127,7 +1187,8 @@ class StreamPresentationEngineTest {
         wrappedProviderId: String? = null,
         videoSizeBytes: Long? = null,
         url: String = "https://example.com/video.mkv",
-        notWebReady: Boolean? = null
+        notWebReady: Boolean? = null,
+        addonBaseUrl: String? = null
     ): Stream {
         return Stream(
             name = name,
@@ -1150,6 +1211,7 @@ class StreamPresentationEngineTest {
             ),
             addonName = addonName,
             addonLogo = null,
+            addonBaseUrl = addonBaseUrl,
             addonParserPreset = parserPreset,
             wrappedProviderId = wrappedProviderId
         )

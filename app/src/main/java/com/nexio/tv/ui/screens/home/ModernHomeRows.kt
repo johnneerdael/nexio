@@ -392,7 +392,7 @@ internal fun ModernRowSection(
     onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
-    onPlayTekenfilmsDirect: (MetaPreview) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean,
     fullscreenTrailerActive: Boolean,
@@ -744,7 +744,7 @@ internal fun ModernRowSection(
 
                                         ModernCatalogClickAction.TekenfilmsDirectPlayback -> {
                                             if (metaPreview != null) {
-                                                onPlayTekenfilmsDirect(metaPreview)
+                                                onPlayTekenfilmsDirect(metaPreview, payload.addonBaseUrl)
                                             }
                                         }
                                     }

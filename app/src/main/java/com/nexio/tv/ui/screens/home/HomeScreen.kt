@@ -143,7 +143,7 @@ fun HomeScreen(
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
-    onPlayTekenfilmsDirect: (MetaPreview) -> Unit = {},
+    onPlayTekenfilmsDirect: (MetaPreview, String) -> Unit = { _, _ -> },
     onPlayWithManualStreamSelection: (MetaPreview) -> Unit = {},
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
@@ -826,7 +826,7 @@ private fun ModernHomeRoute(
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
-    onPlayTekenfilmsDirect: (MetaPreview) -> Unit,
+    onPlayTekenfilmsDirect: (MetaPreview, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,

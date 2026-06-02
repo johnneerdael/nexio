@@ -72,45 +72,9 @@ class DeterministicAutoplayOriginalLanguageGuardTest {
         assertEquals(listOf("multi", "english"), guarded.map { it.stream.wrappedOriginalStreamKey })
     }
 
-    @Test
-    fun `dutch deterministic autoplay prefers tekenfilms stream when available`() {
-        val candidate = selectDutchTekenfilmsDeterministicAutoplayCandidate(
-            deterministicAutoplay = true,
-            dutchInterfaceLanguage = true,
-            streams = listOf(
-                streamCard("ordinary", listOf("English")),
-                streamCard(
-                    key = "tekenfilms",
-                    languages = listOf("Dutch"),
-                    addonBaseUrl = "https://tekenfilms.nexioapp.org/manifest.json"
-                )
-            )
-        )
-
-        assertEquals("tekenfilms", candidate?.stream?.wrappedOriginalStreamKey)
-    }
-
-    @Test
-    fun `tekenfilms deterministic preference is gated to dutch interface language`() {
-        val candidate = selectDutchTekenfilmsDeterministicAutoplayCandidate(
-            deterministicAutoplay = true,
-            dutchInterfaceLanguage = false,
-            streams = listOf(
-                streamCard(
-                    key = "tekenfilms",
-                    languages = listOf("Dutch"),
-                    addonBaseUrl = "https://tekenfilms.nexioapp.org"
-                )
-            )
-        )
-
-        assertEquals(null, candidate)
-    }
-
     private fun streamCard(
         key: String,
-        languages: List<String>,
-        addonBaseUrl: String? = "https://example.com"
+        languages: List<String>
     ): StreamCardModel {
         val stream = Stream(
             name = key,
@@ -130,7 +94,6 @@ class DeterministicAutoplayOriginalLanguageGuardTest {
             ),
             addonName = "Example Addon",
             addonLogo = null,
-            addonBaseUrl = addonBaseUrl,
             wrappedProviderId = "RD",
             wrappedOriginalStreamKey = key
         )

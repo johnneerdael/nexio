@@ -27,6 +27,24 @@ class TekenfilmsHomePlaybackPolicyTest {
     }
 
     @Test
+    fun `matches exact cartoons row and imdb item`() {
+        val row = tekenfilmsRow(
+            addonBaseUrl = "https://cartoons.nexioapp.org/manifest.json/"
+        )
+
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(row, preview("tt0103639")))
+    }
+
+    @Test
+    fun `matches series rows and episode stream ids`() {
+        val row = tekenfilmsRow(rawType = "series")
+
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(row))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(row, preview("tt1234567:1:2", rawType = "series")))
+    }
+
+    @Test
     fun `normalizes manifest url and trailing slash`() {
         val row = tekenfilmsRow(
             addonBaseUrl = "https://tekenfilms.nexioapp.org/manifest.json/"
@@ -53,7 +71,7 @@ class TekenfilmsHomePlaybackPolicyTest {
     @Test
     fun `rejects wrong catalog type catalog id and unsupported item id`() {
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(catalogId = "other")))
-        assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(rawType = "series")))
+        assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(rawType = "other")))
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(tekenfilmsRow(), preview("tmdb:123")))
     }
 
@@ -75,10 +93,13 @@ class TekenfilmsHomePlaybackPolicyTest {
         hasMore = false
     )
 
-    private fun preview(id: String) = MetaPreview(
+    private fun preview(
+        id: String,
+        rawType: String = "movie"
+    ) = MetaPreview(
         id = id,
-        type = ContentType.MOVIE,
-        rawType = "movie",
+        type = ContentType.fromString(rawType),
+        rawType = rawType,
         name = "Title",
         poster = null,
         posterShape = PosterShape.POSTER,

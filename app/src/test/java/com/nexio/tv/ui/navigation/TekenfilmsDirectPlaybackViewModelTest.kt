@@ -51,6 +51,75 @@ class TekenfilmsDirectPlaybackViewModelTest {
     }
 
     @Test
+    fun `buildPlayerRoute fetches streams from cartoons addon and creates player route`() = runTest {
+        val streamRepository = mockk<StreamRepository>()
+        coEvery {
+            streamRepository.getStreamsFromAddon(
+                baseUrl = "https://cartoons.nexioapp.org",
+                type = "movie",
+                videoId = "tt0103639"
+            )
+        } returns NetworkResult.Success(
+            listOf(
+                stream(
+                    url = "https://cartoons.nexioapp.org/nl-gesproken/aladdin.mkv",
+                    addonBaseUrl = "https://cartoons.nexioapp.org"
+                )
+            )
+        )
+
+        val route = TekenfilmsDirectPlaybackViewModel(streamRepository).buildPlayerRoute(
+            item = item(id = "tt0103639"),
+            addonBaseUrl = "https://cartoons.nexioapp.org/manifest.json"
+        )
+
+        assertNotNull(route)
+        assertTrue(route!!.startsWith("player/"))
+        assertTrue(route.contains("contentId=tt0103639"))
+        assertTrue(route.contains("addonBaseUrl=https%3A%2F%2Fcartoons.nexioapp.org"))
+        coVerify(exactly = 1) {
+            streamRepository.getStreamsFromAddon(
+                baseUrl = "https://cartoons.nexioapp.org",
+                type = "movie",
+                videoId = "tt0103639"
+            )
+        }
+    }
+
+    @Test
+    fun `buildPlayerRoute fetches series episode streams without all addon fanout`() = runTest {
+        val streamRepository = mockk<StreamRepository>()
+        coEvery {
+            streamRepository.getStreamsFromAddon(
+                baseUrl = "https://tekenfilms.nexioapp.org",
+                type = "series",
+                videoId = "tt1234567:1:2"
+            )
+        } returns NetworkResult.Success(
+            listOf(stream(url = "https://tekenfilms.nexioapp.org/series/show-s01e02.mkv"))
+        )
+
+        val route = TekenfilmsDirectPlaybackViewModel(streamRepository).buildPlayerRoute(
+            item(id = "tt1234567:1:2", rawType = "series")
+        )
+
+        assertNotNull(route)
+        assertTrue(route!!.startsWith("player/"))
+        assertTrue(route.contains("contentType=series"))
+        assertTrue(route.contains("videoId=tt1234567%3A1%3A2"))
+        coVerify(exactly = 1) {
+            streamRepository.getStreamsFromAddon(
+                baseUrl = "https://tekenfilms.nexioapp.org",
+                type = "series",
+                videoId = "tt1234567:1:2"
+            )
+        }
+        coVerify(exactly = 0) {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun `buildPlayerRoute returns null without fetching for non tekenfilms item`() = runTest {
         val streamRepository = mockk<StreamRepository>()
 
@@ -65,7 +134,7 @@ class TekenfilmsDirectPlaybackViewModelTest {
     }
 
     @Test
-    fun `buildPlayerRoute falls back to deterministic stream route when no stream url is available`() = runTest {
+    fun `buildPlayerRoute returns null without all addon fallback when no stream url is available`() = runTest {
         val streamRepository = mockk<StreamRepository>()
         coEvery {
             streamRepository.getStreamsFromAddon(any(), any(), any())
@@ -75,18 +144,20 @@ class TekenfilmsDirectPlaybackViewModelTest {
             item(id = "tt0103639")
         )
 
-        assertNotNull(route)
-        assertTrue(route!!, route.startsWith("stream/"))
-        assertTrue(route, route.contains("deterministicAutoplay=true"))
-        assertTrue(route, route.contains("addonBaseUrl=https%3A%2F%2Ftekenfilms.nexioapp.org"))
-        assertTrue(route, route.contains("streamVideoId=tt0103639"))
+        assertNull(route)
+        coVerify(exactly = 0) {
+            streamRepository.getStreamsFromAllAddons(any(), any(), any(), any(), any(), any(), any())
+        }
     }
 
-    private fun item(id: String): MetaPreview {
+    private fun item(
+        id: String,
+        rawType: String = "movie"
+    ): MetaPreview {
         return MetaPreview(
             id = id,
-            type = ContentType.MOVIE,
-            rawType = "movie",
+            type = ContentType.fromString(rawType),
+            rawType = rawType,
             name = "Tekenfilm",
             poster = "https://tekenfilms.nexioapp.org/poster.jpg",
             posterShape = PosterShape.POSTER,
@@ -100,7 +171,10 @@ class TekenfilmsDirectPlaybackViewModelTest {
         )
     }
 
-    private fun stream(url: String?): Stream {
+    private fun stream(
+        url: String?,
+        addonBaseUrl: String? = "https://tekenfilms.nexioapp.org"
+    ): Stream {
         return Stream(
             name = "Dutch",
             title = null,
@@ -113,7 +187,7 @@ class TekenfilmsDirectPlaybackViewModelTest {
             behaviorHints = null,
             addonName = "Tekenfilms",
             addonLogo = null,
-            addonBaseUrl = "https://tekenfilms.nexioapp.org"
+            addonBaseUrl = addonBaseUrl
         )
     }
 }

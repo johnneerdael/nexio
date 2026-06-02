@@ -361,7 +361,7 @@ internal fun ModernHomeContent(
     focusState: HomeScreenFocusState,
     enrichingItemIdState: State<String?>,
     onNavigateToDetail: (String, String, String) -> Unit,
-    onPlayTekenfilmsDirect: (MetaPreview) -> Unit = {},
+    onPlayTekenfilmsDirect: (MetaPreview, String) -> Unit = { _, _ -> },
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit = {},

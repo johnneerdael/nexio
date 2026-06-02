@@ -176,9 +176,9 @@ fun NexioNavHost(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
-                onPlayTekenfilmsDirect = { item ->
+                onPlayTekenfilmsDirect = { item, addonBaseUrl ->
                     homeScope.launch {
-                        val route = tekenfilmsDirectPlaybackViewModel.buildPlayerRoute(item)
+                        val route = tekenfilmsDirectPlaybackViewModel.buildPlayerRoute(item, addonBaseUrl)
                         if (route != null) {
                             navController.navigate(route)
                         }

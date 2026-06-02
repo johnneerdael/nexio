@@ -1,6 +1,7 @@
 package com.nexio.tv.core.stream
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import java.util.LinkedHashMap
@@ -393,11 +394,14 @@ object StreamPresentationEngine {
             val effectiveFilter = selectedAddonFilter?.takeIf { addon ->
                 availableAddons.contains(addon)
             }
-            val visibleItems = if (effectiveFilter == null) {
+            val visibleItemsPreSort = if (effectiveFilter == null) {
                 filteredByDv
             } else {
                 filteredByDv.filter { it.stream.addonName == effectiveFilter }
             }
+            val visibleItems = visibleItemsPreSort.sortedWith(
+                compareBy<StreamCardModel> { localCartoonAddonRank(it) }
+            )
             val droppedAddonFilterCount = if (effectiveFilter == null) 0 else (filteredByDv.size - visibleItems.size)
             val diagnostics = StreamFilteringDiagnostics(
                 inputCount = parsed.size,
@@ -433,7 +437,8 @@ object StreamPresentationEngine {
             0
         }
         val sizeSortedGroupedItems = groupedPreSortItems.sortedWith(
-            compareBy<StreamCardModel> { it.addonPriorityRank }
+            compareBy<StreamCardModel> { localCartoonAddonRank(it) }
+                .thenBy { it.addonPriorityRank }
                 .thenBy { cacheStateRank(it.parsed.isCached) }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
@@ -676,7 +681,8 @@ object StreamPresentationEngine {
         if (items.size == 1) return items.first()
         val clusterId = dedupeKeys(items.first()).sorted().joinToString("|")
         return items.minWithOrNull(
-            compareBy<StreamCardModel> { dedupePriority(it) }
+            compareBy<StreamCardModel> { localCartoonAddonRank(it) }
+                .thenBy { dedupePriority(it) }
                 .thenByDescending { it.parsed.hasUsablePlaybackTarget }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
@@ -688,6 +694,11 @@ object StreamPresentationEngine {
 
     private fun addonPriority(item: StreamCardModel): String {
         return item.stream.addonName.lowercase(Locale.US)
+    }
+
+    private fun localCartoonAddonRank(item: StreamCardModel): Int {
+        val addonBaseUrl = item.stream.addonBaseUrl ?: return 1
+        return if (TekenfilmsHomePlaybackPolicy.isSupportedBaseUrl(addonBaseUrl)) 0 else 1
     }
 
     private fun sessionTiebreakHash(item: StreamCardModel, clusterId: String): Int {

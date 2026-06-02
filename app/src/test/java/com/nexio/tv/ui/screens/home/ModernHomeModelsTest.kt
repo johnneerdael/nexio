@@ -90,6 +90,66 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `resolveModernCatalogClickAction uses direct playback for cartoons item`() {
+        val row = HeroCarouselRow(
+            key = "cartoons",
+            title = "Cartoons",
+            globalRowIndex = 0,
+            items = emptyList(),
+            catalogId = "tekenfilms_nl",
+            addonId = "org.nexio.tekenfilms",
+            apiType = "movie"
+        )
+        val payload = ModernPayload.Catalog(
+            focusKey = "tt0103639",
+            itemId = "tt0103639",
+            itemType = "movie",
+            addonBaseUrl = "https://cartoons.nexioapp.org",
+            trailerTitle = "Aladdin",
+            trailerReleaseInfo = null,
+            trailerApiType = "movie"
+        )
+
+        val action = resolveModernCatalogClickAction(
+            row = row,
+            payload = payload,
+            item = metaPreview(id = "tt0103639")
+        )
+
+        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+    }
+
+    @Test
+    fun `resolveModernCatalogClickAction uses direct playback for tekenfilms series item`() {
+        val row = HeroCarouselRow(
+            key = "tekenfilms-series",
+            title = "Tekenfilms Series",
+            globalRowIndex = 0,
+            items = emptyList(),
+            catalogId = "tekenfilms_nl",
+            addonId = "org.nexio.tekenfilms",
+            apiType = "series"
+        )
+        val payload = ModernPayload.Catalog(
+            focusKey = "tt1234567:1:2",
+            itemId = "tt1234567:1:2",
+            itemType = "series",
+            addonBaseUrl = "https://tekenfilms.nexioapp.org",
+            trailerTitle = "Episode",
+            trailerReleaseInfo = null,
+            trailerApiType = "series"
+        )
+
+        val action = resolveModernCatalogClickAction(
+            row = row,
+            payload = payload,
+            item = metaPreview(id = "tt1234567:1:2", rawType = "series")
+        )
+
+        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+    }
+
+    @Test
     fun `resolveModernCatalogClickAction keeps detail navigation for other addons`() {
         val row = HeroCarouselRow(
             key = "other",
@@ -937,11 +997,14 @@ class ModernHomeModelsTest {
         assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Right))
     }
 
-    private fun metaPreview(id: String): MetaPreview {
+    private fun metaPreview(
+        id: String,
+        rawType: String = "movie"
+    ): MetaPreview {
         return MetaPreview(
             id = id,
-            type = ContentType.MOVIE,
-            rawType = "movie",
+            type = ContentType.fromString(rawType),
+            rawType = rawType,
             name = "Movie",
             poster = null,
             posterShape = PosterShape.POSTER,
