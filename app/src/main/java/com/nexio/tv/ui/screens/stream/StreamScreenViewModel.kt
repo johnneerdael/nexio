@@ -492,6 +492,11 @@ class StreamScreenViewModel @Inject constructor(
                         val manualBitrateCapMbps = playerSettings.manualBitrateLimitMbps
                         val autoPlayPlaybackInfo = if (autoPlayHandledForSession) {
                             null
+                        } else if (localCartoonAutoplayBaseUrl != null) {
+                            buildLocalCartoonAutoPlayPlaybackInfo(
+                                organizedStreams = organizedStreams.items,
+                                rawStreams = allStreams
+                            )
                         } else {
                             buildDeterministicAutoPlayPlaybackInfo(
                                 request = buildShadowRequestContext(requestId),
@@ -1346,6 +1351,74 @@ class StreamScreenViewModel @Inject constructor(
                 CometProxyUrlResolver.prewarm(it, candidate.headers, candidateAddonHost)
             }
         }
+    }
+
+    private suspend fun buildLocalCartoonAutoPlayPlaybackInfo(
+        organizedStreams: List<StreamCardModel>,
+        rawStreams: List<Stream>
+    ): StreamPlaybackInfo? {
+        val candidates = if (organizedStreams.isNotEmpty()) {
+            organizedStreams
+        } else {
+            buildRawLocalCartoonAutoPlayCards(rawStreams)
+        }
+        if (candidates.isEmpty()) return null
+        val eligibleStreams = ArrayList<StreamCardModel>(candidates.size)
+        for (i in candidates.indices) {
+            val item = candidates[i]
+            if (!item.hasBlockedDeterministicAutoplayFilename() && !item.stream.getStreamUrl().isNullOrBlank()) {
+                eligibleStreams += item
+            }
+        }
+        if (eligibleStreams.isEmpty()) return null
+
+        val resolveReady = resolveReadyPredicateWithDeadline(
+            deadlineEpochMs = System.currentTimeMillis() + AUTOPLAY_RESOLVE_BUDGET_MS
+        )
+        for (i in eligibleStreams.indices) {
+            val item = eligibleStreams[i]
+            val url = item.stream.getStreamUrl() ?: continue
+            val playable = playbackPreflightIntegrationProvider.isPlayable(url)
+            if (!playable) {
+                Log.i(
+                    TAG,
+                    "LOCAL_CARTOON_AUTOPLAY_PREFLIGHT_REJECTED " +
+                        "stream=${item.stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey}"
+                )
+                continue
+            }
+            val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(item.stream.addonBaseUrl)
+            if (CometProxyUrlResolver.isCometProxy(url, addonHost) && !resolveReady(item)) {
+                continue
+            }
+            return buildStreamPlaybackInfo(
+                item = item,
+                fallbackCandidates = eligibleStreams
+            )
+        }
+
+        return null
+    }
+
+    private fun buildRawLocalCartoonAutoPlayCards(
+        rawStreams: List<Stream>
+    ): List<StreamCardModel> {
+        if (rawStreams.isEmpty()) return emptyList()
+        val cards = ArrayList<StreamCardModel>(rawStreams.size)
+        for (i in rawStreams.indices) {
+            val stream = rawStreams[i]
+            if (stream.getStreamUrl().isNullOrBlank()) continue
+            val parsed = streamParserCache.parse(stream)
+            cards += StreamCardModel(
+                stream = stream,
+                parsed = parsed,
+                title = stream.getDisplayName(),
+                subtitle = stream.getDisplayDescription(),
+                detailLines = emptyList(),
+                addonPriorityRank = 0
+            )
+        }
+        return cards
     }
 
     private suspend fun buildDeterministicAutoPlayPlaybackInfo(

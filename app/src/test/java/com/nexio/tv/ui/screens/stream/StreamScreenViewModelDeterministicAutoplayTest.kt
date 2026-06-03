@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.stream
 import android.util.Log
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.local.CachedStreamLink
@@ -146,6 +147,104 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             assertEquals(null, noWinnerState.autoPlayPlaybackInfo)
         } finally {
             clearViewModel(noWinnerViewModel)
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `local cartoon deterministic autoplay selects direct addon stream without all addon lookup`() = runTest(dispatcher) {
+        val streamRepository = mockk<StreamRepository>()
+        val directStream = stream(
+            name = "Assepoester.1950.1080p.NL.mkv",
+            wrappedProviderId = null,
+            addonBaseUrl = TekenfilmsHomePlaybackPolicy.BASE_URL
+        )
+        val viewModel = buildViewModel(
+            streamFlow = flowOf(NetworkResult.Success(emptyList())),
+            streamRepository = streamRepository,
+            addonBaseUrl = TekenfilmsHomePlaybackPolicy.BASE_URL,
+            singleAddonStreams = NetworkResult.Success(listOf(directStream))
+        )
+
+        try {
+            advanceUntilIdle()
+            coVerify(timeout = 1_000L, exactly = 1) {
+                streamRepository.getStreamsFromAddon(
+                    baseUrl = TekenfilmsHomePlaybackPolicy.BASE_URL,
+                    type = "movie",
+                    videoId = "tt0167261"
+                )
+            }
+            advanceUntilIdle()
+
+            val state = awaitAutoplayResolution(viewModel)
+            assertNotNull("state=$state", state.autoPlayPlaybackInfo)
+            assertEquals(directStream.url, state.autoPlayPlaybackInfo?.url)
+            assertEquals(TekenfilmsHomePlaybackPolicy.BASE_URL, state.autoPlayPlaybackInfo?.addonBaseUrl)
+            assertEquals(null, state.deterministicAutoplayFailureMessage)
+            verify(exactly = 0) {
+                streamRepository.getStreamsFromAllAddons(
+                    type = any(),
+                    videoId = any(),
+                    season = any(),
+                    episode = any(),
+                    installedAddons = any(),
+                    requestOrigin = any(),
+                    requestId = any()
+                )
+            }
+        } finally {
+            clearViewModel(viewModel)
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `local cartoon series deterministic autoplay selects direct addon stream without all addon lookup`() = runTest(dispatcher) {
+        val streamRepository = mockk<StreamRepository>()
+        val directStream = stream(
+            name = "Aflevering.1.NL.1080p.mp4",
+            wrappedProviderId = null,
+            addonBaseUrl = TekenfilmsHomePlaybackPolicy.CARTOONS_BASE_URL
+        )
+        val viewModel = buildViewModel(
+            streamFlow = flowOf(NetworkResult.Success(emptyList())),
+            streamRepository = streamRepository,
+            addonBaseUrl = TekenfilmsHomePlaybackPolicy.CARTOONS_BASE_URL,
+            contentTypeValue = "series",
+            videoIdValue = "tt1234567:1:1",
+            singleAddonStreams = NetworkResult.Success(listOf(directStream))
+        )
+
+        try {
+            advanceUntilIdle()
+            coVerify(timeout = 1_000L, exactly = 1) {
+                streamRepository.getStreamsFromAddon(
+                    baseUrl = TekenfilmsHomePlaybackPolicy.CARTOONS_BASE_URL,
+                    type = "series",
+                    videoId = "tt1234567:1:1"
+                )
+            }
+            advanceUntilIdle()
+
+            val state = awaitAutoplayResolution(viewModel)
+            assertNotNull("state=$state", state.autoPlayPlaybackInfo)
+            assertEquals(directStream.url, state.autoPlayPlaybackInfo?.url)
+            assertEquals(TekenfilmsHomePlaybackPolicy.CARTOONS_BASE_URL, state.autoPlayPlaybackInfo?.addonBaseUrl)
+            assertEquals(null, state.deterministicAutoplayFailureMessage)
+            verify(exactly = 0) {
+                streamRepository.getStreamsFromAllAddons(
+                    type = any(),
+                    videoId = any(),
+                    season = any(),
+                    episode = any(),
+                    installedAddons = any(),
+                    requestOrigin = any(),
+                    requestId = any()
+                )
+            }
+        } finally {
+            clearViewModel(viewModel)
             advanceUntilIdle()
         }
     }
@@ -885,16 +984,20 @@ class StreamScreenViewModelDeterministicAutoplayTest {
 
     private fun buildViewModel(
         streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>,
+        streamRepository: StreamRepository = mockk(),
         cachedLink: CachedStreamLink? = null,
         shadowLogger: ShadowAutoPlayDecisionLogger = mockk(relaxed = true),
         playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider = mockk(),
         playerSettings: PlayerSettings = PlayerSettings(
             playerPreference = PlayerPreference.INTERNAL,
             streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
-        )
+        ),
+        addonBaseUrl: String? = null,
+        contentTypeValue: String = "movie",
+        videoIdValue: String = "tt0167261",
+        singleAddonStreams: NetworkResult<List<Stream>> = NetworkResult.Success(emptyList())
     ): StreamScreenViewModel {
         val context = mockk<Context>(relaxed = true)
-        val streamRepository = mockk<StreamRepository>()
         val addonRepository = mockk<AddonRepository>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
@@ -927,7 +1030,28 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                 requestId = any()
             )
         } returns streamFlow
+        coEvery {
+            streamRepository.getStreamsFromAddon(
+                baseUrl = any(),
+                type = any(),
+                videoId = any()
+            )
+        } returns singleAddonStreams
         every { streamRepository.cancelActiveStreamRequests(any()) } just runs
+
+        val state = mutableMapOf<String, Any?>(
+            "videoId" to videoIdValue,
+            "contentType" to contentTypeValue,
+            "title" to "The Lord of the Rings: The Two Towers",
+            "contentId" to videoIdValue.substringBefore(":"),
+            "runtime" to "179",
+            "genres" to "Adventure",
+            "year" to "2002",
+            "deterministicAutoplay" to "true"
+        )
+        if (addonBaseUrl != null) {
+            state["addonBaseUrl"] = addonBaseUrl
+        }
 
         return StreamScreenViewModel(
             context = context,
@@ -942,19 +1066,24 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             shadowAutoPlayDecisionLogger = shadowLogger,
             shadowAutoplayCollectionUploader = shadowCollectionUploader,
             playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
-            savedStateHandle = SavedStateHandle(
-                mapOf(
-                    "videoId" to "tt0167261",
-                    "contentType" to "movie",
-                    "title" to "The Lord of the Rings: The Two Towers",
-                    "contentId" to "tt0167261",
-                    "runtime" to "179",
-                    "genres" to "Adventure",
-                    "year" to "2002",
-                    "deterministicAutoplay" to "true"
-                )
-            )
+            savedStateHandle = SavedStateHandle(state)
         )
+    }
+
+    private fun awaitAutoplayResolution(
+        viewModel: StreamScreenViewModel
+    ): StreamScreenUiState {
+        var state = viewModel.uiState.value
+        val deadlineMs = System.currentTimeMillis() + 1_000L
+        while (state.autoPlayPlaybackInfo == null &&
+            state.deterministicAutoplayFailureMessage == null &&
+            System.currentTimeMillis() < deadlineMs
+        ) {
+            Thread.sleep(20L)
+            dispatcher.scheduler.advanceUntilIdle()
+            state = viewModel.uiState.value
+        }
+        return state
     }
 
 
@@ -982,7 +1111,8 @@ class StreamScreenViewModelDeterministicAutoplayTest {
 
     private fun stream(
         name: String,
-        wrappedProviderId: String?
+        wrappedProviderId: String?,
+        addonBaseUrl: String? = null
     ): Stream {
         return Stream(
             name = name,
@@ -1004,6 +1134,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             ),
             addonName = "Example Addon",
             addonLogo = null,
+            addonBaseUrl = addonBaseUrl,
             wrappedProviderId = wrappedProviderId,
             wrappedOriginalStreamKey = name
         )
