@@ -45,6 +45,20 @@ class TekenfilmsHomePlaybackPolicyTest {
     }
 
     @Test
+    fun `matches any catalog id from exact tekenfilms origins`() {
+        val movieRow = tekenfilmsRow(catalogId = "tekenfilms_feature_films_nl")
+        val seriesRow = tekenfilmsRow(catalogId = "tekenfilms_series_nl", rawType = "series")
+        val futureRow = tekenfilmsRow(catalogId = "anything_the_addon_adds_later")
+
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(movieRow))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(movieRow, preview("tt0103639")))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(seriesRow))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(seriesRow, preview("tt1234567:1:2", rawType = "series")))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(futureRow))
+        assertTrue(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(futureRow, preview("tekenfilms:future-rail-item")))
+    }
+
+    @Test
     fun `normalizes manifest url and trailing slash`() {
         val row = tekenfilmsRow(
             addonBaseUrl = "https://tekenfilms.nexioapp.org/manifest.json/"
@@ -69,8 +83,7 @@ class TekenfilmsHomePlaybackPolicyTest {
     }
 
     @Test
-    fun `rejects wrong catalog type catalog id and unsupported item id`() {
-        assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(catalogId = "other")))
+    fun `rejects unsupported type and unsupported item id`() {
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(tekenfilmsRow(rawType = "other")))
         assertFalse(TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(tekenfilmsRow(), preview("tmdb:123")))
     }

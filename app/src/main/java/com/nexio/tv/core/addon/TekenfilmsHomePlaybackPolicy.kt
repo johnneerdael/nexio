@@ -17,7 +17,6 @@ object TekenfilmsHomePlaybackPolicy {
     fun isTekenfilmsRow(row: CatalogRow): Boolean {
         return isSupportedBaseUrl(row.addonBaseUrl) &&
             row.addonId == ADDON_ID &&
-            row.catalogId == CATALOG_ID &&
             isSupportedType(row.apiType)
     }
 
@@ -36,7 +35,6 @@ object TekenfilmsHomePlaybackPolicy {
     ): Boolean {
         return isSupportedBaseUrl(addonBaseUrl) &&
             addonId == ADDON_ID &&
-            catalogId == CATALOG_ID &&
             isSupportedType(itemType) &&
             isSupportedItemId(itemId)
     }
