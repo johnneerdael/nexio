@@ -30,7 +30,7 @@ import org.junit.Test
 
 class ModernHomeModelsTest {
     @Test
-    fun `resolveModernCatalogClickAction uses direct playback for exact tekenfilms item`() {
+    fun `resolveModernCatalogClickAction keeps detail navigation for exact tekenfilms item`() {
         val row = HeroCarouselRow(
             key = "tekenfilms",
             title = "Tekenfilms",
@@ -56,11 +56,11 @@ class ModernHomeModelsTest {
             item = metaPreview(id = "tekenfilms:movie-1")
         )
 
-        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+        assertEquals(ModernCatalogClickAction.Detail, action)
     }
 
     @Test
-    fun `resolveModernCatalogClickAction uses direct playback for current imdb tekenfilms item`() {
+    fun `resolveModernCatalogClickAction keeps detail navigation for current imdb tekenfilms item`() {
         val row = HeroCarouselRow(
             key = "tekenfilms",
             title = "Tekenfilms",
@@ -86,11 +86,11 @@ class ModernHomeModelsTest {
             item = metaPreview(id = "tt0103639")
         )
 
-        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+        assertEquals(ModernCatalogClickAction.Detail, action)
     }
 
     @Test
-    fun `resolveModernCatalogClickAction uses direct playback for cartoons item`() {
+    fun `resolveModernCatalogClickAction keeps detail navigation for cartoons item`() {
         val row = HeroCarouselRow(
             key = "cartoons",
             title = "Cartoons",
@@ -116,11 +116,11 @@ class ModernHomeModelsTest {
             item = metaPreview(id = "tt0103639")
         )
 
-        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+        assertEquals(ModernCatalogClickAction.Detail, action)
     }
 
     @Test
-    fun `resolveModernCatalogClickAction uses direct playback for tekenfilms series item`() {
+    fun `resolveModernCatalogClickAction keeps detail navigation for tekenfilms series item`() {
         val row = HeroCarouselRow(
             key = "tekenfilms-series",
             title = "Tekenfilms Series",
@@ -146,11 +146,11 @@ class ModernHomeModelsTest {
             item = metaPreview(id = "tt1234567:1:2", rawType = "series")
         )
 
-        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+        assertEquals(ModernCatalogClickAction.Detail, action)
     }
 
     @Test
-    fun `resolveModernCatalogClickAction uses direct playback for non original tekenfilms catalog id`() {
+    fun `resolveModernCatalogClickAction keeps detail navigation for non original tekenfilms catalog id`() {
         val row = HeroCarouselRow(
             key = "tekenfilms-series",
             title = "Tekenfilms Series",
@@ -176,7 +176,7 @@ class ModernHomeModelsTest {
             item = metaPreview(id = "tt1234567:1:2", rawType = "series")
         )
 
-        assertEquals(ModernCatalogClickAction.TekenfilmsDirectPlayback, action)
+        assertEquals(ModernCatalogClickAction.Detail, action)
     }
 
     @Test

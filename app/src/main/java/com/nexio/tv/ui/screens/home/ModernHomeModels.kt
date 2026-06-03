@@ -7,7 +7,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -93,29 +92,14 @@ internal data class FocusedTrailerSelection(
 )
 
 internal enum class ModernCatalogClickAction {
-    Detail,
-    TekenfilmsDirectPlayback
+    Detail
 }
 
 internal fun resolveModernCatalogClickAction(
-    row: HeroCarouselRow,
-    payload: ModernPayload.Catalog,
-    item: MetaPreview?
-): ModernCatalogClickAction {
-    if (
-        item != null &&
-        TekenfilmsHomePlaybackPolicy.isTekenfilmsItem(
-            addonBaseUrl = payload.addonBaseUrl,
-            addonId = row.addonId.orEmpty(),
-            catalogId = row.catalogId,
-            itemType = payload.itemType,
-            itemId = payload.itemId
-        )
-    ) {
-        return ModernCatalogClickAction.TekenfilmsDirectPlayback
-    }
-    return ModernCatalogClickAction.Detail
-}
+    @Suppress("UNUSED_PARAMETER") row: HeroCarouselRow,
+    @Suppress("UNUSED_PARAMETER") payload: ModernPayload.Catalog,
+    @Suppress("UNUSED_PARAMETER") item: MetaPreview?
+): ModernCatalogClickAction = ModernCatalogClickAction.Detail
 
 @Immutable
 data class ModernCarouselItem(

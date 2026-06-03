@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.AioStrictFileParser
@@ -281,6 +282,16 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
+    private fun localCartoonAutoplayBaseUrl(): String? {
+        if (!deterministicAutoplay) return null
+        val sourceBaseUrl = sourceAddonBaseUrl?.takeIf { it.isNotBlank() } ?: return null
+        return if (TekenfilmsHomePlaybackPolicy.isSupportedBaseUrl(sourceBaseUrl)) {
+            TekenfilmsHomePlaybackPolicy.normalizeBaseUrl(sourceBaseUrl)
+        } else {
+            null
+        }
+    }
+
     fun consumeDeterministicAutoplayFailure() {
         updateUiStateIfChanged { it.copy(deterministicAutoplayFailureMessage = null) }
     }
@@ -314,6 +325,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 val directFlowActive = directAutoPlayFlowEnabledForSession
+                val localCartoonAutoplayBaseUrl = localCartoonAutoplayBaseUrl()
                 var resolvedAutoPlayTarget = false
 
                 if (directFlowActive) {
@@ -336,7 +348,20 @@ class StreamScreenViewModel @Inject constructor(
                         maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
                     )
                     if (cached != null) {
-                        if (shouldInvalidateCachedDeterministicAutoPlayLink(cached)) {
+                        if (shouldInvalidateCachedLocalCartoonAutoPlayLink(cached, localCartoonAutoplayBaseUrl)) {
+                            streamLinkCacheDataStore.invalidate(streamCacheKey)
+                            Log.i(
+                                TAG,
+                                "AUTOPLAY_CACHE_INVALIDATED reason=local_cartoon_addon_mismatch " +
+                                    "contentKey=$streamCacheKey cachedAddon=${cached.addonBaseUrl ?: "legacy"} " +
+                                    "requiredAddon=$localCartoonAutoplayBaseUrl"
+                            )
+                            Log.i(
+                                TAG,
+                                "AUTOPLAY_CACHE_RESELECTION_TRIGGERED contentKey=$streamCacheKey " +
+                                    "mode=deterministic reason=local_cartoon_addon_mismatch"
+                            )
+                        } else if (shouldInvalidateCachedDeterministicAutoPlayLink(cached)) {
                             streamLinkCacheDataStore.invalidate(streamCacheKey)
                             Log.i(
                                 TAG,
@@ -381,7 +406,7 @@ class StreamScreenViewModel @Inject constructor(
                                         filename = cached.filename,
                                         videoHash = cached.videoHash,
                                         videoSize = cached.videoSize,
-                                        addonBaseUrl = sourceAddonBaseUrl
+                                        addonBaseUrl = cached.addonBaseUrl ?: sourceAddonBaseUrl
                                     )
                                 )
                             }
@@ -402,6 +427,13 @@ class StreamScreenViewModel @Inject constructor(
 
                 val installedAddons = addonRepository.getInstalledAddons().first()
                 val installedAddonOrder = installedAddons.map { it.displayName }
+                val streamFetchAddons = if (localCartoonAutoplayBaseUrl != null) {
+                    installedAddons.filter { addon ->
+                        TekenfilmsHomePlaybackPolicy.normalizeBaseUrl(addon.baseUrl) == localCartoonAutoplayBaseUrl
+                    }
+                } else {
+                    installedAddons
+                }
                 streamParserCache = StreamPresentationEngine.ParserCache()
 
                 suspend fun buildOrganizedPayload(
@@ -576,7 +608,7 @@ class StreamScreenViewModel @Inject constructor(
                     }
                 }
 
-                updateSourceChipsForFetchStart(installedAddons)
+                updateSourceChipsForFetchStart(streamFetchAddons)
                 val organizeChannel = Channel<PendingOrganizeRequest>(Channel.UNLIMITED)
                 var latestAddonStreamGroups: List<AddonStreams> = emptyList()
                 val queuedPresentationVersion = AtomicLong(0L)
@@ -613,6 +645,83 @@ class StreamScreenViewModel @Inject constructor(
 
                 suspend fun collectStreamsFor(fetchVideoId: String): Boolean {
                     var sawVisibleStreams = false
+                    if (localCartoonAutoplayBaseUrl != null) {
+                        updateUiStateIfChanged {
+                            it.copy(
+                                isLoading = true,
+                                showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
+                                showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
+                                    true
+                                } else {
+                                    it.showDirectAutoPlayOverlay
+                                }
+                            )
+                        }
+                        val result = streamRepository.getStreamsFromAddon(
+                            baseUrl = localCartoonAutoplayBaseUrl,
+                            type = contentType,
+                            videoId = fetchVideoId
+                        )
+                        when (result) {
+                            is NetworkResult.Success -> {
+                                val streams = result.data
+                                sawVisibleStreams = streams.isNotEmpty()
+                                val sourceAddon = streamFetchAddons.firstOrNull()
+                                val addonName = streams.firstOrNull()?.addonName
+                                    ?: sourceAddon?.displayName
+                                    ?: if (localCartoonAutoplayBaseUrl == TekenfilmsHomePlaybackPolicy.CARTOONS_BASE_URL) {
+                                        "Cartoons"
+                                    } else {
+                                        "Tekenfilms"
+                                    }
+                                val addonLogo = streams.firstOrNull()?.addonLogo ?: sourceAddon?.logo
+                                val addonStreamGroups = listOf(
+                                    AddonStreams(
+                                        addonName = addonName,
+                                        addonLogo = addonLogo,
+                                        streams = streams
+                                    )
+                                )
+                                val version = queuedPresentationVersion.incrementAndGet()
+                                latestAddonStreamGroups = addonStreamGroups
+                                organizeChannel.trySend(PendingOrganizeRequest(
+                                    version = version,
+                                    addonStreamGroups = addonStreamGroups
+                                ))
+                            }
+                            is NetworkResult.Error -> {
+                                streamSearchCompletedWithError = true
+                                if (directAutoPlayFlowEnabledForSession) {
+                                    directAutoPlayFlowEnabledForSession = false
+                                }
+                                updateUiStateIfChanged {
+                                    it.copy(
+                                        isLoading = false,
+                                        showNoStreamsState = false,
+                                        error = null,
+                                        isDirectAutoPlayFlow = true,
+                                        showDirectAutoPlayOverlay = true,
+                                        directAutoPlayMessage = null,
+                                        deterministicAutoplayFailureMessage = result.message
+                                    )
+                                }
+                            }
+                            NetworkResult.Loading -> {
+                                updateUiStateIfChanged {
+                                    it.copy(
+                                        isLoading = true,
+                                        showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
+                                        showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
+                                            true
+                                        } else {
+                                            it.showDirectAutoPlayOverlay
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        return sawVisibleStreams
+                    }
                     streamRepository.getStreamsFromAllAddons(
                         type = contentType,
                         videoId = fetchVideoId,
@@ -1133,7 +1242,8 @@ class StreamScreenViewModel @Inject constructor(
                     bingeGroup = playbackInfo.bingeGroup,
                     filename = playbackInfo.filename,
                     videoHash = playbackInfo.videoHash,
-                    videoSize = playbackInfo.videoSize
+                    videoSize = playbackInfo.videoSize,
+                    addonBaseUrl = playbackInfo.addonBaseUrl
                 )
             }
         }
@@ -1186,7 +1296,8 @@ class StreamScreenViewModel @Inject constructor(
                 bingeGroup = result.playbackInfo.bingeGroup,
                 filename = result.playbackInfo.filename,
                 videoHash = result.playbackInfo.videoHash,
-                videoSize = result.playbackInfo.videoSize
+                videoSize = result.playbackInfo.videoSize,
+                addonBaseUrl = result.playbackInfo.addonBaseUrl
             )
         }
         Log.i(
@@ -1436,7 +1547,8 @@ class StreamScreenViewModel @Inject constructor(
                     bingeGroup = playbackInfo.bingeGroup,
                     filename = playbackInfo.filename,
                     videoHash = playbackInfo.videoHash,
-                    videoSize = playbackInfo.videoSize
+                    videoSize = playbackInfo.videoSize,
+                    addonBaseUrl = playbackInfo.addonBaseUrl
                 )
             }
         }
@@ -1538,6 +1650,15 @@ class StreamScreenViewModel @Inject constructor(
             normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
         }
         return isWebDl && isDolbyVision
+    }
+
+    private fun shouldInvalidateCachedLocalCartoonAutoPlayLink(
+        cached: com.nexio.tv.data.local.CachedStreamLink,
+        requiredBaseUrl: String?
+    ): Boolean {
+        val required = requiredBaseUrl ?: return false
+        val cachedBaseUrl = cached.addonBaseUrl ?: return true
+        return TekenfilmsHomePlaybackPolicy.normalizeBaseUrl(cachedBaseUrl) != required
     }
 
     private fun logPresentationDiagnostics(

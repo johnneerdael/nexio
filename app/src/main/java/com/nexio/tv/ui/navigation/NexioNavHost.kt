@@ -163,7 +163,6 @@ fun NexioNavHost(
 
         composable(Screen.Home.route) {
             val homeViewModel: HomeViewModel = hiltViewModel()
-            val tekenfilmsDirectPlaybackViewModel: TekenfilmsDirectPlaybackViewModel = hiltViewModel()
             val homeUiState by homeViewModel.uiState.collectAsState()
             val homeScope = rememberCoroutineScope()
             HomeScreen(
@@ -175,14 +174,6 @@ fun NexioNavHost(
                 onModernHomeTrailerFullscreenActiveChanged = onModernHomeTrailerFullscreenActiveChanged,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
-                },
-                onPlayTekenfilmsDirect = { item, addonBaseUrl ->
-                    homeScope.launch {
-                        val route = tekenfilmsDirectPlaybackViewModel.buildPlayerRoute(item, addonBaseUrl)
-                        if (route != null) {
-                            navController.navigate(route)
-                        }
-                    }
                 },
                 onPlayWithManualStreamSelection = { item ->
                     navController.navigate(buildManualSelectionStreamRouteForMetaPreview(item))
@@ -292,7 +283,7 @@ fun NexioNavHost(
                 },
                 onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, originalLanguage, imdbId, deterministicAutoplay, streamVideoId ->
                     navController.navigate(
-                        Screen.Stream.createRoute(
+                        buildDetailPlaybackStreamRoute(
                             videoId = videoId,
                             streamVideoId = streamVideoId,
                             contentType = contentType,
@@ -306,12 +297,11 @@ fun NexioNavHost(
                             genres = genres,
                             year = year,
                             contentId = contentId,
-                            contentName = title,
                             runtime = runtime,
                             originalLanguage = originalLanguage,
                             imdbId = imdbId,
-                            returnToDetailOnBack = deterministicAutoplay || contentType.equals("series", ignoreCase = true),
-                            deterministicAutoplay = deterministicAutoplay
+                            deterministicAutoplay = deterministicAutoplay,
+                            addonBaseUrl = detailArgs.getString("addonBaseUrl")
                         )
                     )
                 },
@@ -333,7 +323,8 @@ fun NexioNavHost(
                             runtime = runtime,
                             originalLanguage = originalLanguage,
                             imdbId = imdbId,
-                            returnToDetailOnBack = true
+                            returnToDetailOnBack = true,
+                            addonBaseUrl = detailArgs.getString("addonBaseUrl")
                         )
                     )
                 }
@@ -1230,6 +1221,50 @@ internal fun continueWatchingRuntimeMinutes(item: ContinueWatchingItem): Int? {
             runtimeMinutesFromDurationMs(item.progress.duration) ?: parseRuntimeMinutes(item.displayMetadata?.runtime)
         is ContinueWatchingItem.NextUp -> parseRuntimeMinutes(item.info.displayMetadata?.runtime)
     }
+}
+
+internal fun buildDetailPlaybackStreamRoute(
+    videoId: String,
+    streamVideoId: String? = null,
+    contentType: String,
+    contentId: String,
+    title: String,
+    poster: String? = null,
+    backdrop: String? = null,
+    logo: String? = null,
+    season: Int? = null,
+    episode: Int? = null,
+    episodeName: String? = null,
+    genres: String? = null,
+    year: String? = null,
+    runtime: Int? = null,
+    originalLanguage: String? = null,
+    imdbId: String? = null,
+    deterministicAutoplay: Boolean,
+    addonBaseUrl: String? = null
+): String {
+    return Screen.Stream.createRoute(
+        videoId = videoId,
+        streamVideoId = streamVideoId,
+        contentType = contentType,
+        title = title,
+        poster = poster,
+        backdrop = backdrop,
+        logo = logo,
+        season = season,
+        episode = episode,
+        episodeName = episodeName,
+        genres = genres,
+        year = year,
+        contentId = contentId,
+        contentName = title,
+        runtime = runtime,
+        originalLanguage = originalLanguage,
+        imdbId = imdbId,
+        returnToDetailOnBack = deterministicAutoplay || contentType.equals("series", ignoreCase = true),
+        deterministicAutoplay = deterministicAutoplay,
+        addonBaseUrl = addonBaseUrl
+    )
 }
 
 internal fun buildManualSelectionStreamRoute(

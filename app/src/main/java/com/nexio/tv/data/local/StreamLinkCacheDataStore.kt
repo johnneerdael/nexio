@@ -23,7 +23,8 @@ data class CachedStreamLink(
     val bingeGroup: String? = null,
     val filename: String? = null,
     val videoHash: String? = null,
-    val videoSize: Long? = null
+    val videoSize: Long? = null,
+    val addonBaseUrl: String? = null
 )
 
 private val Context.streamLinkCacheDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -47,7 +48,8 @@ class StreamLinkCacheDataStore @Inject constructor(
         bingeGroup: String? = null,
         filename: String? = null,
         videoHash: String? = null,
-        videoSize: Long? = null
+        videoSize: Long? = null,
+        addonBaseUrl: String? = null
     ) {
         val payload = JSONObject().apply {
             put("url", url)
@@ -60,6 +62,7 @@ class StreamLinkCacheDataStore @Inject constructor(
             put("filename", filename)
             put("videoHash", videoHash)
             videoSize?.let { put("videoSize", it) }
+            put("addonBaseUrl", addonBaseUrl)
         }.toString()
 
         store().edit { prefs ->
@@ -100,7 +103,8 @@ class StreamLinkCacheDataStore @Inject constructor(
                 bingeGroup = json.optString("bingeGroup", "").ifBlank { null },
                 filename = json.optString("filename", "").ifBlank { null },
                 videoHash = json.optString("videoHash", "").ifBlank { null },
-                videoSize = json.optLong("videoSize", -1L).takeIf { it >= 0L }
+                videoSize = json.optLong("videoSize", -1L).takeIf { it >= 0L },
+                addonBaseUrl = json.optString("addonBaseUrl", "").ifBlank { null }
             )
         }.getOrNull()
 

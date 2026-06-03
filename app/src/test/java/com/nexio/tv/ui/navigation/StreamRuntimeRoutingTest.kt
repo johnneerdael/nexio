@@ -610,7 +610,7 @@ class StreamRuntimeRoutingTest {
         val source = sourceFile("com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt").toFile().readText()
 
         assertTrue(source.contains("sourceAddonBaseUrl: String? = savedStateHandle.getOptionalString(\"addonBaseUrl\")"))
-        assertTrue(source.contains("addonBaseUrl = sourceAddonBaseUrl"))
+        assertTrue(source.contains("addonBaseUrl = cached.addonBaseUrl ?: sourceAddonBaseUrl"))
         assertTrue(source.contains("addonBaseUrl = stream.addonBaseUrl ?: sourceAddonBaseUrl"))
         assertTrue(source.contains("addonBaseUrl = candidate.stream.addonBaseUrl ?: sourceAddonBaseUrl"))
     }
@@ -669,6 +669,67 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("manualSelection=true"))
         assertTrue(route.contains("deterministicAutoplay=false"))
         assertTrue(route.contains("returnToDetailOnBack=false"))
+    }
+
+    @Test
+    fun `detail playback route preserves addon base url for deterministic autoplay`() {
+        val route = buildDetailPlaybackStreamRoute(
+            videoId = "tt0103639",
+            streamVideoId = "tt0103639",
+            contentType = "movie",
+            contentId = "tt0103639",
+            title = "Aladdin",
+            poster = "poster",
+            backdrop = "backdrop",
+            deterministicAutoplay = true,
+            addonBaseUrl = "https://tekenfilms.nexioapp.org"
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tt0103639", args.getValue("videoId"))
+        assertEquals("tt0103639", args.getValue("streamVideoId"))
+        assertEquals("true", args.getValue("deterministicAutoplay"))
+        assertEquals("true", args.getValue("returnToDetailOnBack"))
+        assertEquals("https://tekenfilms.nexioapp.org", args.getValue("addonBaseUrl"))
+    }
+
+    @Test
+    fun `detail episode manual selection route preserves addon base url and episode fetch id`() {
+        val route = buildManualSelectionStreamRoute(
+            videoId = "tt1234567:1:2",
+            streamVideoId = "tt1234567:1:2",
+            contentType = "series",
+            title = "Example",
+            season = 1,
+            episode = 2,
+            episodeName = "Episode",
+            contentId = "tt1234567",
+            contentName = "Example",
+            returnToDetailOnBack = true,
+            addonBaseUrl = "https://cartoons.nexioapp.org"
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tt1234567:1:2", args.getValue("videoId"))
+        assertEquals("tt1234567:1:2", args.getValue("streamVideoId"))
+        assertEquals("true", args.getValue("manualSelection"))
+        assertEquals("true", args.getValue("returnToDetailOnBack"))
+        assertEquals("https://cartoons.nexioapp.org", args.getValue("addonBaseUrl"))
+    }
+
+    @Test
+    fun `stream view model uses local cartoon addon only for local cartoon deterministic autoplay`() {
+        val source = sourceFile("com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt").toFile().readText()
+
+        assertTrue(source.contains("private fun localCartoonAutoplayBaseUrl()"))
+        assertTrue(source.contains("TekenfilmsHomePlaybackPolicy.isSupportedBaseUrl(sourceBaseUrl)"))
+        assertTrue(source.contains("streamRepository.getStreamsFromAddon("))
+        assertTrue(source.contains("baseUrl = localCartoonAutoplayBaseUrl"))
+        assertTrue(source.contains("streamRepository.getStreamsFromAllAddons("))
+        assertTrue(source.contains("shouldInvalidateCachedLocalCartoonAutoPlayLink(cached, localCartoonAutoplayBaseUrl)"))
+        assertTrue(source.contains("addonBaseUrl = playbackInfo.addonBaseUrl"))
     }
 
     @Test

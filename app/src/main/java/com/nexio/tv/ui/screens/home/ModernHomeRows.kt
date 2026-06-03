@@ -392,7 +392,6 @@ internal fun ModernRowSection(
     onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
-    onPlayTekenfilmsDirect: (MetaPreview, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     canPromoteHeroTrailerToFullscreen: Boolean,
     fullscreenTrailerActive: Boolean,
@@ -731,7 +730,7 @@ internal fun ModernRowSection(
                             } else {
                                 null
                             }
-                            val onCatalogClick = remember(row, payload, metaPreview, onNavigateToDetail, onPlayTekenfilmsDirect) {
+                            val onCatalogClick = remember(row, payload, metaPreview, onNavigateToDetail) {
                                 {
                                     when (resolveModernCatalogClickAction(row, payload, metaPreview)) {
                                         ModernCatalogClickAction.Detail -> {
@@ -740,12 +739,6 @@ internal fun ModernRowSection(
                                                 payload.itemType,
                                                 payload.addonBaseUrl
                                             )
-                                        }
-
-                                        ModernCatalogClickAction.TekenfilmsDirectPlayback -> {
-                                            if (metaPreview != null) {
-                                                onPlayTekenfilmsDirect(metaPreview, payload.addonBaseUrl)
-                                            }
                                         }
                                     }
                                 }
