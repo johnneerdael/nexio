@@ -1,6 +1,11 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydrationState
@@ -32,6 +37,31 @@ class ModernHomeRowItemFromMetaPreviewTest {
         val ref = item.posterRef as ArtworkDisplayRef.LegacyString
         assertEquals("https://x/p.jpg", ref.value)
         assertEquals(ArtworkType.POSTER, ref.imageType)
+    }
+
+    @Test
+    fun `fromMetaPreview preserves typed artwork over legacy null artwork strings`() {
+        val typedPoster = runtimeAsset("poster", ArtworkType.POSTER)
+        val typedBackdrop = runtimeAsset("backdrop", ArtworkType.BACKDROP)
+        val typedLogo = runtimeAsset("logo", ArtworkType.LOGO)
+        val item = ModernHomeRowItem.fromMetaPreview(
+            makeMeta(
+                id = "tt1",
+                name = "x",
+                poster = null,
+                background = null,
+                logo = null,
+                artwork = ArtworkBundle(
+                    poster = typedPoster,
+                    backdrop = typedBackdrop,
+                    logo = typedLogo
+                )
+            )
+        )
+
+        assertEquals(typedPoster, item.posterRef)
+        assertEquals(typedBackdrop, item.backdropRef)
+        assertEquals(typedLogo, item.logoRef)
     }
 
     @Test
@@ -107,7 +137,8 @@ class ModernHomeRowItemFromMetaPreviewTest {
         background: String? = null,
         logo: String? = null,
         releaseInfo: String? = null,
-        posterProviderTag: String? = null
+        posterProviderTag: String? = null,
+        artwork: ArtworkBundle? = null
     ) = MetaPreview(
         id = id,
         type = ContentType.MOVIE,
@@ -120,6 +151,17 @@ class ModernHomeRowItemFromMetaPreviewTest {
         releaseInfo = releaseInfo,
         imdbRating = null,
         genres = emptyList(),
-        posterProviderTag = posterProviderTag
+        posterProviderTag = posterProviderTag,
+        artwork = artwork
     )
+
+    private fun runtimeAsset(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =
+        ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("decision-$key"),
+            assetKey = ArtworkAssetKey("asset-$key"),
+            imageType = type,
+            selectedProvider = null,
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty()
+        )
 }

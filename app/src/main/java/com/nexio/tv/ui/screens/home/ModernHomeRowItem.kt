@@ -78,9 +78,12 @@ data class ModernHomeRowItem(
             parentId = meta.id,
             title = meta.name,
             year = meta.releaseInfo?.split("-")?.firstOrNull()?.toIntOrNull(),
-            posterRef = meta.poster.toLegacyHomeRailRefOrNull(ArtworkType.POSTER),
-            backdropRef = meta.background.toLegacyHomeRailRefOrNull(ArtworkType.BACKDROP),
-            logoRef = meta.logo.toLegacyHomeRailRefOrNull(ArtworkType.LOGO),
+            posterRef = meta.artwork?.poster
+                ?: meta.poster.toLegacyHomeRailRefOrNull(ArtworkType.POSTER),
+            backdropRef = meta.artwork?.backdrop
+                ?: meta.background.toLegacyHomeRailRefOrNull(ArtworkType.BACKDROP),
+            logoRef = meta.artwork?.logo
+                ?: meta.logo.toLegacyHomeRailRefOrNull(ArtworkType.LOGO),
             thumbnailRef = null,
             rating = null,
             description = meta.description,
@@ -91,7 +94,7 @@ data class ModernHomeRowItem(
             textSourceRank = DisplaySourceRank.FIRST_PAINT,
             textLanguageTag = null,
             hydrationState = HydrationState.PREVIEW_ONLY,
-            posterProviderTag = meta.posterProviderTag
+            posterProviderTag = meta.artwork?.poster.deriveProviderTag() ?: meta.posterProviderTag
         )
     }
 }
