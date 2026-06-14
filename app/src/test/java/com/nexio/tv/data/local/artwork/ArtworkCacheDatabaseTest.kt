@@ -88,7 +88,6 @@ class ArtworkCacheDatabaseTest {
         db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-a", "decision-a"))
 
         db.decisionDao().deleteDecisionsBySettingsHash("settings-a")
-        db.decisionDao().deleteLinksReferencingMissingDecisions()
 
         assertNull(db.decisionDao().getDecision("decision-a"))
         assertEquals("decision-b", db.decisionDao().getDecision("decision-b")?.decisionKey)
@@ -120,6 +119,56 @@ class ArtworkCacheDatabaseTest {
         assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
     }
 
+    @Test
+    fun `settings invalidation removes outgoing preview link while preserving canonical decision`() = runTest {
+        val db = inMemoryDatabase()
+        db.decisionDao().upsertDecision(decision("preview-a", settingsHash = "settings-a"))
+        db.decisionDao().upsertDecision(decision("canonical-a", settingsHash = null))
+        db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-a", "canonical-a"))
+
+        db.decisionDao().deleteDecisionsBySettingsHash("settings-a")
+
+        assertNull(db.decisionDao().getDecision("preview-a"))
+        assertEquals("canonical-a", db.decisionDao().getDecision("canonical-a")?.decisionKey)
+        assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
+    }
+
+    @Test
+    fun `policy hash invalidation supports empty settings hash set`() = runTest {
+        val db = inMemoryDatabase()
+        db.decisionDao().upsertDecision(
+            decision("credential-a", settingsHash = null, credentialHash = "credential-a")
+        )
+        db.decisionDao().upsertDecision(decision("primary-a", settingsHash = null, credentialHash = null))
+        db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-a", "credential-a"))
+
+        db.decisionDao().deleteDecisionsByPolicyHashes(
+            settingsHashes = emptySet(),
+            credentialHashes = setOf("credential-a")
+        )
+
+        assertNull(db.decisionDao().getDecision("credential-a"))
+        assertEquals("primary-a", db.decisionDao().getDecision("primary-a")?.decisionKey)
+        assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
+    }
+
+    @Test
+    fun `policy hash invalidation supports empty credential hash set`() = runTest {
+        val db = inMemoryDatabase()
+        db.decisionDao().upsertDecision(decision("settings-a", settingsHash = "settings-a"))
+        db.decisionDao().upsertDecision(decision("primary-a", settingsHash = null, credentialHash = null))
+        db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-a", "settings-a"))
+
+        db.decisionDao().deleteDecisionsByPolicyHashes(
+            settingsHashes = setOf("settings-a"),
+            credentialHashes = emptySet()
+        )
+
+        assertNull(db.decisionDao().getDecision("settings-a"))
+        assertEquals("primary-a", db.decisionDao().getDecision("primary-a")?.decisionKey)
+        assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
+    }
+
     private fun inMemoryDatabase(): ArtworkCacheDatabase {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         return Room.inMemoryDatabaseBuilder(context, ArtworkCacheDatabase::class.java)
@@ -129,7 +178,8 @@ class ArtworkCacheDatabaseTest {
 
     private fun decision(
         decisionKey: String,
-        settingsHash: String?
+        settingsHash: String?,
+        credentialHash: String? = null
     ): ArtworkDecisionEntity =
         ArtworkDecisionEntity(
             decisionKey = decisionKey,
@@ -142,7 +192,7 @@ class ArtworkCacheDatabaseTest {
             selectedProviderKey = "RPDB",
             selectedSourceRole = "PREMIUM",
             settingsHash = settingsHash,
-            credentialHash = null,
+            credentialHash = credentialHash,
             policyVersion = 1,
             imageLanguage = "en",
             createdAtMs = 100,
