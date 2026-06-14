@@ -28,5 +28,6 @@ data class ArtworkAssetRecordEntity(
     val policyVersion: Int,
     val fetchedAtMs: Long,
     val expiresAtMs: Long,
-    val staleUntilMs: Long
+    val staleUntilMs: Long,
+    val payloadJson: String
 )

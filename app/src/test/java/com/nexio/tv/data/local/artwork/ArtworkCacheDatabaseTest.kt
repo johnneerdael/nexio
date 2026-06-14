@@ -46,7 +46,8 @@ class ArtworkCacheDatabaseTest {
             policyVersion = 1,
             fetchedAtMs = 100,
             expiresAtMs = 200,
-            staleUntilMs = 300
+            staleUntilMs = 300,
+            payloadJson = """{"assetKey":"asset-a"}"""
         )
 
         db.decisionDao().upsertDecision(decision)
@@ -219,6 +220,7 @@ class ArtworkCacheDatabaseTest {
             policyVersion = 1,
             fetchedAtMs = fetchedAtMs,
             expiresAtMs = fetchedAtMs + 100,
-            staleUntilMs = fetchedAtMs + 200
+            staleUntilMs = fetchedAtMs + 200,
+            payloadJson = """{"assetKey":"$assetKey"}"""
         )
 }
