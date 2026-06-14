@@ -1,6 +1,7 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -146,6 +147,37 @@ class ArtworkAssetRecordStoreTest {
         }
 
         assertEquals(original, file.readText())
+    }
+
+    @Test
+    fun `asset record json codec round trips records`() {
+        val codec = ArtworkAssetRecordJsonCodec(Gson())
+        val older = record("codec-old", ArtworkDecisionKey("codec-decision"), fetchedAtMs = 100)
+        val newer = record("codec-new", ArtworkDecisionKey("codec-decision"), fetchedAtMs = 200)
+        val json = codec.toStoreJson(listOf(older, newer))
+
+        val decoded = codec.decodeStoreJson(json)
+
+        assertEquals(listOf(older, newer), decoded.records)
+        assertEquals(0, decoded.quarantinedRecordCount)
+    }
+
+    @Test
+    fun `asset record json codec quarantines malformed record`() {
+        val codec = ArtworkAssetRecordJsonCodec(Gson())
+        val valid = record("codec-valid", ArtworkDecisionKey("codec-valid-decision"), fetchedAtMs = 300)
+        val json = codec.toStoreJson(listOf(valid))
+        json.getAsJsonArray("records").add(
+            JsonObject().apply {
+                addProperty("assetKey", "codec-bad")
+                addProperty("imageType", "NOT_REAL")
+            }
+        )
+
+        val decoded = codec.decodeStoreJson(json)
+
+        assertEquals(listOf(valid), decoded.records)
+        assertEquals(1, decoded.quarantinedRecordCount)
     }
 
     @Test
