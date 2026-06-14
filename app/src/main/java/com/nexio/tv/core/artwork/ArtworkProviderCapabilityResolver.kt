@@ -182,11 +182,6 @@ class ArtworkProviderCapabilityResolver @Inject constructor() {
         mediaKind: MetadataMediaKind,
         settings: ArtworkProviderSettings
     ): String? {
-        val available = com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability
-            .from(com.nexio.tv.BuildConfig.FANARTTV_API_KEY)
-        if (available !is com.nexio.tv.core.artwork.fanarttv.FanartTvAvailability.Available) {
-            return "fanart_tv_not_configured"
-        }
         if (imageType !in fanartTvDescriptor.supportedArtworkTypes) {
             return "unsupported_artwork_type_for_provider"
         }
