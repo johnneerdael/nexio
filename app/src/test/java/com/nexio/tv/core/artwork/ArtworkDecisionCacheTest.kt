@@ -597,6 +597,46 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `decision json codec round trips canonical decision and preview link`() {
+        val codec = ArtworkDecisionJsonCodec(Gson())
+        val decision = durableRpdbDecision()
+        val previewKey = ArtworkDecisionKey("codec-preview")
+        val canonicalKey = decision.decisionKey
+        val json = codec.toStoreJson(
+            decisions = listOf(decision),
+            previewLinks = listOf(previewKey to canonicalKey)
+        )
+
+        val decoded = codec.decodeStoreJson(json)
+
+        assertEquals(listOf(decision), decoded.decisions)
+        assertEquals(listOf(previewKey to canonicalKey), decoded.previewLinks)
+        assertEquals(0, decoded.droppedDecisionCount)
+        assertEquals(0, decoded.quarantinedDecisionCount)
+    }
+
+    @Test
+    fun `decision json codec quarantines malformed decision and keeps valid decision`() {
+        val codec = ArtworkDecisionJsonCodec(Gson())
+        val valid = durableRpdbDecision()
+        val malformed = JsonObject().apply {
+            addProperty("decisionKey", "codec-malformed")
+            addProperty("imageType", "NOT_REAL")
+        }
+        val json = codec.toStoreJson(
+            decisions = listOf(valid),
+            previewLinks = emptyList()
+        )
+        json.getAsJsonArray("decisions").add(malformed)
+
+        val decoded = codec.decodeStoreJson(json)
+
+        assertEquals(listOf(valid), decoded.decisions)
+        assertEquals(1, decoded.quarantinedDecisionCount)
+        assertNotNull(decoded.firstQuarantinedDecisionKeyHash)
+    }
+
+    @Test
     fun `durable top level parse failure is failed non authoritative`() {
         val temp = TemporaryFolder().also { it.create() }
         val file = temp.newFile("artwork-decisions.json")
