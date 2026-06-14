@@ -1,0 +1,10 @@
+- [ ] Add Room entities, DAOs, database module, and migrations for artwork decisions and asset records.
+- [ ] Implement Room-backed `ArtworkDecisionCache` and `ArtworkAssetRecordStore` adapters behind the existing interfaces.
+- [ ] Import existing JSON artwork decisions and asset records into Room with tolerant malformed-entry handling.
+- [ ] Keep JSON fallback available when SQLite open/import fails for a session.
+- [ ] Update artwork persistence so durable asset refs are promoted only after asset-record persistence succeeds.
+- [ ] Add decision-to-latest-asset lookup for legacy `nexio-artwork://decision/{decisionKey}` recovery.
+- [ ] Add bounded background repair for missing asset records, missing files, stale decisions, and orphaned refs.
+- [ ] Add unit and repository tests for DAO round trips, migration, fallback, rehydration, and durable-promotion rules.
+- [ ] Add startup/device verification that populated rails restart with direct disk artwork hits and reduced artwork network execution.
+- [ ] Validate the OpenSpec change with `openspec validate migrate-artwork-cache-index-to-room --strict`.
