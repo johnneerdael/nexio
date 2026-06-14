@@ -53,6 +53,19 @@ class ArtworkCacheEntityMapperTest {
     }
 
     @Test
+    fun `provider key mapping covers special indexed providers`() {
+        val addonDecision = decision().let { base ->
+            base.copy(
+                selectedCandidate = base.selectedCandidate.copy(provider = ArtworkProviderId.AddonPreview)
+            )
+        }
+        val placeholderAssetRecord = assetRecord().copy(provider = ArtworkProviderId.Placeholder)
+
+        assertEquals("ADDON_PREVIEW", decisionMapper.toEntity(addonDecision).selectedProviderKey)
+        assertEquals("PLACEHOLDER", assetRecordMapper.toEntity(placeholderAssetRecord).providerKey)
+    }
+
+    @Test
     fun `decision mapper returns null for malformed payload`() {
         val entity = decisionMapper.toEntity(decision()).copy(payloadJson = "[1,2,3]")
 
