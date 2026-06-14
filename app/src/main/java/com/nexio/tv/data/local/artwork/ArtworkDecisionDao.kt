@@ -24,31 +24,44 @@ abstract class ArtworkDecisionDao {
     abstract suspend fun deleteDecision(decisionKey: String): Int
 
     @Transaction
-    open suspend fun deleteDecisionsBySettingsHash(settingsHash: String): Int =
-        deleteDecisionsAndLinks(decisionKeysBySettingsHash(settingsHash))
+    open suspend fun deleteDecisionsBySettingsHash(settingsHash: String): Int {
+        deleteLinksReferencingSettingsHash(settingsHash)
+        return deleteDecisionRowsBySettingsHash(settingsHash)
+    }
 
     @Transaction
-    open suspend fun deleteDecisionsByCredentialHash(credentialHash: String): Int =
-        deleteDecisionsAndLinks(decisionKeysByCredentialHash(credentialHash))
+    open suspend fun deleteDecisionsByCredentialHash(credentialHash: String): Int {
+        deleteLinksReferencingCredentialHash(credentialHash)
+        return deleteDecisionRowsByCredentialHash(credentialHash)
+    }
 
     @Transaction
     open suspend fun deleteDecisionsByPolicyHashes(
         settingsHashes: Set<String>,
         credentialHashes: Set<String>
     ): Int {
-        val decisionKeys = linkedSetOf<String>()
-        if (settingsHashes.isNotEmpty()) {
-            decisionKeys += decisionKeysBySettingsHashes(settingsHashes)
+        if (settingsHashes.isEmpty() && credentialHashes.isEmpty()) return 0
+        return when {
+            settingsHashes.isEmpty() -> {
+                deleteLinksReferencingCredentialHashes(credentialHashes)
+                deleteDecisionRowsByCredentialHashes(credentialHashes)
+            }
+            credentialHashes.isEmpty() -> {
+                deleteLinksReferencingSettingsHashes(settingsHashes)
+                deleteDecisionRowsBySettingsHashes(settingsHashes)
+            }
+            else -> {
+                deleteLinksReferencingPolicyHashes(settingsHashes, credentialHashes)
+                deleteDecisionRowsByPolicyHashes(settingsHashes, credentialHashes)
+            }
         }
-        if (credentialHashes.isNotEmpty()) {
-            decisionKeys += decisionKeysByCredentialHashes(credentialHashes)
-        }
-        return deleteDecisionsAndLinks(decisionKeys.toList())
     }
 
     @Transaction
-    open suspend fun deletePremiumScopedDecisions(): Int =
-        deleteDecisionsAndLinks(premiumScopedDecisionKeys())
+    open suspend fun deletePremiumScopedDecisions(): Int {
+        deleteLinksReferencingPremiumScopedDecisions()
+        return deletePremiumScopedDecisionRows()
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun upsertPreviewLink(entity: ArtworkPreviewLinkEntity)
@@ -77,30 +90,79 @@ abstract class ArtworkDecisionDao {
         deleteDecision(decisionKey)
     }
 
-    private suspend fun deleteDecisionsAndLinks(decisionKeys: List<String>): Int {
-        if (decisionKeys.isEmpty()) return 0
-        deleteLinksReferencingDecisions(decisionKeys)
-        return deleteDecisionsByKeys(decisionKeys)
-    }
+    @Query("DELETE FROM artwork_decisions WHERE settingsHash = :settingsHash")
+    protected abstract suspend fun deleteDecisionRowsBySettingsHash(settingsHash: String): Int
 
-    @Query("SELECT decisionKey FROM artwork_decisions WHERE settingsHash = :settingsHash")
-    protected abstract suspend fun decisionKeysBySettingsHash(settingsHash: String): List<String>
+    @Query("DELETE FROM artwork_decisions WHERE credentialHash = :credentialHash")
+    protected abstract suspend fun deleteDecisionRowsByCredentialHash(credentialHash: String): Int
 
-    @Query("SELECT decisionKey FROM artwork_decisions WHERE credentialHash = :credentialHash")
-    protected abstract suspend fun decisionKeysByCredentialHash(credentialHash: String): List<String>
+    @Query("DELETE FROM artwork_decisions WHERE settingsHash IN (:settingsHashes)")
+    protected abstract suspend fun deleteDecisionRowsBySettingsHashes(settingsHashes: Set<String>): Int
 
-    @Query("SELECT decisionKey FROM artwork_decisions WHERE settingsHash IN (:settingsHashes)")
-    protected abstract suspend fun decisionKeysBySettingsHashes(settingsHashes: Set<String>): List<String>
+    @Query("DELETE FROM artwork_decisions WHERE credentialHash IN (:credentialHashes)")
+    protected abstract suspend fun deleteDecisionRowsByCredentialHashes(credentialHashes: Set<String>): Int
 
-    @Query("SELECT decisionKey FROM artwork_decisions WHERE credentialHash IN (:credentialHashes)")
-    protected abstract suspend fun decisionKeysByCredentialHashes(credentialHashes: Set<String>): List<String>
+    @Query("DELETE FROM artwork_decisions WHERE settingsHash IN (:settingsHashes) OR credentialHash IN (:credentialHashes)")
+    protected abstract suspend fun deleteDecisionRowsByPolicyHashes(
+        settingsHashes: Set<String>,
+        credentialHashes: Set<String>
+    ): Int
 
-    @Query("SELECT decisionKey FROM artwork_decisions WHERE settingsHash IS NOT NULL OR credentialHash IS NOT NULL")
-    protected abstract suspend fun premiumScopedDecisionKeys(): List<String>
+    @Query("DELETE FROM artwork_decisions WHERE settingsHash IS NOT NULL OR credentialHash IS NOT NULL")
+    protected abstract suspend fun deletePremiumScopedDecisionRows(): Int
 
-    @Query("DELETE FROM artwork_preview_links WHERE previewKey IN (:decisionKeys) OR canonicalKey IN (:decisionKeys)")
-    protected abstract suspend fun deleteLinksReferencingDecisions(decisionKeys: List<String>): Int
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (SELECT decisionKey FROM artwork_decisions WHERE settingsHash = :settingsHash) " +
+            "OR canonicalKey IN (SELECT decisionKey FROM artwork_decisions WHERE settingsHash = :settingsHash)"
+    )
+    protected abstract suspend fun deleteLinksReferencingSettingsHash(settingsHash: String): Int
 
-    @Query("DELETE FROM artwork_decisions WHERE decisionKey IN (:decisionKeys)")
-    protected abstract suspend fun deleteDecisionsByKeys(decisionKeys: List<String>): Int
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (SELECT decisionKey FROM artwork_decisions WHERE credentialHash = :credentialHash) " +
+            "OR canonicalKey IN (SELECT decisionKey FROM artwork_decisions WHERE credentialHash = :credentialHash)"
+    )
+    protected abstract suspend fun deleteLinksReferencingCredentialHash(credentialHash: String): Int
+
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (SELECT decisionKey FROM artwork_decisions WHERE settingsHash IN (:settingsHashes)) " +
+            "OR canonicalKey IN (SELECT decisionKey FROM artwork_decisions WHERE settingsHash IN (:settingsHashes))"
+    )
+    protected abstract suspend fun deleteLinksReferencingSettingsHashes(settingsHashes: Set<String>): Int
+
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (SELECT decisionKey FROM artwork_decisions WHERE credentialHash IN (:credentialHashes)) " +
+            "OR canonicalKey IN (SELECT decisionKey FROM artwork_decisions WHERE credentialHash IN (:credentialHashes))"
+    )
+    protected abstract suspend fun deleteLinksReferencingCredentialHashes(credentialHashes: Set<String>): Int
+
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (" +
+            "SELECT decisionKey FROM artwork_decisions " +
+            "WHERE settingsHash IN (:settingsHashes) OR credentialHash IN (:credentialHashes)" +
+            ") OR canonicalKey IN (" +
+            "SELECT decisionKey FROM artwork_decisions " +
+            "WHERE settingsHash IN (:settingsHashes) OR credentialHash IN (:credentialHashes)" +
+            ")"
+    )
+    protected abstract suspend fun deleteLinksReferencingPolicyHashes(
+        settingsHashes: Set<String>,
+        credentialHashes: Set<String>
+    ): Int
+
+    @Query(
+        "DELETE FROM artwork_preview_links " +
+            "WHERE previewKey IN (" +
+            "SELECT decisionKey FROM artwork_decisions " +
+            "WHERE settingsHash IS NOT NULL OR credentialHash IS NOT NULL" +
+            ") OR canonicalKey IN (" +
+            "SELECT decisionKey FROM artwork_decisions " +
+            "WHERE settingsHash IS NOT NULL OR credentialHash IS NOT NULL" +
+            ")"
+    )
+    protected abstract suspend fun deleteLinksReferencingPremiumScopedDecisions(): Int
 }
