@@ -632,8 +632,12 @@ class ArtworkDecisionCacheTest {
         val decoded = codec.decodeStoreJson(json)
 
         assertEquals(listOf(valid), decoded.decisions)
+        assertEquals(1, decoded.droppedDecisionCount)
         assertEquals(1, decoded.quarantinedDecisionCount)
-        assertNotNull(decoded.firstQuarantinedDecisionKeyHash)
+        assertEquals(
+            artworkDecisionShortSha256("codec-malformed"),
+            decoded.firstQuarantinedDecisionKeyHash
+        )
     }
 
     @Test
