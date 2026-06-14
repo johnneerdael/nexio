@@ -73,6 +73,10 @@ class DurableArtworkAssetRecordStore(
             loaded = true
             return
         }
+        if (file.length() == 0L) {
+            loaded = true
+            return
+        }
 
         // CLAUDE.md hard rule #3: streaming read. The previous implementation
         // used `file.readText()` + `JsonParser.parseString(raw).asJsonObject`

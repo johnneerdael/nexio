@@ -44,6 +44,19 @@ class ArtworkAssetRecordStoreTest {
     }
 
     @Test
+    fun `empty existing file is treated as empty store and can be written`() {
+        val file = temp.newFile("empty-artwork-asset-records.json")
+        val record = record("asset-after-empty", ArtworkDecisionKey("decision-after-empty"), fetchedAtMs = 350)
+
+        val store = DurableArtworkAssetRecordStore(file, Gson())
+        store.put(record)
+
+        val restarted = DurableArtworkAssetRecordStore(file, Gson())
+        assertEquals(record, restarted.get(record.assetKey))
+        assertEquals(record, restarted.findLatestAssetForDecision(ArtworkDecisionKey("decision-after-empty")))
+    }
+
+    @Test
     fun `malformed asset record is quarantined without dropping valid records`() {
         val file = temp.newFile("artwork-asset-records.json")
         file.writeText(
