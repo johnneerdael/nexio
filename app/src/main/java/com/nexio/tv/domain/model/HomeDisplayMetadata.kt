@@ -67,7 +67,7 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         ratingSource = ratingSource.orDefault(),
         tomatoesRating = tomatoesRating,
         originalLanguage = originalLanguage,
-        imdbId = firstPaintStableIds.imdb?.takeIf { it.isNotBlank() }
+        imdbId = (firstPaintStableIds as ProviderIds?)?.imdb?.takeIf { it.isNotBlank() }
             ?: id.takeIf { it.startsWith("tt", ignoreCase = true) },
         poster = poster,
         posterProviderTag = posterProviderTag,
@@ -169,8 +169,8 @@ fun HomeDisplayMetadata.applyToPreview(base: MetaPreview): MetaPreview {
         // a base-preserved durable RPDB ref doesn't get tagged with the overlay's
         // bare-URL provider.
         posterProviderTag = when {
-            appliedPoster === base.poster && appliedPoster != null -> base.posterProviderTag
-            displayPoster != null -> posterProviderTag
+            displayPoster != null && appliedPoster == displayPoster -> posterProviderTag
+            appliedPoster != null && appliedPoster == base.poster -> base.posterProviderTag
             else -> base.posterProviderTag
         },
         background = appliedBackground,
