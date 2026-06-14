@@ -84,7 +84,10 @@ class ArtworkProviderRegistryTest {
         )
 
         assertEquals(
-            listOf(ArtworkProviderChoiceKey.DEFAULT) + artworkProviderDescriptors.map { it.choice },
+            listOf(ArtworkProviderChoiceKey.DEFAULT) +
+                artworkProviderDescriptors
+                    .filter { it.isAvailableFor(ArtworkType.POSTER, settings) }
+                    .map { it.choice },
             registry.availableChoices(ArtworkType.POSTER, settings)
         )
     }

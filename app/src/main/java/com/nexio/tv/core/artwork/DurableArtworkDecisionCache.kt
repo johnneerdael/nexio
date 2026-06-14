@@ -1,27 +1,10 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
-import com.google.gson.JsonArray
-import com.google.gson.JsonElement
-import com.google.gson.JsonNull
-import com.google.gson.JsonObject
-import com.google.gson.stream.JsonReader
-import com.google.gson.stream.JsonToken
-import com.google.gson.stream.JsonWriter
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceEventEnvelope
-import java.io.BufferedReader
-import java.io.BufferedWriter
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
@@ -59,6 +42,7 @@ class DurableArtworkDecisionCache(
     private var lastLoadErrorMessageHash: String? = null
     private var lastLoadErrorTopFrame: String? = null
     private var firstQuarantinedDecisionKeyHash: String? = null
+    private val codec = ArtworkDecisionJsonCodec(gson)
     private val authorityContext: ArtworkDecisionAuthorityContext
         get() = ArtworkDecisionAuthorityContext(
             storeIdHash = artworkDecisionShortSha256(file.absolutePath),
@@ -230,27 +214,7 @@ class DurableArtworkDecisionCache(
         }
 
         runCatching {
-            // CLAUDE.md hard rule #3: streaming read. The previous
-            // implementation used `file.readText()` + `JsonParser.parseString(raw)`
-            // which materialised the entire decision cache (often >100 KB after
-            // a long browsing session) as a String, then re-pinned it via the
-            // parser's internal StringReader. With cold-start happening while
-            // the home pipeline is also loading, the transient cost competed
-            // with first-paint allocations. Streaming the file directly via
-            // JsonReader keeps the bytes off-heap until they're parsed into
-            // the typed JsonObject.
-            val storeJson: JsonObject = FileInputStream(file).use { fis ->
-                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
-                    JsonReader(br).use { reader ->
-                        if (reader.peek() == JsonToken.NULL) {
-                            reader.nextNull()
-                            null
-                        } else {
-                            gson.fromJson<JsonObject>(reader, JsonObject::class.java)
-                        }
-                    }
-                }
-            } ?: run {
+            val snapshot = codec.readStoreFile(file) ?: run {
                 val loadState = loadedAuthoritativeState(droppedDecisionCount = 0, quarantinedDecisionCount = 0)
                 traceDecisionStoreLoad(
                     success = true,
@@ -264,92 +228,20 @@ class DurableArtworkDecisionCache(
                 )
                 return
             }
-            val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
-            val legacyObfuscatedStore = storedSchemaVersion == null && storeJson.has("a")
-            if (storedSchemaVersion == null) {
-                if (!legacyObfuscatedStore) {
-                    val loadState = failedNonAuthoritativeState(errorClass = "MissingSchemaVersion")
-                    traceDecisionStoreLoad(
-                        success = false,
-                        authoritative = false,
-                        loadState = loadState,
-                        decisionCount = 0,
-                        linkCount = 0,
-                        droppedDecisionCount = 0,
-                        quarantinedDecisionCount = 0,
-                        filePresent = true,
-                        reason = "missing_schema_version"
-                    )
-                    return
-                }
-                lastStoredSchemaVersion = SCHEMA_VERSION
-            } else {
-                lastStoredSchemaVersion = storedSchemaVersion
-            }
-            val decisionElements =
-                if (legacyObfuscatedStore) {
-                    storeJson.requiredArray("a")
-                } else {
-                    storeJson.requiredArray("decisions")
-                }
-            if (storedSchemaVersion != null && storedSchemaVersion != SCHEMA_VERSION) {
-                val droppedDecisionCount = decisionElements.size()
-                val loadState = failedNonAuthoritativeState(errorClass = "SchemaVersionMismatch")
-                traceDecisionStoreLoad(
-                    success = false,
-                    authoritative = false,
-                    loadState = loadState,
-                    decisionCount = 0,
-                    linkCount = 0,
-                    droppedDecisionCount = droppedDecisionCount,
-                    quarantinedDecisionCount = droppedDecisionCount,
-                    filePresent = true,
-                    reason = "schema_version_mismatch",
-                    storedSchemaVersion = storedSchemaVersion
-                )
-                return
-            }
 
-            var droppedDecisionCount = 0
-            var quarantinedDecisionCount = 0
-            decisionElements.forEach { decisionElement ->
-                val restored = runCatching {
-                    decisionElement.asJsonObjectOrNull()?.toDecisionDomainOrNull()
-                }.getOrNull()
-                if (restored == null) {
-                    droppedDecisionCount += 1
-                    quarantinedDecisionCount += 1
-                    if (firstQuarantinedDecisionKeyHash == null) {
-                        firstQuarantinedDecisionKeyHash = decisionElement.safeDecisionKeyHash()
-                    }
-                } else {
-                    decisions[restored.decisionKey] = restored
-                }
+            lastStoredSchemaVersion = snapshot.storedSchemaVersion
+            firstQuarantinedDecisionKeyHash = snapshot.firstQuarantinedDecisionKeyHash
+            snapshot.decisions.forEach { decision ->
+                decisions[decision.decisionKey] = decision
             }
-            val previewLinkElements =
-                if (legacyObfuscatedStore) {
-                    storeJson.requiredArray("b")
-                } else {
-                    storeJson.requiredArray("previewLinks")
-                }
-            previewLinkElements.forEach { linkElement ->
-                runCatching {
-                    val link = requireNotNull(linkElement.asJsonObjectOrNull())
-                    previewToCanonical[ArtworkDecisionKey(requireNotNull(link.stringOrNull("previewKey", "a")))] =
-                        ArtworkDecisionKey(requireNotNull(link.stringOrNull("canonicalKey", "b")))
-                }.onFailure {
-                    droppedDecisionCount += 1
-                    quarantinedDecisionCount += 1
-                    if (firstQuarantinedDecisionKeyHash == null) {
-                        firstQuarantinedDecisionKeyHash = linkElement.safePreviewLinkKeyHash()
-                    }
-                }
+            snapshot.previewLinks.forEach { (previewKey, canonicalKey) ->
+                previewToCanonical[previewKey] = canonicalKey
             }
             val loadState =
-                if (droppedDecisionCount == 0 && quarantinedDecisionCount == 0) {
-                    loadedAuthoritativeState(droppedDecisionCount, quarantinedDecisionCount)
+                if (snapshot.droppedDecisionCount == 0 && snapshot.quarantinedDecisionCount == 0) {
+                    loadedAuthoritativeState(snapshot.droppedDecisionCount, snapshot.quarantinedDecisionCount)
                 } else {
-                    loadedPartialNonAuthoritativeState(droppedDecisionCount, quarantinedDecisionCount)
+                    loadedPartialNonAuthoritativeState(snapshot.droppedDecisionCount, snapshot.quarantinedDecisionCount)
                 }
             traceDecisionStoreLoad(
                 success = true,
@@ -357,30 +249,49 @@ class DurableArtworkDecisionCache(
                 loadState = loadState,
                 decisionCount = decisions.size,
                 linkCount = previewToCanonical.size,
-                droppedDecisionCount = droppedDecisionCount,
-                quarantinedDecisionCount = quarantinedDecisionCount,
+                droppedDecisionCount = snapshot.droppedDecisionCount,
+                quarantinedDecisionCount = snapshot.quarantinedDecisionCount,
                 filePresent = true
             )
         }.onFailure { error ->
             decisions.clear()
             previewToCanonical.clear()
-            lastLoadErrorMessageHash = error.message?.let(::artworkDecisionShortSha256)
-            lastLoadErrorTopFrame = error.stackTrace.firstOrNull()?.toTopFrameString()
-            val loadState = failedNonAuthoritativeState(errorClass = error.javaClass.simpleName)
-            traceDecisionStoreLoad(
-                success = false,
-                authoritative = false,
-                loadState = loadState,
-                decisionCount = 0,
-                linkCount = 0,
-                droppedDecisionCount = 0,
-                quarantinedDecisionCount = 0,
-                filePresent = true,
-                reason = "exception",
-                errorClass = error.javaClass.simpleName,
-                errorMessageHash = lastLoadErrorMessageHash,
-                errorTopFrame = lastLoadErrorTopFrame
-            )
+            if (error is ArtworkDecisionJsonStoreDecodeException) {
+                lastStoredSchemaVersion = error.storedSchemaVersion
+                lastLoadErrorMessageHash = null
+                lastLoadErrorTopFrame = null
+                val loadState = failedNonAuthoritativeState(errorClass = error.errorClassForLoad)
+                traceDecisionStoreLoad(
+                    success = false,
+                    authoritative = false,
+                    loadState = loadState,
+                    decisionCount = 0,
+                    linkCount = 0,
+                    droppedDecisionCount = error.droppedDecisionCount,
+                    quarantinedDecisionCount = error.quarantinedDecisionCount,
+                    filePresent = true,
+                    reason = error.reason,
+                    storedSchemaVersion = error.storedSchemaVersion
+                )
+            } else {
+                lastLoadErrorMessageHash = error.message?.let(::artworkDecisionShortSha256)
+                lastLoadErrorTopFrame = error.stackTrace.firstOrNull()?.toTopFrameString()
+                val loadState = failedNonAuthoritativeState(errorClass = error.javaClass.simpleName)
+                traceDecisionStoreLoad(
+                    success = false,
+                    authoritative = false,
+                    loadState = loadState,
+                    decisionCount = 0,
+                    linkCount = 0,
+                    droppedDecisionCount = 0,
+                    quarantinedDecisionCount = 0,
+                    filePresent = true,
+                    reason = "exception",
+                    errorClass = error.javaClass.simpleName,
+                    errorMessageHash = lastLoadErrorMessageHash,
+                    errorTopFrame = lastLoadErrorTopFrame
+                )
+            }
         }
     }
 
@@ -488,7 +399,7 @@ class DurableArtworkDecisionCache(
                 }
             )
         }
-        persistJsonToFile(snapshot.toStoreJson())
+        persistSnapshotToFile(snapshot)
     }
 
     private fun flushPendingWritesLocked() {
@@ -500,7 +411,14 @@ class DurableArtworkDecisionCache(
     }
 
     private fun persistLocked() {
-        persistJsonToFile(toStoreJson())
+        persistSnapshotToFile(
+            StoreSnapshot(
+                decisions = decisions.values.toList(),
+                previewLinks = previewToCanonical.entries.map { (previewKey, canonicalKey) ->
+                    previewKey to canonicalKey
+                }
+            )
+        )
     }
 
     private data class StoreSnapshot(
@@ -508,46 +426,20 @@ class DurableArtworkDecisionCache(
         val previewLinks: List<Pair<ArtworkDecisionKey, ArtworkDecisionKey>>
     )
 
-    /**
-     * Writes the supplied store JSON to disk atomically. Callable from any thread; does
-     * not require [lock]. The synchronous put/remove paths still hold [lock] when they
-     * invoke this, but the debounced flush path captures the JSON under the lock and
-     * then calls this lock-free.
-     */
-    private fun persistJsonToFile(storeJson: JsonObject) {
-        var tempFile: File? = null
+    private fun persistSnapshotToFile(snapshot: StoreSnapshot) {
         try {
-            val parent = file.parentFile
-            if (parent != null && !parent.exists()) parent.mkdirs()
-
-            tempFile = File(parent ?: File("."), "${file.name}.tmp")
-            FileOutputStream(tempFile).use { fos ->
-                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
-                    JsonWriter(bw).use { writer ->
-                        gson.toJson(storeJson, writer)
-                    }
-                }
-            }
-            try {
-                Files.move(
-                    tempFile.toPath(),
-                    file.toPath(),
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-                )
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(
-                    tempFile.toPath(),
-                    file.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
-                )
-            }
-            traceDecisionStoreWrite(success = true)
+            codec.writeStoreFile(file, snapshot.decisions, snapshot.previewLinks)
+            traceDecisionStoreWrite(
+                success = true,
+                decisionCount = snapshot.decisions.size,
+                linkCount = snapshot.previewLinks.size
+            )
         } catch (error: Exception) {
-            tempFile?.delete()
             traceDecisionStoreWrite(
                 success = false,
-                errorClass = error.javaClass.simpleName
+                errorClass = error.javaClass.simpleName,
+                decisionCount = snapshot.decisions.size,
+                linkCount = snapshot.previewLinks.size
             )
         }
     }
@@ -613,270 +505,6 @@ class DurableArtworkDecisionCache(
         val bytes: Long?
     )
 
-    private fun JsonObject.arrayOrEmpty(name: String, legacyName: String? = null): JsonArray =
-        elementOrNull(name, legacyName)
-            ?.takeUnless { it.isJsonNull }
-            ?.asJsonArray
-            ?: JsonArray()
-
-    private fun JsonObject.requiredArray(name: String): JsonArray {
-        val element = requireNotNull(get(name)) { "Missing required array $name" }
-        require(!element.isJsonNull) { "Null required array $name" }
-        return element.asJsonArray
-    }
-
-    private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
-        takeIf { it.isJsonObject }?.asJsonObject
-
-    private fun JsonObject.elementOrNull(name: String, legacyName: String? = null): JsonElement? =
-        get(name) ?: legacyName?.let(::get)
-
-    private fun JsonObject.stringOrNull(name: String, legacyName: String? = null): String? =
-        runCatching {
-            elementOrNull(name, legacyName)
-                ?.takeUnless { it is JsonNull || it.isJsonNull }
-                ?.asString
-        }.getOrNull()
-
-    private fun JsonObject.intOrNull(name: String, legacyName: String? = null): Int? =
-        runCatching {
-            elementOrNull(name, legacyName)
-                ?.takeUnless { it is JsonNull || it.isJsonNull }
-                ?.asInt
-        }.getOrNull()
-
-    private fun JsonObject.longOrNull(name: String, legacyName: String? = null): Long? =
-        runCatching {
-            elementOrNull(name, legacyName)
-                ?.takeUnless { it is JsonNull || it.isJsonNull }
-                ?.asLong
-        }.getOrNull()
-
-    private fun JsonObject.objectOrNull(name: String, legacyName: String? = null): JsonObject? =
-        runCatching {
-            elementOrNull(name, legacyName)?.asJsonObjectOrNull()
-        }.getOrNull()
-
-    private fun JsonObject.toDecisionDomainOrNull(): ArtworkDecision? = runCatching {
-        ArtworkDecision(
-            decisionKey = ArtworkDecisionKey(requireNotNull(stringOrNull("decisionKey", "a"))),
-            ownerKey = requireNotNull(objectOrNull("owner", "b")).toOwnerDomain(),
-            canonicalContentId = stringOrNull("canonicalContentId", "c"),
-            imageType = ArtworkType.valueOf(requireNotNull(stringOrNull("imageType", "d"))),
-            selectedCandidate = requireNotNull(objectOrNull("selectedCandidate", "e")).toCandidateDomain(),
-            rejectedCandidates = arrayOrEmpty("rejectedCandidates", "f").map { element ->
-                requireNotNull(element.asJsonObjectOrNull()?.toRejectedDomainOrNull())
-            },
-            policyVersion = requireNotNull(intOrNull("policyVersion", "g")),
-            imageLanguage = requireNotNull(stringOrNull("imageLanguage", "h")),
-            settingsHash = stringOrNull("settingsHash", "i"),
-            credentialHash = stringOrNull("credentialHash", "j"),
-            createdAtMs = requireNotNull(longOrNull("createdAtMs", "k")),
-            expiresAtMs = requireNotNull(longOrNull("expiresAtMs", "l")),
-            staleUntilMs = longOrNull("staleUntilMs", "m")
-        )
-    }.getOrNull()
-
-    private fun JsonObject.toOwnerDomain(): ArtworkOwnerKey = when (val type = requireNotNull(stringOrNull("type", "a"))) {
-        "canonical" -> ArtworkOwnerKey.CanonicalContent(requireNotNull(stringOrNull("contentId", "b")))
-        "preview" -> ArtworkOwnerKey.PreviewItem(
-            itemKey = requireNotNull(stringOrNull("itemKey", "c")),
-            sourcePayloadHash = requireNotNull(stringOrNull("sourcePayloadHash", "d"))
-        )
-        else -> error("Unknown owner type $type")
-    }
-
-    private fun JsonObject.toCandidateDomain(): PersistedArtworkCandidate =
-        PersistedArtworkCandidate(
-            provider = objectOrNull("provider", "a")?.toProviderDomain(),
-            sourceRole = ArtworkSourceRole.valueOf(requireNotNull(stringOrNull("sourceRole", "b"))),
-            sourceHash = stringOrNull("sourceHash", "c"),
-            redactedSourceForTrace = stringOrNull("redactedSourceForTrace", "d"),
-            providerTemplate = objectOrNull("providerTemplate", "e")?.toTemplateDomain(),
-            priority = requireNotNull(intOrNull("priority", "f"))
-        )
-
-    private fun JsonObject.toRejectedDomainOrNull(): RejectedArtworkCandidate? = runCatching {
-        RejectedArtworkCandidate(
-            provider = objectOrNull("provider", "a")?.toProviderDomain(),
-            sourceRole = ArtworkSourceRole.valueOf(requireNotNull(stringOrNull("sourceRole", "b"))),
-            reason = requireNotNull(stringOrNull("reason", "c")),
-            sourceHash = stringOrNull("sourceHash", "d"),
-            redactedSourceForTrace = stringOrNull("redactedSourceForTrace", "e"),
-            providerTemplate = objectOrNull("providerTemplate", "f")?.toTemplateDomain(),
-            priority = requireNotNull(intOrNull("priority", "g"))
-        )
-    }.getOrNull()
-
-    private fun JsonObject.toTemplateDomain(): PersistedProviderTemplate =
-        PersistedProviderTemplate(
-            provider = requireNotNull(objectOrNull("provider", "a")).toProviderDomain(),
-            imageType = ArtworkType.valueOf(requireNotNull(stringOrNull("imageType", "b"))),
-            idType = requireNotNull(stringOrNull("idType", "c")),
-            mediaId = requireNotNull(stringOrNull("mediaId", "d")),
-            providerPathHash = stringOrNull("providerPathHash", "e"),
-            settingsHash = stringOrNull("settingsHash", "f"),
-            credentialHash = stringOrNull("credentialHash", "g"),
-            imageLanguage = requireNotNull(stringOrNull("imageLanguage", "h")),
-            policyVersion = requireNotNull(intOrNull("policyVersion", "i")),
-            pathParams = objectOrNull("pathParams", "j")
-                ?.entrySet()
-                ?.associate { (key, value) -> key to value.asString }
-                .orEmpty()
-        )
-
-    private fun JsonObject.toProviderDomain(): ArtworkProviderId = when (val type = requireNotNull(stringOrNull("type", "a"))) {
-        "runtime" -> ArtworkProviderId.RuntimeProvider(
-            IntegrationProvider.valueOf(requireNotNull(stringOrNull("integrationProvider", "b")))
-        )
-        "rail_preview" -> ArtworkProviderId.RailPreview
-        "addon_preview" -> ArtworkProviderId.AddonPreview
-        "placeholder" -> ArtworkProviderId.Placeholder
-        else -> error("Unknown provider type $type")
-    }
-
-    private fun toStoreJson(): JsonObject = JsonObject().apply {
-        addProperty("schemaVersion", SCHEMA_VERSION)
-        add("decisions", JsonArray().apply {
-            decisions.values.forEach { decision -> add(decision.toJson()) }
-        })
-        add("previewLinks", JsonArray().apply {
-            previewToCanonical.forEach { (previewKey, canonicalKey) ->
-                add(JsonObject().apply {
-                    addProperty("previewKey", previewKey.value)
-                    addProperty("canonicalKey", canonicalKey.value)
-                })
-            }
-        })
-    }
-
-    private fun StoreSnapshot.toStoreJson(): JsonObject = JsonObject().apply {
-        addProperty("schemaVersion", SCHEMA_VERSION)
-        add("decisions", JsonArray().apply {
-            decisions.forEach { decision -> add(decision.toJson()) }
-        })
-        add("previewLinks", JsonArray().apply {
-            previewLinks.forEach { (previewKey, canonicalKey) ->
-                add(JsonObject().apply {
-                    addProperty("previewKey", previewKey.value)
-                    addProperty("canonicalKey", canonicalKey.value)
-                })
-            }
-        })
-    }
-
-    private fun ArtworkDecision.toJson(): JsonObject = JsonObject().apply {
-        addProperty("decisionKey", decisionKey.value)
-        add("owner", ownerKey.toJson())
-        addNullableProperty("canonicalContentId", canonicalContentId)
-        addProperty("imageType", imageType.name)
-        add("selectedCandidate", selectedCandidate.toJson())
-        add("rejectedCandidates", JsonArray().apply {
-            rejectedCandidates.forEach { rejected -> add(rejected.toJson()) }
-        })
-        addProperty("policyVersion", policyVersion)
-        addProperty("imageLanguage", imageLanguage)
-        addNullableProperty("settingsHash", settingsHash)
-        addNullableProperty("credentialHash", credentialHash)
-        addProperty("createdAtMs", createdAtMs)
-        addProperty("expiresAtMs", expiresAtMs)
-        addNullableProperty("staleUntilMs", staleUntilMs)
-    }
-
-    private fun ArtworkOwnerKey.toJson(): JsonObject = JsonObject().apply {
-        when (this@toJson) {
-            is ArtworkOwnerKey.CanonicalContent -> {
-                addProperty("type", "canonical")
-                addProperty("contentId", contentId)
-                add("itemKey", JsonNull.INSTANCE)
-                add("sourcePayloadHash", JsonNull.INSTANCE)
-            }
-            is ArtworkOwnerKey.PreviewItem -> {
-                addProperty("type", "preview")
-                add("contentId", JsonNull.INSTANCE)
-                addProperty("itemKey", itemKey)
-                addProperty("sourcePayloadHash", sourcePayloadHash)
-            }
-        }
-    }
-
-    private fun PersistedArtworkCandidate.toJson(): JsonObject = JsonObject().apply {
-        add("provider", provider?.toJson() ?: JsonNull.INSTANCE)
-        addProperty("sourceRole", sourceRole.name)
-        addNullableProperty("sourceHash", sourceHash)
-        addNullableProperty("redactedSourceForTrace", redactedSourceForTrace)
-        add("providerTemplate", providerTemplate?.toJson() ?: JsonNull.INSTANCE)
-        addProperty("priority", priority)
-    }
-
-    private fun RejectedArtworkCandidate.toJson(): JsonObject = JsonObject().apply {
-        add("provider", provider?.toJson() ?: JsonNull.INSTANCE)
-        addProperty("sourceRole", sourceRole.name)
-        addProperty("reason", reason)
-        addNullableProperty("sourceHash", sourceHash)
-        addNullableProperty("redactedSourceForTrace", redactedSourceForTrace)
-        add("providerTemplate", providerTemplate?.toJson() ?: JsonNull.INSTANCE)
-        addProperty("priority", priority)
-    }
-
-    private fun PersistedProviderTemplate.toJson(): JsonObject = JsonObject().apply {
-        add("provider", provider.toJson())
-        addProperty("imageType", imageType.name)
-        addProperty("idType", idType)
-        addProperty("mediaId", mediaId)
-        addNullableProperty("providerPathHash", providerPathHash)
-        addNullableProperty("settingsHash", settingsHash)
-        addNullableProperty("credentialHash", credentialHash)
-        addProperty("imageLanguage", imageLanguage)
-        addProperty("policyVersion", policyVersion)
-        add("pathParams", JsonObject().apply {
-            pathParams.forEach { (key, value) -> addProperty(key, value) }
-        })
-    }
-
-    private fun ArtworkProviderId.toJson(): JsonObject = JsonObject().apply {
-        when (this@toJson) {
-            is ArtworkProviderId.RuntimeProvider -> {
-                addProperty("type", "runtime")
-                addProperty("integrationProvider", providerId.name)
-            }
-            ArtworkProviderId.RailPreview -> {
-                addProperty("type", "rail_preview")
-                add("integrationProvider", JsonNull.INSTANCE)
-            }
-            ArtworkProviderId.AddonPreview -> {
-                addProperty("type", "addon_preview")
-                add("integrationProvider", JsonNull.INSTANCE)
-            }
-            ArtworkProviderId.Placeholder -> {
-                addProperty("type", "placeholder")
-                add("integrationProvider", JsonNull.INSTANCE)
-            }
-        }
-    }
-
-    private fun JsonObject.addNullableProperty(name: String, value: String?) {
-        if (value == null) add(name, JsonNull.INSTANCE) else addProperty(name, value)
-    }
-
-    private fun JsonObject.addNullableProperty(name: String, value: Long?) {
-        if (value == null) add(name, JsonNull.INSTANCE) else addProperty(name, value)
-    }
-
-    private fun JsonElement.safeDecisionKeyHash(): String {
-        val decisionKey = runCatching {
-            asJsonObject.get("decisionKey")?.takeIf { element -> element.isJsonPrimitive }?.asString
-        }.getOrNull()
-        return artworkDecisionShortSha256(decisionKey ?: toString())
-    }
-
-    private fun JsonElement.safePreviewLinkKeyHash(): String {
-        val previewKey = runCatching {
-            asJsonObject.get("previewKey")?.takeIf { element -> element.isJsonPrimitive }?.asString
-        }.getOrNull()
-        return artworkDecisionShortSha256(previewKey ?: toString())
-    }
-
     private fun loadedAuthoritativeState(
         droppedDecisionCount: Int,
         quarantinedDecisionCount: Int
@@ -930,14 +558,16 @@ class DurableArtworkDecisionCache(
 
     private fun traceDecisionStoreWrite(
         success: Boolean,
-        errorClass: String? = null
+        errorClass: String? = null,
+        decisionCount: Int = decisions.size,
+        linkCount: Int = previewToCanonical.size
     ) {
         traceArtwork(
             eventType = "artwork.decision_store_write",
             payload = mapOf(
                 "success" to success,
-                "decisionCount" to decisions.size,
-                "linkCount" to previewToCanonical.size,
+                "decisionCount" to decisionCount,
+                "linkCount" to linkCount,
                 "errorClass" to errorClass
             )
         )
@@ -973,7 +603,7 @@ class DurableArtworkDecisionCache(
             credentialHash == other.credentialHash
 
     companion object {
-        private const val SCHEMA_VERSION = 1
+        private const val SCHEMA_VERSION = ArtworkDecisionJsonCodec.SCHEMA_VERSION
         private const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
         private val FALLBACK_SOURCE_ROLES = setOf(
             ArtworkSourceRole.PRIMARY,

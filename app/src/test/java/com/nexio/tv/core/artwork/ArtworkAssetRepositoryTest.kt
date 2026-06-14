@@ -97,6 +97,39 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
+    fun `asset record index recovers decision ref without network after restart`() = runTest {
+        val decision = rpdbTemplateDecision()
+        val cache = InMemoryArtworkDecisionCache().apply { put(decision) }
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01))
+            }
+        )
+        val warm = requireNotNull(repository.getOrFetchDecision(decision.decisionKey))
+        val restartedRepository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = InMemoryArtworkDecisionCache(),
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.NetworkError(IllegalStateException("network should not be required"))
+            }
+        )
+
+        val recovered = restartedRepository.getOrFetchDecision(decision.decisionKey)
+
+        assertEquals(warm.assetKey, recovered?.assetKey)
+        assertEquals("DECISION_MISSING_ASSET_RECOVERED", recovered?.cacheDecision)
+        assertEquals(false, recovered?.networkExecuted)
+    }
+
+    @Test
     fun `fresh materialization returns image result when asset record write fails`() = runTest {
         val traceSink = RecordingArtworkTraceSink()
         val decision = rpdbTemplateDecision()

@@ -41,6 +41,12 @@ import com.nexio.tv.data.local.integration.IntegrationProviderBackoffDao
 import com.nexio.tv.data.local.integration.LocalIntegrationCacheStore
 import com.nexio.tv.data.local.integration.MediaIdentityDao
 import com.nexio.tv.data.local.integration.RailStoreDao
+import com.nexio.tv.data.local.artwork.ArtworkAssetRecordDao
+import com.nexio.tv.data.local.artwork.ArtworkCacheDatabase
+import com.nexio.tv.data.local.artwork.ArtworkCacheMigrationDao
+import com.nexio.tv.data.local.artwork.ArtworkDecisionDao
+import com.nexio.tv.data.local.artwork.RoomArtworkAssetRecordStore
+import com.nexio.tv.data.local.artwork.RoomArtworkDecisionCache
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -67,6 +73,32 @@ object IntegrationRuntimeModule {
             IntegrationCacheDatabase::class.java,
             "integration-cache.db"
         ).fallbackToDestructiveMigration().build()
+
+    @Provides
+    @Singleton
+    fun provideArtworkCacheDatabase(
+        @ApplicationContext context: Context
+    ): ArtworkCacheDatabase =
+        Room.databaseBuilder(
+            context,
+            ArtworkCacheDatabase::class.java,
+            "artwork-cache.db"
+        ).fallbackToDestructiveMigration().build()
+
+    @Provides
+    fun provideArtworkDecisionDao(
+        database: ArtworkCacheDatabase
+    ): ArtworkDecisionDao = database.decisionDao()
+
+    @Provides
+    fun provideArtworkAssetRecordDao(
+        database: ArtworkCacheDatabase
+    ): ArtworkAssetRecordDao = database.assetRecordDao()
+
+    @Provides
+    fun provideArtworkCacheMigrationDao(
+        database: ArtworkCacheDatabase
+    ): ArtworkCacheMigrationDao = database.migrationDao()
 
     @Provides
     fun provideIntegrationCacheDao(
@@ -109,13 +141,22 @@ object IntegrationRuntimeModule {
     fun provideArtworkDecisionCache(
         @ApplicationContext context: Context,
         gson: Gson,
-        traceSink: RuntimeTraceSink
+        traceSink: RuntimeTraceSink,
+        artworkDecisionDao: ArtworkDecisionDao,
+        artworkCacheMigrationDao: ArtworkCacheMigrationDao
     ): ArtworkDecisionCache =
-        DurableArtworkDecisionCache(
-            file = File(context.filesDir, "artwork-decisions-v1.json"),
+        RoomArtworkDecisionCache(
+            dao = artworkDecisionDao,
+            migrationDao = artworkCacheMigrationDao,
+            legacyFile = File(context.filesDir, "artwork-decisions-v1.json"),
             gson = gson,
             traceSink = traceSink,
-            thumbnailWriteDebounceMs = 1_500L
+            fallback = DurableArtworkDecisionCache(
+                file = File(context.filesDir, "artwork-decisions-v1.json"),
+                gson = gson,
+                traceSink = traceSink,
+                thumbnailWriteDebounceMs = 1_500L
+            )
         )
 
     @Provides
@@ -128,11 +169,19 @@ object IntegrationRuntimeModule {
     @Singleton
     fun provideArtworkAssetRecordStore(
         @ApplicationContext context: Context,
-        gson: Gson
+        gson: Gson,
+        artworkAssetRecordDao: ArtworkAssetRecordDao,
+        artworkCacheMigrationDao: ArtworkCacheMigrationDao
     ): ArtworkAssetRecordStore =
-        DurableArtworkAssetRecordStore(
-            file = File(context.filesDir, "artwork-asset-records-v1.json"),
-            gson = gson
+        RoomArtworkAssetRecordStore(
+            dao = artworkAssetRecordDao,
+            migrationDao = artworkCacheMigrationDao,
+            legacyFile = File(context.filesDir, "artwork-asset-records-v1.json"),
+            gson = gson,
+            fallback = DurableArtworkAssetRecordStore(
+                file = File(context.filesDir, "artwork-asset-records-v1.json"),
+                gson = gson
+            )
         )
 
     @Provides

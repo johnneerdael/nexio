@@ -13,10 +13,7 @@ class ArtworkLegacyProjectionTest {
     }
 
     @Test
-    fun `runtime asset projects to decision URI even when asset key is known`() {
-        // Asset URIs are read-only at the Coil fetcher and would dangle if the
-        // originating decision was never materialized. The legacy projection now
-        // always emits a decision URI so the self-healing fetcher path runs.
+    fun `runtime asset projects to asset URI when asset key is known`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:poster:imdb:tt0137523"),
             assetKey = ArtworkAssetKey("artwork-asset:rpdb:poster:imdb:tt0137523"),
@@ -27,13 +24,13 @@ class ArtworkLegacyProjectionTest {
         )
 
         assertEquals(
-            "nexio-artwork://decision/artwork-decision:poster:imdb:tt0137523",
+            "nexio-artwork://asset/artwork-asset:rpdb:poster:imdb:tt0137523",
             ref.toLegacyArtworkString()
         )
     }
 
     @Test
-    fun `runtime asset projection always emits decision URI regardless of asset key presence`() {
+    fun `runtime asset projection prefers asset URI over decision URI`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:poster:canonical:imdb:tt123"),
             assetKey = ArtworkAssetKey("artwork-asset:RPDB:poster:imdb:tt123:settings:s:credential:c:imageLang:en:policy:1"),
@@ -44,7 +41,7 @@ class ArtworkLegacyProjectionTest {
         )
 
         assertEquals(
-            "nexio-artwork://decision/artwork-decision:poster:canonical:imdb:tt123",
+            "nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt123:settings:s:credential:c:imageLang:en:policy:1",
             ref.toLegacyArtworkString()
         )
     }
@@ -132,7 +129,7 @@ class ArtworkLegacyProjectionTest {
         )
 
         assertEquals(
-            "nexio-artwork://decision/artwork-decision:thumbnail:imdb:tt0137523:S1E1",
+            "nexio-artwork://asset/artwork-asset:TOP_POSTERS:thumbnail:imdb:tt0137523:S1E1",
             ref.toLegacyArtworkString()
         )
     }
