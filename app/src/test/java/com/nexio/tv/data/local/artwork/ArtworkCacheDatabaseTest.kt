@@ -95,6 +95,31 @@ class ArtworkCacheDatabaseTest {
         assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
     }
 
+    @Test
+    fun `missing decision cleanup preserves alias preview link when canonical decision exists`() = runTest {
+        val db = inMemoryDatabase()
+        db.decisionDao().upsertDecision(decision("canonical-a", settingsHash = null))
+        db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-alias", "canonical-a"))
+
+        db.decisionDao().deleteLinksReferencingMissingDecisions()
+
+        assertEquals("canonical-a", db.decisionDao().getCanonicalKeyForPreview("preview-alias"))
+    }
+
+    @Test
+    fun `delete decision and links removes links referencing preview decision`() = runTest {
+        val db = inMemoryDatabase()
+        db.decisionDao().upsertDecision(decision("preview-a", settingsHash = "settings-a"))
+        db.decisionDao().upsertDecision(decision("canonical-a", settingsHash = null))
+        db.decisionDao().upsertPreviewLink(ArtworkPreviewLinkEntity("preview-a", "canonical-a"))
+
+        db.decisionDao().deleteDecisionAndLinks("preview-a")
+
+        assertNull(db.decisionDao().getDecision("preview-a"))
+        assertEquals("canonical-a", db.decisionDao().getDecision("canonical-a")?.decisionKey)
+        assertNull(db.decisionDao().getCanonicalKeyForPreview("preview-a"))
+    }
+
     private fun inMemoryDatabase(): ArtworkCacheDatabase {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         return Room.inMemoryDatabaseBuilder(context, ArtworkCacheDatabase::class.java)

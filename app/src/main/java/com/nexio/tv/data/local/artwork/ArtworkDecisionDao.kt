@@ -55,8 +55,7 @@ abstract class ArtworkDecisionDao {
 
     @Query(
         "DELETE FROM artwork_preview_links " +
-            "WHERE canonicalKey NOT IN (SELECT decisionKey FROM artwork_decisions) " +
-            "OR previewKey NOT IN (SELECT decisionKey FROM artwork_decisions)"
+            "WHERE canonicalKey NOT IN (SELECT decisionKey FROM artwork_decisions)"
     )
     abstract suspend fun deleteLinksReferencingMissingDecisions(): Int
 
