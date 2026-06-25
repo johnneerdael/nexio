@@ -570,11 +570,7 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int): ArtworkAssetKey? =
         when (val candidateSource = source) {
             is ArtworkSource.ProviderTemplate ->
-                toPersistedCandidate(
-                    policyVersion = policyVersion,
-                    remoteSourceStore = remoteSourceStore
-                ).providerTemplate
-                    ?.let(ArtworkCacheKeys::assetKeyForProviderTemplate)
+                null
             is ArtworkSource.RemoteUrl ->
                 provider?.let { selectedProvider ->
                     ArtworkCacheKeys.assetKeyForRemoteUrl(

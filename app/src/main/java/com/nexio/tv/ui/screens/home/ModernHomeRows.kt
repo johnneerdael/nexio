@@ -102,7 +102,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
-private const val POSTER_PREFETCH_DISTANCE = 8
+private const val POSTER_PREFETCH_DISTANCE = 25
 
 private fun ModernCarouselItem.artworkCacheOwnerId(): String = when (val payload = payload) {
     is ModernPayload.Catalog -> payload.itemId
@@ -552,10 +552,20 @@ internal fun ModernRowSection(
                 val modelKey = model.toString()
                 val cacheKey = "${modelKey}_${widthPx}x${heightPx}"
                 if (imageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) return
+                val diskKey = when (item.payload) {
+                    is ModernPayload.Catalog -> {
+                        val artworkOwnerId = item.artworkCacheOwnerId()
+                        val posterProviderTag = item.posterRef.deriveProviderTag()
+                        ArtworkImageCacheKeys.poster(artworkOwnerId, posterProviderTag, modelKey)
+                    }
+                    is ModernPayload.ContinueWatching ->
+                        ArtworkImageCacheKeys.poster(item.artworkCacheOwnerId(), null, modelKey)
+                }
                 imageLoader.enqueue(
                     ImageRequest.Builder(context)
                         .data(model)
                         .memoryCacheKey(cacheKey)
+                        .diskCacheKey(diskKey)
                         .size(width = widthPx, height = heightPx)
                         .build()
                 )

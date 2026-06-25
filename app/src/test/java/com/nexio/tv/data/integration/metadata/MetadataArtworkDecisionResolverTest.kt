@@ -1,9 +1,11 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.artwork.ArtworkCacheKeys
+import com.nexio.tv.core.artwork.ArtworkCandidate
 import com.nexio.tv.core.artwork.ArtworkDecisionPolicy
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
 import com.nexio.tv.core.artwork.ArtworkRemoteSourceStore
@@ -15,11 +17,15 @@ import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
 import com.nexio.tv.core.artwork.fanarttv.FanartTvCandidateGenerator
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.data.remote.api.TvdbArtworkRecord
 import com.nexio.tv.domain.model.ArtworkProviderSettings
+import com.nexio.tv.domain.model.ProviderIds
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -128,6 +135,51 @@ class MetadataArtworkDecisionResolverTest {
         val type2Hash = ArtworkCacheKeys.normalizedUrlHash("https://art.tvdb.com/type-2-poster.jpg")
         assertEquals(type2Hash, decision.selectedCandidate.sourceHash)
         assertTrue(remoteSourceStore.get(type2Hash) != null)
+    }
+
+    @Test
+    fun `premium provider template resolves as decision ref until asset is materialized`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val remoteSourceStore = RecordingRemoteSourceStore()
+        val resolver = resolver(
+            cache = cache,
+            remoteSourceStore = remoteSourceStore,
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "rpdb-key",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        )
+        val ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523")
+        val candidates = listOf(
+            ArtworkCandidate(
+                ownerKey = ownerKey,
+                canonicalContentId = "imdb:tt0137523",
+                providerIds = ProviderIds(imdb = "tt0137523"),
+                mediaKind = MetadataMediaKind.MOVIE,
+                imageType = ArtworkType.POSTER,
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                sourceRole = ArtworkSourceRole.PREMIUM,
+                source = ArtworkSource.ProviderTemplate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    idType = "imdb",
+                    mediaId = "tt0137523",
+                    providerPathHash = "rpdb-path",
+                    settingsHash = "settings",
+                    credentialHash = "credential"
+                ),
+                priority = 1,
+                requiresRuntimeFetch = true
+            )
+        )
+
+        val posterRef = resolver.resolveFields(candidates)
+            .getValue(ResolvedField.POSTER)
+            .value as ArtworkDisplayRef.RuntimeAsset
+
+        assertNull(posterRef.assetKey)
+        assertNotNull(cache.get(posterRef.decisionKey))
     }
 
     private fun resolver(

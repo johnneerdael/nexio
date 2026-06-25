@@ -279,7 +279,7 @@ internal fun modernRowItemContentType(item: ModernCarouselItem): String {
 internal fun shouldPrefetchModernRow(
     isActiveRow: Boolean,
     isVerticalRowsScrolling: Boolean
-): Boolean = isActiveRow && !isVerticalRowsScrolling
+): Boolean = !isVerticalRowsScrolling
 
 internal fun modernVisibleCatalogRows(rows: List<CatalogRow>): List<CatalogRow> {
     val visibleRowsByKey = LinkedHashMap<String, CatalogRow>()

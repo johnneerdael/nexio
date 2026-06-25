@@ -3,6 +3,7 @@ package com.nexio.tv.data.local.artwork
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkAssetRecord
@@ -76,6 +77,33 @@ class RoomArtworkAssetRecordStoreTest {
 
         assertNull(restarted.get(notImported.assetKey))
         assertEquals(validB, restarted.findLatestAssetForDecision(ArtworkDecisionKey("legacy-decision")))
+    }
+
+    @Test
+    fun `imports legacy obfuscated json records without entering fallback mode`() = runTest {
+        val db = inMemoryDatabase()
+        val legacyFile = temp.newFile("legacy-obfuscated-records.json")
+        val legacy = record("legacy-compact", ArtworkDecisionKey("legacy-compact-decision"), fetchedAtMs = 250)
+        val fresh = record("fresh-after-migration", ArtworkDecisionKey("fresh-decision"), fetchedAtMs = 300)
+        writeLegacyObfuscatedFile(legacyFile, legacy)
+
+        val store = store(db, legacyFile)
+
+        assertEquals(legacy, store.get(legacy.assetKey))
+        assertEquals(legacy, store.findLatestAssetForDecision(ArtworkDecisionKey("legacy-compact-decision")))
+        assertEquals(
+            ArtworkCacheMigrationEntity(
+                key = "asset-records-json-v1",
+                completedAtMs = db.migrationDao().get("asset-records-json-v1")!!.completedAtMs,
+                importedCount = 1,
+                skippedCount = 0
+            ),
+            db.migrationDao().get("asset-records-json-v1")
+        )
+
+        store.put(fresh)
+
+        assertEquals(fresh, store(db, legacyFile).get(fresh.assetKey))
     }
 
     @Test
@@ -174,6 +202,31 @@ class RoomArtworkAssetRecordStoreTest {
                     addProperty("imageType", "NOT_REAL")
                 }
             )
+        }
+        file.writeText(gson.toJson(json))
+    }
+
+    private fun writeLegacyObfuscatedFile(file: File, record: ArtworkAssetRecord) {
+        val json = JsonObject().apply {
+            add("a", JsonArray().apply {
+                add(
+                    JsonObject().apply {
+                        addProperty("a", record.assetKey.value)
+                        addProperty("b", record.decisionKey?.value)
+                        addProperty("c", "PLACEHOLDER")
+                        addProperty("d", record.imageType.name)
+                        addProperty("e", record.imageLanguage)
+                        addProperty("f", record.relativePath)
+                        addProperty("g", record.mimeType)
+                        addProperty("h", record.byteCount)
+                        addProperty("i", record.sourceHash)
+                        addProperty("j", record.policyVersion)
+                        addProperty("k", record.fetchedAtMs)
+                        addProperty("l", record.expiresAtMs)
+                        addProperty("m", record.staleUntilMs)
+                    }
+                )
+            })
         }
         file.writeText(gson.toJson(json))
     }

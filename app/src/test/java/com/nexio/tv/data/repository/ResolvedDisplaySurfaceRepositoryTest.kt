@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
@@ -150,6 +151,38 @@ class ResolvedDisplaySurfaceRepositoryTest {
         assertTrue(published)
         assertEquals(1, repository.getSnapshot(profileId = 1).size)
         assertEquals("Rail A Title", repository.getSnapshot(profileId = 1).single().display.title)
+    }
+
+    @Test
+    fun `homeAuthorityAliasKeysWithRenderablePoster excludes decision only poster refs`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val item = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Decision-only poster"
+        ).copy(artwork = ArtworkBundle(poster = artworkRef(key = "poster-decision", imageType = ArtworkType.POSTER)))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(item))
+
+        assertTrue(
+            repository.homeAuthorityAliasKeysWithRenderablePoster(profileId = 1).isEmpty()
+        )
+    }
+
+    @Test
+    fun `homeAuthorityAliasKeysWithRenderablePoster includes asset backed poster refs`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val item = resolvedItem(
+            itemKey = "movie:tmdb:550",
+            title = "Cached poster"
+        ).copy(artwork = ArtworkBundle(poster = assetArtworkRef(key = "poster-asset", imageType = ArtworkType.POSTER)))
+
+        repository.publishResolvedItems(profileSession = activeSession.value, items = listOf(item))
+
+        assertTrue(
+            "movie:tmdb:550" in repository.homeAuthorityAliasKeysWithRenderablePoster(profileId = 1)
+        )
     }
 
     @Test
@@ -922,6 +955,18 @@ class ResolvedDisplaySurfaceRepositoryTest {
     ) = ArtworkDisplayRef.RuntimeAsset(
         decisionKey = ArtworkDecisionKey(key),
         assetKey = null,
+        imageType = imageType,
+        selectedProvider = null,
+        sourceRole = ArtworkSourceRole.PREMIUM,
+        trace = ArtworkTrace.empty()
+    )
+
+    private fun assetArtworkRef(
+        key: String,
+        imageType: ArtworkType
+    ) = ArtworkDisplayRef.RuntimeAsset(
+        decisionKey = ArtworkDecisionKey(key),
+        assetKey = ArtworkAssetKey("asset-$key"),
         imageType = imageType,
         selectedProvider = null,
         sourceRole = ArtworkSourceRole.PREMIUM,

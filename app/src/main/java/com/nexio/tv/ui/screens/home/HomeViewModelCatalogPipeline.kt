@@ -167,7 +167,7 @@ private fun ArtworkDisplayRef?.isRenderableHomeCardArtworkRef(): Boolean =
     when (this) {
         null -> false
         is ArtworkDisplayRef.Placeholder -> false
-        is ArtworkDisplayRef.RuntimeAsset -> true
+        is ArtworkDisplayRef.RuntimeAsset -> assetKey != null
         is ArtworkDisplayRef.LegacyString -> value.isRenderableHomeCardUrl()
     }
 
@@ -868,7 +868,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     // suspending homeHydrationCoordinator.hydrate(...) call inside the body would
     // otherwise save the iterator into the continuation's L$N field, pinning the
     // uniqueItems list for the lifetime of the (possibly cancelled) coroutine.
-    val authorityAliasKeys = resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
+    val authorityAliasKeysWithPoster = resolvedDisplaySurfaceRepository.homeAuthorityAliasKeysWithRenderablePoster(
         profileId = capturedProfileSession.profileId,
         includePreviewOnly = false
     )
@@ -885,7 +885,7 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             return
         }
         val itemKey = homeDisplayItemKey(item.apiType, item.id)
-        if (itemKey in authorityAliasKeys) continue
+        if (itemKey in authorityAliasKeysWithPoster) continue
         if (hydratedHomeOverlaysByItemKey.value[itemKey]?.satisfiesVisibleHydrationFor(item, languageTag) == true) continue
         if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) continue
         try {
@@ -927,6 +927,7 @@ private fun HydratedHomeOverlay.satisfiesVisibleHydrationFor(
     languageTag: String
 ): Boolean {
     if (this.languageTag != languageTag) return false
+    if (!item.hasRenderableHomeCardPoster() && !fields.displayPoster.isRenderableHomeCardUrl()) return false
     val seriesLike = item.type == ContentType.SERIES ||
         item.apiType.equals("series", ignoreCase = true) ||
         item.apiType.equals("tv", ignoreCase = true)
@@ -1977,10 +1978,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                     }
                     val deferredCatalogPublishes = linkedMapOf<String, Pair<CatalogRow, CatalogItemDiff>>()
                     var rawFirstPaintBatchActive = catalogInventoryRepository.isEmpty() && !deferCatalogPublishUntilHydrated
-                    val resolvedAuthorityAliasKeys = resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
-                        profileId = expectedProfileSession.profileId,
-                        includePreviewOnly = false
-                    )
+                    val resolvedAuthorityAliasesWithPoster =
+                        resolvedDisplaySurfaceRepository.homeAuthorityAliasKeysWithRenderablePoster(
+                            profileId = expectedProfileSession.profileId,
+                            includePreviewOnly = false
+                        )
                     refreshedCatalogCount.set(
                         homeCatalogRefreshCoordinator.refreshSerially(
                             addons = addons,
@@ -2013,7 +2015,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
                                 }
                             },
                             hasResolvedAuthority = { itemKey ->
-                                itemKey in resolvedAuthorityAliasKeys
+                                itemKey in resolvedAuthorityAliasesWithPoster
                             },
                             onCatalogReady = { catalogKey, row, diff ->
                                 withContext(Dispatchers.Main.immediate) {
@@ -2252,20 +2254,37 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(
             Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible prefetch generation=$expectedGeneration")
             return
         }
-        val visibleItemKeys = visibleHydrationItems
-            .asSequence()
-            .map { item -> homeDisplayItemKey(item.apiType, item.id) }
-            .toSet()
-        val resolvedVisibleItemsByAlias = resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(
-            profileId = expectedProfileSession.profileId
+    }
+    val visibleItemKeys = visibleItems
+        .asSequence()
+        .map { item -> homeDisplayItemKey(item.apiType, item.id) }
+        .toSet()
+    if (visibleItems.isNotEmpty()) {
+        homeCatalogRefreshCoordinator.prefetchVisiblePreviewPosterAssetsOnly(
+            items = visibleItems,
+            telemetryEnabled = startupPerfTelemetryEnabled,
+            onLog = { event, details -> logStartupPerf(event, details) }
         )
-        val resolvedVisibleItems = visibleItemKeys
-            .asSequence()
-            .mapNotNull(resolvedVisibleItemsByAlias::get)
-            .distinctBy { it.itemKey }
+    }
+    val resolvedVisibleItemsByAlias = resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(
+        profileId = expectedProfileSession.profileId
+    )
+    val resolvedVisibleItems = visibleItemKeys
+        .asSequence()
+        .mapNotNull(resolvedVisibleItemsByAlias::get)
+        .distinctBy { it.itemKey }
+        .toList()
+    val persistedResolvedItems = withContext(Dispatchers.IO) {
+        resolvedDisplaySnapshotStore.readProfileArtworkSnapshotAnyLanguage(profileId = expectedProfileSession.profileId)
+            .values
+            .distinctBy { item -> item.itemKey }
             .toList()
-        homeCatalogRefreshCoordinator.prefetchResolvedVisibleImagesOnly(
-            items = resolvedVisibleItems,
+    }
+    val resolvedPosterPrefetchItems = (resolvedVisibleItems + persistedResolvedItems)
+        .distinctBy { item -> item.itemKey }
+    if (resolvedPosterPrefetchItems.isNotEmpty()) {
+        homeCatalogRefreshCoordinator.prefetchResolvedVisiblePostersOnly(
+            items = resolvedPosterPrefetchItems,
             telemetryEnabled = startupPerfTelemetryEnabled,
             onLog = { event, details -> logStartupPerf(event, details) }
         )

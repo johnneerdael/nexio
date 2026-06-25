@@ -266,6 +266,58 @@ class ResolvedDisplaySnapshotStoreTest {
     }
 
     @Test
+    fun `read drops provider-template asset URI when record is missing`() {
+        val providerTemplateAssetKey = ArtworkAssetKey(
+            "artwork-asset:RPDB:poster:imdb:tt32565993:" +
+                "settings:348ee7a03812654a1bed8f378de9fa35d7b75ec130bc7d28d035bcff69949d3b:" +
+                "credential:b8c0287672c33e5d5a391b8290c231a0afb35b5c543dd6f535c6ef2f1e14c87c:" +
+                "imageLang:en:policy:1"
+        )
+        val providerTemplateUri = "nexio-artwork://asset/${providerTemplateAssetKey.value}"
+        val posterRef = ArtworkDisplayRef.LegacyString(
+            value = providerTemplateUri,
+            imageType = ArtworkType.POSTER,
+            trace = ArtworkTrace(selectedProvider = "RPDB", sourceRole = "PREMIUM")
+        )
+        val store = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = tempFolder.newFolder("resolved-display-provider-template"),
+            activeProfileId = { 2 },
+            currentLanguageTag = { "en" },
+            assetRefIsRecoverable = { false }
+        )
+        val item = sampleItem("movie:tmdb:1301421", "The Sheep Detectives").copy(
+            artwork = ArtworkBundle(poster = posterRef),
+            slots = ResolvedDisplayFieldSlots(
+                title = slot("The Sheep Detectives", DisplaySourceRank.RESOLVED, "TMDB"),
+                originalTitle = slot(null, DisplaySourceRank.EMPTY, null),
+                overview = slot(null, DisplaySourceRank.EMPTY, null),
+                genres = slot(emptyList(), DisplaySourceRank.EMPTY, null),
+                releaseInfo = slot("2026", DisplaySourceRank.RESOLVED, "TMDB"),
+                runtime = slot(null, DisplaySourceRank.EMPTY, null),
+                rating = slot(null, DisplaySourceRank.EMPTY, null),
+                poster = slot(posterRef, DisplaySourceRank.RESOLVED, "RPDB"),
+                backdrop = slot(null, DisplaySourceRank.EMPTY, null),
+                logo = slot(null, DisplaySourceRank.EMPTY, null),
+                thumbnail = slot(null, DisplaySourceRank.EMPTY, null),
+                posterProviderTag = slot("rpdb", DisplaySourceRank.RESOLVED, "RPDB")
+            ),
+            displayLanguageTag = "en",
+            hydrationState = HydrationState.CANONICAL_READY
+        )
+
+        store.write(mapOf(item.itemKey to item), profileId = 2)
+
+        val restored = store.read(profileId = 2)[item.itemKey]
+        assertNull(restored?.artwork?.poster)
+        assertNull(restored?.slots?.poster?.value)
+        assertEquals(DisplaySourceRank.EMPTY, restored?.slots?.poster?.rank)
+        assertTrue(
+            restored?.slots?.poster?.trace
+                ?.contains("dropped_unrecoverable_cached_asset_ref") == true
+        )
+    }
+
+    @Test
     fun `round-trip multiple items preserves keys and values`() {
         val store = storeFor()
         val items = (1..5).associate { i ->

@@ -69,6 +69,49 @@ class HomeCatalogRowDisplayProjectionTest {
     }
 
     @Test
+    fun `home row projection drops cards with only decision artwork refs`() {
+        val row = row(
+            addonId = "other",
+            addonBaseUrl = "https://example.test",
+            catalogId = "movies",
+            itemCount = 2,
+            renderPoster = false
+        ).copy(
+            items = listOf(
+                item("ordinary", 0, renderPoster = false).copy(
+                    artwork = ArtworkBundle(poster = runtimeDecisionRef("poster-decision"))
+                ),
+                item("ordinary", 1, renderPoster = true)
+            )
+        )
+
+        val projected = projectCatalogRowForHomeDisplay(row, HomeLayout.MODERN)
+
+        assertEquals(listOf("ordinary:1"), projected.items.map { it.id })
+    }
+
+    @Test
+    fun `home row projection keeps cards with asset backed artwork refs`() {
+        val row = row(
+            addonId = "other",
+            addonBaseUrl = "https://example.test",
+            catalogId = "movies",
+            itemCount = 1,
+            renderPoster = false
+        ).copy(
+            items = listOf(
+                item("ordinary", 0, renderPoster = false).copy(
+                    artwork = ArtworkBundle(poster = runtimeAsset("poster-asset"))
+                )
+            )
+        )
+
+        val projected = projectCatalogRowForHomeDisplay(row, HomeLayout.MODERN)
+
+        assertEquals(listOf("ordinary:0"), projected.items.map { it.id })
+    }
+
+    @Test
     fun `profile switch provider fallback keeps cached posterless cards`() {
         val row = row(
             addonId = "trakt",
@@ -235,7 +278,18 @@ class HomeCatalogRowDisplayProjectionTest {
         ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("decision-$id"),
             assetKey = ArtworkAssetKey("asset-$id"),
-            imageType = ArtworkType.BACKDROP,
+            imageType = ArtworkType.POSTER,
+            selectedProvider = null,
+            sourceRole = ArtworkSourceRole.RAIL_PREVIEW,
+            trace = ArtworkTrace.empty(),
+            displayHints = ArtworkDisplayHints()
+        )
+
+    private fun runtimeDecisionRef(id: String): ArtworkDisplayRef.RuntimeAsset =
+        ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("decision-$id"),
+            assetKey = null,
+            imageType = ArtworkType.POSTER,
             selectedProvider = null,
             sourceRole = ArtworkSourceRole.RAIL_PREVIEW,
             trace = ArtworkTrace.empty(),

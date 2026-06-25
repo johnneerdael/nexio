@@ -10,6 +10,7 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.artwork.ArtworkAssetRepository
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkBundle
@@ -24,6 +25,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.ResolvedDisplaySnapshotStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogIds
@@ -972,7 +974,7 @@ class HomeCatalogRefreshCoordinatorTest {
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
-    fun `serialized refresh delegates visible overlay hydration and image prefetch after successful catalog refresh`() = runTest {
+    fun `serialized refresh hydrates visible authority item when poster is not renderable`() = runTest {
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
@@ -1002,6 +1004,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val fullRow = displayRow.copy(items = listOf(visiblePreview, hiddenPreview))
         val resolvedVisible = resolvedItemFor(visiblePreview)
         val resolvedDisplaySurfaceRepository = mockk<ResolvedDisplaySurfaceRepository>()
+        val resolvedDisplaySnapshotStore = mockk<ResolvedDisplaySnapshotStore>()
 
         every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
         every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
@@ -1009,8 +1012,15 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
         every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
         every { viewModel.resolvedDisplaySurfaceRepository } returns resolvedDisplaySurfaceRepository
+        every { viewModel.resolvedDisplaySnapshotStore } returns resolvedDisplaySnapshotStore
         every {
             resolvedDisplaySurfaceRepository.homeAuthorityAliasKeys(
+                profileId = profileSession.profileId,
+                includePreviewOnly = false
+            )
+        } returns setOf(homeDisplayItemKey(visiblePreview.apiType, visiblePreview.id))
+        every {
+            resolvedDisplaySurfaceRepository.homeAuthorityAliasKeysWithRenderablePoster(
                 profileId = profileSession.profileId,
                 includePreviewOnly = false
             )
@@ -1018,6 +1028,9 @@ class HomeCatalogRefreshCoordinatorTest {
         every {
             resolvedDisplaySurfaceRepository.homeAuthorityItemsByAlias(profileId = profileSession.profileId)
         } returns mapOf(homeDisplayItemKey(visiblePreview.apiType, visiblePreview.id) to resolvedVisible)
+        every {
+            resolvedDisplaySnapshotStore.readProfileArtworkSnapshotAnyLanguage(profileId = profileSession.profileId)
+        } returns mapOf(resolvedVisible.itemKey to resolvedVisible)
         every { viewModel.addonsCache } returns listOf(addon())
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
@@ -1087,6 +1100,12 @@ class HomeCatalogRefreshCoordinatorTest {
         coEvery {
             coordinator.prefetchResolvedVisibleImagesOnly(any(), any(), any())
         } returns Unit
+        coEvery {
+            coordinator.prefetchResolvedVisiblePostersOnly(any(), any(), any())
+        } returns Unit
+        coEvery {
+            coordinator.prefetchVisiblePreviewPosterAssetsOnly(any(), any(), any())
+        } returns Unit
         every { viewModel.profileManager.activeProfileSession } returns MutableStateFlow(profileSession)
 
         try {
@@ -1112,7 +1131,14 @@ class HomeCatalogRefreshCoordinatorTest {
             )
         }
         coVerify(exactly = 1) {
-            coordinator.prefetchResolvedVisibleImagesOnly(
+            coordinator.prefetchVisiblePreviewPosterAssetsOnly(
+                items = listOf(visiblePreview),
+                telemetryEnabled = false,
+                onLog = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            coordinator.prefetchResolvedVisiblePostersOnly(
                 items = listOf(resolvedVisible),
                 telemetryEnabled = false,
                 onLog = any()
@@ -1514,11 +1540,50 @@ class HomeCatalogRefreshCoordinatorTest {
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
+    fun `visible preview prefetch materializes persisted decision poster refs`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val artworkAssetRepository = mockk<ArtworkAssetRepository>()
+        val decisionKey = ArtworkDecisionKey("artwork-decision:poster:canonical:imdb:tt32565993")
+        val logs = mutableListOf<Pair<String, String?>>()
+        val item = preview(
+            id = "1301421",
+            poster = "nexio-artwork://decision/${decisionKey.value}"
+        )
+        coEvery { artworkAssetRepository.getOrFetchDecision(any()) } returns null
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            coordinator(
+                catalogRepository = catalogRepository,
+                metadataRouterFacade = metadataRouterFacade,
+                metadataDiskCacheStore = metadataDiskCacheStore,
+                posterRatingsUrlResolver = posterRatingsUrlResolver,
+                artworkAssetRepository = artworkAssetRepository
+            ).prefetchVisiblePreviewPosterAssetsOnly(
+                items = listOf(item),
+                telemetryEnabled = true,
+                onLog = { event, details -> logs += event to details }
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        coVerify(exactly = 1) { artworkAssetRepository.getOrFetchDecision(decisionKey) }
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_start" && it.second?.contains("decisions=1") == true })
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_end" && it.second?.contains("failed=1") == true })
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
     fun `resolved visible prefetch includes authority runtime artwork refs`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val artworkAssetRepository = mockk<ArtworkAssetRepository>()
         val logs = mutableListOf<Pair<String, String?>>()
         val item = resolvedItemFor(preview(id = "1007757", poster = null)).copy(
             artwork = ArtworkBundle(
@@ -1527,6 +1592,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 logo = runtimeArtworkRef("logoDecision", ArtworkType.LOGO)
             )
         )
+        coEvery { artworkAssetRepository.getOrFetchDecision(any()) } returns null
 
         try {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -1534,7 +1600,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 catalogRepository = catalogRepository,
                 metadataRouterFacade = metadataRouterFacade,
                 metadataDiskCacheStore = metadataDiskCacheStore,
-                posterRatingsUrlResolver = posterRatingsUrlResolver
+                posterRatingsUrlResolver = posterRatingsUrlResolver,
+                artworkAssetRepository = artworkAssetRepository
             ).prefetchResolvedVisibleImagesOnly(
                 items = listOf(item),
                 telemetryEnabled = true,
@@ -1544,9 +1611,57 @@ class HomeCatalogRefreshCoordinatorTest {
             Dispatchers.resetMain()
         }
 
+        coVerify(exactly = 1) { artworkAssetRepository.getOrFetchDecision(ArtworkDecisionKey("posterDecision")) }
+        coVerify(exactly = 1) { artworkAssetRepository.getOrFetchDecision(ArtworkDecisionKey("backdropDecision")) }
+        coVerify(exactly = 1) { artworkAssetRepository.getOrFetchDecision(ArtworkDecisionKey("logoDecision")) }
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_start" && it.second?.contains("decisions=3") == true })
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_end" && it.second?.contains("failed=3") == true })
         assertTrue(logs.any { it.first == "image_prefetch_start" && it.second?.contains("urls_total=3") == true })
         assertTrue(logs.any { it.first == "item_image_fetch" && it.second?.contains("urls=3/3") == true })
         assertTrue(logs.any { it.first == "image_prefetch_end" && it.second?.contains("fetched_urls=3") == true })
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `resolved visible prefetch materializes persisted decision legacy refs`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val artworkAssetRepository = mockk<ArtworkAssetRepository>()
+        val decisionKey = ArtworkDecisionKey("artwork-decision:poster:canonical:imdb:tt32565993")
+        val logs = mutableListOf<Pair<String, String?>>()
+        val item = resolvedItemFor(preview(id = "1301421", poster = null)).copy(
+            artwork = ArtworkBundle(
+                poster = ArtworkDisplayRef.LegacyString(
+                    value = "nexio-artwork://decision/${decisionKey.value}",
+                    imageType = ArtworkType.POSTER,
+                    trace = ArtworkTrace.empty()
+                )
+            )
+        )
+        coEvery { artworkAssetRepository.getOrFetchDecision(any()) } returns null
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            coordinator(
+                catalogRepository = catalogRepository,
+                metadataRouterFacade = metadataRouterFacade,
+                metadataDiskCacheStore = metadataDiskCacheStore,
+                posterRatingsUrlResolver = posterRatingsUrlResolver,
+                artworkAssetRepository = artworkAssetRepository
+            ).prefetchResolvedVisiblePostersOnly(
+                items = listOf(item),
+                telemetryEnabled = true,
+                onLog = { event, details -> logs += event to details }
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        coVerify(exactly = 1) { artworkAssetRepository.getOrFetchDecision(decisionKey) }
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_start" && it.second?.contains("decisions=1") == true })
+        assertTrue(logs.any { it.first == "artwork_asset_prefetch_end" && it.second?.contains("failed=1") == true })
     }
 
     @Test
@@ -2058,6 +2173,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
             ),
             posterRatingsUrlResolver = posterResolver,
+            artworkAssetRepository = mockk<ArtworkAssetRepository>(relaxed = true),
             profileBoundary = profileBoundary,
             playbackActivityTracker = playbackActivityTracker,
             appContext = context
@@ -2073,7 +2189,8 @@ class HomeCatalogRefreshCoordinatorTest {
         catalogRepository: CatalogRepository,
         metadataRouterFacade: MetadataRouterFacade,
         metadataDiskCacheStore: MetadataDiskCacheStore,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver
+        posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        artworkAssetRepository: ArtworkAssetRepository = mockk(relaxed = true)
     ): HomeCatalogRefreshCoordinator {
         val profileBoundary = mockk<ProfileBoundary>()
         val playbackActivityTracker = mockk<PlaybackActivityTracker>()
@@ -2089,6 +2206,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 metadataRouterFacade = metadataRouterFacade
             ),
             posterRatingsUrlResolver = posterRatingsUrlResolver,
+            artworkAssetRepository = artworkAssetRepository,
             profileBoundary = profileBoundary,
             playbackActivityTracker = playbackActivityTracker,
             appContext = context

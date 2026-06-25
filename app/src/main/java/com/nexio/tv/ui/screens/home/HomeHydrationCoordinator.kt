@@ -343,6 +343,11 @@ class HomeHydrationCoordinator @Inject constructor(
         if (overlay.isStale(nowMs)) return null
         if (overlay.settingsSignature != settingsSignature) return null
         if (item.firstPaintStableIds.strictlyContains(overlay.stableIdsSnapshot)) return null
+        if (!item.toHomeDisplayMetadata().hasRenderablePosterForVisibleHome() &&
+            !overlay.fields.hasRenderablePosterForVisibleHome()
+        ) {
+            return null
+        }
         if (item.requiresOriginalLanguageForVisibleHydration() && overlay.fields.originalLanguage.isNullOrBlank()) {
             return null
         }
@@ -364,9 +369,29 @@ class HomeHydrationCoordinator @Inject constructor(
         if (settingsSignature != freshOverlay.settingsSignature) return false
         if (stableIdsSnapshot != freshOverlay.stableIdsSnapshot) return false
         if (item.firstPaintStableIds.strictlyContains(stableIdsSnapshot)) return false
+        if (!item.toHomeDisplayMetadata().hasRenderablePosterForVisibleHome() &&
+            !fields.hasRenderablePosterForVisibleHome()
+        ) {
+            return false
+        }
         if (item.requiresOriginalLanguageForVisibleHydration() && fields.originalLanguage.isNullOrBlank()) return false
         return displayHash == freshOverlay.displayHash && fields == freshOverlay.fields
     }
+
+    private fun HomeDisplayMetadata.hasRenderablePosterForVisibleHome(): Boolean {
+        val typedPoster = artwork?.poster
+        if (typedPoster != null) {
+            return when (typedPoster) {
+                is ArtworkDisplayRef.RuntimeAsset -> typedPoster.assetKey != null
+                is ArtworkDisplayRef.LegacyString -> typedPoster.value.isRenderableHomePosterUrl()
+                is ArtworkDisplayRef.Placeholder -> false
+            }
+        }
+        return poster.isRenderableHomePosterUrl()
+    }
+
+    private fun String?.isRenderableHomePosterUrl(): Boolean =
+        !isNullOrBlank() && !startsWith("nexio-placeholder://")
 
     private fun HydratedHomeOverlay.withRequestedItemKey(itemKey: String): HydratedHomeOverlay =
         if (this.itemKey == itemKey) this else copy(itemKey = itemKey)

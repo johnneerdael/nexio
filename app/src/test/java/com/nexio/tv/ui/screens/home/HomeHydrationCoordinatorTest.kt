@@ -212,11 +212,8 @@ class HomeHydrationCoordinatorTest {
         )
 
         assertEquals(artwork, overlaySlot.captured.fields.artwork)
-        // Legacy projection always emits decision URI for RuntimeAsset (asset URIs
-        // are read-only in NexioArtworkFetcher and would dangle if bytes were never
-        // fetched). The structured ArtworkBundle still carries the assetKey above.
-        assertEquals("nexio-artwork://decision/posterDecision", overlaySlot.captured.fields.poster)
-        assertEquals("nexio-artwork://decision/posterDecision", overlaySlot.captured.fields.displayPoster)
+        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.poster)
+        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.displayPoster)
     }
 
     @Test
@@ -892,6 +889,55 @@ class HomeHydrationCoordinatorTest {
         every {
             store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
         } returns mapOf("movie:550" to stale)
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        every {
+            store.readByCanonicalIdentity(any(), any(), any(), any(), any(), any())
+        } returns null
+        coEvery { store.upsert(any(), any()) } returns Unit
+
+        val result = coordinator(facade, store, RecordingTraceSink()).hydrate(
+            item = preview,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNotNull(result)
+        coVerify(exactly = 1) { facade.resolveRequest(any()) }
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+    }
+
+    @Test
+    fun `posterless overlay cache entry falls through when visible preview also has no poster`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val preview = preview(
+            id = "550",
+            title = "Preview title",
+            stableIds = ProviderIds(tmdb = "550")
+        ).copy(
+            poster = null,
+            artwork = ArtworkBundle()
+        )
+        val cached = cachedOverlay(
+            itemKey = "movie:550",
+            stableIds = ProviderIds(tmdb = "550"),
+            settingsSignature = ArtworkProviderSettings().toSettingsSignature(),
+            fields = HomeDisplayMetadata(
+                title = "Cached title",
+                description = "Cached overview",
+                poster = null,
+                artwork = null
+            )
+        )
+
+        every {
+            store.readForItemKeys(setOf("movie:550"), "en-US", HOME_OVERLAY_POLICY_VERSION, any())
+        } returns mapOf("movie:550" to cached)
         coEvery { facade.resolveRequest(any()) } returns resolutionResult()
         coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
         every {

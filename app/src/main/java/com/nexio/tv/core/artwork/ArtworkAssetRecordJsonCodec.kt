@@ -96,14 +96,24 @@ class ArtworkAssetRecordJsonCodec(private val gson: Gson) {
     }
 
     fun decodeStoreJson(storeJson: JsonObject): ArtworkAssetRecordJsonStoreSnapshot {
-        val storedSchemaVersion = requireNotNull(storeJson.intOrNull("schemaVersion"))
-        require(storedSchemaVersion == SCHEMA_VERSION) {
+        val storedSchemaVersion = storeJson.intOrNull("schemaVersion")
+        val legacyObfuscatedStore = storedSchemaVersion == null && storeJson.has("a")
+        require(storedSchemaVersion != null || legacyObfuscatedStore) {
+            "Missing artwork asset record schema"
+        }
+        val recordElements =
+            if (legacyObfuscatedStore) {
+                storeJson.requiredArray("a")
+            } else {
+                storeJson.requiredArray("records")
+            }
+        require(storedSchemaVersion == null || storedSchemaVersion == SCHEMA_VERSION) {
             "Unsupported artwork asset record schema $storedSchemaVersion"
         }
 
         var quarantinedRecordCount = 0
         val records = mutableListOf<ArtworkAssetRecord>()
-        storeJson.requiredArray("records").forEach { element ->
+        recordElements.forEach { element ->
             val record = runCatching {
                 element.asJsonObjectOrNull()?.let(::fromRecordJson)
             }.getOrNull()
@@ -116,7 +126,7 @@ class ArtworkAssetRecordJsonCodec(private val gson: Gson) {
 
         return ArtworkAssetRecordJsonStoreSnapshot(
             records = records,
-            storedSchemaVersion = storedSchemaVersion,
+            storedSchemaVersion = if (legacyObfuscatedStore) SCHEMA_VERSION else storedSchemaVersion,
             quarantinedRecordCount = quarantinedRecordCount
         )
     }
@@ -146,19 +156,19 @@ class ArtworkAssetRecordJsonCodec(private val gson: Gson) {
 
     fun fromRecordJson(json: JsonObject): ArtworkAssetRecord? = runCatching {
         ArtworkAssetRecord(
-            assetKey = ArtworkAssetKey(requireNotNull(json.stringOrNull("assetKey"))),
-            decisionKey = json.stringOrNull("decisionKey")?.let(::ArtworkDecisionKey),
-            provider = json.stringOrNull("provider").toProviderDomain(),
-            imageType = ArtworkType.valueOf(requireNotNull(json.stringOrNull("imageType"))),
-            imageLanguage = requireNotNull(json.stringOrNull("imageLanguage")),
-            relativePath = requireNotNull(json.stringOrNull("relativePath")),
-            mimeType = json.stringOrNull("mimeType"),
-            byteCount = requireNotNull(json.longOrNull("byteCount")),
-            sourceHash = requireNotNull(json.stringOrNull("sourceHash")),
-            policyVersion = requireNotNull(json.intOrNull("policyVersion")),
-            fetchedAtMs = requireNotNull(json.longOrNull("fetchedAtMs")),
-            expiresAtMs = requireNotNull(json.longOrNull("expiresAtMs")),
-            staleUntilMs = requireNotNull(json.longOrNull("staleUntilMs"))
+            assetKey = ArtworkAssetKey(requireNotNull(json.stringOrNull("assetKey", "a"))),
+            decisionKey = json.stringOrNull("decisionKey", "b")?.let(::ArtworkDecisionKey),
+            provider = json.stringOrNull("provider", "c").toProviderDomain(),
+            imageType = ArtworkType.valueOf(requireNotNull(json.stringOrNull("imageType", "d"))),
+            imageLanguage = requireNotNull(json.stringOrNull("imageLanguage", "e")),
+            relativePath = requireNotNull(json.stringOrNull("relativePath", "f")),
+            mimeType = json.stringOrNull("mimeType", "g"),
+            byteCount = requireNotNull(json.longOrNull("byteCount", "h")),
+            sourceHash = requireNotNull(json.stringOrNull("sourceHash", "i")),
+            policyVersion = requireNotNull(json.intOrNull("policyVersion", "j")),
+            fetchedAtMs = requireNotNull(json.longOrNull("fetchedAtMs", "k")),
+            expiresAtMs = requireNotNull(json.longOrNull("expiresAtMs", "l")),
+            staleUntilMs = requireNotNull(json.longOrNull("staleUntilMs", "m"))
         )
     }.getOrNull()
 
@@ -171,25 +181,33 @@ class ArtworkAssetRecordJsonCodec(private val gson: Gson) {
     private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
         takeIf { it.isJsonObject }?.asJsonObject
 
-    private fun JsonObject.elementOrNull(name: String): JsonElement? = get(name)
+    private fun JsonObject.elementOrNull(name: String, vararg legacyNames: String): JsonElement? {
+        val canonical = get(name)
+        if (canonical != null) return canonical
+        for (i in legacyNames.indices) {
+            val legacy = get(legacyNames[i])
+            if (legacy != null) return legacy
+        }
+        return null
+    }
 
-    private fun JsonObject.stringOrNull(name: String): String? =
+    private fun JsonObject.stringOrNull(name: String, vararg legacyNames: String): String? =
         runCatching {
-            elementOrNull(name)
+            elementOrNull(name, *legacyNames)
                 ?.takeUnless { it is JsonNull || it.isJsonNull }
                 ?.asString
         }.getOrNull()
 
-    private fun JsonObject.intOrNull(name: String): Int? =
+    private fun JsonObject.intOrNull(name: String, vararg legacyNames: String): Int? =
         runCatching {
-            elementOrNull(name)
+            elementOrNull(name, *legacyNames)
                 ?.takeUnless { it is JsonNull || it.isJsonNull }
                 ?.asInt
         }.getOrNull()
 
-    private fun JsonObject.longOrNull(name: String): Long? =
+    private fun JsonObject.longOrNull(name: String, vararg legacyNames: String): Long? =
         runCatching {
-            elementOrNull(name)
+            elementOrNull(name, *legacyNames)
                 ?.takeUnless { it is JsonNull || it.isJsonNull }
                 ?.asLong
         }.getOrNull()

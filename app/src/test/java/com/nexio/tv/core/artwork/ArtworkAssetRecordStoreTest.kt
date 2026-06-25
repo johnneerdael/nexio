@@ -1,6 +1,7 @@
 package com.nexio.tv.core.artwork
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -159,6 +160,39 @@ class ArtworkAssetRecordStoreTest {
         val decoded = codec.decodeStoreJson(json)
 
         assertEquals(listOf(older, newer), decoded.records)
+        assertEquals(0, decoded.quarantinedRecordCount)
+    }
+
+    @Test
+    fun `asset record json codec reads legacy obfuscated records`() {
+        val codec = ArtworkAssetRecordJsonCodec(Gson())
+        val legacy = record("legacy-compact", ArtworkDecisionKey("legacy-compact-decision"), fetchedAtMs = 250)
+        val json = JsonObject().apply {
+            add("a", JsonArray().apply {
+                add(
+                    JsonObject().apply {
+                        addProperty("a", legacy.assetKey.value)
+                        addProperty("b", legacy.decisionKey?.value)
+                        addProperty("c", "PLACEHOLDER")
+                        addProperty("d", legacy.imageType.name)
+                        addProperty("e", legacy.imageLanguage)
+                        addProperty("f", legacy.relativePath)
+                        addProperty("g", legacy.mimeType)
+                        addProperty("h", legacy.byteCount)
+                        addProperty("i", legacy.sourceHash)
+                        addProperty("j", legacy.policyVersion)
+                        addProperty("k", legacy.fetchedAtMs)
+                        addProperty("l", legacy.expiresAtMs)
+                        addProperty("m", legacy.staleUntilMs)
+                    }
+                )
+            })
+        }
+
+        val decoded = codec.decodeStoreJson(json)
+
+        assertEquals(listOf(legacy), decoded.records)
+        assertEquals(1, decoded.storedSchemaVersion)
         assertEquals(0, decoded.quarantinedRecordCount)
     }
 

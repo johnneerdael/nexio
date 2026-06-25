@@ -141,11 +141,7 @@ class MetadataArtworkDecisionResolver @Inject constructor(
     private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int) =
         when (val candidateSource = source) {
             is ArtworkSource.ProviderTemplate ->
-                toPersistedCandidate(
-                    policyVersion = policyVersion,
-                    remoteSourceStore = remoteSourceStore
-                ).providerTemplate
-                    ?.let(ArtworkCacheKeys::assetKeyForProviderTemplate)
+                null
             is ArtworkSource.RemoteUrl ->
                 provider?.let { selectedProvider ->
                     ArtworkCacheKeys.assetKeyForRemoteUrl(

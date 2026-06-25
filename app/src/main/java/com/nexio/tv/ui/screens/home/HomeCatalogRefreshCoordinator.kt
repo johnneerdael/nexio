@@ -8,6 +8,8 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkAssetRepository
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.emptyOrNull
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
@@ -50,6 +52,8 @@ internal data class CatalogItemDiff(
     val addedOrChanged: List<MetaPreview>,
     val removed: List<MetaPreview>
 )
+
+private const val NEXIO_ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
 
 internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPreview>): CatalogItemDiff {
     val oldByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
@@ -100,6 +104,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val artworkAssetRepository: ArtworkAssetRepository,
     private val profileBoundary: ProfileBoundary,
     private val playbackActivityTracker: PlaybackActivityTracker,
     @ApplicationContext private val appContext: Context
@@ -409,11 +414,72 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         telemetryEnabled: Boolean,
         onLog: (String, String?) -> Unit
     ) {
+        prefetchResolvedImages(
+            items = items,
+            catalogKey = "visible_home_resolved",
+            posterOnly = false,
+            telemetryEnabled = telemetryEnabled,
+            onLog = onLog
+        )
+    }
+
+    internal suspend fun prefetchResolvedVisiblePostersOnly(
+        items: List<ResolvedDisplayItem>,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        prefetchResolvedImages(
+            items = items,
+            catalogKey = "visible_home_resolved_posters",
+            posterOnly = true,
+            telemetryEnabled = telemetryEnabled,
+            onLog = onLog
+        )
+    }
+
+    internal suspend fun prefetchVisiblePreviewPosterAssetsOnly(
+        items: List<MetaPreview>,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        if (items.isEmpty()) return
+        val decisionKeys = linkedSetOf<ArtworkDecisionKey>()
+        var refsConsidered = 0
+        val uniqueItems = items.distinctBy { homeDisplayItemKey(it.apiType, it.id) }
+        for (itemIndex in uniqueItems.indices) {
+            val item = uniqueItems[itemIndex]
+            refsConsidered += addRuntimeDecisionKey(item.artwork?.poster, decisionKeys)
+            refsConsidered += addLegacyDecisionKey(item.poster, decisionKeys)
+        }
+        prefetchArtworkDecisionAssets(
+            decisionKeys = decisionKeys,
+            catalogKey = "visible_home_preview_posters",
+            itemCount = uniqueItems.size,
+            refsConsidered = refsConsidered,
+            telemetryEnabled = telemetryEnabled,
+            onLog = onLog
+        )
+    }
+
+    private suspend fun prefetchResolvedImages(
+        items: List<ResolvedDisplayItem>,
+        catalogKey: String,
+        posterOnly: Boolean,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
         val uniqueItems = items.distinctBy { it.itemKey }
         if (uniqueItems.isEmpty()) return
 
-        val catalogKey = "visible_home_resolved"
-        val imageTelemetry = buildResolvedImagePrefetchTelemetry(uniqueItems)
+        prefetchResolvedArtworkAssets(
+            items = uniqueItems,
+            catalogKey = catalogKey,
+            posterOnly = posterOnly,
+            telemetryEnabled = telemetryEnabled,
+            onLog = onLog
+        )
+
+        val imageTelemetry = buildResolvedImagePrefetchTelemetry(uniqueItems, posterOnly = posterOnly)
         onLog(
             "image_prefetch_start",
             "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
@@ -430,6 +496,105 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
         )
     }
+
+    private suspend fun prefetchResolvedArtworkAssets(
+        items: List<ResolvedDisplayItem>,
+        catalogKey: String,
+        posterOnly: Boolean,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        val decisionKeys = linkedSetOf<ArtworkDecisionKey>()
+        var refsConsidered = 0
+        for (itemIndex in items.indices) {
+            val item = items[itemIndex]
+            refsConsidered += addRuntimeDecisionKey(item.artwork.poster, decisionKeys)
+            if (!posterOnly) {
+                refsConsidered += addRuntimeDecisionKey(item.artwork.backdrop, decisionKeys)
+                refsConsidered += addRuntimeDecisionKey(item.artwork.logo, decisionKeys)
+            }
+        }
+        prefetchArtworkDecisionAssets(
+            decisionKeys = decisionKeys,
+            catalogKey = catalogKey,
+            itemCount = items.size,
+            refsConsidered = refsConsidered,
+            telemetryEnabled = telemetryEnabled,
+            onLog = onLog
+        )
+    }
+
+    private suspend fun prefetchArtworkDecisionAssets(
+        decisionKeys: Set<ArtworkDecisionKey>,
+        catalogKey: String,
+        itemCount: Int,
+        refsConsidered: Int,
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ) {
+        onLog(
+            "artwork_asset_prefetch_start",
+            "catalogKey=$catalogKey items=$itemCount refs=$refsConsidered decisions=${decisionKeys.size}"
+        )
+        if (decisionKeys.isEmpty()) return
+
+        var durable = 0
+        var failed = 0
+        val orderedDecisionKeys = decisionKeys.toList()
+        for (decisionIndex in orderedDecisionKeys.indices) {
+            val decisionKey = orderedDecisionKeys[decisionIndex]
+            val result = runCatching {
+                artworkAssetRepository.getOrFetchDecision(decisionKey)
+            }.getOrNull()
+            if (result?.durable == true) {
+                durable += 1
+            } else {
+                failed += 1
+            }
+            if (telemetryEnabled) {
+                onLog(
+                    if (result?.durable == true) "artwork_asset_prefetch_durable" else "artwork_asset_prefetch_failed",
+                    "catalogKey=$catalogKey decisionIndex=$decisionIndex"
+                )
+            }
+        }
+        onLog(
+            "artwork_asset_prefetch_end",
+            "catalogKey=$catalogKey decisions=${decisionKeys.size} durable=$durable failed=$failed"
+        )
+    }
+
+    private fun addRuntimeDecisionKey(
+        ref: ArtworkDisplayRef?,
+        decisionKeys: MutableSet<ArtworkDecisionKey>
+    ): Int {
+        val decisionKey = when (ref) {
+            is ArtworkDisplayRef.RuntimeAsset -> ref.decisionKey
+            is ArtworkDisplayRef.LegacyString ->
+                ref.value.toArtworkDecisionKey()
+            is ArtworkDisplayRef.Placeholder,
+            null -> null
+        } ?: return 0
+        decisionKeys += decisionKey
+        return 1
+    }
+
+    private fun addLegacyDecisionKey(
+        value: String?,
+        decisionKeys: MutableSet<ArtworkDecisionKey>
+    ): Int {
+        val decisionKey = value?.toArtworkDecisionKey() ?: return 0
+        decisionKeys += decisionKey
+        return 1
+    }
+
+    private fun String.toArtworkDecisionKey(): ArtworkDecisionKey? =
+        removePrefixOrNull(NEXIO_ARTWORK_DECISION_PREFIX)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::ArtworkDecisionKey)
+
+    private fun String.removePrefixOrNull(prefix: String): String? =
+        takeIf { it.startsWith(prefix) }?.removePrefix(prefix)
 
     private data class ImageCacheEntry(
         val url: String,
@@ -507,7 +672,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         )
     }
 
-    private fun buildResolvedImagePrefetchTelemetry(items: List<ResolvedDisplayItem>): ImagePrefetchTelemetry {
+    private fun buildResolvedImagePrefetchTelemetry(
+        items: List<ResolvedDisplayItem>,
+        posterOnly: Boolean = false
+    ): ImagePrefetchTelemetry {
         val orderedEntries = linkedSetOf<ImageCacheEntry>()
         val itemEvents = mutableListOf<Pair<String, String>>()
         var cachedUrls = 0
@@ -521,6 +689,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     ?.let { model ->
                         add(ImageCacheEntry(model, ArtworkImageCacheKeys.poster(item.contentId, item.artwork.poster.deriveProviderTag(), model)))
                     }
+                if (posterOnly) return@buildList
                 item.artwork.backdrop.toPrefetchModelString()
                     ?.let { model ->
                         add(ImageCacheEntry(model, ArtworkImageCacheKeys.backdrop(item.contentId, model)))

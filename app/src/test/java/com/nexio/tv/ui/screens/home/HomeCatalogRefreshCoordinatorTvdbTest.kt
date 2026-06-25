@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
+import com.nexio.tv.core.artwork.ArtworkAssetRepository
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
@@ -217,6 +218,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
                 metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
             ),
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
+            artworkAssetRepository = mockk<ArtworkAssetRepository>(relaxed = true),
             profileBoundary = profileBoundary,
             appContext = mockk<Context>(relaxed = true),
             playbackActivityTracker = mockk<PlaybackActivityTracker>(relaxed = true)

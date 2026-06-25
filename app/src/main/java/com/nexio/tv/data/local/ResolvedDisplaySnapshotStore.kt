@@ -185,6 +185,30 @@ class ResolvedDisplaySnapshotStore private constructor(
         return out
     }
 
+    fun readProfileArtworkSnapshotAnyLanguage(profileId: Int = activeProfileId()): Map<String, ResolvedDisplayItem> {
+        val parent = rootDir()
+        val prefix = "p${profileId.coerceAtLeast(1)}_"
+        val files = parent.listFiles()
+            .orEmpty()
+            .filter { file -> file.isFile && file.name.startsWith(prefix) && file.name.endsWith(".json") }
+            .sortedBy { file -> file.name }
+        if (files.isEmpty()) return emptyMap()
+        val out = LinkedHashMap<String, ResolvedDisplayItem>()
+        val expectedLanguageTag = currentLanguageTag()
+        for (fileIndex in files.indices) {
+            val items = readSnapshotFile(
+                file = files[fileIndex],
+                expectedLanguageTag = expectedLanguageTag,
+                filterByLanguage = false
+            )
+            if (items.isEmpty()) continue
+            for ((key, item) in items) {
+                out.putIfAbsent(key, item)
+            }
+        }
+        return out
+    }
+
     private fun readSnapshotFile(
         file: File,
         expectedLanguageTag: String,

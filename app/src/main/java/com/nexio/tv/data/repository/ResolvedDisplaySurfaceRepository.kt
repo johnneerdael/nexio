@@ -101,6 +101,22 @@ class ResolvedDisplaySurfaceRepository(
         return out
     }
 
+    fun homeAuthorityAliasKeysWithRenderablePoster(
+        profileId: Int,
+        includePreviewOnly: Boolean = false
+    ): Set<String> {
+        val items = snapshotNow(profileId)
+        if (items.isEmpty()) return emptySet()
+        val out = HashSet<String>(items.size * 2)
+        for (i in items.indices) {
+            val item = items[i]
+            if (!includePreviewOnly && item.hydrationState == HydrationState.PREVIEW_ONLY) continue
+            if (!item.artwork.poster.isRenderableHomePosterRef()) continue
+            out += item.toDisplayBundle().aliases
+        }
+        return out
+    }
+
     suspend fun getSnapshot(profileId: Int): List<ResolvedDisplayItem> =
         getSnapshot(HOME_SURFACE_KEY, profileId)
 
@@ -399,6 +415,15 @@ private fun List<ResolvedDisplayItem>.toAuthorityProjection(): List<ResolvedDisp
 
 private fun ResolvedDisplayItem.matchesAuthorityAlias(itemKey: String): Boolean =
     toDisplayBundle().aliases.contains(itemKey)
+
+private fun ArtworkDisplayRef?.isRenderableHomePosterRef(): Boolean =
+    when (this) {
+        null -> false
+        is ArtworkDisplayRef.Placeholder -> false
+        is ArtworkDisplayRef.RuntimeAsset -> assetKey != null
+        is ArtworkDisplayRef.LegacyString ->
+            value.isNotBlank() && !value.startsWith("nexio-placeholder://")
+    }
 
 private fun ResolvedDisplayItem.toDisplayBundle(): DisplayBundle {
     val aliases = authorityAliases()

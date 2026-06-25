@@ -81,10 +81,11 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertInternalArtworkRef(resolved)
+        assertTrue(resolved!!.startsWith("nexio-artwork://decision/"))
         assertNoRawPremiumUrl(resolved)
         assertFalse(resolved.orEmpty().contains("api.top-posters.com"))
         assertFalse(resolved.orEmpty().contains("ratingposterdb.com"))
-        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
+        val decision = decisionFromRefOrOnlyCached(cache, resolved)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -242,7 +243,7 @@ class PosterRatingsUrlResolverTest {
     }
 
     @Test
-    fun `top posters episode thumbnail projects selected provider template as asset URI`() {
+    fun `top posters episode thumbnail projects selected provider template as decision URI`() {
         val cache = InMemoryArtworkDecisionCache()
         val resolver = resolver(cache)
 
@@ -258,12 +259,10 @@ class PosterRatingsUrlResolverTest {
 
         val runtimeRef = resolved as ArtworkDisplayRef.RuntimeAsset
         val decision = cache.get(runtimeRef.decisionKey)
-        val expectedAssetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
-            decision!!.selectedCandidate.providerTemplate!!
-        )
-        assertEquals(expectedAssetKey, runtimeRef.assetKey)
+        assertNotNull(decision?.selectedCandidate?.providerTemplate)
+        assertNull(runtimeRef.assetKey)
         assertTrue(runtimeRef.displayHints.embedsRatingOverlay)
-        assertEquals("nexio-artwork://asset/${expectedAssetKey.value}", resolved.toLegacyArtworkString())
+        assertEquals("nexio-artwork://decision/${runtimeRef.decisionKey.value}", resolved.toLegacyArtworkString())
     }
 
     @Test
@@ -412,6 +411,29 @@ class PosterRatingsUrlResolverTest {
     }
 
     @Test
+    fun `premium provider template keeps decision ref so missing premium can fall back to primary poster`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val fallbackUrl = "https://image.tmdb.org/t/p/w500/poster.jpg"
+        val preview = preview(id = "tt15940132", poster = fallbackUrl).copy(
+            firstPaintStableIds = ProviderIds(imdb = "tt15940132")
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        assertTrue(resolved.poster!!.startsWith("nexio-artwork://decision/"))
+        val structuredPoster = resolved.artwork?.poster as? ArtworkDisplayRef.RuntimeAsset
+        assertNotNull(structuredPoster)
+        assertNull(structuredPoster!!.assetKey)
+        val decision = checkNotNull(cache.get(structuredPoster.decisionKey))
+        assertEquals("RPDB", decision.selectedCandidate.provider?.key)
+        assertEquals(
+            listOf("TMDB"),
+            decision.rejectedCandidates.mapNotNull { it.provider?.key }
+        )
+    }
+
+    @Test
     fun `meta preview premium projection keeps structured runtime asset for typed snapshot`() {
         val cache = InMemoryArtworkDecisionCache()
         val resolver = resolver(cache)
@@ -424,7 +446,7 @@ class PosterRatingsUrlResolverTest {
         val structuredPoster = resolved.artwork?.poster as? ArtworkDisplayRef.RuntimeAsset
         assertNotNull(structuredPoster)
         structuredPoster!!
-        assertNotNull(structuredPoster.assetKey)
+        assertNull(structuredPoster.assetKey)
         assertEquals(ArtworkType.POSTER, structuredPoster.imageType)
         assertEquals("RPDB", cache.get(structuredPoster.decisionKey)?.selectedCandidate?.provider?.key)
     }
