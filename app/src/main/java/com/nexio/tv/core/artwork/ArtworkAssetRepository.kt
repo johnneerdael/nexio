@@ -4,6 +4,7 @@ import com.nexio.tv.core.integration.ByteArrayIntegrationCodec
 import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSpec
@@ -470,6 +471,19 @@ class ArtworkAssetRepository @Inject constructor(
             .getOrNull()
 
         if (record == null) {
+            val recoveredDecision = assetKey.toProviderTemplateRecoveryDecisionOrNull()
+            if (recoveredDecision != null) {
+                traceArtwork(
+                    eventType = "artwork.orphan_asset_ref_provider_template_rehydrate_requested",
+                    payload = mapOf(
+                        "assetKeyHash" to assetKey.hashedForTrace(),
+                        "provider" to recoveredDecision.selectedCandidate.provider?.key,
+                        "imageType" to recoveredDecision.imageType.name,
+                        "source" to "asset_key_provider_template"
+                    )
+                )
+                return getOrFetch(recoveredDecision)
+            }
             traceArtwork(
                 eventType = "artwork.orphan_asset_ref_rehydrate_skipped",
                 payload = mapOf(
@@ -629,3 +643,95 @@ class ArtworkAssetRepository @Inject constructor(
         const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
     }
 }
+
+private fun ArtworkAssetKey.toProviderTemplateRecoveryDecisionOrNull(): ArtworkDecision? {
+    val parts = value.split(":")
+    if (parts.size < PROVIDER_TEMPLATE_ASSET_MIN_PARTS) return null
+    if (parts.firstOrNull() != "artwork-asset") return null
+    if (parts.getOrNull(3) == "urlHash") return null
+    if (parts.getOrNull(parts.size - 8) != "settings") return null
+    if (parts.getOrNull(parts.size - 6) != "credential") return null
+    if (parts.getOrNull(parts.size - 4) != "imageLang") return null
+    if (parts.getOrNull(parts.size - 2) != "policy") return null
+
+    val runtimeProvider = parts.getOrNull(1)
+        ?.let { runCatching { IntegrationProvider.valueOf(it) }.getOrNull() }
+        ?: return null
+    val provider = ArtworkProviderId.RuntimeProvider(runtimeProvider)
+    val imageType = parts.getOrNull(2)
+        ?.uppercase()
+        ?.let { runCatching { ArtworkType.valueOf(it) }.getOrNull() }
+        ?: return null
+    val idType = parts.getOrNull(3)?.takeIf { it.isNotBlank() } ?: return null
+    val mediaId = parts.getOrNull(4)?.takeIf { it.isNotBlank() } ?: return null
+    val settingsHash = parts.getOrNull(parts.size - 7)?.takeIf { it.isNotBlank() && it != "none" }
+    val credentialHash = parts.getOrNull(parts.size - 5)?.takeIf { it.isNotBlank() && it != "none" }
+    val imageLanguage = parts.getOrNull(parts.size - 3)?.takeIf { it.isNotBlank() } ?: return null
+    val policyVersion = parts.getOrNull(parts.size - 1)?.toIntOrNull() ?: return null
+
+    val pathParamParts = parts.subList(5, parts.size - 8)
+    if (pathParamParts.size % 2 != 0) return null
+    val pathParams = linkedMapOf<String, String>()
+    var index = 0
+    while (index < pathParamParts.size) {
+        val key = pathParamParts[index].takeIf { it.isNotBlank() } ?: return null
+        val paramValue = pathParamParts[index + 1].takeIf { it.isNotBlank() } ?: return null
+        if (pathParams.put(key, paramValue) != null) return null
+        index += 2
+    }
+
+    val providerPathHash = ArtworkCacheKeys.providerTemplatePathHash(
+        provider = provider,
+        imageType = imageType,
+        idType = idType,
+        mediaId = mediaId,
+        pathParams = pathParams
+    )
+    val template = PersistedProviderTemplate(
+        provider = provider,
+        imageType = imageType,
+        idType = idType,
+        mediaId = mediaId,
+        providerPathHash = providerPathHash,
+        settingsHash = settingsHash,
+        credentialHash = credentialHash,
+        imageLanguage = imageLanguage,
+        policyVersion = policyVersion,
+        pathParams = pathParams
+    )
+    val now = System.currentTimeMillis()
+    val ownerKey = ArtworkOwnerKey.CanonicalContent("$idType:$mediaId")
+    val decisionKey = ArtworkCacheKeys.decisionKey(
+        ownerKey = ownerKey,
+        imageType = imageType,
+        provider = provider,
+        premiumEnabled = true,
+        settingsHash = settingsHash,
+        credentialHash = credentialHash,
+        policyVersion = policyVersion
+    )
+    return ArtworkDecision(
+        decisionKey = decisionKey,
+        ownerKey = ownerKey,
+        canonicalContentId = "$idType:$mediaId",
+        imageType = imageType,
+        selectedCandidate = PersistedArtworkCandidate(
+            provider = provider,
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            sourceHash = providerPathHash,
+            redactedSourceForTrace = null,
+            providerTemplate = template,
+            priority = 10
+        ),
+        rejectedCandidates = emptyList(),
+        policyVersion = policyVersion,
+        imageLanguage = imageLanguage,
+        settingsHash = settingsHash,
+        credentialHash = credentialHash,
+        createdAtMs = now,
+        expiresAtMs = now + ArtworkDecisionPolicy.DECISION_TTL_MS,
+        staleUntilMs = now + ArtworkDecisionPolicy.DECISION_STALE_TTL_MS
+    )
+}
+
+private const val PROVIDER_TEMPLATE_ASSET_MIN_PARTS = 13

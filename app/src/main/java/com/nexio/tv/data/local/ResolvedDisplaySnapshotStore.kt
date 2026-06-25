@@ -8,6 +8,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkAssetRecordStore
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkCacheRepairService
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
@@ -69,17 +70,20 @@ class ResolvedDisplaySnapshotStore private constructor(
     private val activeProfileId: () -> Int,
     private val currentLanguageTag: () -> String,
     private val repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?,
+    private val assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean,
 ) {
     @Inject
     constructor(
         @ApplicationContext context: Context,
         profileManager: ProfileManager,
         artworkCacheRepairService: ArtworkCacheRepairService,
+        artworkAssetRecordStore: ArtworkAssetRecordStore,
     ) : this(
         rootDir = { File(context.filesDir, SNAPSHOT_DIR) },
         activeProfileId = { profileManager.activeProfileId.value },
         currentLanguageTag = { AppLocaleResolver.resolveEffectiveAppLanguageTag(context) },
         repairDecisionRefToAssetKey = artworkCacheRepairService::repairDecisionRefToAssetKey,
+        assetRefIsRecoverable = assetRefRecoverability(artworkAssetRecordStore),
     )
 
     companion object {
@@ -96,11 +100,13 @@ class ResolvedDisplaySnapshotStore private constructor(
             activeProfileId: () -> Int,
             currentLanguageTag: () -> String = { "en" },
             repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey? = { null },
+            assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean = { false },
         ): ResolvedDisplaySnapshotStore = ResolvedDisplaySnapshotStore(
             rootDir = { rootDir },
             activeProfileId = activeProfileId,
             currentLanguageTag = currentLanguageTag,
             repairDecisionRefToAssetKey = repairDecisionRefToAssetKey,
+            assetRefIsRecoverable = assetRefIsRecoverable,
         )
     }
 
@@ -230,6 +236,7 @@ class ResolvedDisplaySnapshotStore private constructor(
                                     }
                                     items = decodedItems.mapValues { (_, item) ->
                                         item.repairDecisionOnlyArtworkRefs(repairDecisionRefToAssetKey)
+                                            .dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
                                     }.filterValues { item ->
                                         !filterByLanguage ||
                                             item.displayLanguageTag.matchesSnapshotLanguage(expectedLanguageTag)
@@ -296,6 +303,14 @@ private fun String?.matchesSnapshotLanguage(expectedLanguageTag: String): Boolea
     return actual.substringBefore('-', actual)
         .equals(expected.substringBefore('-', expected), ignoreCase = true)
 }
+
+private fun assetRefRecoverability(
+    artworkAssetRecordStore: ArtworkAssetRecordStore
+): (ArtworkAssetKey) -> Boolean = { key ->
+    runCatching { artworkAssetRecordStore.get(key) != null }.getOrDefault(false)
+}
+
+private const val ARTWORK_ASSET_URI_PREFIX = "nexio-artwork://asset/"
 
 private data class PersistedResolvedDisplayItem(
     val itemKey: String,
@@ -392,6 +407,18 @@ private fun ResolvedDisplayItem.repairDecisionOnlyArtworkRefs(
     return copy(artwork = repairedArtwork, slots = repairedSlots)
 }
 
+private fun ResolvedDisplayItem.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ResolvedDisplayItem {
+    val sanitizedArtwork = artwork.dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
+    val sanitizedSlots = slots?.dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
+    if (sanitizedArtwork == artwork && sanitizedSlots == slots) return this
+    return copy(
+        artwork = sanitizedArtwork,
+        slots = sanitizedSlots
+    )
+}
+
 private fun ArtworkBundle.repairDecisionOnlyRefs(
     repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
 ): ArtworkBundle {
@@ -412,6 +439,29 @@ private fun ArtworkBundle.repairDecisionOnlyRefs(
         backdrop = repairedBackdrop,
         logo = repairedLogo,
         thumbnail = repairedThumbnail
+    )
+}
+
+private fun ArtworkBundle.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ArtworkBundle {
+    val sanitizedPoster = poster.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedBackdrop = backdrop.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedLogo = logo.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedThumbnail = thumbnail.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    if (
+        sanitizedPoster == poster &&
+        sanitizedBackdrop == backdrop &&
+        sanitizedLogo == logo &&
+        sanitizedThumbnail == thumbnail
+    ) {
+        return this
+    }
+    return copy(
+        poster = sanitizedPoster,
+        backdrop = sanitizedBackdrop,
+        logo = sanitizedLogo,
+        thumbnail = sanitizedThumbnail
     )
 }
 
@@ -438,6 +488,29 @@ private fun ResolvedDisplayFieldSlots.repairDecisionOnlyRefs(
     )
 }
 
+private fun ResolvedDisplayFieldSlots.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ResolvedDisplayFieldSlots {
+    val sanitizedPoster = poster.dropUnrecoverableCachedAssetRef(assetRefIsRecoverable)
+    val sanitizedBackdrop = backdrop.dropUnrecoverableCachedAssetRef(assetRefIsRecoverable)
+    val sanitizedLogo = logo.dropUnrecoverableCachedAssetRef(assetRefIsRecoverable)
+    val sanitizedThumbnail = thumbnail.dropUnrecoverableCachedAssetRef(assetRefIsRecoverable)
+    if (
+        sanitizedPoster == poster &&
+        sanitizedBackdrop == backdrop &&
+        sanitizedLogo == logo &&
+        sanitizedThumbnail == thumbnail
+    ) {
+        return this
+    }
+    return copy(
+        poster = sanitizedPoster,
+        backdrop = sanitizedBackdrop,
+        logo = sanitizedLogo,
+        thumbnail = sanitizedThumbnail
+    )
+}
+
 private fun ResolvedSlot<ArtworkDisplayRef>.repairDecisionOnlyRef(
     repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
 ): ResolvedSlot<ArtworkDisplayRef> {
@@ -452,6 +525,34 @@ private fun ArtworkDisplayRef?.repairDecisionOnlyRef(
     if (runtime.assetKey != null) return runtime
     val repairedAssetKey = repairDecisionRefToAssetKey(runtime.decisionKey) ?: return runtime
     return runtime.copy(assetKey = repairedAssetKey)
+}
+
+private fun ResolvedSlot<ArtworkDisplayRef>.dropUnrecoverableCachedAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ResolvedSlot<ArtworkDisplayRef> {
+    val sanitized = value.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    return if (sanitized == value) this else copy(
+        value = null,
+        rank = DisplaySourceRank.EMPTY,
+        provider = null,
+        role = role ?: "UNRECOVERABLE_CACHED_ASSET_REF",
+        trace = trace + "dropped_unrecoverable_cached_asset_ref"
+    )
+}
+
+private fun ArtworkDisplayRef?.takeUnlessUnrecoverableAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ArtworkDisplayRef? {
+    val legacy = this as? ArtworkDisplayRef.LegacyString ?: return this
+    return if (legacy.value.isRecoverableAssetRef(assetRefIsRecoverable)) legacy else null
+}
+
+private fun String.isRecoverableAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): Boolean {
+    if (!startsWith(ARTWORK_ASSET_URI_PREFIX)) return true
+    val key = removePrefix(ARTWORK_ASSET_URI_PREFIX).takeIf { it.isNotBlank() } ?: return false
+    return runCatching { assetRefIsRecoverable(ArtworkAssetKey(key)) }.getOrDefault(false)
 }
 
 private fun ResolvedDisplayItem.toReusableArtworkOnlyItem(

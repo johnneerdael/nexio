@@ -3,9 +3,14 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkAssetRecordStore
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.ProviderId
@@ -26,13 +31,46 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 @Singleton
-class HydratedHomeOverlayStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
-        sink = NoopRuntimeTraceSink,
-        sessionId = { null }
-    )
+class HydratedHomeOverlayStore private constructor(
+    private val context: Context,
+    private val assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean,
+    private val traceEvents: TraceMetadataEvents,
+    private val writeDebounceMs: Long
 ) {
+    @Inject constructor(
+        @ApplicationContext context: Context,
+        assetRecordStore: ArtworkAssetRecordStore,
+        traceEvents: TraceMetadataEvents = TraceMetadataEvents(
+            sink = NoopRuntimeTraceSink,
+            sessionId = { null }
+        )
+    ) : this(
+        context = context,
+        assetRefIsRecoverable = assetRefRecoverability(assetRecordStore),
+        traceEvents = traceEvents,
+        writeDebounceMs = OVERLAY_WRITE_DEBOUNCE_MS
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        assetRefIsRecoverable = { true },
+        traceEvents = TraceMetadataEvents(
+            sink = NoopRuntimeTraceSink,
+            sessionId = { null }
+        ),
+        writeDebounceMs = 0L
+    )
+
+    constructor(
+        context: Context,
+        traceEvents: TraceMetadataEvents
+    ) : this(
+        context = context,
+        assetRefIsRecoverable = { true },
+        traceEvents = traceEvents,
+        writeDebounceMs = 0L
+    )
+
     private val gson = Gson()
     private val version = MutableStateFlow(0L)
     private val staleItemKeys = MutableStateFlow<Set<String>>(emptySet())
@@ -40,7 +78,7 @@ class HydratedHomeOverlayStore @Inject constructor(
         HydratedHomeOverlayTypedStore(
             file = File(context.filesDir, "hydrated-home-overlay-v2/entries.json"),
             gson = gson,
-            writeDebounceMs = 1_500L
+            writeDebounceMs = writeDebounceMs
         ).also { store ->
             migrateV1FileIfNeeded(store)
             migrateLegacyPrefsIfNeeded(store)
@@ -271,7 +309,9 @@ class HydratedHomeOverlayStore @Inject constructor(
                 return null
             }
 
-            overlay.takeUnless { it.isExpired(nowMs) }
+            overlay
+                .takeUnless { it.isExpired(nowMs) }
+                ?.dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read hydrated home overlay key=$overlayKey", error)
         }.getOrNull()
@@ -444,5 +484,80 @@ class HydratedHomeOverlayStore @Inject constructor(
         const val ALIAS_PREFIX = "alias::"
         const val OVERLAY_SCHEMA_VERSION = 1
         const val VERSION_DEBOUNCE_MS = 50L
+        const val OVERLAY_WRITE_DEBOUNCE_MS = 1_500L
     }
+}
+
+private fun assetRefRecoverability(
+    assetRecordStore: ArtworkAssetRecordStore
+): (ArtworkAssetKey) -> Boolean = { assetKey ->
+    runCatching { assetRecordStore.get(assetKey) != null }.getOrDefault(false)
+}
+
+private fun HydratedHomeOverlay.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): HydratedHomeOverlay {
+    val sanitizedFields = fields.dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
+    if (sanitizedFields == fields) return this
+    return copy(
+        fields = sanitizedFields,
+        displayHash = sanitizedFields.hydratedHomeDisplayHash()
+    )
+}
+
+private fun HomeDisplayMetadata.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): HomeDisplayMetadata {
+    val sanitizedArtwork = artwork?.dropUnrecoverableCachedAssetRefs(assetRefIsRecoverable)
+    val sanitizedPoster = poster.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedBackdrop = backdrop.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedLogo = logo.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    val sanitizedThumbnail = thumbnail.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+    if (
+        sanitizedArtwork == artwork &&
+        sanitizedPoster == poster &&
+        sanitizedBackdrop == backdrop &&
+        sanitizedLogo == logo &&
+        sanitizedThumbnail == thumbnail
+    ) {
+        return this
+    }
+    return copy(
+        poster = sanitizedPoster,
+        backdrop = sanitizedBackdrop,
+        logo = sanitizedLogo,
+        thumbnail = sanitizedThumbnail,
+        artwork = sanitizedArtwork
+    )
+}
+
+private fun ArtworkBundle.dropUnrecoverableCachedAssetRefs(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ArtworkBundle = copy(
+    poster = poster.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable),
+    backdrop = backdrop.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable),
+    logo = logo.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable),
+    thumbnail = thumbnail.takeUnlessUnrecoverableAssetRef(assetRefIsRecoverable)
+)
+
+private fun ArtworkDisplayRef?.takeUnlessUnrecoverableAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): ArtworkDisplayRef? {
+    val legacy = this as? ArtworkDisplayRef.LegacyString ?: return this
+    return if (legacy.value.isRecoverableAssetRef(assetRefIsRecoverable)) legacy else null
+}
+
+private fun String?.takeUnlessUnrecoverableAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): String? {
+    val value = this ?: return null
+    return if (value.isRecoverableAssetRef(assetRefIsRecoverable)) value else null
+}
+
+private fun String.isRecoverableAssetRef(
+    assetRefIsRecoverable: (ArtworkAssetKey) -> Boolean
+): Boolean {
+    if (!startsWith("nexio-artwork://asset/")) return true
+    val key = removePrefix("nexio-artwork://asset/").takeIf { it.isNotBlank() } ?: return false
+    return assetRefIsRecoverable(ArtworkAssetKey(key))
 }

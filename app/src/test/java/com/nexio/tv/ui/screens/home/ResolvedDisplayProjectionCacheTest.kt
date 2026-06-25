@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydrationState
@@ -19,6 +22,7 @@ class ResolvedDisplayProjectionCacheTest {
         itemKey: String,
         updatedAtMs: Long,
         title: String? = "Title",
+        artwork: ArtworkBundle = ArtworkBundle(),
     ): ResolvedDisplayItem = ResolvedDisplayItem(
         itemKey = itemKey,
         contentId = itemKey,
@@ -30,7 +34,7 @@ class ResolvedDisplayProjectionCacheTest {
         imdbId = null,
         stableIds = ProviderIds(),
         display = ResolvedDisplayFields(title, null, null, null, null, emptyList(), null),
-        artwork = ArtworkBundle(),
+        artwork = artwork,
         rating = null,
         trailer = TrailerDisplayState(),
         hydrationState = HydrationState.PREVIEW_ONLY,
@@ -60,6 +64,29 @@ class ResolvedDisplayProjectionCacheTest {
 
         assertNotSame(first, second)
         assertTrue(second.title == "New")
+    }
+
+    @Test
+    fun `projectItem returns new instance when artwork changes without updatedAtMs change`() {
+        val cache = ResolvedDisplayProjectionCache()
+        val before = resolved("movie:tmdb:1", updatedAtMs = 100L)
+        val after = resolved(
+            itemKey = "movie:tmdb:1",
+            updatedAtMs = 100L,
+            artwork = ArtworkBundle(
+                poster = ArtworkDisplayRef.LegacyString(
+                    value = "https://image.tmdb.org/t/p/w500/poster.jpg",
+                    imageType = ArtworkType.POSTER,
+                    trace = ArtworkTrace(selectedProvider = "TMDB", sourceRole = "PRIMARY")
+                )
+            )
+        )
+
+        val first = cache.projectItem(before)
+        val second = cache.projectItem(after)
+
+        assertNotSame(first, second)
+        assertSame(after.artwork.poster, second.posterRef)
     }
 
     @Test

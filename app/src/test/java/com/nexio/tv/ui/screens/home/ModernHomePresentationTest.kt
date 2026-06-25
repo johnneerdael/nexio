@@ -48,6 +48,52 @@ class ModernHomePresentationTest {
     }
 
     @Test
+    fun `landscape presentation keeps backdrop-only catalog items`() {
+        val cache = ModernCarouselRowBuildCache()
+        val row = catalogRow(
+            "popular",
+            "Popular",
+            ContentType.MOVIE,
+            listOf(meta("movie-1").copy(poster = null, background = "https://image.example/backdrop.jpg"))
+        )
+
+        val state = buildModernHomePresentation(
+            input = presentationInput(
+                catalogRows = listOf(row),
+                useLandscapePosters = true
+            ),
+            cache = cache
+        )
+
+        val renderedRow = state.rows.single()
+        assertEquals("addon_movie_popular", renderedRow.key)
+        assertEquals(listOf("movie-1"), renderedRow.items.map { (it.payload as ModernPayload.Catalog).itemId })
+    }
+
+    @Test
+    fun `portrait presentation keeps backdrop-only catalog items as placeholder candidates`() {
+        val cache = ModernCarouselRowBuildCache()
+        val row = catalogRow(
+            "popular",
+            "Popular",
+            ContentType.MOVIE,
+            listOf(meta("movie-1").copy(poster = null, background = "https://image.example/backdrop.jpg"))
+        )
+
+        val state = buildModernHomePresentation(
+            input = presentationInput(
+                catalogRows = listOf(row),
+                useLandscapePosters = false
+            ),
+            cache = cache
+        )
+
+        val renderedRow = state.rows.single()
+        assertEquals("addon_movie_popular", renderedRow.key)
+        assertEquals(listOf("movie-1"), renderedRow.items.map { (it.payload as ModernPayload.Catalog).itemId })
+    }
+
+    @Test
     fun `reuses cached row when catalog input is unchanged`() {
         val cache = ModernCarouselRowBuildCache()
         val row = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(meta("movie-1")))
@@ -110,17 +156,17 @@ class ModernHomePresentationTest {
     }
 
     @Test
-    fun `ordinary presentation drops resolved items with placeholder poster refs`() {
+    fun `ordinary presentation keeps resolved items with placeholder poster refs`() {
         val cache = ModernCarouselRowBuildCache()
         val kept = meta("movie-kept")
-        val dropped = meta("movie-dropped")
-        val row = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(dropped, kept))
+        val placeholder = meta("movie-placeholder")
+        val row = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(placeholder, kept))
         val resolvedRail = ResolvedRailRow(
             catalogId = row.catalogId,
             title = row.catalogName,
             items = listOf(
-                ModernHomeRowItem.from(syntheticResolvedDisplayItem(dropped)).copy(
-                    posterRef = ArtworkDisplayRef.Placeholder(
+                ModernHomeRowItem.from(syntheticResolvedDisplayItem(placeholder)).copy(
+                    posterRef = com.nexio.tv.core.artwork.ArtworkDisplayRef.Placeholder(
                         placeholderType = PlaceholderType.POSTER,
                         imageType = ArtworkType.POSTER,
                         trace = ArtworkTrace.empty()
@@ -138,8 +184,8 @@ class ModernHomePresentationTest {
             cache = cache
         )
 
-        assertEquals(listOf("movie-kept"), state.lookups.activeCatalogItemIds.toList())
-        assertEquals(1, state.rows.single().items.size)
+        assertEquals(listOf("movie-placeholder", "movie-kept"), state.lookups.activeCatalogItemIds.toList())
+        assertEquals(2, state.rows.single().items.size)
     }
 
     @Test

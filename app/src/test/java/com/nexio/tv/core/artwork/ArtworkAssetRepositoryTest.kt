@@ -928,6 +928,52 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
+    fun `getOrRehydrateAsset recovers provider template asset when record is missing`() = runTest {
+        val diskCache = ArtworkAssetDiskCache(temp.root)
+        val recordStore = RecordingArtworkAssetRecordStore()
+        val decision = rpdbTemplateDecision()
+        val assetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            checkNotNull(decision.selectedCandidate.providerTemplate)
+        )
+        var loadedSource: ArtworkSource? = null
+        var loadedDecision: ArtworkDecision? = null
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = InMemoryArtworkDecisionCache(),
+            diskCache = diskCache,
+            assetRecordStore = recordStore,
+            traceSink = traceSink,
+            byteLoader = ArtworkByteLoader { source, recoveredDecision ->
+                loadedSource = source
+                loadedDecision = recoveredDecision
+                IntegrationLoadResult.Success("template-recovered".toByteArray())
+            }
+        )
+
+        val result = repository.getOrRehydrateAsset(assetKey)
+
+        assertNotNull(result)
+        result!!
+        assertEquals(assetKey, result.assetKey)
+        assertArrayEquals("template-recovered".toByteArray(), result.localFile.readBytes())
+        assertEquals(result.record, recordStore.get(assetKey))
+        val source = loadedSource as? ArtworkSource.ProviderTemplate
+        assertNotNull(source)
+        assertEquals(ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB), source!!.provider)
+        assertEquals("imdb", source.idType)
+        assertEquals("tt0137523", source.mediaId)
+        val decisionForLoad = checkNotNull(loadedDecision)
+        assertEquals(ArtworkType.POSTER, decisionForLoad.imageType)
+        assertEquals("credentialhash", decisionForLoad.credentialHash)
+        assertTrue(
+            traceSink.events.any {
+                it.eventType == "artwork.orphan_asset_ref_provider_template_rehydrate_requested"
+            }
+        )
+    }
+
+    @Test
     fun `getOrRehydrateAsset returns null and emits orphan trace when no asset record exists`() = runTest {
         val traceSink = RecordingArtworkTraceSink()
         val repository = repository(
@@ -935,7 +981,13 @@ class ArtworkAssetRepositoryTest {
             assetRecordStore = RecordingArtworkAssetRecordStore(),
             traceSink = traceSink
         )
-        val orphanKey = ArtworkAssetKey("artwork-asset:RPDB:poster:tmdb:series-999:settings:abc:credential:def:imageLang:en:policy:1")
+        val orphanKey = ArtworkCacheKeys.assetKeyForRemoteUrl(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+            imageType = ArtworkType.POSTER,
+            normalizedUrlHash = "orphan-hash",
+            variant = null,
+            policyVersion = 1
+        )
 
         val result = repository.getOrRehydrateAsset(orphanKey)
 

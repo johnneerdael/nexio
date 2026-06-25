@@ -14,21 +14,20 @@ import javax.inject.Singleton
  * tick rate (~5/s × 76 rows × 25 items ≈ 9.5K projections/sec). Without
  * memoization that throughput would silently undo the allocation-rate
  * mitigation from PR #16. This cache returns the same instance whenever
- * the underlying [ResolvedDisplayItem] is unchanged (same `itemKey` and
- * same `updatedAtMs`) so Compose's structural-equality skip can elide
- * recomposition.
+ * the underlying [ResolvedDisplayItem] content is unchanged so Compose's
+ * structural-equality skip can elide recomposition.
  */
 @Singleton
 class ResolvedDisplayProjectionCache @Inject constructor() {
-    private val itemCache = mutableMapOf<String, Pair<Long, ModernHomeRowItem>>()
+    private val itemCache = mutableMapOf<String, Pair<Int, ModernHomeRowItem>>()
     private val railCache = mutableMapOf<String, Pair<Int, ResolvedRailRow>>()
     // Hero-panel projection cache. Keyed by itemKey; the value's first slot is
     // the source `ResolvedDisplayItem` reference used as a fast-path identity
     // check. Upstream (`HomeResolvedDisplayMapper`) already memoizes resolved
     // instances so the same itemKey yields the same reference until content
-    // actually changes — reference equality on the source is therefore both
-    // sufficient and equivalent to `(itemKey, updatedAtMs)` keying used by
-    // [projectItem].
+    // actually changes — reference equality on the source is therefore
+    // sufficient for hero items. [projectItem] uses a content hash because live
+    // artwork upgrades may arrive with unchanged `updatedAtMs`.
     private val heroItemCache = mutableMapOf<String, Pair<ResolvedDisplayItem, HeroDisplayItem>>()
     // Single-slot cache of the most recently emitted rails list. When the next
     // emission produces a list whose elements are reference-identical to the
@@ -55,10 +54,11 @@ class ResolvedDisplayProjectionCache @Inject constructor() {
 
     @Synchronized
     fun projectItem(resolved: ResolvedDisplayItem): ModernHomeRowItem {
+        val contentHash = resolved.hashCode()
         val cached = itemCache[resolved.itemKey]
-        if (cached != null && cached.first == resolved.updatedAtMs) return cached.second
+        if (cached != null && cached.first == contentHash) return cached.second
         val fresh = ModernHomeRowItem.from(resolved)
-        itemCache[resolved.itemKey] = resolved.updatedAtMs to fresh
+        itemCache[resolved.itemKey] = contentHash to fresh
         return fresh
     }
 

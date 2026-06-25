@@ -1,7 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.addon.TekenfilmsHomePlaybackPolicy
-import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.homeDisplayItemKey
 
@@ -199,7 +198,7 @@ private fun presentationRailItems(
     resolvedRail: ResolvedRailRow
 ): List<ModernHomeRowItem> {
     if (!TekenfilmsHomePlaybackPolicy.isTekenfilmsRow(sourceRow)) {
-        return resolvedRail.items.filter { item -> item.hasRenderableHomeCardPoster() }
+        return resolvedRail.items
     }
     if (sourceRow.items.size <= resolvedRail.items.size) {
         return resolvedRail.items
@@ -218,17 +217,3 @@ private fun presentationRailItems(
     }
     return out
 }
-
-private fun ModernHomeRowItem.hasRenderableHomeCardPoster(): Boolean =
-    posterRef.isRenderableHomeCardArtworkRef()
-
-private fun ArtworkDisplayRef?.isRenderableHomeCardArtworkRef(): Boolean =
-    when (this) {
-        null -> false
-        is ArtworkDisplayRef.Placeholder -> false
-        is ArtworkDisplayRef.RuntimeAsset -> assetKey != null
-        is ArtworkDisplayRef.LegacyString -> value.isRenderableHomeCardUrl()
-    }
-
-private fun String?.isRenderableHomeCardUrl(): Boolean =
-    !isNullOrBlank() && !startsWith("nexio-placeholder://")

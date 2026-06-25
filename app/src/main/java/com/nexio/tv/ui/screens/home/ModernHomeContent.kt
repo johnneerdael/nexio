@@ -677,7 +677,16 @@ internal fun ModernHomeContent(
 
         val hadActiveRow = focusHolder.activeRowKey != null
         val existingActive = focusHolder.activeRowKey?.let { key -> carouselRows.firstOrNull { it.key == key } }
-        val resolvedActive = existingActive ?: carouselRows.first()
+        val shouldPromoteInsertedContinueWatching =
+            !focusState.hasSavedFocus &&
+                carouselRows.firstOrNull()?.key == "continue_watching" &&
+                focusHolder.activeRowKey != "continue_watching" &&
+                contentState.continueWatchingItems.isNotEmpty()
+        val resolvedActive = if (shouldPromoteInsertedContinueWatching) {
+            carouselRows.first()
+        } else {
+            existingActive ?: carouselRows.first()
+        }
         val resolvedIndex = focusedItemByRow[resolvedActive.key]
             ?.coerceIn(0, (resolvedActive.items.size - 1).coerceAtLeast(0))
             ?: 0
@@ -693,10 +702,16 @@ internal fun ModernHomeContent(
             preferredLanguageTag = contentState.preferredLanguageTag
         )
         displayedHeroItemKey = resolvedHeroItem?.key
-        if (!focusState.hasSavedFocus && (!hadActiveRow || existingActive == null)) {
+        if (
+            shouldPromoteInsertedContinueWatching ||
+            (!focusState.hasSavedFocus && (!hadActiveRow || existingActive == null))
+        ) {
             pendingRowFocusKey = resolvedActive.key
             pendingRowFocusIndex = resolvedIndex
             pendingRowFocusNonce++
+        }
+        if (shouldPromoteInsertedContinueWatching) {
+            verticalRowListState.scrollToItem(0)
         }
     }
 
