@@ -165,6 +165,32 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun `overlay payload extraction unwraps zipped downloaded subtitles before parsing`() {
+        val subtitleText = """
+            1
+            00:00:01,000 --> 00:00:02,000
+            Hello zipped overlay
+        """.trimIndent()
+        val payload = addonSubtitleOverlayPayloadFromBytes(
+            url = "https://example.test/subtitles/episode.zip",
+            mimeType = MimeTypes.APPLICATION_SUBRIP,
+            bytes = zip("episode.srt", subtitleText)
+        )
+
+        val groups = parseAddonSubtitleOverlayCueGroups(
+            url = payload.url,
+            mimeType = payload.mimeType,
+            bytes = payload.bytes
+        )
+
+        assertEquals(MimeTypes.APPLICATION_SUBRIP, payload.mimeType)
+        assertEquals(1, groups.size)
+        assertEquals(1_000L, groups.single().startMs)
+        assertEquals(2_000L, groups.single().endMs)
+        assertEquals("Hello zipped overlay", groups.single().cues.single().text.toString())
+    }
+
+    @Test
     fun `source texts for translation are trimmed and deduplicated`() {
         val groups = listOf(
             TimedAddonCueGroup(startMs = 0L, endMs = 1_000L, cues = listOf(cue(" Hello "), cue("World"))),

@@ -32,6 +32,12 @@ internal data class TimedAddonCueGroup(
     val cues: List<Cue>
 )
 
+internal data class AddonSubtitleOverlayPayload(
+    val url: String,
+    val mimeType: String,
+    val bytes: ByteArray
+)
+
 internal fun PlayerRuntimeController.activateAddonSubtitleOverlay(
     subtitle: Subtitle,
     selectedSubtitle: Subtitle = subtitle
@@ -291,10 +297,28 @@ private suspend fun PlayerRuntimeController.parseAddonSubtitleCueGroups(
     subtitle: Subtitle,
     mimeType: String
 ): List<TimedAddonCueGroup> {
+    val payload = readAddonSubtitleOverlayPayload(subtitle.url, mimeType)
     return parseAddonSubtitleOverlayCueGroups(
-        url = subtitle.url,
-        mimeType = mimeType,
-        bytes = readAddonSubtitleBytes(subtitle.url)
+        url = payload.url,
+        mimeType = payload.mimeType,
+        bytes = payload.bytes
+    )
+}
+
+internal fun addonSubtitleOverlayPayloadFromBytes(
+    url: String,
+    mimeType: String = PlayerSubtitleUtils.mimeTypeFromUrl(url),
+    bytes: ByteArray
+): AddonSubtitleOverlayPayload {
+    val payload = extractAddonSubtitlePayload(
+        bytes = bytes,
+        fallbackExtension = addonSubtitleOverlayFallbackExtension(url, mimeType)
+    )
+    val payloadUrl = "addon-subtitle.${payload.extension}"
+    return AddonSubtitleOverlayPayload(
+        url = payloadUrl,
+        mimeType = PlayerSubtitleUtils.mimeTypeFromUrl(payloadUrl),
+        bytes = payload.bytes
     )
 }
 
@@ -390,13 +414,21 @@ private fun toTimedAddonCueGroup(cuesWithTiming: CuesWithTiming): TimedAddonCueG
     )
 }
 
-private suspend fun PlayerRuntimeController.readAddonSubtitleBytes(url: String): ByteArray {
-    if (url.startsWith("file:", ignoreCase = true)) {
-        return File(URI(url)).readBytes()
+private suspend fun PlayerRuntimeController.readAddonSubtitleOverlayPayload(
+    url: String,
+    mimeType: String
+): AddonSubtitleOverlayPayload {
+    val bytes = if (url.startsWith("file:", ignoreCase = true)) {
+        File(URI(url)).readBytes()
+    } else {
+        addonSubtitleBytesFromDownloadBytesResult(
+            subtitleSourceDownloadIntegrationProvider.downloadBytes(url, currentHeaders)
+        )
     }
-
-    return addonSubtitleBytesFromDownloadResult(
-        subtitleSourceDownloadIntegrationProvider.downloadText(url)
+    return addonSubtitleOverlayPayloadFromBytes(
+        url = url,
+        mimeType = mimeType,
+        bytes = bytes
     )
 }
 
@@ -412,5 +444,37 @@ internal fun addonSubtitleBytesFromDownloadResult(
         IntegrationCallResult.Missing -> {
             throw IllegalStateException("Addon subtitle response body is empty")
         }
+    }
+}
+
+internal fun addonSubtitleBytesFromDownloadBytesResult(
+    result: IntegrationCallResult<ByteArray>
+): ByteArray {
+    return when (result) {
+        is IntegrationCallResult.Success -> result.value
+        is IntegrationCallResult.HttpError -> {
+            throw IllegalStateException("Addon subtitle download failed http=${result.statusCode}")
+        }
+        is IntegrationCallResult.NetworkError -> throw result.throwable
+        IntegrationCallResult.Missing -> {
+            throw IllegalStateException("Addon subtitle response body is empty")
+        }
+    }
+}
+
+private fun addonSubtitleOverlayFallbackExtension(
+    url: String,
+    mimeType: String
+): String {
+    val lowered = url.lowercase().substringBefore('#').substringBefore('?')
+    val fileName = lowered.substringAfterLast('/', "")
+    return when {
+        fileName.endsWith(".ass") -> "ass"
+        fileName.endsWith(".ssa") -> "ssa"
+        fileName.endsWith(".vtt") || fileName.endsWith(".webvtt") -> "vtt"
+        fileName.endsWith(".srt") -> "srt"
+        mimeType == MimeTypes.TEXT_SSA -> "ass"
+        mimeType == MimeTypes.TEXT_VTT -> "vtt"
+        else -> "srt"
     }
 }
