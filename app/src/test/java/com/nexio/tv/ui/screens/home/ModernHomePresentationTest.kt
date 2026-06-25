@@ -4,6 +4,7 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.PlaceholderType
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -106,6 +107,39 @@ class ModernHomePresentationTest {
         )
 
         assertEquals(25, state.rows.single().items.size)
+    }
+
+    @Test
+    fun `ordinary presentation drops resolved items with placeholder poster refs`() {
+        val cache = ModernCarouselRowBuildCache()
+        val kept = meta("movie-kept")
+        val dropped = meta("movie-dropped")
+        val row = catalogRow("popular", "Popular", ContentType.MOVIE, listOf(dropped, kept))
+        val resolvedRail = ResolvedRailRow(
+            catalogId = row.catalogId,
+            title = row.catalogName,
+            items = listOf(
+                ModernHomeRowItem.from(syntheticResolvedDisplayItem(dropped)).copy(
+                    posterRef = ArtworkDisplayRef.Placeholder(
+                        placeholderType = PlaceholderType.POSTER,
+                        imageType = ArtworkType.POSTER,
+                        trace = ArtworkTrace.empty()
+                    )
+                ),
+                ModernHomeRowItem.from(syntheticResolvedDisplayItem(kept))
+            )
+        )
+
+        val state = buildModernHomePresentation(
+            input = presentationInput(
+                catalogRows = listOf(row),
+                resolvedRailRows = listOf(resolvedRail)
+            ),
+            cache = cache
+        )
+
+        assertEquals(listOf("movie-kept"), state.lookups.activeCatalogItemIds.toList())
+        assertEquals(1, state.rows.single().items.size)
     }
 
     @Test

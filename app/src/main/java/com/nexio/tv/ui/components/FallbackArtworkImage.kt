@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +47,8 @@ fun FallbackArtworkImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     testTag: String = "fallback-artwork-image",
-    testForceError: Boolean = false
+    testForceError: Boolean = false,
+    onPlaceholder: (() -> Unit)? = null
 ) {
     var failedPrimary by remember(model, testForceError) {
         mutableStateOf(testForceError && model != null)
@@ -77,6 +79,9 @@ fun FallbackArtworkImage(
             )
         }
         FallbackArtworkImageState.Placeholder -> {
+            LaunchedEffect(onPlaceholder) {
+                onPlaceholder?.invoke()
+            }
             MonochromePosterPlaceholder(
                 modifier = modifier.testTag("fallback-artwork-placeholder")
             )

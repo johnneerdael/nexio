@@ -27,6 +27,7 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -216,6 +217,55 @@ class ResolvedDisplaySnapshotStoreTest {
     }
 
     @Test
+    fun `read repairs decision-only runtime refs to durable asset refs`() {
+        val decisionKey = ArtworkDecisionKey("movie-rpdb-tt0137523-poster")
+        val repairedAssetKey = ArtworkAssetKey("asset-rpdb-poster-tt0137523")
+        val decisionOnlyPoster = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = decisionKey,
+            assetKey = null,
+            imageType = ArtworkType.POSTER,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace(selectedProvider = "RPDB", sourceRole = "PREMIUM")
+        )
+        val store = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = tempFolder.newFolder("resolved-display-repair"),
+            activeProfileId = { 1 },
+            currentLanguageTag = { "en" },
+            repairDecisionRefToAssetKey = { key ->
+                if (key == decisionKey) repairedAssetKey else null
+            }
+        )
+        val item = sampleItem("movie:imdb:tt0137523", "Fight Club").copy(
+            artwork = ArtworkBundle(poster = decisionOnlyPoster),
+            slots = ResolvedDisplayFieldSlots(
+                title = slot("Fight Club", DisplaySourceRank.RESOLVED, "tmdb"),
+                originalTitle = slot("Fight Club", DisplaySourceRank.RESOLVED, "tmdb"),
+                overview = slot("An insomniac office worker meets a soap maker.", DisplaySourceRank.RESOLVED, "tmdb"),
+                genres = slot(listOf("Drama", "Thriller"), DisplaySourceRank.RESOLVED, "tmdb"),
+                releaseInfo = slot("1999", DisplaySourceRank.RESOLVED, "tmdb"),
+                runtime = slot("139m", DisplaySourceRank.RESOLVED, "tmdb"),
+                rating = slot(TitleRating(8.8, TitleRatingSource.IMDB), DisplaySourceRank.RESOLVED, "imdb"),
+                poster = slot(decisionOnlyPoster, DisplaySourceRank.RESOLVED, "RPDB"),
+                backdrop = slot(null, DisplaySourceRank.EMPTY, null),
+                logo = slot(null, DisplaySourceRank.EMPTY, null),
+                thumbnail = slot(null, DisplaySourceRank.EMPTY, null),
+                posterProviderTag = slot("RPDB", DisplaySourceRank.RESOLVED, "RPDB")
+            )
+        )
+
+        store.write(mapOf(item.itemKey to item))
+
+        val restored = store.read()[item.itemKey]
+        val restoredPoster = restored?.artwork?.poster as? ArtworkDisplayRef.RuntimeAsset
+        val restoredSlotPoster = restored?.slots?.poster?.value as? ArtworkDisplayRef.RuntimeAsset
+        assertEquals(repairedAssetKey, restoredPoster?.assetKey)
+        assertEquals(repairedAssetKey, restoredSlotPoster?.assetKey)
+        assertEquals(decisionKey, restoredPoster?.decisionKey)
+        assertEquals(decisionKey, restoredSlotPoster?.decisionKey)
+    }
+
+    @Test
     fun `round-trip multiple items preserves keys and values`() {
         val store = storeFor()
         val items = (1..5).associate { i ->
@@ -227,6 +277,152 @@ class ResolvedDisplaySnapshotStoreTest {
         items.forEach { (key, expected) ->
             assertEquals(expected.display.title, read[key]?.display?.title)
         }
+    }
+
+    @Test
+    fun `read reusable current-language snapshot restores another profile cache`() {
+        val root = tempFolder.newFolder("resolved-display-cross-profile")
+        val profileOneStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 1 },
+            currentLanguageTag = { "nl" }
+        )
+        val item = sampleItem("movie:tmdb:550", "Vechtclub").copy(displayLanguageTag = "nl")
+        profileOneStore.write(mapOf(item.itemKey to item), profileId = 1)
+        val profileTwoStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 2 },
+            currentLanguageTag = { "nl" }
+        )
+
+        val read = profileTwoStore.readReusableCurrentLanguageSnapshot(profileId = 2)
+
+        assertEquals("Vechtclub", read[item.itemKey]?.display?.title)
+    }
+
+    @Test
+    fun `read reusable current-language snapshot rejects different-language cache`() {
+        val root = tempFolder.newFolder("resolved-display-cross-language")
+        val profileOneStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 1 },
+            currentLanguageTag = { "en" }
+        )
+        val item = sampleItem("movie:tmdb:550", "Fight Club").copy(displayLanguageTag = "en")
+        profileOneStore.write(mapOf(item.itemKey to item), profileId = 1)
+        val profileTwoStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 2 },
+            currentLanguageTag = { "nl" }
+        )
+
+        val read = profileTwoStore.readReusableCurrentLanguageSnapshot(profileId = 2)
+
+        assertTrue(read.isEmpty())
+    }
+
+    @Test
+    fun `read reusable artwork snapshot strips different-language metadata`() {
+        val root = tempFolder.newFolder("resolved-display-artwork-only")
+        val profileOneStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 1 },
+            currentLanguageTag = { "en" }
+        )
+        val runtimePoster = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("movie-tmdb-550-poster"),
+            assetKey = ArtworkAssetKey("asset-movie-tmdb-550-poster"),
+            imageType = ArtworkType.POSTER,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace(selectedProvider = "TMDB", sourceRole = "PRIMARY")
+        )
+        val item = sampleItem("movie:tmdb:550", "Fight Club").copy(
+            contentId = "tmdb:550",
+            parentId = "tmdb:550",
+            canonicalProvider = "tmdb",
+            canonicalId = "550",
+            stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523"),
+            artwork = ArtworkBundle(poster = runtimePoster),
+            slots = ResolvedDisplayFieldSlots(
+                title = slot("Fight Club", DisplaySourceRank.RESOLVED, "tmdb"),
+                originalTitle = slot("Fight Club", DisplaySourceRank.RESOLVED, "tmdb"),
+                overview = slot("English overview", DisplaySourceRank.RESOLVED, "tmdb"),
+                genres = slot(listOf("Drama"), DisplaySourceRank.RESOLVED, "tmdb"),
+                releaseInfo = slot("1999", DisplaySourceRank.RESOLVED, "tmdb"),
+                runtime = slot("139m", DisplaySourceRank.RESOLVED, "tmdb"),
+                rating = slot(TitleRating(8.8, TitleRatingSource.IMDB), DisplaySourceRank.RESOLVED, "imdb"),
+                poster = slot(runtimePoster, DisplaySourceRank.RESOLVED, "TMDB"),
+                backdrop = slot(null, DisplaySourceRank.EMPTY, null),
+                logo = slot(null, DisplaySourceRank.EMPTY, null),
+                thumbnail = slot(null, DisplaySourceRank.EMPTY, null),
+                posterProviderTag = slot("TMDB", DisplaySourceRank.RESOLVED, "TMDB")
+            ),
+            displayLanguageTag = "en",
+            hydrationState = HydrationState.CANONICAL_READY
+        )
+        profileOneStore.write(mapOf(item.itemKey to item), profileId = 1)
+        val profileTwoStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 2 },
+            currentLanguageTag = { "nl" }
+        )
+
+        val read = profileTwoStore.readReusableArtworkSnapshot(profileId = 2)
+        val restored = read[item.itemKey]
+
+        assertEquals("nl", restored?.displayLanguageTag)
+        assertNull(restored?.display?.title)
+        assertNull(restored?.display?.overview)
+        assertNull(restored?.rating)
+        assertEquals(HydrationState.PREVIEW_ONLY, restored?.hydrationState)
+        assertEquals(DisplaySourceRank.EMPTY, restored?.slots?.title?.rank)
+        assertEquals(DisplaySourceRank.STALE_RESOLVED, restored?.slots?.poster?.rank)
+        val restoredPoster = restored?.artwork?.poster as? ArtworkDisplayRef.RuntimeAsset
+        assertEquals("asset-movie-tmdb-550-poster", restoredPoster?.assetKey?.value)
+    }
+
+    @Test
+    fun `read reusable artwork snapshot drops placeholder-only items`() {
+        val root = tempFolder.newFolder("resolved-display-artwork-placeholder")
+        val profileOneStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 1 },
+            currentLanguageTag = { "en" }
+        )
+        val placeholderPoster = ArtworkDisplayRef.Placeholder(
+            placeholderType = PlaceholderType.POSTER,
+            imageType = ArtworkType.POSTER,
+            trace = ArtworkTrace(reason = "missing")
+        )
+        val item = sampleItem("movie:tmdb:550", "Fight Club").copy(
+            artwork = ArtworkBundle(poster = placeholderPoster),
+            slots = ResolvedDisplayFieldSlots(
+                title = slot("Fight Club", DisplaySourceRank.RESOLVED, "tmdb"),
+                originalTitle = slot(null, DisplaySourceRank.EMPTY, null),
+                overview = slot(null, DisplaySourceRank.EMPTY, null),
+                genres = slot(emptyList(), DisplaySourceRank.EMPTY, null),
+                releaseInfo = slot(null, DisplaySourceRank.EMPTY, null),
+                runtime = slot(null, DisplaySourceRank.EMPTY, null),
+                rating = slot(null, DisplaySourceRank.EMPTY, null),
+                poster = slot(placeholderPoster, DisplaySourceRank.PLACEHOLDER, "PLACEHOLDER"),
+                backdrop = slot(null, DisplaySourceRank.EMPTY, null),
+                logo = slot(null, DisplaySourceRank.EMPTY, null),
+                thumbnail = slot(null, DisplaySourceRank.EMPTY, null),
+                posterProviderTag = slot(null, DisplaySourceRank.EMPTY, null)
+            ),
+            displayLanguageTag = "en"
+        )
+        profileOneStore.write(mapOf(item.itemKey to item), profileId = 1)
+        val profileTwoStore = ResolvedDisplaySnapshotStore.forTesting(
+            rootDir = root,
+            activeProfileId = { 2 },
+            currentLanguageTag = { "nl" }
+        )
+
+        val read = profileTwoStore.readReusableArtworkSnapshot(profileId = 2)
+
+        assertTrue(read.isEmpty())
     }
 
     @Test

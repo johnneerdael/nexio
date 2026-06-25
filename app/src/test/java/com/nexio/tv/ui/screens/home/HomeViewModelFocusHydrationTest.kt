@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -24,22 +26,38 @@ import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
+import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
+import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
+import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.CatalogInventoryRepository
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.EffectiveTrackingProviderState
+import com.nexio.tv.data.repository.KitsuDiscoverySnapshot
+import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.ScreensaverTrailerCandidateCacheRepository
+import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
+import com.nexio.tv.domain.model.HomeCatalogRail
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeItemHydrationState
+import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.MetaPreview
@@ -48,6 +66,9 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
+import com.nexio.tv.domain.model.ResolvedDisplayFields
+import com.nexio.tv.domain.model.ResolvedDisplayItem
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.toRail
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -76,6 +97,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -665,6 +687,307 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `unauthenticated profile renders configured public trakt rails from persisted synthetic groups`() = runTest(testDispatcher) {
+        val activeSession = MutableStateFlow(profileSession(profileId = 2, sessionId = "session-b"))
+        val homeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true)
+        val configuredRails = listOf(
+            HomeCatalogRail(
+                key = TraktCatalogIds.TRENDING_MOVIES,
+                family = "trakt",
+                source = "provider_catalog",
+                title = "Trakt Trending Movies"
+            ),
+            HomeCatalogRail(
+                key = TraktCatalogIds.TRENDING_SHOWS,
+                family = "trakt",
+                source = "provider_catalog",
+                title = "Trakt Trending Shows"
+            )
+        )
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS),
+            catalogOrder = listOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
+        )
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession,
+            homeRailOrderStore = homeRailOrderStore,
+            traktDiscoverySnapshotFlow = flowOf(TraktDiscoverySnapshot())
+        )
+        advanceUntilIdle()
+        viewModel.viewModelScope.cancel()
+        viewModel.traktCatalogPreferences = traktPrefs
+        viewModel.homeCatalogRails = configuredRails
+        viewModel.homeCatalogRailsObserved = true
+        val movieItem = railPreviewMetaPreview().copy(
+            id = "tt-trakt-movie",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Trakt Movie"
+        )
+        val showItem = railPreviewMetaPreview().copy(
+            id = "tt-trakt-show",
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "Trakt Show"
+        )
+        val movieRow = CatalogRow(
+            addonId = TRAKT_HOME_ADDON_ID,
+            addonName = "Trakt",
+            addonBaseUrl = "https://api.trakt.tv",
+            catalogId = TraktCatalogIds.TRENDING_MOVIES,
+            catalogName = "Trakt Trending Movies",
+            type = ContentType.MOVIE,
+            items = listOf(movieItem),
+            hasMore = false
+        )
+        val showRow = CatalogRow(
+            addonId = TRAKT_HOME_ADDON_ID,
+            addonName = "Trakt",
+            addonBaseUrl = "https://api.trakt.tv",
+            catalogId = TraktCatalogIds.TRENDING_SHOWS,
+            catalogName = "Trakt Trending Shows",
+            type = ContentType.SERIES,
+            items = listOf(showItem),
+            hasMore = false
+        )
+        viewModel.activeProfileTraktAuthenticated = false
+        viewModel.persistedTraktSyntheticGroups = listOf(
+            PersistedSyntheticCatalogGroup(TraktCatalogIds.TRENDING_MOVIES, listOf(movieRow)),
+            PersistedSyntheticCatalogGroup(TraktCatalogIds.TRENDING_SHOWS, listOf(showRow))
+        )
+        every { homeRailOrderStore.reconcileNow(any()) } returns EffectiveHomeRailOrder(
+            visibleKeys = listOf(
+                HomeRailKey(TraktCatalogIds.TRENDING_MOVIES),
+                HomeRailKey(TraktCatalogIds.TRENDING_SHOWS)
+            ),
+            disabledKeys = emptySet(),
+            unknownSavedKeys = emptyList(),
+            newlyDiscoveredKeys = emptyList(),
+            prunedKeys = emptyList()
+        )
+        viewModel.installedAddonsObserved = true
+        viewModel.traktDiscoveryObserved = true
+        viewModel.simklDiscoveryObserved = true
+        viewModel.mdbListDiscoveryObserved = true
+        viewModel.tmdbDiscoveryObserved = true
+        viewModel.kitsuDiscoveryObserved = true
+
+        viewModel.updateCatalogRowsPipeline(activeSession.value)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS),
+            viewModel._internalCatalogRows.value.map { it.catalogId }
+        )
+    }
+
+    @Test
+    fun `authenticated trakt renewal publishes reusable public synthetic groups when snapshot already matches disk`() = runTest(testDispatcher) {
+        val activeSession = MutableStateFlow(profileSession(profileId = 2, sessionId = "session-b"))
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS),
+            catalogOrder = listOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
+        )
+        val movieRow = CatalogRow(
+            addonId = TRAKT_HOME_ADDON_ID,
+            addonName = "Trakt",
+            addonBaseUrl = "https://api.trakt.tv",
+            catalogId = TraktCatalogIds.TRENDING_MOVIES,
+            catalogName = "Trakt Trending Movies",
+            type = ContentType.MOVIE,
+            items = listOf(railPreviewMetaPreview().copy(id = "tt-trakt-movie", type = ContentType.MOVIE, rawType = "movie")),
+            hasMore = false
+        )
+        val showRow = CatalogRow(
+            addonId = TRAKT_HOME_ADDON_ID,
+            addonName = "Trakt",
+            addonBaseUrl = "https://api.trakt.tv",
+            catalogId = TraktCatalogIds.TRENDING_SHOWS,
+            catalogName = "Trakt Trending Shows",
+            type = ContentType.SERIES,
+            items = listOf(railPreviewMetaPreview().copy(id = "tt-trakt-show", type = ContentType.SERIES, rawType = "series")),
+            hasMore = false
+        )
+        val reusableGroups = listOf(
+            PersistedSyntheticCatalogGroup(TraktCatalogIds.TRENDING_MOVIES, listOf(movieRow)),
+            PersistedSyntheticCatalogGroup(TraktCatalogIds.TRENDING_SHOWS, listOf(showRow))
+        )
+        val reusableSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            traktGroups = reusableGroups,
+            updatedAtMs = 123L
+        )
+        val syntheticStore = mockk<SyntheticHomeCatalogStore>(relaxed = true) {
+            every { read(profileId = 2) } returns null
+            every {
+                readReusablePublicTraktSnapshot(
+                    profileId = 2,
+                    enabledCatalogs = traktPrefs.enabledCatalogs
+                )
+            } returns reusableSnapshot
+        }
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession,
+            syntheticHomeCatalogStore = syntheticStore,
+            trackingProviderState = EffectiveTrackingProviderState(traktAuthenticated = true)
+        )
+        advanceUntilIdle()
+        viewModel.traktCatalogPreferences = traktPrefs
+        viewModel.activeProfileTraktAuthenticated = true
+        viewModel.persistedTraktSyntheticGroups = emptyList()
+
+        viewModel.renewTraktSyntheticSnapshotPipeline(
+            snapshot = TraktDiscoverySnapshot(),
+            expectedProfileSession = activeSession.value
+        )
+        advanceUntilIdle()
+
+        assertEquals(reusableGroups, viewModel.persistedTraktSyntheticGroups)
+    }
+
+    @Test
+    fun `authenticated trakt renewal merges reusable public groups with profile scoped groups`() = runTest(testDispatcher) {
+        val activeSession = MutableStateFlow(profileSession(profileId = 2, sessionId = "session-b"))
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                TraktCatalogIds.TRENDING_SHOWS,
+                TraktCatalogIds.RECOMMENDED_MOVIES
+            ),
+            catalogOrder = listOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                TraktCatalogIds.TRENDING_SHOWS,
+                TraktCatalogIds.RECOMMENDED_MOVIES
+            )
+        )
+        fun row(catalogId: String, type: ContentType): CatalogRow {
+            return CatalogRow(
+                addonId = TRAKT_HOME_ADDON_ID,
+                addonName = "Trakt",
+                addonBaseUrl = "https://api.trakt.tv",
+                catalogId = catalogId,
+                catalogName = catalogId,
+                type = type,
+                items = listOf(
+                    railPreviewMetaPreview().copy(
+                        id = "item-$catalogId",
+                        type = type,
+                        rawType = if (type == ContentType.SERIES) "series" else "movie"
+                    )
+                ),
+                hasMore = false
+            )
+        }
+        val profileScopedGroup = PersistedSyntheticCatalogGroup(
+            TraktCatalogIds.RECOMMENDED_MOVIES,
+            listOf(row(TraktCatalogIds.RECOMMENDED_MOVIES, ContentType.MOVIE))
+        )
+        val reusablePublicGroups = listOf(
+            PersistedSyntheticCatalogGroup(
+                TraktCatalogIds.TRENDING_MOVIES,
+                listOf(row(TraktCatalogIds.TRENDING_MOVIES, ContentType.MOVIE))
+            ),
+            PersistedSyntheticCatalogGroup(
+                TraktCatalogIds.TRENDING_SHOWS,
+                listOf(row(TraktCatalogIds.TRENDING_SHOWS, ContentType.SERIES))
+            )
+        )
+        val syntheticStore = mockk<SyntheticHomeCatalogStore>(relaxed = true) {
+            every { read(profileId = 2) } returns SyntheticHomeCatalogStore.Snapshot(
+                traktGroups = listOf(profileScopedGroup),
+                updatedAtMs = 100L
+            )
+            every {
+                readReusablePublicTraktSnapshot(
+                    profileId = 2,
+                    enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
+                )
+            } returns SyntheticHomeCatalogStore.Snapshot(
+                traktGroups = reusablePublicGroups,
+                updatedAtMs = 123L
+            )
+        }
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true,
+            profileSessionFlow = activeSession,
+            syntheticHomeCatalogStore = syntheticStore,
+            trackingProviderState = EffectiveTrackingProviderState(traktAuthenticated = true)
+        )
+        advanceUntilIdle()
+        viewModel.traktCatalogPreferences = traktPrefs
+        viewModel.activeProfileTraktAuthenticated = true
+
+        viewModel.renewTraktSyntheticSnapshotPipeline(
+            snapshot = TraktDiscoverySnapshot(),
+            expectedProfileSession = activeSession.value
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                TraktCatalogIds.RECOMMENDED_MOVIES,
+                TraktCatalogIds.TRENDING_MOVIES,
+                TraktCatalogIds.TRENDING_SHOWS
+            ),
+            viewModel.persistedTraktSyntheticGroups.map { it.orderKey }
+        )
+    }
+
+    @Test
+    fun `unauthenticated profile keeps public trakt discovery emission`() = runTest(testDispatcher) {
+        val publicItem = railPreviewMetaPreview().copy(
+            id = "tt-public-trending",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Public Trending"
+        )
+        val privateItem = railPreviewMetaPreview().copy(
+            id = "tt-private-recommendation",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Private Recommendation"
+        )
+        val discoverySnapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(publicItem),
+            recommendationMovieItems = listOf(privateItem),
+            updatedAtMs = 123L
+        )
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true,
+            traktCatalogPreferencesFlow = flowOf(
+                TraktCatalogPreferences(
+                    enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                    catalogOrder = listOf(TraktCatalogIds.TRENDING_MOVIES)
+                )
+            ),
+            homeCatalogRailsFlow = flowOf(
+                listOf(
+                    HomeCatalogRail(
+                        key = TraktCatalogIds.TRENDING_MOVIES,
+                        family = "trakt",
+                        source = "provider_catalog",
+                        title = "Trakt Trending Movies"
+                    )
+                )
+            ),
+            traktDiscoverySnapshotFlow = flowOf(discoverySnapshot),
+            trackingProviderState = EffectiveTrackingProviderState(traktAuthenticated = false)
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(listOf("Public Trending"), viewModel.traktDiscoverySnapshot.trendingMovieItems.map { it.name })
+        assertEquals(listOf("Public Trending"), viewModel.persistedTraktDiscoverySnapshot.trendingMovieItems.map { it.name })
+        assertTrue(viewModel.traktDiscoverySnapshot.recommendationMovieItems.isEmpty())
+        assertTrue(viewModel.persistedTraktDiscoverySnapshot.recommendationMovieItems.isEmpty())
+    }
+
+    @Test
     fun `profile reset preserves focused hydration reuse caches`() {
         assertFalse(resetProfileScopedHomeStateSource.contains("focusedItemHydrationStates.clear"))
         assertFalse(resetProfileScopedHomeStateSource.contains("trailerMetadataAvailableState.clear"))
@@ -796,6 +1119,7 @@ class HomeViewModelFocusHydrationTest {
         assertNull(viewModel.lastCatalogComputationSignature)
         assertNotNull(viewModel.catalogUpdateJob)
         viewModel.catalogUpdateJob?.cancel()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -815,9 +1139,32 @@ class HomeViewModelFocusHydrationTest {
         viewModel.resolvedDisplaySurfaceRepository.publishResolvedItems(
             profileSession = profileSession(profileId = 1, sessionId = "test-session"),
             items = listOf(
-                mockk<com.nexio.tv.domain.model.ResolvedDisplayItem> {
-                    every { itemKey } returns "movie:tmdb:550"
-                }
+                ResolvedDisplayItem(
+                    itemKey = "movie:tmdb:550",
+                    contentId = "550",
+                    parentId = "550",
+                    itemType = ContentType.MOVIE,
+                    mediaKind = MetadataMediaKind.MOVIE,
+                    canonicalProvider = "tmdb",
+                    canonicalId = "550",
+                    imdbId = null,
+                    stableIds = ProviderIds(tmdb = "550"),
+                    display = ResolvedDisplayFields(
+                        title = "Fight Club",
+                        originalTitle = null,
+                        year = 1999,
+                        releaseDate = null,
+                        overview = null,
+                        genres = emptyList(),
+                        runtimeText = null
+                    ),
+                    artwork = ArtworkBundle(),
+                    rating = null,
+                    trailer = TrailerDisplayState(),
+                    hydrationState = HydrationState.CANONICAL_READY,
+                    sourceTrace = emptyList(),
+                    updatedAtMs = 1L
+                )
             )
         )
         viewModel.lastCatalogComputationSignature = "previous"
@@ -833,6 +1180,7 @@ class HomeViewModelFocusHydrationTest {
         assertNull(viewModel.lastCatalogComputationSignature)
         assertNotNull(viewModel.catalogUpdateJob)
         viewModel.catalogUpdateJob?.cancel()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -1324,6 +1672,11 @@ class HomeViewModelFocusHydrationTest {
             profileSession(profileId = 1, sessionId = "test-session")
         ),
         homeRailOrderStore: HomeRailOrderStore = mockk(relaxed = true),
+        traktCatalogPreferencesFlow: Flow<TraktCatalogPreferences> = emptyFlow(),
+        homeCatalogRailsFlow: Flow<List<HomeCatalogRail>> = emptyFlow(),
+        traktDiscoverySnapshotFlow: Flow<TraktDiscoverySnapshot> = flowOf(TraktDiscoverySnapshot()),
+        syntheticHomeCatalogStore: SyntheticHomeCatalogStore = mockk(relaxed = true),
+        trackingProviderState: EffectiveTrackingProviderState = EffectiveTrackingProviderState(),
         appContext: Context = mockk(relaxed = true)
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
@@ -1378,6 +1731,42 @@ class HomeViewModelFocusHydrationTest {
         val profileBoundary = mockk<com.nexio.tv.core.profile.ProfileBoundary>(relaxed = true) {
             every { currentLanguageTag() } answers { currentLanguageTagProvider() }
         }
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true) {
+            every { homeCatalogRails } returns homeCatalogRailsFlow
+        }
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
+            every { catalogPreferences } returns traktCatalogPreferencesFlow
+        }
+        val traktDiscoveryService = mockk<com.nexio.tv.data.repository.TraktDiscoveryService>(relaxed = true) {
+            every { observeSnapshot(any()) } returns traktDiscoverySnapshotFlow
+            coEvery { ensureFresh(any(), any()) } returns Unit
+        }
+        val simklDiscoveryService = mockk<com.nexio.tv.data.repository.SimklDiscoveryService>(relaxed = true) {
+            every { observeSnapshot(any()) } returns flowOf(SimklDiscoverySnapshot())
+        }
+        val mdbListDiscoveryService = mockk<com.nexio.tv.data.repository.MDBListDiscoveryService>(relaxed = true) {
+            every { observeSnapshot(any()) } returns flowOf(MDBListDiscoverySnapshot())
+        }
+        val tmdbDiscoveryService = mockk<com.nexio.tv.data.repository.TmdbDiscoveryService>(relaxed = true) {
+            every { observeSnapshot() } returns flowOf(TmdbDiscoverySnapshot())
+        }
+        val kitsuDiscoveryService = mockk<com.nexio.tv.data.repository.KitsuDiscoveryService>(relaxed = true) {
+            every { observeSnapshot() } returns flowOf(KitsuDiscoverySnapshot())
+        }
+        val traktDiscoverySnapshotStore = mockk<TraktDiscoverySnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+        }
+        val simklDiscoverySnapshotStore = mockk<SimklDiscoverySnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+        }
+        val mdbListDiscoverySnapshotStore = mockk<MDBListDiscoverySnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+        }
+        val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+            every { state } returns flowOf(trackingProviderState)
+            coEvery { currentState() } returns trackingProviderState
+            coEvery { currentState(any()) } returns trackingProviderState
+        }
 
         return HomeViewModel(
             addonRepository = mockk(relaxed = true),
@@ -1385,24 +1774,24 @@ class HomeViewModelFocusHydrationTest {
             watchProgressRepository = mockk(relaxed = true),
             libraryRepository = mockk(relaxed = true),
             metaRepository = mockk(relaxed = true),
-            layoutPreferenceDataStore = mockk(relaxed = true),
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
             tmdbSettingsDataStore = mockk(relaxed = true),
             tmdbCatalogSettingsDataStore = mockk(relaxed = true),
             kitsuCatalogSettingsDataStore = mockk(relaxed = true),
-            traktSettingsDataStore = mockk(relaxed = true),
+            traktSettingsDataStore = traktSettingsDataStore,
             mdbListSettingsDataStore = mockk(relaxed = true),
             simklSettingsDataStore = mockk(relaxed = true),
             playerSettingsDataStore = mockk(relaxed = true),
-            traktDiscoverySnapshotStore = mockk(relaxed = true),
-            simklDiscoverySnapshotStore = mockk(relaxed = true),
-            mdbListDiscoverySnapshotStore = mockk(relaxed = true),
+            traktDiscoverySnapshotStore = traktDiscoverySnapshotStore,
+            simklDiscoverySnapshotStore = simklDiscoverySnapshotStore,
+            mdbListDiscoverySnapshotStore = mdbListDiscoverySnapshotStore,
             continueWatchingSnapshotService = mockk(relaxed = true),
             trackingScrobbleService = mockk(relaxed = true),
-            traktDiscoveryService = mockk(relaxed = true),
-            simklDiscoveryService = mockk(relaxed = true),
-            mdbListDiscoveryService = mockk(relaxed = true),
-            tmdbDiscoveryService = mockk(relaxed = true),
-            kitsuDiscoveryService = mockk(relaxed = true),
+            traktDiscoveryService = traktDiscoveryService,
+            simklDiscoveryService = simklDiscoveryService,
+            mdbListDiscoveryService = mdbListDiscoveryService,
+            tmdbDiscoveryService = tmdbDiscoveryService,
+            kitsuDiscoveryService = kitsuDiscoveryService,
             mdbListRepository = mockk(relaxed = true),
             metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(metadataRouterFacade),
@@ -1414,7 +1803,7 @@ class HomeViewModelFocusHydrationTest {
             homeCatalogRefreshCoordinator = mockk(relaxed = true),
             debugSettingsDataStore = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
-            syntheticHomeCatalogStore = mockk(relaxed = true),
+            syntheticHomeCatalogStore = syntheticHomeCatalogStore,
             homeRailOrderStore = homeRailOrderStore,
             profileManager = profileManagerWithSwitch,
             profileModeRouter = profileModeRouter,
@@ -1427,7 +1816,7 @@ class HomeViewModelFocusHydrationTest {
                 playerSettings = emptyFlow(),
                 nowMs = { 1L }
             ),
-            trackingProviderStateService = mockk(relaxed = true),
+            trackingProviderStateService = trackingProviderStateService,
             playbackIdleGateState = playbackIdleGateState,
             resolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(
                 activeProfileSession = { profileSessionFlow.value }

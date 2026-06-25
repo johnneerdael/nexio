@@ -9,6 +9,7 @@ import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkCacheRepairService
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
@@ -67,15 +68,18 @@ class ResolvedDisplaySnapshotStore private constructor(
     private val rootDir: () -> File,
     private val activeProfileId: () -> Int,
     private val currentLanguageTag: () -> String,
+    private val repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?,
 ) {
     @Inject
     constructor(
         @ApplicationContext context: Context,
         profileManager: ProfileManager,
+        artworkCacheRepairService: ArtworkCacheRepairService,
     ) : this(
         rootDir = { File(context.filesDir, SNAPSHOT_DIR) },
         activeProfileId = { profileManager.activeProfileId.value },
         currentLanguageTag = { AppLocaleResolver.resolveEffectiveAppLanguageTag(context) },
+        repairDecisionRefToAssetKey = artworkCacheRepairService::repairDecisionRefToAssetKey,
     )
 
     companion object {
@@ -91,10 +95,12 @@ class ResolvedDisplaySnapshotStore private constructor(
             rootDir: File,
             activeProfileId: () -> Int,
             currentLanguageTag: () -> String = { "en" },
+            repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey? = { null },
         ): ResolvedDisplaySnapshotStore = ResolvedDisplaySnapshotStore(
             rootDir = { rootDir },
             activeProfileId = activeProfileId,
             currentLanguageTag = currentLanguageTag,
+            repairDecisionRefToAssetKey = repairDecisionRefToAssetKey,
         )
     }
 
@@ -129,6 +135,55 @@ class ResolvedDisplaySnapshotStore private constructor(
     fun read(profileId: Int = activeProfileId()): Map<String, ResolvedDisplayItem> {
         val file = snapshotFileFor(profileId)
         if (!file.exists()) return emptyMap()
+        return readSnapshotFile(file = file, expectedLanguageTag = currentLanguageTag())
+    }
+
+    fun readReusableCurrentLanguageSnapshot(
+        profileId: Int = activeProfileId(),
+        candidateProfileIds: Iterable<Int> = 1..4
+    ): Map<String, ResolvedDisplayItem> {
+        val languageTag = currentLanguageTag()
+        for (candidateProfileId in candidateProfileIds.distinct()) {
+            if (candidateProfileId == profileId) continue
+            val file = snapshotFileFor(profileId = candidateProfileId, languageTag = languageTag)
+            if (!file.exists()) continue
+            val items = readSnapshotFile(file = file, expectedLanguageTag = languageTag)
+            if (items.isNotEmpty()) return items
+        }
+        return emptyMap()
+    }
+
+    fun readReusableArtworkSnapshot(
+        profileId: Int = activeProfileId(),
+        candidateProfileIds: Iterable<Int> = 1..4
+    ): Map<String, ResolvedDisplayItem> {
+        val languageTag = currentLanguageTag()
+        val out = LinkedHashMap<String, ResolvedDisplayItem>()
+        for (candidateProfileId in candidateProfileIds.distinct()) {
+            if (candidateProfileId == profileId) continue
+            val files = reusableSnapshotFilesForProfile(candidateProfileId, languageTag)
+            for (fileIndex in files.indices) {
+                val items = readSnapshotFile(
+                    file = files[fileIndex],
+                    expectedLanguageTag = languageTag,
+                    filterByLanguage = false
+                )
+                if (items.isEmpty()) continue
+                for ((key, item) in items) {
+                    if (out.containsKey(key)) continue
+                    val artworkOnly = item.toReusableArtworkOnlyItem(languageTag) ?: continue
+                    out[key] = artworkOnly
+                }
+            }
+        }
+        return out
+    }
+
+    private fun readSnapshotFile(
+        file: File,
+        expectedLanguageTag: String,
+        filterByLanguage: Boolean = true
+    ): Map<String, ResolvedDisplayItem> {
         return runCatching {
             FileInputStream(file).use { fis ->
                 BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
@@ -149,14 +204,35 @@ class ResolvedDisplaySnapshotStore private constructor(
                                     }
                                 }
                                 "items" -> {
-                                    items = if (schemaVersion <= 1) {
+                                    val decodedItems: Map<String, ResolvedDisplayItem> = if (schemaVersion <= 1) {
                                         gson.fromJson(reader, legacyMapType) ?: emptyMap()
                                     } else {
                                         val persisted: Map<String, PersistedResolvedDisplayItem> =
                                             gson.fromJson(reader, persistedMapType) ?: emptyMap()
-                                        persisted.mapNotNull { (key, value) ->
-                                            value.toDomain()?.let { item -> key to item }
-                                        }.toMap()
+                                        val restored = LinkedHashMap<String, ResolvedDisplayItem>(persisted.size)
+                                        var droppedItems = 0
+                                        for ((key, value) in persisted) {
+                                            val item = value.toDomain()
+                                            if (item != null) {
+                                                restored[key] = item
+                                            } else {
+                                                droppedItems += 1
+                                            }
+                                        }
+                                        if (droppedItems > 0) {
+                                            Log.w(
+                                                TAG,
+                                                "Dropped $droppedItems persisted resolved display items during restore " +
+                                                    "restored=${restored.size}"
+                                            )
+                                        }
+                                        restored
+                                    }
+                                    items = decodedItems.mapValues { (_, item) ->
+                                        item.repairDecisionOnlyArtworkRefs(repairDecisionRefToAssetKey)
+                                    }.filterValues { item ->
+                                        !filterByLanguage ||
+                                            item.displayLanguageTag.matchesSnapshotLanguage(expectedLanguageTag)
                                     }
                                 }
                                 else -> reader.skipValue()
@@ -179,14 +255,46 @@ class ResolvedDisplaySnapshotStore private constructor(
     }
 
     private fun snapshotFileFor(profileId: Int): File {
+        return snapshotFileFor(profileId = profileId, languageTag = currentLanguageTag())
+    }
+
+    private fun snapshotFileFor(profileId: Int, languageTag: String): File {
         val parent = rootDir()
         if (!parent.exists()) parent.mkdirs()
-        val sanitizedTag = currentLanguageTag()
+        val sanitizedTag = languageTag
             .lowercase()
             .replace(Regex("[^a-z0-9_-]"), "_")
             .ifBlank { "unknown" }
         return File(parent, "p${profileId.coerceAtLeast(1)}_${sanitizedTag}.json")
     }
+
+    private fun reusableSnapshotFilesForProfile(profileId: Int, languageTag: String): List<File> {
+        val exact = snapshotFileFor(profileId = profileId, languageTag = languageTag)
+        val parent = rootDir()
+        val prefix = "p${profileId.coerceAtLeast(1)}_"
+        val files = parent.listFiles()
+            .orEmpty()
+            .filter { file -> file.isFile && file.name.startsWith(prefix) && file.name.endsWith(".json") }
+            .sortedBy { file -> file.name }
+        if (!exact.exists()) return files
+        return buildList {
+            add(exact)
+            for (i in files.indices) {
+                val file = files[i]
+                if (file.absolutePath != exact.absolutePath) add(file)
+            }
+        }
+    }
+}
+
+private fun String?.matchesSnapshotLanguage(expectedLanguageTag: String): Boolean {
+    val actual = this?.trim().orEmpty()
+    if (actual.isBlank()) return true
+    val expected = expectedLanguageTag.trim()
+    if (expected.isBlank()) return true
+    if (actual.equals(expected, ignoreCase = true)) return true
+    return actual.substringBefore('-', actual)
+        .equals(expected.substringBefore('-', expected), ignoreCase = true)
 }
 
 private data class PersistedResolvedDisplayItem(
@@ -211,6 +319,17 @@ private data class PersistedResolvedDisplayItem(
     val displayLanguageTag: String?
 ) {
     fun toDomain(): ResolvedDisplayItem? = runCatching {
+        val restoredArtwork = runCatching { artwork.toDomain() }.getOrDefault(ArtworkBundle())
+        val restoredRating = runCatching { rating }.getOrNull()
+        val restoredTrailer = runCatching { trailer.toDomain() }.getOrDefault(TrailerDisplayState())
+        val restoredSlots = runCatching { slots?.toDomain() }.getOrNull()
+        val restoredPreferredArtworkProviders = runCatching {
+            preferredArtworkProviders.mapNotNull { (key, value) ->
+                val type = runCatching { ArtworkType.valueOf(key) }.getOrNull()
+                val provider = value.toDomain()
+                if (type != null && provider != null) type to provider else null
+            }.toMap()
+        }.getOrDefault(emptyMap())
         ResolvedDisplayItem(
             itemKey = itemKey,
             contentId = contentId,
@@ -222,19 +341,20 @@ private data class PersistedResolvedDisplayItem(
             imdbId = imdbId,
             stableIds = stableIds,
             display = display,
-            artwork = artwork.toDomain(),
-            rating = rating,
-            trailer = trailer.toDomain(),
+            artwork = restoredArtwork,
+            rating = restoredRating,
+            trailer = restoredTrailer,
             hydrationState = hydrationState,
-            sourceTrace = sourceTrace,
+            sourceTrace = emptyList(),
             updatedAtMs = updatedAtMs,
-            slots = slots?.toDomain(),
-            preferredArtworkProviders = preferredArtworkProviders.mapNotNull { (key, value) ->
-                val type = runCatching { ArtworkType.valueOf(key) }.getOrNull()
-                val provider = value.toDomain()
-                if (type != null && provider != null) type to provider else null
-            }.toMap(),
+            slots = restoredSlots,
+            preferredArtworkProviders = restoredPreferredArtworkProviders,
             displayLanguageTag = displayLanguageTag
+        )
+    }.onFailure { error ->
+        Log.w(
+            "ResolvedDisplayStore",
+            "Dropping persisted resolved display item=$itemKey: ${error.javaClass.simpleName}"
         )
     }.getOrNull()
 }
@@ -262,6 +382,202 @@ private fun ResolvedDisplayItem.toPersisted(): PersistedResolvedDisplayItem =
             .mapValues { (_, provider) -> provider.toPersisted() },
         displayLanguageTag = displayLanguageTag
     )
+
+private fun ResolvedDisplayItem.repairDecisionOnlyArtworkRefs(
+    repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
+): ResolvedDisplayItem {
+    val repairedArtwork = artwork.repairDecisionOnlyRefs(repairDecisionRefToAssetKey)
+    val repairedSlots = slots?.repairDecisionOnlyRefs(repairDecisionRefToAssetKey)
+    if (repairedArtwork == artwork && repairedSlots == slots) return this
+    return copy(artwork = repairedArtwork, slots = repairedSlots)
+}
+
+private fun ArtworkBundle.repairDecisionOnlyRefs(
+    repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
+): ArtworkBundle {
+    val repairedPoster = poster.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedBackdrop = backdrop.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedLogo = logo.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedThumbnail = thumbnail.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    if (
+        repairedPoster == poster &&
+        repairedBackdrop == backdrop &&
+        repairedLogo == logo &&
+        repairedThumbnail == thumbnail
+    ) {
+        return this
+    }
+    return copy(
+        poster = repairedPoster,
+        backdrop = repairedBackdrop,
+        logo = repairedLogo,
+        thumbnail = repairedThumbnail
+    )
+}
+
+private fun ResolvedDisplayFieldSlots.repairDecisionOnlyRefs(
+    repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
+): ResolvedDisplayFieldSlots {
+    val repairedPoster = poster.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedBackdrop = backdrop.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedLogo = logo.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    val repairedThumbnail = thumbnail.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    if (
+        repairedPoster == poster &&
+        repairedBackdrop == backdrop &&
+        repairedLogo == logo &&
+        repairedThumbnail == thumbnail
+    ) {
+        return this
+    }
+    return copy(
+        poster = repairedPoster,
+        backdrop = repairedBackdrop,
+        logo = repairedLogo,
+        thumbnail = repairedThumbnail
+    )
+}
+
+private fun ResolvedSlot<ArtworkDisplayRef>.repairDecisionOnlyRef(
+    repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
+): ResolvedSlot<ArtworkDisplayRef> {
+    val repaired = value.repairDecisionOnlyRef(repairDecisionRefToAssetKey)
+    return if (repaired == value) this else copy(value = repaired)
+}
+
+private fun ArtworkDisplayRef?.repairDecisionOnlyRef(
+    repairDecisionRefToAssetKey: (ArtworkDecisionKey) -> ArtworkAssetKey?
+): ArtworkDisplayRef? {
+    val runtime = this as? ArtworkDisplayRef.RuntimeAsset ?: return this
+    if (runtime.assetKey != null) return runtime
+    val repairedAssetKey = repairDecisionRefToAssetKey(runtime.decisionKey) ?: return runtime
+    return runtime.copy(assetKey = repairedAssetKey)
+}
+
+private fun ResolvedDisplayItem.toReusableArtworkOnlyItem(
+    languageTag: String
+): ResolvedDisplayItem? {
+    val nowMs = updatedAtMs
+    val reusableSlots = (slots ?: artwork.toReusableArtworkSlots(nowMs))
+        .toReusableArtworkOnlySlots(nowMs)
+    val reusableArtwork = ArtworkBundle(
+        poster = reusableSlots.poster.value,
+        backdrop = reusableSlots.backdrop.value,
+        logo = reusableSlots.logo.value,
+        thumbnail = reusableSlots.thumbnail.value
+    )
+    if (
+        reusableArtwork.poster == null &&
+        reusableArtwork.backdrop == null &&
+        reusableArtwork.logo == null &&
+        reusableArtwork.thumbnail == null
+    ) {
+        return null
+    }
+    return copy(
+        display = ResolvedDisplayFields(
+            title = null,
+            originalTitle = null,
+            year = null,
+            releaseDate = null,
+            overview = null,
+            genres = emptyList(),
+            runtimeText = null,
+            tomatoesRating = null
+        ),
+        artwork = reusableArtwork,
+        rating = null,
+        trailer = TrailerDisplayState(),
+        hydrationState = HydrationState.PREVIEW_ONLY,
+        sourceTrace = emptyList(),
+        slots = reusableSlots,
+        displayLanguageTag = languageTag
+    )
+}
+
+private fun ResolvedDisplayFieldSlots.toReusableArtworkOnlySlots(nowMs: Long): ResolvedDisplayFieldSlots {
+    val poster = poster.toReusableArtworkSlot(nowMs)
+    val posterProviderTag = if (poster.value != null && !this.posterProviderTag.value.isNullOrBlank()) {
+        this.posterProviderTag.copy(
+            rank = DisplaySourceRank.STALE_RESOLVED,
+            role = this.posterProviderTag.role ?: "REUSABLE_ARTWORK_CACHE",
+            trace = this.posterProviderTag.trace + "reusable_artwork_only"
+        )
+    } else {
+        ResolvedSlot.empty(nowMs)
+    }
+    return ResolvedDisplayFieldSlots(
+        title = ResolvedSlot.empty(nowMs),
+        originalTitle = ResolvedSlot.empty(nowMs),
+        overview = ResolvedSlot.empty(nowMs),
+        genres = ResolvedSlot.empty(nowMs),
+        releaseInfo = ResolvedSlot.empty(nowMs),
+        runtime = ResolvedSlot.empty(nowMs),
+        rating = ResolvedSlot.empty(nowMs),
+        poster = poster,
+        backdrop = backdrop.toReusableArtworkSlot(nowMs),
+        logo = logo.toReusableArtworkSlot(nowMs),
+        thumbnail = thumbnail.toReusableArtworkSlot(nowMs),
+        posterProviderTag = posterProviderTag
+    )
+}
+
+private fun ArtworkBundle.toReusableArtworkSlots(nowMs: Long): ResolvedDisplayFieldSlots =
+    ResolvedDisplayFieldSlots(
+        title = ResolvedSlot.empty(nowMs),
+        originalTitle = ResolvedSlot.empty(nowMs),
+        overview = ResolvedSlot.empty(nowMs),
+        genres = ResolvedSlot.empty(nowMs),
+        releaseInfo = ResolvedSlot.empty(nowMs),
+        runtime = ResolvedSlot.empty(nowMs),
+        rating = ResolvedSlot.empty(nowMs),
+        poster = poster.toReusableArtworkSlot(ArtworkType.POSTER, nowMs),
+        backdrop = backdrop.toReusableArtworkSlot(ArtworkType.BACKDROP, nowMs),
+        logo = logo.toReusableArtworkSlot(ArtworkType.LOGO, nowMs),
+        thumbnail = thumbnail.toReusableArtworkSlot(ArtworkType.THUMBNAIL, nowMs),
+        posterProviderTag = ResolvedSlot.empty(nowMs)
+    )
+
+private fun ResolvedSlot<ArtworkDisplayRef>.toReusableArtworkSlot(nowMs: Long): ResolvedSlot<ArtworkDisplayRef> {
+    val ref = value.takeIfReusableArtworkRef() ?: return ResolvedSlot.empty(nowMs)
+    return copy(
+        value = ref,
+        rank = DisplaySourceRank.STALE_RESOLVED,
+        role = role ?: "REUSABLE_ARTWORK_CACHE",
+        trace = trace + "reusable_artwork_only"
+    )
+}
+
+private fun ArtworkDisplayRef?.toReusableArtworkSlot(
+    imageType: ArtworkType,
+    nowMs: Long
+): ResolvedSlot<ArtworkDisplayRef> {
+    val ref = takeIfReusableArtworkRef() ?: return ResolvedSlot.empty(nowMs)
+    return ResolvedSlot(
+        value = ref,
+        rank = DisplaySourceRank.STALE_RESOLVED,
+        provider = ref.providerKey(),
+        role = "REUSABLE_ARTWORK_CACHE",
+        updatedAtMs = nowMs,
+        expiresAtMs = null,
+        trace = listOf("reusable_artwork_only:$imageType")
+    )
+}
+
+private fun ArtworkDisplayRef?.takeIfReusableArtworkRef(): ArtworkDisplayRef? =
+    when (this) {
+        is ArtworkDisplayRef.RuntimeAsset,
+        is ArtworkDisplayRef.LegacyString -> this
+        is ArtworkDisplayRef.Placeholder,
+        null -> null
+    }
+
+private fun ArtworkDisplayRef.providerKey(): String? =
+    when (this) {
+        is ArtworkDisplayRef.RuntimeAsset -> selectedProvider?.key
+        is ArtworkDisplayRef.LegacyString -> trace.selectedProvider
+        is ArtworkDisplayRef.Placeholder -> null
+    }
 
 private data class PersistedResolvedDisplayFieldSlots(
     val title: PersistedSlot<String>,

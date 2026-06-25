@@ -4,6 +4,7 @@ import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayFieldSlots
+import com.nexio.tv.domain.model.ResolvedSlot
 import com.nexio.tv.domain.model.TitleRating
 
 /**
@@ -41,4 +42,5 @@ internal fun ResolvedDisplayFieldSlots.toResolvedDisplayFields(
     )
 }
 
-internal fun ResolvedDisplayFieldSlots.toRating(): TitleRating? = rating.value
+internal fun ResolvedDisplayFieldSlots.toRating(): TitleRating? =
+    (rating as ResolvedSlot<*>).value as? TitleRating

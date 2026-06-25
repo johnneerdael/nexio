@@ -155,7 +155,8 @@ internal fun resolveModernCarouselCardArtworkModel(
 ): Any? {
     val useBackdrop = useLandscapePosters || (focusedPosterBackdropExpandEnabled && isBackdropExpanded)
     val resolvedTypedModel = if (useBackdrop) {
-        item.backdropRef.toCoilModelOrNull() ?: item.posterRef.toCoilModelOrNull()
+        item.backdropRef.toCoilModelOrNull()
+            ?: item.posterRef.toCoilModelOrNull()
     } else {
         item.posterRef.toCoilModelOrNull()
     }
@@ -965,6 +966,10 @@ private fun ModernCarouselCard(
         primaryModel = coilModel,
         fallbackModel = fallbackArtworkModel
     )
+    var artworkUnavailable by remember(item.key) { mutableStateOf(false) }
+    LaunchedEffect(imageModel, fallbackArtworkModel) {
+        artworkUnavailable = false
+    }
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
             logoModel != null &&
@@ -982,6 +987,11 @@ private fun ModernCarouselCard(
     }
     val titleStyle = remember(titleMedium) {
         titleMedium.copy(fontWeight = FontWeight.Medium)
+    }
+
+    if (!useLandscapePosters && artworkUnavailable) {
+        Spacer(modifier = modifier.width(0.dp))
+        return
     }
 
     Column(
@@ -1095,7 +1105,12 @@ private fun ModernCarouselCard(
                             fallbackModel = fallbackArtworkModel,
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Crop,
+                            onPlaceholder = {
+                                if (!useLandscapePosters) {
+                                    artworkUnavailable = true
+                                }
+                            }
                         )
                     } else {
                         MonochromePosterPlaceholder()

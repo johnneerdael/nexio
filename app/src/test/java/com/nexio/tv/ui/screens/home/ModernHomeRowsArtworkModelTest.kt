@@ -36,7 +36,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://decision/decision-backdropAsset", model)
+        assertEquals("nexio-artwork://asset/backdropAsset", model)
     }
 
     @Test
@@ -56,7 +56,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://decision/decision-backdropAsset", model)
+        assertEquals("nexio-artwork://asset/backdropAsset", model)
     }
 
     @Test
@@ -76,7 +76,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertEquals("nexio-artwork://decision/decision-posterAsset", model)
+        assertEquals("nexio-artwork://asset/posterAsset", model)
     }
 
     @Test
@@ -112,7 +112,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.imageUrl
         )
 
-        assertNotEquals("nexio-artwork://decision/decision-backdropAsset", model)
+        assertNotEquals("nexio-artwork://asset/backdropAsset", model)
         assertTrue(model is LegacyRemoteArtworkModel)
         val legacyModel = model as LegacyRemoteArtworkModel
         assertEquals(ArtworkType.POSTER, legacyModel.imageType)
@@ -138,7 +138,7 @@ class ModernHomeRowsArtworkModelTest {
             fallbackModel = item.heroPreview.poster
         )
 
-        assertNotEquals("nexio-artwork://decision/decision-logoAsset", model)
+        assertNotEquals("nexio-artwork://asset/logoAsset", model)
         assertTrue(model is LegacyRemoteArtworkModel)
         assertEquals(ArtworkType.POSTER, (model as LegacyRemoteArtworkModel).imageType)
     }
@@ -257,7 +257,8 @@ class ModernHomeRowsArtworkModelTest {
             isBackdropExpanded = false
         )
 
-        assertEquals("nexio-artwork://decision/decision-posterDecision", primary)
+        assertEquals("nexio-artwork://asset/posterDecision", primary)
+        assertEquals("nexio-artwork://decision/posterDecision", fallback)
         // After CLAUDE.md rule #1 fix, the fallback prefers the resolved-authority
         // legacy URL on [heroPreview.poster] (a safe nexio-artwork:// URI in this
         // fixture) over the raw addon URL on [metaPreview.poster]. Both shapes

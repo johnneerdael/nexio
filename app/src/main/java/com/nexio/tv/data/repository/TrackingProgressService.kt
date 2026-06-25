@@ -145,7 +145,7 @@ class DefaultTrackingProgressService @Inject constructor(
             if (active.size == 1) {
                 return@flatMapLatest snapshotLoadedFlowForProvider(active.single())
             }
-            combine(active.map(::snapshotLoadedFlowForProvider)) { loaded -> loaded.any { it } }
+            combine(active.map(::snapshotLoadedFlowForProvider)) { loaded -> loaded.all { it } }
         }
 
     @Suppress("OVERRIDE_DEPRECATION")

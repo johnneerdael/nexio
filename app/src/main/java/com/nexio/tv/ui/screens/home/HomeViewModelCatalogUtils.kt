@@ -404,6 +404,33 @@ internal fun TraktCatalogPreferences.onlyWhenAuthenticated(
     }
 }
 
+internal val PUBLIC_TRAKT_DISCOVERY_CATALOG_IDS = setOf(
+    TraktCatalogIds.TRENDING_MOVIES,
+    TraktCatalogIds.TRENDING_SHOWS,
+    TraktCatalogIds.POPULAR_MOVIES,
+    TraktCatalogIds.POPULAR_SHOWS
+)
+
+internal fun TraktCatalogPreferences.publicDiscoveryOnly(): TraktCatalogPreferences {
+    val enabledPublic = enabledCatalogs.intersect(PUBLIC_TRAKT_DISCOVERY_CATALOG_IDS)
+    if (enabledPublic.isEmpty()) {
+        return TraktCatalogPreferences(
+            enabledCatalogs = emptySet(),
+            catalogOrder = emptyList(),
+            selectedPopularListKeys = emptySet()
+        )
+    }
+    return copy(
+        enabledCatalogs = enabledPublic,
+        catalogOrder = catalogOrder.filter { it in enabledPublic },
+        selectedPopularListKeys = emptySet()
+    )
+}
+
+internal fun TraktCatalogPreferences.forHomeDiscovery(authenticated: Boolean): TraktCatalogPreferences {
+    return if (authenticated) this else publicDiscoveryOnly()
+}
+
 internal fun buildExpectedConfiguredMDBListOrderKeys(
     prefs: MDBListCatalogPreferences,
     snapshot: MDBListDiscoverySnapshot

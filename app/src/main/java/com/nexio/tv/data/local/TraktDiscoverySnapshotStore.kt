@@ -46,6 +46,12 @@ class TraktDiscoverySnapshotStore private constructor(
         private const val TAG = "TraktDiscoveryStore"
         internal const val BASE_PREFS_NAME = "trakt_discovery_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
+        private val REUSABLE_PUBLIC_CATALOGS = setOf(
+            TraktCatalogIds.TRENDING_MOVIES,
+            TraktCatalogIds.TRENDING_SHOWS,
+            TraktCatalogIds.POPULAR_MOVIES,
+            TraktCatalogIds.POPULAR_SHOWS
+        )
     }
 
     private val gson = Gson()
@@ -73,6 +79,23 @@ class TraktDiscoverySnapshotStore private constructor(
 
     fun readActiveProfile(): TraktDiscoverySnapshot? {
         return read(activeProfileId())
+    }
+
+    fun readReusablePublicSnapshot(
+        profileId: Int = activeProfileId(),
+        candidateProfileIds: Iterable<Int> = 1..4,
+        enabledCatalogs: Set<String>
+    ): TraktDiscoverySnapshot? {
+        val reusableCatalogs = enabledCatalogs.intersect(REUSABLE_PUBLIC_CATALOGS)
+        if (reusableCatalogs.isEmpty()) return null
+
+        for (candidateProfileId in candidateProfileIds.distinct()) {
+            if (candidateProfileId == profileId) continue
+            val candidate = read(profileId = candidateProfileId) ?: continue
+            val reusable = candidate.toReusablePublicSnapshot(reusableCatalogs)
+            if (reusable.hasReusablePublicContent()) return reusable
+        }
+        return null
     }
 
     fun write(
@@ -160,6 +183,40 @@ class TraktDiscoverySnapshotStore private constructor(
             }
         }
     }
+
+    private fun TraktDiscoverySnapshot.toReusablePublicSnapshot(
+        enabledCatalogs: Set<String>
+    ): TraktDiscoverySnapshot {
+        return TraktDiscoverySnapshot(
+            trendingMovieItemRecords = if (TraktCatalogIds.TRENDING_MOVIES in enabledCatalogs) {
+                trendingMovieItemRecords
+            } else {
+                emptyList()
+            },
+            trendingShowItemRecords = if (TraktCatalogIds.TRENDING_SHOWS in enabledCatalogs) {
+                trendingShowItemRecords
+            } else {
+                emptyList()
+            },
+            popularMovieItemRecords = if (TraktCatalogIds.POPULAR_MOVIES in enabledCatalogs) {
+                popularMovieItemRecords
+            } else {
+                emptyList()
+            },
+            popularShowItemRecords = if (TraktCatalogIds.POPULAR_SHOWS in enabledCatalogs) {
+                popularShowItemRecords
+            } else {
+                emptyList()
+            },
+            updatedAtMs = updatedAtMs
+        )
+    }
+
+    private fun TraktDiscoverySnapshot.hasReusablePublicContent(): Boolean =
+        trendingMovieItemRecords.isNotEmpty() ||
+            trendingShowItemRecords.isNotEmpty() ||
+            popularMovieItemRecords.isNotEmpty() ||
+            popularShowItemRecords.isNotEmpty()
 
     private fun decodeCustomCatalogs(root: JsonObject): List<TraktCustomListCatalog> {
         val array = root.getAsJsonArray("customListCatalogs") ?: return emptyList()

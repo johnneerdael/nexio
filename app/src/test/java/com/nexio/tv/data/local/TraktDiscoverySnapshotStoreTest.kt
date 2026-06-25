@@ -35,6 +35,38 @@ class TraktDiscoverySnapshotStoreTest {
     }
 
     @Test
+    fun `public discovery fallback reuses only enabled public rails from another profile`() {
+        val prefsByName = linkedMapOf<String, InMemorySharedPreferences>()
+        val context = mockContext(prefsByName)
+        val store = TraktDiscoverySnapshotStore(context)
+        val profileOne = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(sampleItem("tt-trending-movie")),
+            trendingShowItems = listOf(sampleItem("tt-trending-show", ContentType.SERIES)),
+            popularMovieItems = listOf(sampleItem("tt-popular-movie")),
+            recommendationMovieItems = listOf(sampleItem("tt-recommended-movie")),
+            updatedAtMs = 123L
+        )
+
+        store.write(profileOne, profileId = 1)
+
+        val fallback = store.readReusablePublicSnapshot(
+            profileId = 2,
+            enabledCatalogs = setOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                TraktCatalogIds.TRENDING_SHOWS,
+                TraktCatalogIds.RECOMMENDED_MOVIES
+            )
+        )
+
+        assertNotNull(fallback)
+        assertEquals(listOf("tt-trending-movie"), fallback?.trendingMovieItems?.map { it.id })
+        assertEquals(listOf("tt-trending-show"), fallback?.trendingShowItems?.map { it.id })
+        assertEquals(emptyList<MetaPreview>(), fallback?.popularMovieItems)
+        assertEquals(emptyList<MetaPreview>(), fallback?.recommendationMovieItems)
+        assertEquals(123L, fallback?.updatedAtMs)
+    }
+
+    @Test
     fun `read sanitizes null popular list fields before snapshot hashing`() {
         val prefsByName = linkedMapOf<String, InMemorySharedPreferences>()
         val context = mockContext(prefsByName)
@@ -83,10 +115,13 @@ class TraktDiscoverySnapshotStoreTest {
         }
     }
 
-    private fun sampleItem(id: String) = MetaPreview(
+    private fun sampleItem(
+        id: String,
+        type: ContentType = ContentType.MOVIE
+    ) = MetaPreview(
         id = id,
-        type = ContentType.MOVIE,
-        rawType = "movie",
+        type = type,
+        rawType = if (type == ContentType.SERIES) "series" else "movie",
         name = id,
         poster = null,
         posterShape = PosterShape.POSTER,

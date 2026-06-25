@@ -2,6 +2,7 @@ package com.nexio.tv.sync
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -338,8 +339,8 @@ class ProfileSettingsScopeContractTest {
         val source = homeCatalogPipeline.readText()
 
         assertTrue(source.contains("hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty()"))
-        assertTrue(source.contains("persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()"))
-        assertTrue(source.contains("trackingProviderStateService.currentState()"))
+        assertTrue(source.contains("persistedTraktSyntheticGroups = snapshot.traktGroups.forTraktHomeAuthState(providerState.traktAuthenticated)"))
+        assertTrue(source.contains("trackingProviderStateService.currentState(profileId)"))
         assertTrue(
             "Trakt Up Next must not be described from stale UI state after profile auth is cleared",
             !source.contains("hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty()")
@@ -609,7 +610,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"trakt_discovery\")"))
         assertTrue(source.contains("Skipping empty Trakt discovery emission during profile switch"))
         val traktSuppressIndex = source.indexOf("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"trakt_discovery\")")
-        val traktClearIndex = source.indexOf("clearTraktHomeState(\"observe_trakt_discovery_unauthenticated\")")
+        val traktClearIndex = source.indexOf("reason = \"observe_trakt_discovery_unauthenticated\"")
         assertTrue(
             "Empty Trakt emissions during profile switch must be skipped before unauthenticated clearing can run",
             traktSuppressIndex >= 0 && traktClearIndex > traktSuppressIndex
@@ -621,6 +622,126 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("loadActiveProfileDiskBackedHomeState("))
         assertTrue(homeSource.contains("profileSwitchDiskHydrationActive"))
         assertTrue(homeSource.contains("shouldSuppressProfileSwitchRefresh(reason: String)"))
+    }
+
+    @Test
+    fun `profile switch defers transient unauthenticated tracking state before clearing provider rails`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val pipelineSource = homeCatalogPipeline.readText()
+
+        val applyStart = homeSource.indexOf("private fun applyTrackingProviderState(")
+        val suppressGuard = homeSource.indexOf(
+            "wouldLoseAuthenticatedState && shouldSuppressProfileSwitchRefresh(reason)",
+            startIndex = applyStart
+        )
+        val deferredReconcile = homeSource.indexOf(
+            "scheduleTrackingProviderStateReconcileAfterProfileSwitch()",
+            startIndex = suppressGuard
+        )
+        val traktAuthMutation = homeSource.indexOf(
+            "activeProfileTraktAuthenticated = state.traktAuthenticated",
+            startIndex = applyStart
+        )
+        val traktClear = homeSource.indexOf(
+            "clearTraktHomeState(reason)",
+            startIndex = applyStart
+        )
+
+        assertTrue("Tracking auth state should be applied through a helper", applyStart >= 0)
+        assertTrue("Transient unauthenticated state should be suppressed during profile-switch hydration", suppressGuard > applyStart)
+        assertTrue("Suppressed unauthenticated state should schedule a delayed stable-state recheck", deferredReconcile > suppressGuard)
+        assertTrue("Provider auth flags must not be downgraded before the profile-switch suppression guard", traktAuthMutation > suppressGuard)
+        assertTrue("Trakt home state must not be cleared before the profile-switch suppression guard", traktClear > suppressGuard)
+        assertTrue(pipelineSource.contains("deferredTrackingProviderStateReconcileJob?.cancel()"))
+        assertTrue(pipelineSource.contains("deferredTrackingProviderStateReconcileJob = null"))
+    }
+
+    @Test
+    fun `profile switch disk snapshot suppresses incomplete producer frames`() {
+        val pipelineSource = homeCatalogPipeline.readText()
+
+        val diagnosticsIndex = pipelineSource.indexOf("val producerFrameDiagnostics = analyzeHomeFrame(")
+        val suppressGuard = pipelineSource.indexOf(
+            "isProfileSwitchDiskSnapshotModeActive()",
+            startIndex = diagnosticsIndex
+        )
+        val reasonIndex = pipelineSource.indexOf(
+            "\"profile_switch_disk_snapshot\"",
+            startIndex = suppressGuard
+        )
+        val dropCurrentRailsIndex = pipelineSource.indexOf(
+            "wouldDropCurrentRenderedRails",
+            startIndex = diagnosticsIndex
+        )
+        val dropCurrentRailsReasonIndex = pipelineSource.indexOf(
+            "\"would_drop_current_rails\"",
+            startIndex = dropCurrentRailsIndex
+        )
+        val publishIndex = pipelineSource.indexOf(
+            "applyHomeProducerEmissionToUiPipeline(",
+            startIndex = diagnosticsIndex
+        )
+
+        assertTrue("Home producer diagnostics must run before the publish guard", diagnosticsIndex >= 0)
+        assertTrue(
+            "Incomplete producer candidates must be suppressed during profile-switch disk snapshot mode",
+            suppressGuard > diagnosticsIndex
+        )
+        assertTrue(
+            "Profile-switch suppression should have a distinct diagnostic reason",
+            reasonIndex > suppressGuard
+        )
+        assertTrue(
+            "A smaller producer frame must be compared against already rendered rails",
+            dropCurrentRailsIndex > diagnosticsIndex
+        )
+        assertTrue(
+            "Dropping already rendered rails should have a distinct diagnostic reason",
+            dropCurrentRailsReasonIndex > dropCurrentRailsIndex
+        )
+        assertTrue(
+            "The profile-switch suppression guard must run before publishing producer rows",
+            publishIndex > suppressGuard
+        )
+        assertTrue(
+            "Profile-switch disk snapshot mode should clear only after a complete producer frame is published",
+            pipelineSource.indexOf("clearProfileSwitchDiskSnapshotMode(\"producer_final_frame_applied\")", startIndex = publishIndex) > publishIndex
+        )
+    }
+
+    @Test
+    fun `simkl discovery observer ignores timestamp only snapshot churn`() {
+        val pipelineSource = homeCatalogPipeline.readText()
+
+        val observerIndex = pipelineSource.indexOf("internal fun HomeViewModel.observeSimklDiscoveryPipeline()")
+        val signatureGuardIndex = pipelineSource.indexOf(
+            "simklDiscoverySnapshotContentSignature(snapshot)",
+            startIndex = observerIndex
+        )
+        val staleEqualityIndex = pipelineSource.indexOf(
+            "snapshot == simklDiscoverySnapshot",
+            startIndex = observerIndex
+        )
+        val helperIndex = pipelineSource.indexOf("private fun simklDiscoverySnapshotContentSignature(")
+        val helperEndIndex = pipelineSource.indexOf(
+            "private fun traktDiscoverySnapshotContentSignature(",
+            startIndex = helperIndex
+        )
+        val helperSource = pipelineSource.substring(helperIndex, helperEndIndex)
+        val runRefreshIndex = pipelineSource.indexOf(
+            "runSerializedHomeRefreshIfNeeded(\"simkl_discovery\")",
+            startIndex = observerIndex
+        )
+
+        assertTrue("SIMKL observer should exist", observerIndex >= 0)
+        assertTrue("SIMKL observer must compare stable content signatures", signatureGuardIndex > observerIndex)
+        assertTrue("SIMKL observer must not rely on data-class equality with updatedAtMs", staleEqualityIndex == -1)
+        assertTrue("SIMKL content signature helper should exist", helperIndex > observerIndex)
+        assertTrue("SIMKL content signature helper should have a bounded body", helperEndIndex > helperIndex)
+        assertTrue("SIMKL content signature must ignore updatedAtMs", !helperSource.contains("updatedAtMs"))
+        assertTrue("SIMKL content signature must ignore generatedAtMs", !helperSource.contains("generatedAtMs"))
+        assertTrue("SIMKL content signature must ignore source payload hash churn", !helperSource.contains("sourcePayloadHash"))
+        assertTrue("SIMKL signature guard must run before queuing serialized refresh", runRefreshIndex > signatureGuardIndex)
     }
 
     @Test
@@ -641,12 +762,46 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
-    fun `profile switch uses disk-only catalog reload when profile disk state exists`() {
+    fun `profile switch uses disk snapshot as bridge while live refresh runs`() {
         val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
         val pipelineSource = homeCatalogPipeline.readText()
 
-        assertTrue(homeSource.contains("val hasDiskCacheState = loadActiveProfileDiskBackedHomeState("))
-        assertTrue(homeSource.contains("reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh = !hasDiskCacheState)"))
+        assertTrue(homeSource.contains("val diskBackedHomeState = loadActiveProfileDiskBackedHomeState("))
+        assertTrue(homeSource.contains("diskBackedHomeState.hasRenderableHomeSnapshot ||"))
+        assertTrue(homeSource.contains("diskBackedHomeState.hasSyntheticCatalogSnapshot"))
+        assertTrue(homeSource.contains("allowNetworkRefresh = true"))
+        assertTrue(homeSource.contains("runSerializedHomeRefreshIfNeeded(\"profile_switch_hydration_refresh\")"))
+        assertTrue(homeSource.contains("PROFILE_SWITCH_DISK_SNAPSHOT_BACKGROUND_REFRESH_REASONS"))
+        assertTrue(homeSource.contains("reason in PROFILE_SWITCH_DISK_SNAPSHOT_BACKGROUND_REFRESH_REASONS"))
+        assertTrue(pipelineSource.contains("retainExpectedExistingSyntheticGroups("))
+        assertTrue(pipelineSource.contains("val profileProviderState = withContext(Dispatchers.IO)"))
+        assertTrue(pipelineSource.contains("trackingProviderStateService.currentState(profileId)"))
+        assertTrue(pipelineSource.contains("val traktAuthenticatedForRenewal = activeProfileTraktAuthenticated || profileProviderState.traktAuthenticated"))
+        assertTrue(pipelineSource.contains("traktCatalogPreferences.forHomeDiscovery(traktAuthenticatedForRenewal)"))
+        assertTrue(pipelineSource.contains("val currentPersistedTraktGroups ="))
+        assertTrue(pipelineSource.contains("val currentPersistedTraktGroups = if (preserveExistingWhenPreferencesEmpty)"))
+        assertTrue(pipelineSource.contains("persistedTraktSyntheticGroups.forTraktHomeAuthState(traktAuthenticatedForRenewal)"))
+        assertTrue(pipelineSource.contains("val existingTraktGroups = if (preserveExistingWhenPreferencesEmpty)"))
+        assertTrue(pipelineSource.contains("existingSnapshot.traktGroups.forTraktHomeAuthState(traktAuthenticatedForRenewal)"))
+        assertTrue(pipelineSource.contains("combineSyntheticGroupSources("))
+        assertTrue(pipelineSource.contains("withCurrentSyntheticGroupsForProfileSwitch("))
+        assertTrue(pipelineSource.contains("currentPersistedTraktGroups"))
+        assertTrue(pipelineSource.contains("preserveExistingWhenPreferencesEmpty) {"))
+        assertTrue(pipelineSource.contains("expectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefsSnapshot)"))
+        assertTrue(pipelineSource.contains("preserveExistingWhenPreferencesEmpty = reason == \"profile_switch_hydration_refresh\""))
+        assertTrue(pipelineSource.contains("preserveExistingWhenExpectedEmpty = preserveExistingWhenPreferencesEmpty"))
+        assertTrue(pipelineSource.contains("if (expectedOrderKeys.isEmpty()) {"))
+        assertTrue(pipelineSource.contains("preserveExistingWhenExpectedEmpty && renewedGroups.isEmpty()"))
+        val catalogPlanSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/CatalogPlan.kt").readText()
+        assertTrue(catalogPlanSource.contains("preserveExistingWhenPreferencesEmpty: Boolean = false"))
+        assertTrue(catalogPlanSource.contains("preserveExistingWhenPreferencesEmpty && existingSnapshot.tmdbGroups.isNotEmpty()"))
+        assertTrue(catalogPlanSource.contains(".ifEmpty { existingSnapshot.tmdbGroups }"))
+        assertTrue(catalogPlanSource.contains("preserveExistingWhenPreferencesEmpty && buildExpectedConfiguredTmdbOrderKeys(sanitized).isEmpty()"))
+        assertTrue(catalogPlanSource.contains("return existingSnapshot.tmdbGroups"))
+        assertFalse(
+            "A renderable disk snapshot must not disable profile-switch network refresh; otherwise missing Trakt/TMDB rows never refill.",
+            homeSource.contains("allowNetworkRefresh = !diskBackedHomeState.hasRenderableHomeSnapshot")
+        )
         assertTrue(pipelineSource.contains("allowNetworkRefresh: Boolean"))
         assertTrue(pipelineSource.contains("loadAllCatalogsPipeline(addons, allowNetworkRefresh = allowNetworkRefresh)"))
         assertTrue(pipelineSource.contains("allowNetworkRefresh = allowNetworkRefresh"))
@@ -734,6 +889,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("mdbListDiscoveryObserved = true"))
         assertTrue(source.contains("scheduleUpdateCatalogRows()"))
         assertTrue(source.contains("hasDiskCacheState"))
+        assertTrue(source.contains("hasRenderableHomeSnapshot"))
     }
 
     @Test
@@ -815,9 +971,11 @@ class ProfileSettingsScopeContractTest {
         )
         val inProgressRouteStart = navSource.indexOf("is ContinueWatchingItem.InProgress ->")
         val resumeVideoIdArg = navSource.indexOf("videoId = item.progress.videoId", startIndex = inProgressRouteStart)
-        val streamVideoIdArg = navSource.indexOf("streamVideoId = streamFetchVideoIdForCw(", startIndex = inProgressRouteStart)
+        val streamFetchId = navSource.indexOf("val streamVideoId = streamFetchVideoIdForCw(", startIndex = inProgressRouteStart)
+        val streamVideoIdArg = navSource.indexOf("streamVideoId = streamVideoId", startIndex = resumeVideoIdArg)
         val nextUpRouteStart = navSource.indexOf("is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(")
         assertTrue("CW in-progress playback route should exist", inProgressRouteStart >= 0)
+        assertTrue("CW in-progress playback should compute the stream fetch id before creating the route", streamFetchId > inProgressRouteStart)
         assertTrue("CW in-progress playback should preserve the resume videoId", resumeVideoIdArg > inProgressRouteStart)
         assertTrue("CW in-progress playback should pass the stream fetch id separately", streamVideoIdArg > resumeVideoIdArg)
         assertTrue(
@@ -881,12 +1039,37 @@ class ProfileSettingsScopeContractTest {
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 
+        assertTrue(source.contains("private suspend fun providerState(owner: PlaybackOwnerContext)"))
+        assertTrue(source.contains("trackingProviderStateService.currentState(owner.ownerProfileId)"))
         assertTrue(source.contains("if (providerState.traktAuthenticated)"))
         assertTrue(source.contains("if (providerState.simklAuthenticated)"))
         assertTrue(source.contains("if (providerState.mdbListAuthenticated)"))
+        assertTrue(source.contains("traktScrobbleService.scrobbleStart("))
+        assertTrue(source.contains("traktScrobbleService.scrobbleStop("))
+        assertTrue(source.contains("traktScrobbleService.scrobblePause("))
+        assertTrue(source.contains("simklScrobbleService.scrobbleStart("))
+        assertTrue(source.contains("simklScrobbleService.scrobbleStop("))
+        assertTrue(source.contains("simklScrobbleService.scrobblePause("))
+        assertTrue(source.contains("owner.ownerProfileId,\n                                owner.ownerSessionId"))
         assertTrue(source.contains("mdbListScrobbleService?.scrobbleStart(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
         assertTrue(source.contains("mdbListScrobbleService?.scrobbleStop(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
         assertTrue(source.contains("mdbListScrobbleService?.scrobblePause(item, progressPercent, owner.ownerProfileId, owner.ownerSessionId)"))
+    }
+
+    @Test
+    fun `resolved display surface sanitizes restored rating payloads before merge`() {
+        val source = File("app/src/main/java/com/nexio/tv/data/repository/ResolvedDisplaySurfaceRepository.kt").readText()
+        val slotProjectionSource = File("app/src/main/java/com/nexio/tv/data/repository/ResolvedDisplaySlotProjection.kt").readText()
+
+        assertTrue(source.contains("val safeItems = items.withSafeRatings()"))
+        assertTrue(source.contains("val incomingRating = incoming.safeRating()"))
+        assertTrue(source.contains("val existingRating = existing.safeRating()"))
+        assertTrue(source.contains("incomingRating?.source != existingRating?.source"))
+        assertTrue(source.contains("mergedSlots.toRating() ?: incomingRating ?: existingRating"))
+        assertTrue(source.contains("private fun ResolvedDisplayItem.safeRating(): TitleRating?"))
+        assertTrue(source.contains("catch (_: ClassCastException)"))
+        assertTrue(source.contains("item.copy(rating = null)"))
+        assertTrue(slotProjectionSource.contains("(rating as ResolvedSlot<*>).value as? TitleRating"))
     }
 
     @Test

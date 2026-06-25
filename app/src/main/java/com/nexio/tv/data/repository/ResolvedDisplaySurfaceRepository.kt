@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.ResolvedSlot
+import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.visibleDisplaySignature
 import com.nexio.tv.ui.screens.home.HomeRailProjectionReducer
@@ -131,12 +132,13 @@ class ResolvedDisplaySurfaceRepository(
         items: List<ResolvedDisplayItem>
     ): Boolean {
         if (!isSupportedSurface(surfaceKey)) return false
+        val safeItems = items.withSafeRatings()
         val active = activeProfileSession()
         var published = false
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
             val existing = currentSurface[active.profileId].orEmpty()
-            val merged = mergeIncrementalItems(existing, items, traceEvents)
+            val merged = mergeIncrementalItems(existing, safeItems, traceEvents)
             val nextItems = merged.toAuthorityProjection()
             if (shouldSuppressSurfaceUpdate(surfaceKey, existing, nextItems)) {
                 current
@@ -170,15 +172,16 @@ class ResolvedDisplaySurfaceRepository(
         if (active.profileId != profileSession.profileId || active.sessionId != profileSession.sessionId) {
             return false
         }
+        val safeItems = items.withSafeRatings()
 
         var published = false
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
             val existingList = currentSurface[profileSession.profileId].orEmpty()
             val nextItems = if (replace) {
-                applyNonDowngradeMergeForReplace(existingList, items, traceEvents)
+                applyNonDowngradeMergeForReplace(existingList, safeItems, traceEvents)
             } else {
-                mergeIncrementalItems(existingList, items, traceEvents)
+                mergeIncrementalItems(existingList, safeItems, traceEvents)
             }.toAuthorityProjection()
             if (shouldSuppressSurfaceUpdate(surfaceKey, existingList, nextItems)) {
                 current
@@ -204,7 +207,7 @@ class ResolvedDisplaySurfaceRepository(
     @Synchronized
     fun restoreFromDisk(items: Map<String, ResolvedDisplayItem>, profileId: Int) {
         if (items.isEmpty()) return
-        val itemsList = items.values.toList()
+        val itemsList = items.values.toList().withSafeRatings()
         surfaces.update { current ->
             val currentSurface = current[HOME_SURFACE_KEY].orEmpty()
             val existing = currentSurface[profileId].orEmpty()
@@ -230,9 +233,10 @@ class ResolvedDisplaySurfaceRepository(
         profileId: Int,
         items: List<ResolvedDisplayItem>
     ) {
+        val safeItems = items.withSafeRatings()
         surfaces.update { current ->
             val currentSurface = current[surfaceKey].orEmpty()
-            current + (surfaceKey to (currentSurface + (profileId to items.toAuthorityProjection())))
+            current + (surfaceKey to (currentSurface + (profileId to safeItems.toAuthorityProjection())))
         }
     }
 
@@ -555,9 +559,11 @@ private fun applyNonDowngradeMerge(
         existing = existingSlots,
         profile = null
     )
+    val incomingRating = incoming.safeRating()
+    val existingRating = existing.safeRating()
     val stableSignatureChanged = incoming.displayLanguageTag != existing.displayLanguageTag ||
         incoming.preferredArtworkProviders != existing.preferredArtworkProviders ||
-        incoming.rating?.source != existing.rating?.source
+        incomingRating?.source != existingRating?.source
     val canonicalContentChanged = incoming.hydrationState != HydrationState.PREVIEW_ONLY &&
         existing.hydrationState != HydrationState.PREVIEW_ONLY &&
         incoming.updatedAtMs != existing.updatedAtMs
@@ -607,7 +613,7 @@ private fun applyNonDowngradeMerge(
         fallbackTitle = incoming.display.title.orEmpty(),
         fallbackTomatoesRating = incoming.display.tomatoesRating ?: existing.display.tomatoesRating
     )
-    val mergedRating = mergedSlots.toRating() ?: incoming.rating
+    val mergedRating = mergedSlots.toRating() ?: incomingRating ?: existingRating
 
     return incoming.copy(
         slots = mergedSlots,
@@ -633,7 +639,42 @@ private fun <T> stableSameRankSlot(
 }
 
 private fun ResolvedDisplayItem.slotDerivedFieldsMatch(other: ResolvedDisplayItem): Boolean =
-    artwork == other.artwork && display == other.display && rating == other.rating
+    artwork == other.artwork && display == other.display && safeRating() == other.safeRating()
+
+private fun List<ResolvedDisplayItem>.withSafeRatings(): List<ResolvedDisplayItem> {
+    var changed = false
+    val out = ArrayList<ResolvedDisplayItem>(size)
+    for (i in indices) {
+        val item = this[i]
+        val safeRating = item.safeRating()
+        out += if (safeRating == null && item.hasInvalidRatingPayload()) {
+            changed = true
+            item.copy(rating = null)
+        } else {
+            item
+        }
+    }
+    return if (changed) out else this
+}
+
+private fun ResolvedDisplayItem.safeRating(): TitleRating? =
+    safeRatingPayload() as? TitleRating
+
+private fun ResolvedDisplayItem.safeRatingPayload(): Any? =
+    try {
+        rating as Any?
+    } catch (_: ClassCastException) {
+        INVALID_RATING_PAYLOAD
+    }
+
+private fun ResolvedDisplayItem.hasInvalidRatingPayload(): Boolean =
+    when (val payload = safeRatingPayload()) {
+        null -> false
+        INVALID_RATING_PAYLOAD -> true
+        else -> payload !is TitleRating
+    }
+
+private object INVALID_RATING_PAYLOAD
 
 private fun strengthenProviderIds(existing: ProviderIds, incoming: ProviderIds): ProviderIds {
     if (existing == incoming) return existing

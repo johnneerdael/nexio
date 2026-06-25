@@ -87,11 +87,21 @@ internal fun resolveEffectiveTmdbSyntheticGroups(
     renewedTmdbGroups: List<PersistedSyntheticCatalogGroup>,
     existingSnapshot: SyntheticHomeCatalogStore.Snapshot,
     prefs: TmdbCatalogPreferences,
-    snapshot: TmdbDiscoverySnapshot
+    snapshot: TmdbDiscoverySnapshot,
+    preserveExistingWhenPreferencesEmpty: Boolean = false
 ): List<PersistedSyntheticCatalogGroup> {
     val sanitized = prefs.sanitized()
     val currentRenewedGroups = renewedTmdbGroups.filterTmdbGroupsEnabledUnder(sanitized)
     if (currentRenewedGroups.isNotEmpty()) return currentRenewedGroups
+    if (preserveExistingWhenPreferencesEmpty && existingSnapshot.tmdbGroups.isNotEmpty()) {
+        if (buildExpectedConfiguredTmdbOrderKeys(sanitized).isEmpty()) return existingSnapshot.tmdbGroups
+        return existingSnapshot.tmdbGroups
+            .filterTmdbGroupsEnabledUnder(sanitized)
+            .ifEmpty { existingSnapshot.tmdbGroups }
+    }
+    if (preserveExistingWhenPreferencesEmpty && buildExpectedConfiguredTmdbOrderKeys(sanitized).isEmpty()) {
+        return existingSnapshot.tmdbGroups
+    }
     val existingCurrentGroups = existingSnapshot.tmdbGroupsMatchingPreferences(prefs)
     if (existingCurrentGroups.isEmpty()) return emptyList()
     return if (shouldPreserveExistingTmdbGroupsDuringRefresh(sanitized, snapshot)) {

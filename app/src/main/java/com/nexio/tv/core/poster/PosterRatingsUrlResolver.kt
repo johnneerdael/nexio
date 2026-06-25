@@ -2,6 +2,7 @@ package com.nexio.tv.core.poster
 
 import com.nexio.tv.core.artwork.ArtworkCacheKeys
 import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkCandidate
 import com.nexio.tv.core.artwork.ArtworkCredentialHash
 import com.nexio.tv.core.artwork.ArtworkDecision
@@ -24,6 +25,7 @@ import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.NoopArtworkRemoteSourceStore
 import com.nexio.tv.core.artwork.RejectedArtworkCandidate
 import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.artwork.enforceArtworkTypeBoundaries
 import com.nexio.tv.core.artwork.toPersistedCandidate
 import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.IntegrationPosterRequest
@@ -103,7 +105,8 @@ class PosterRatingsUrlResolver @Inject constructor(
             ?: fallbackPosterUrl
         return metaPreview.copy(
             poster = poster,
-            posterProviderTag = resolved.premiumProviderTag()
+            posterProviderTag = resolved.premiumProviderTag(),
+            artwork = metaPreview.artwork.withPoster(resolved)
         )
     }
 
@@ -134,7 +137,8 @@ class PosterRatingsUrlResolver @Inject constructor(
 
         return metaPreview.copy(
             poster = poster,
-            posterProviderTag = providerTag
+            posterProviderTag = providerTag,
+            artwork = metaPreview.artwork.withPoster(resolved)
         )
     }
 
@@ -179,6 +183,11 @@ class PosterRatingsUrlResolver @Inject constructor(
 
         val selection = artworkRouter.select(candidates, policy)
         val selected = selection.selectedCandidateOrNull ?: return null
+        val persistedSelected = selected.toPersistedCandidate(
+            policyVersion = policy.policyVersion,
+            remoteSourceStore = remoteSourceStore
+        )
+        val selectedAssetKey = selected.assetKeyForRuntimeRef(policy.policyVersion)
         val settingsHash = ArtworkDecisionPolicy.settingsHash(settings, ArtworkType.POSTER)
         val credentialHash = ArtworkDecisionPolicy.credentialHash(settings, ArtworkType.POSTER)
         val now = System.currentTimeMillis()
@@ -196,10 +205,7 @@ class PosterRatingsUrlResolver @Inject constructor(
             ownerKey = ownerKey,
             canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
             imageType = ArtworkType.POSTER,
-            selectedCandidate = selected.toPersistedCandidate(
-                policyVersion = policy.policyVersion,
-                remoteSourceStore = remoteSourceStore
-            ),
+            selectedCandidate = persistedSelected,
             rejectedCandidates = selection.rejectedCandidates,
             policyVersion = policy.policyVersion,
             imageLanguage = selected.imageLanguage,
@@ -213,7 +219,7 @@ class PosterRatingsUrlResolver @Inject constructor(
 
         return ArtworkDisplayRef.RuntimeAsset(
             decisionKey = decisionKey,
-            assetKey = null,
+            assetKey = selectedAssetKey,
             imageType = ArtworkType.POSTER,
             selectedProvider = selected.provider,
             sourceRole = selected.sourceRole,
@@ -707,6 +713,13 @@ class PosterRatingsUrlResolver @Inject constructor(
             ?.selectedProvider
             ?.key
             ?.lowercase()
+
+    private fun ArtworkBundle?.withPoster(poster: ArtworkDisplayRef.RuntimeAsset?): ArtworkBundle? {
+        if (poster == null) return this
+        return (this ?: ArtworkBundle())
+            .copy(poster = poster)
+            .enforceArtworkTypeBoundaries()
+    }
 
     private fun ProviderIds.posterArtworkOwnerKey(
         contentId: String,

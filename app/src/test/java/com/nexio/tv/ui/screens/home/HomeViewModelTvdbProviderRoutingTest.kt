@@ -176,6 +176,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         ) as ContinueWatchingItem.InProgress
 
         assertEquals("Nederlandse titel", result.displayMetadata?.title)
+        assertEquals("Nederlandse titel", result.progress.name)
     }
 
     @Test

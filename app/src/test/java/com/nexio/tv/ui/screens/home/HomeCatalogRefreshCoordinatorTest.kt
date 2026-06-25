@@ -64,20 +64,34 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeCatalogRefreshCoordinatorTest {
+    @Test
+    fun `post startup refresh budget cancels slow work promptly`() = runBlocking {
+        val startedAtMs = System.currentTimeMillis()
+
+        val completed = runPostStartupRefreshWithBudget(timeoutMs = 25L) {
+            delay(5_000L)
+        }
+
+        assertFalse(completed)
+        assertTrue(System.currentTimeMillis() - startedAtMs < 1_000L)
+    }
 
     @Test
     fun `diffCatalogItems marks new and changed entries as addedOrChanged`() {
@@ -131,6 +145,20 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
+    fun `diffCatalogItems treats reorder only rows as retained`() {
+        val first = preview(id = "a", poster = "posterA")
+        val second = preview(id = "b", poster = "posterB")
+
+        val diff = diffCatalogItems(
+            oldItems = listOf(first, second),
+            newItems = listOf(second, first)
+        )
+
+        assertTrue(diff.addedOrChanged.isEmpty())
+        assertTrue(diff.removed.isEmpty())
+    }
+
+    @Test
     fun `provider home enrichment no longer mutates preview runtime`() = runTest {
         val item = preview(id = "a", poster = "posterA")
         val resolver = mockk<ProviderLocalizedMetadataResolver>()
@@ -177,6 +205,20 @@ class HomeCatalogRefreshCoordinatorTest {
             shouldReusePersistedHomeItem(
                 itemChanged = true,
                 persistedFallback = preview(id = "a", poster = "posterA").copy(tomatoesRating = 71.0)
+            )
+        )
+    }
+
+    @Test
+    fun `shouldReusePersistedHomeItem reuses retained localized display metadata`() {
+        val raw = preview(id = "a", poster = "posterA").copy(name = "English title")
+        val persisted = raw.copy(name = "Nederlandse titel", tomatoesRating = null)
+
+        assertTrue(
+            shouldReusePersistedHomeItem(
+                itemChanged = false,
+                persistedFallback = persisted,
+                currentItem = raw
             )
         )
     }
@@ -451,6 +493,76 @@ class HomeCatalogRefreshCoordinatorTest {
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
+    @Test
+    fun `deferred refresh publishes only hydrated catalog rows`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val events = mutableListOf<String>()
+        val rawPreview = preview(id = "tt-deferred-refresh", poster = null).copy(name = "Raw title")
+        val rawRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://addon.example",
+                addonId = "addon",
+                addonName = "Addon",
+                catalogId = "popular",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                supportsSkip = false
+            )
+        } returns Result.success(rawRow)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } coAnswers {
+            events += "provider"
+            TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = TvMetadataEnrichment(
+                    seriesTvdbId = null,
+                    localizedTitle = "Hydrated title"
+                )
+            )
+        }
+
+        val refreshed = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter
+        ).refreshSerially(
+            addons = listOf(addon()),
+            telemetryEnabled = true,
+            isCatalogDisabled = { _, _ -> false },
+            getCurrentRow = { null },
+            isItemReferencedElsewhere = { _, _ -> false },
+            onCatalogReady = { catalogKey, row, _ ->
+                events += "publish:$catalogKey:${row.items.single().name}"
+            },
+            onLog = { _, _ -> },
+            publishRawRowsImmediately = false
+        )
+
+        assertEquals(1, refreshed)
+        assertEquals(
+            listOf(
+                "provider",
+                "publish:addon_movie_popular:Hydrated title"
+            ),
+            events
+        )
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun `home serialized refresh immediately publishes every raw first paint row before hydrated republish`() = runTest {
@@ -534,7 +646,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } coAnswers {
             val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
@@ -597,7 +710,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         }
         coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint(profileSession) }
@@ -666,7 +780,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } coAnswers {
             val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
@@ -759,7 +874,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } returns 0
         every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
@@ -948,7 +1064,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } coAnswers {
             val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
@@ -1081,7 +1198,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } coAnswers {
             val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(6)
@@ -1214,7 +1332,8 @@ class HomeCatalogRefreshCoordinatorTest {
                 hasResolvedAuthority = any(),
                 onCatalogReady = any(),
                 onRawCatalogBatchComplete = any(),
-                onLog = any()
+                onLog = any(),
+                publishRawRowsImmediately = any()
             )
         } returns 0
         coEvery {
@@ -1620,6 +1739,45 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 0) {
             metadataDiskCacheStore.writeHomeDisplayMetadata(any(), any(), any())
         }
+    }
+
+    @Test
+    fun `home refresh reuses retained localized metadata for reordered items without provider resolution`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val rawFirst = preview(id = "tt-retained-a", poster = null).copy(name = "English A")
+        val rawSecond = preview(id = "tt-retained-b", poster = null).copy(name = "English B")
+        val persistedFirst = rawFirst.copy(name = "Nederlandse A", description = "Beschrijving A")
+        val persistedSecond = rawSecond.copy(name = "Nederlandse B", description = "Beschrijving B")
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawSecond, rawFirst),
+            hasMore = false
+        )
+        val existingRow = row.copy(items = listOf(persistedFirst, persistedSecond))
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(seriesTvdbId = null, localizedTitle = "Provider title")
+        )
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            existingRowsByKey = mapOf(homeCatalogGlobalKey(row) to existingRow),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(listOf("Nederlandse B", "Nederlandse A"), hydratedRows.single().items.map { it.name })
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
     @Test

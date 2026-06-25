@@ -59,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -405,6 +406,7 @@ class MainActivity : ComponentActivity() {
     private var deferredStartupWorkJob: Job? = null
     private var deferredBrowsableRequestJob: Job? = null
     private var startupPerfWindowJob: Job? = null
+    private var startupProfileSelectionKeyFallback: ((KeyEvent) -> Boolean)? = null
     private var profileBoundSurfaceObserverJob: Job? = null
     private var idleScreensaverColdBootRefreshPending: Boolean = false
     private var shouldRunDeferredStartupWorkThisStart: Boolean = false
@@ -622,36 +624,85 @@ class MainActivity : ComponentActivity() {
                     // Capture composition-local value at composable scope for use in LaunchedEffect
                     val contentFocusRequesterForGating = LocalContentFocusRequester.current
                     val profileSelectionScope = rememberCoroutineScope()
+                    val startupProfileIds = profiles.map { it.id }
+                    var startupProfileFallbackIndex by remember(startupProfileIds, activeProfileId) {
+                        mutableIntStateOf(
+                            profiles.indexOfFirst { it.id == activeProfileId }.takeIf { it >= 0 } ?: 0
+                        )
+                    }
+                    LaunchedEffect(startupProfileIds, activeProfileId) {
+                        startupProfileFallbackIndex =
+                            profiles.indexOfFirst { it.id == activeProfileId }.takeIf { it >= 0 } ?: 0
+                    }
+                    val selectStartupProfile: (Int) -> Unit = { profileId ->
+                        profileSelectionScope.launch {
+                            val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+                            try {
+                                profileManager.setActiveProfile(profileId)
+                            } catch (e: com.nexio.tv.core.integration.ProfileBoundaryException) {
+                                if (e.violation == com.nexio.tv.core.integration.ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) {
+                                    android.widget.Toast.makeText(
+                                        this@MainActivity,
+                                        getString(R.string.profile_switch_blocked_by_playback),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@launch
+                                } else {
+                                    throw e
+                                }
+                            }
+                            val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+                            processProfileSelectionGatePassed = true
+                            hasPassedProfileSelectionGate = true
+                            startProfileBoundSurfaceObserverIfProfileGateResolved("profile_selected")
+                            scheduleDeferredStartupWorkIfProfileGateResolved("profile_selected")
+                            if (beforeLocale != afterLocale) {
+                                recreate()
+                            }
+                        }
+                    }
 
                     if (shouldShowProfileSelection) {
-                        ProfileSelectionScreen(
-                            onProfileSelected = { profileId ->
-                                profileSelectionScope.launch {
-                                    val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
-                                    try {
-                                        profileManager.setActiveProfile(profileId)
-                                    } catch (e: com.nexio.tv.core.integration.ProfileBoundaryException) {
-                                        if (e.violation == com.nexio.tv.core.integration.ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) {
-                                            android.widget.Toast.makeText(
-                                                this@MainActivity,
-                                                getString(R.string.profile_switch_blocked_by_playback),
-                                                android.widget.Toast.LENGTH_SHORT
-                                            ).show()
-                                            return@launch
-                                        } else {
-                                            throw e
+                        DisposableEffect(startupProfileIds, activeProfileId) {
+                            Log.i(
+                                "ProfileSelection",
+                                "Registering startup profile key fallback profiles=${startupProfileIds.joinToString(",")} active=$activeProfileId"
+                            )
+                            startupProfileSelectionKeyFallback = { event ->
+                                if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0 || profiles.isEmpty()) {
+                                    false
+                                } else {
+                                    when (event.keyCode) {
+                                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                            startupProfileFallbackIndex = (startupProfileFallbackIndex - 1).coerceAtLeast(0)
+                                            true
                                         }
-                                    }
-                                    val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
-                                    processProfileSelectionGatePassed = true
-                                    hasPassedProfileSelectionGate = true
-                                    startProfileBoundSurfaceObserverIfProfileGateResolved("profile_selected")
-                                    scheduleDeferredStartupWorkIfProfileGateResolved("profile_selected")
-                                    if (beforeLocale != afterLocale) {
-                                        recreate()
+                                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                            startupProfileFallbackIndex = (startupProfileFallbackIndex + 1).coerceAtMost(profiles.lastIndex)
+                                            true
+                                        }
+                                        KeyEvent.KEYCODE_DPAD_CENTER,
+                                        KeyEvent.KEYCODE_ENTER,
+                                        KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                            val profileId = profiles.getOrNull(startupProfileFallbackIndex)?.id
+                                            Log.i(
+                                                "ProfileSelection",
+                                                "Startup fallback selecting profile=$profileId index=$startupProfileFallbackIndex"
+                                            )
+                                            profileId?.let(selectStartupProfile)
+                                            true
+                                        }
+                                        else -> false
                                     }
                                 }
                             }
+                            onDispose {
+                                Log.i("ProfileSelection", "Clearing startup profile key fallback")
+                                startupProfileSelectionKeyFallback = null
+                            }
+                        }
+                        ProfileSelectionScreen(
+                            onProfileSelected = selectStartupProfile
                         )
                         return@Surface
                     }
@@ -1484,6 +1535,17 @@ class MainActivity : ComponentActivity() {
                 KeyEvent.KEYCODE_ASSIST,
                 KeyEvent.KEYCODE_SEARCH -> {
                     if (voiceKeyHandler?.invoke() == true) return true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    Log.i(
+                        "ProfileSelection",
+                        "dispatchKeyEvent key=${event.keyCode} fallbackRegistered=${startupProfileSelectionKeyFallback != null}"
+                    )
+                    if (startupProfileSelectionKeyFallback?.invoke(event) == true) return true
                 }
             }
         }
@@ -2434,6 +2496,9 @@ private fun LegacyProfileSwitcherSection(
 ) {
     val activeProfile = profiles.find { it.id == activeProfileId } ?: profiles.firstOrNull() ?: return
     val otherProfiles = profiles.filter { it.id != activeProfileId }
+    val otherProfileFocusRequesters = remember(otherProfiles.map { it.id }) {
+        List(otherProfiles.size) { FocusRequester() }
+    }
     var expanded by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     val borderColor by animateColorAsState(
@@ -2472,6 +2537,14 @@ private fun LegacyProfileSwitcherSection(
                     ) {
                         expanded = !expanded
                         true
+                    } else if (
+                        event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionDown &&
+                        expanded &&
+                        otherProfileFocusRequesters.isNotEmpty()
+                    ) {
+                        otherProfileFocusRequesters.first().requestFocus()
+                        true
                     } else {
                         false
                     }
@@ -2503,9 +2576,11 @@ private fun LegacyProfileSwitcherSection(
         }
 
         if (expanded) {
-            otherProfiles.forEach { profile ->
+            otherProfiles.forEachIndexed { index, profile ->
                 LegacyProfileSwitcherRow(
                     profile = profile,
+                    focusRequester = otherProfileFocusRequesters[index],
+                    onMoveUp = { focusRequester.requestFocus() },
                     onSelect = {
                         expanded = false
                         onSwitchProfile(profile.id)
@@ -2519,6 +2594,8 @@ private fun LegacyProfileSwitcherSection(
 @Composable
 private fun LegacyProfileSwitcherRow(
     profile: UserProfile,
+    focusRequester: FocusRequester,
+    onMoveUp: () -> Unit,
     onSelect: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -2534,6 +2611,7 @@ private fun LegacyProfileSwitcherRow(
             .height(48.dp)
             .clip(RoundedCornerShape(14.dp))
             .border(2.dp, borderColor, RoundedCornerShape(14.dp))
+            .focusRequester(focusRequester)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -2542,6 +2620,9 @@ private fun LegacyProfileSwitcherRow(
                     (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
                 ) {
                     onSelect()
+                    true
+                } else if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                    onMoveUp()
                     true
                 } else {
                     false

@@ -193,6 +193,13 @@ private fun TraktDiscoverySnapshot.hasConfiguredDiscoveryContent(
     }
 }
 
+private fun TraktDiscoverySnapshot.hasReusablePublicContent(): Boolean {
+    return trendingMovieItemRecords.isNotEmpty() ||
+        trendingShowItemRecords.isNotEmpty() ||
+        popularMovieItemRecords.isNotEmpty() ||
+        popularShowItemRecords.isNotEmpty()
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TraktDiscoveryService @Inject constructor(
@@ -289,6 +296,19 @@ class TraktDiscoveryService @Inject constructor(
                         setProfileSnapshot(profileId, persisted)
                         lastRefreshByProfile[profileId] = persisted.updatedAtMs
                     }
+                    if (!hadPersistedSnapshot) {
+                        val prefs = traktSettingsDataStore.catalogPreferences.first()
+                        snapshotStore.readReusablePublicSnapshot(
+                            profileId = profileId,
+                            enabledCatalogs = prefs.enabledCatalogs
+                        )?.let { reusable ->
+                            hadPersistedSnapshot = true
+                            setRawProfileSnapshot(profileId, reusable)
+                            setProfileSnapshot(profileId, reusable)
+                            lastRefreshByProfile[profileId] = reusable.updatedAtMs
+                            Log.d("TraktDiscovery", "Reused public Trakt discovery snapshot for profile=$profileId")
+                        }
+                    }
                     if (autoRefreshOnStart && !hadPersistedSnapshot) {
                         scope.launch {
                             runCatching { ensureFresh(force = false, profileId = profileId) }
@@ -309,10 +329,24 @@ class TraktDiscoveryService @Inject constructor(
         force: Boolean,
         profileId: Int = profileManager.activeProfileId.value
     ) = withContext(Dispatchers.IO) {
+        val prefs = traktSettingsDataStore.catalogPreferences.first()
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
-            setRawProfileSnapshot(profileId, TraktDiscoverySnapshot())
-            setProfileSnapshot(profileId, TraktDiscoverySnapshot())
-            snapshotStore.clear(profileId = profileId)
+            val publicSnapshot = fetchPublicDiscoverySnapshotFromGlobalCache(prefs)
+            val reusable = publicSnapshot.takeIf { it.hasReusablePublicContent() }
+                ?: snapshotStore.readReusablePublicSnapshot(
+                    profileId = profileId,
+                    enabledCatalogs = prefs.enabledCatalogs
+                )
+            if (reusable != null) {
+                setRawProfileSnapshot(profileId, reusable)
+                setProfileSnapshot(profileId, reusable)
+                lastRefreshByProfile[profileId] = reusable.updatedAtMs
+                Log.d("TraktDiscovery", "Reused public Trakt discovery snapshot for unauthenticated profile=$profileId")
+            } else {
+                setRawProfileSnapshot(profileId, TraktDiscoverySnapshot())
+                setProfileSnapshot(profileId, TraktDiscoverySnapshot())
+                snapshotStore.clear(profileId = profileId)
+            }
             return@withContext
         }
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
@@ -341,8 +375,6 @@ class TraktDiscoveryService @Inject constructor(
                 lastRefreshByProfile[profileId] = lockedNow
                 return@withLock
             }
-
-            val prefs = traktSettingsDataStore.catalogPreferences.first()
 
             val calendar = if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs) {
                 fetchCalendarShows(days = 7)
@@ -580,6 +612,46 @@ class TraktDiscoveryService @Inject constructor(
                 )
             }
             .take(maxItemsPerRail)
+    }
+
+    private suspend fun fetchPublicDiscoverySnapshotFromGlobalCache(
+        prefs: TraktCatalogPreferences
+    ): TraktDiscoverySnapshot {
+        val trendingMovies = if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs) {
+            fetchTrendingMovies()
+        } else {
+            emptyList()
+        }
+        val trendingShows = if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs) {
+            fetchTrendingShows()
+        } else {
+            emptyList()
+        }
+        val popularMovies = if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs) {
+            fetchPopularMovies()
+        } else {
+            emptyList()
+        }
+        val popularShows = if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs) {
+            fetchPopularShows()
+        } else {
+            emptyList()
+        }
+        if (
+            trendingMovies.isEmpty() &&
+            trendingShows.isEmpty() &&
+            popularMovies.isEmpty() &&
+            popularShows.isEmpty()
+        ) {
+            return TraktDiscoverySnapshot()
+        }
+        return TraktDiscoverySnapshot(
+            trendingMovieItemRecords = trendingMovies,
+            trendingShowItemRecords = trendingShows,
+            popularMovieItemRecords = popularMovies,
+            popularShowItemRecords = popularShows,
+            updatedAtMs = System.currentTimeMillis()
+        )
     }
 
     private suspend fun fetchPopularLists(): List<TraktPopularListOption> {

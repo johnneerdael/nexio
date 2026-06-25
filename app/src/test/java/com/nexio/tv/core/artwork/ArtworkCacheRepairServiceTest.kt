@@ -18,8 +18,10 @@ class ArtworkCacheRepairServiceTest {
         val service = ArtworkCacheRepairService(diskCache, store)
 
         val repaired = service.repairDecisionRef(decisionKey)
+        val repairedAssetKey = service.repairDecisionRefToAssetKey(decisionKey)
 
         assertEquals("nexio-artwork://asset/${written.record.assetKey.value}", repaired)
+        assertEquals(written.record.assetKey, repairedAssetKey)
     }
 
     @Test

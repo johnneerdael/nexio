@@ -353,6 +353,24 @@ internal fun continueWatchingProfileScopedEmissions(
 
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
+        activeHomeProfileSession
+            .distinctUntilChangedBy { it.profileSessionKey }
+            .collectLatest { session ->
+                if (!isCurrentHomeSession(session)) return@collectLatest
+                runCatching {
+                    continueWatchingSnapshotService.ensureFresh(force = false)
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(
+                        HomeViewModel.TAG,
+                        "Failed to refresh continue-watching snapshot for profile=${session.profileId}",
+                        error
+                    )
+                }
+            }
+    }
+
+    viewModelScope.launch {
         continueWatchingProfileScopedEmissions(
             activeHomeProfileSession = activeHomeProfileSession,
             observeProfileSnapshot = { profileId ->
@@ -368,6 +386,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             when (emission) {
                 is ProfileScopedEmission.Loading -> {
                     continueWatchingEnrichmentJob?.cancel()
+                    continueWatchingPublishedLanguageTag = null
+                    clearRememberedContinueWatchingEpisodeTitles()
                     emitContinueWatchingInitialGateState(
                         session = session,
                         state = "loading",
@@ -386,6 +406,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 }
                 is ProfileScopedEmission.Error -> {
                     continueWatchingEnrichmentJob?.cancel()
+                    continueWatchingPublishedLanguageTag = null
+                    clearRememberedContinueWatchingEpisodeTitles()
                     Log.w(
                         HomeViewModel.TAG,
                         "Continue watching snapshot failed: ${emission.throwable.message}"
@@ -488,6 +510,17 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     continueWatchingEnrichmentJob = null
     continueWatchingSnapshotVersion += 1L
     val snapshotVersion = continueWatchingSnapshotVersion
+    val snapshotLanguageTag = profileBoundary.currentLanguageTag()
+    val currentContinueWatchingItems = if (continueWatchingPublishedLanguageTag == snapshotLanguageTag) {
+        _displayContinueWatchingItems.value
+    } else {
+        emptyList()
+    }
+    val currentTraktUpNextItems = if (continueWatchingPublishedLanguageTag == snapshotLanguageTag) {
+        _uiState.value.traktUpNextItems
+    } else {
+        emptyList()
+    }
 
     val nowMs = System.currentTimeMillis()
     val rawItems = buildContinueWatchingItemsForSnapshot(snapshot, nowMs)
@@ -502,10 +535,13 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         val idx = rawItems.indexOfFirst { it === item }
         projectedKeys[idx] ?: item.canonicalOrContentKey()
     }
-    val items = withContinueWatchingOverlaySidecars(
-        preserveContinueWatchingEpisodeText(
-            incoming = itemsWithoutOverlaySidecars,
-            current = _displayContinueWatchingItems.value
+    val baseItems = withContinueWatchingOverlaySidecars(
+        applyRememberedContinueWatchingEpisodeTitles(
+            items = preserveContinueWatchingEpisodeText(
+                incoming = itemsWithoutOverlaySidecars,
+                current = currentContinueWatchingItems
+            ),
+            languageTag = snapshotLanguageTag
         )
     )
     val traktUpNextRawItems = snapshot.traktUpNextItems.map { entry ->
@@ -513,10 +549,38 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     }.filter { it.info.hasAired }
     val traktUpNextItemsWithoutOverlaySidecars = preserveContinueWatchingEpisodeText(
         incoming = traktUpNextRawItems,
-        current = _uiState.value.traktUpNextItems
+        current = currentTraktUpNextItems
     )
-    val traktUpNextItems = withContinueWatchingOverlaySidecars(traktUpNextItemsWithoutOverlaySidecars)
+    val baseTraktUpNextItems = withContinueWatchingOverlaySidecars(
+        applyRememberedContinueWatchingEpisodeTitles(
+            items = traktUpNextItemsWithoutOverlaySidecars,
+            languageTag = snapshotLanguageTag
+        )
+    )
         .filterIsInstance<ContinueWatchingItem.NextUp>()
+    val settings = currentTmdbSettings
+    val preEnrichBeforePublish = !snapshotLanguageTag.trim().startsWith("en", ignoreCase = true) &&
+        shouldEnrichContinueWatchingProviderMetadata(baseItems, baseTraktUpNextItems, settings) &&
+        isNonPlaybackHomeWorkAllowed()
+    val items = if (preEnrichBeforePublish) {
+        withContinueWatchingOverlaySidecars(
+            enrichContinueWatchingItems(baseItems, settings)
+        )
+    } else {
+        baseItems
+    }
+    val traktUpNextItems = if (preEnrichBeforePublish) {
+        withContinueWatchingOverlaySidecars(
+            enrichContinueWatchingNextUpItems(baseTraktUpNextItems, settings)
+        ).filterIsInstance<ContinueWatchingItem.NextUp>()
+    } else {
+        baseTraktUpNextItems
+    }
+    Log.d(
+        HomeViewModel.TAG,
+        "Continue watching publish language=$snapshotLanguageTag previousLanguage=$continueWatchingPublishedLanguageTag " +
+            "items=${items.debugContinueWatchingTitles()} traktUpNext=${traktUpNextItems.debugContinueWatchingTitles()}"
+    )
 
     if (!isCurrentHomeSession(session)) {
         emitStaleContinueWatchingEmission("publish", session)
@@ -543,6 +607,9 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     val cwUnchanged = _displayContinueWatchingItems.value == items
     if (snapshotVersion == continueWatchingSnapshotVersion && !cwUnchanged) {
         _displayContinueWatchingItems.value = items
+    }
+    if (snapshotVersion == continueWatchingSnapshotVersion) {
+        continueWatchingPublishedLanguageTag = snapshotLanguageTag
     }
     _uiState.update { state ->
         if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
@@ -571,8 +638,8 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         reason = readinessReason
     )
 
-    val settings = currentTmdbSettings
     if (
+        !preEnrichBeforePublish &&
         shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings) &&
         isNonPlaybackHomeWorkAllowed()
     ) {
@@ -587,6 +654,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                if (profileBoundary.currentLanguageTag() != snapshotLanguageTag) return@launch
                 val enrichedItems = withContinueWatchingOverlaySidecars(
                     enrichContinueWatchingItems(items, settings)
                 )
@@ -599,9 +667,15 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                     return@launch
                 }
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
+                if (profileBoundary.currentLanguageTag() != snapshotLanguageTag) return@launch
                 val enrichedTraktItems = withContinueWatchingOverlaySidecars(
                     enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
                 ).filterIsInstance<ContinueWatchingItem.NextUp>()
+                Log.d(
+                    HomeViewModel.TAG,
+                    "Continue watching enriched language=$snapshotLanguageTag " +
+                        "items=${enrichedItems.debugContinueWatchingTitles()} traktUpNext=${enrichedTraktItems.debugContinueWatchingTitles()}"
+                )
                 if (!isCurrentHomeSession(session)) {
                     emitStaleContinueWatchingEmission("enrichment", session)
                     Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment")
@@ -618,6 +692,9 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
                 val cwUnchanged = _displayContinueWatchingItems.value == enrichedItems
                 if (snapshotVersion == continueWatchingSnapshotVersion && !cwUnchanged) {
                     _displayContinueWatchingItems.value = enrichedItems
+                }
+                if (snapshotVersion == continueWatchingSnapshotVersion) {
+                    continueWatchingPublishedLanguageTag = snapshotLanguageTag
                 }
                 _uiState.update { state ->
                     if (snapshotVersion != continueWatchingSnapshotVersion) return@update state
@@ -653,6 +730,102 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         }
     }
 }
+
+private fun List<ContinueWatchingItem>.debugContinueWatchingTitles(): String =
+    take(5).joinToString(separator = " |") { item ->
+        when (item) {
+            is ContinueWatchingItem.InProgress -> item.progress.name
+            is ContinueWatchingItem.NextUp -> item.info.name
+        }
+    }
+
+private fun HomeViewModel.clearRememberedContinueWatchingEpisodeTitles() {
+    continueWatchingLocalizedEpisodeTitleLanguageTag = null
+    synchronized(continueWatchingLocalizedEpisodeTitleByIdentity) {
+        continueWatchingLocalizedEpisodeTitleByIdentity.clear()
+    }
+}
+
+private fun HomeViewModel.rememberContinueWatchingLocalizedEpisodeTitle(
+    item: ContinueWatchingItem,
+    title: String,
+    languageTag: String
+) {
+    val normalizedTitle = title.trim().takeIf { it.isNotEmpty() } ?: return
+    val keys = item.textIdentityKeys()
+    if (keys.isEmpty()) return
+    synchronized(continueWatchingLocalizedEpisodeTitleByIdentity) {
+        if (continueWatchingLocalizedEpisodeTitleLanguageTag != languageTag) {
+            continueWatchingLocalizedEpisodeTitleLanguageTag = languageTag
+            continueWatchingLocalizedEpisodeTitleByIdentity.clear()
+        }
+        for (i in keys.indices) {
+            continueWatchingLocalizedEpisodeTitleByIdentity[keys[i]] = normalizedTitle
+        }
+    }
+}
+
+private fun HomeViewModel.applyRememberedContinueWatchingEpisodeTitles(
+    items: List<ContinueWatchingItem>,
+    languageTag: String
+): List<ContinueWatchingItem> {
+    if (items.isEmpty()) return items
+    val remembered = synchronized(continueWatchingLocalizedEpisodeTitleByIdentity) {
+        if (continueWatchingLocalizedEpisodeTitleLanguageTag == languageTag) {
+            HashMap(continueWatchingLocalizedEpisodeTitleByIdentity)
+        } else {
+            emptyMap()
+        }
+    }
+    if (remembered.isEmpty()) return items
+
+    var changed = false
+    val out = ArrayList<ContinueWatchingItem>(items.size)
+    for (i in items.indices) {
+        val item = items[i]
+        val title = item.textIdentityKeys().firstNotNullOfOrNull { key -> remembered[key] }
+        val next = item.withEpisodeDisplayTitle(title)
+        if (next !== item) changed = true
+        out += next
+    }
+    return if (changed) out else items
+}
+
+private fun ContinueWatchingItem.withEpisodeDisplayTitle(title: String?): ContinueWatchingItem {
+    val normalizedTitle = title?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> {
+            if (progress.name == normalizedTitle && progress.episodeTitle == normalizedTitle) {
+                this
+            } else {
+                copy(
+                    progress = progress.copy(
+                        name = normalizedTitle,
+                        episodeTitle = normalizedTitle
+                    )
+                )
+            }
+        }
+        is ContinueWatchingItem.NextUp -> {
+            if (info.name == normalizedTitle && info.episodeTitle == normalizedTitle) {
+                this
+            } else {
+                copy(
+                    info = info.copy(
+                        name = normalizedTitle,
+                        episodeTitle = normalizedTitle
+                    )
+                )
+            }
+        }
+    }
+}
+
+private fun ContinueWatchingItem.episodeDisplayTitle(): String? =
+    when (this) {
+        is ContinueWatchingItem.InProgress -> progress.episodeTitle ?: progress.name
+        is ContinueWatchingItem.NextUp -> info.episodeTitle ?: info.name
+    }.trim().takeIf { it.isNotEmpty() }
 
 private suspend fun HomeViewModel.withContinueWatchingOverlaySidecars(
     items: List<ContinueWatchingItem>
@@ -692,17 +865,59 @@ private fun ContinueWatchingItem.withOverlaySidecar(
     overlay: HydratedHomeOverlay
 ): ContinueWatchingItem {
     val current = displayMetadata()
+    val overlayFields = overlay.fields
     val merged = current.copy(
-        imdbId = current.imdbId ?: overlay.imdbId ?: overlay.fields.imdbId,
-        originalLanguage = current.originalLanguage ?: overlay.fields.originalLanguage,
-        runtime = current.runtime ?: overlay.fields.runtime,
-        releaseInfo = current.releaseInfo ?: overlay.fields.releaseInfo,
-        imdbRating = current.imdbRating ?: overlay.fields.imdbRating,
-        ratingSource = current.ratingSource ?: overlay.fields.ratingSource
+        title = overlayFields.title ?: current.title,
+        logo = overlayFields.logo ?: current.logo,
+        description = overlayFields.description ?: current.description,
+        genres = overlayFields.genres.ifEmpty { current.genres },
+        releaseInfo = overlayFields.releaseInfo ?: current.releaseInfo,
+        runtime = overlayFields.runtime ?: current.runtime,
+        imdbRating = overlayFields.imdbRating ?: current.imdbRating,
+        ratingSource = overlayFields.ratingSource ?: current.ratingSource,
+        tomatoesRating = overlayFields.tomatoesRating ?: current.tomatoesRating,
+        originalLanguage = current.originalLanguage ?: overlayFields.originalLanguage,
+        imdbId = current.imdbId ?: overlay.imdbId ?: overlayFields.imdbId,
+        poster = overlayFields.displayPoster ?: current.poster,
+        posterProviderTag = overlayFields.posterProviderTag ?: current.posterProviderTag,
+        backdrop = overlayFields.displayBackdrop ?: current.backdrop,
+        thumbnail = overlayFields.displayThumbnail ?: current.thumbnail,
+        artwork = overlayFields.artwork ?: current.artwork
     )
     return when (this) {
-        is ContinueWatchingItem.InProgress -> copy(displayMetadata = merged)
-        is ContinueWatchingItem.NextUp -> copy(info = info.copy(displayMetadata = merged))
+        is ContinueWatchingItem.InProgress -> {
+            val isEpisodeResume = progress.season != null && progress.episode != null
+            val visibleName = if (isEpisodeResume) {
+                progress.name
+            } else {
+                merged.title?.takeIf { it.isNotBlank() } ?: progress.name
+            }
+            copy(
+                progress = progress.copy(
+                    name = visibleName,
+                    poster = merged.displayPoster ?: progress.poster,
+                    backdrop = merged.displayBackdrop ?: progress.backdrop,
+                    logo = merged.displayLogo ?: progress.logo
+                ),
+                displayMetadata = merged,
+                episodeDescription = merged.description ?: episodeDescription,
+                genres = merged.genres.ifEmpty { genres },
+                releaseInfo = merged.releaseInfo ?: releaseInfo
+            )
+        }
+        is ContinueWatchingItem.NextUp -> copy(
+            info = info.copy(
+                displayMetadata = merged,
+                name = merged.title?.takeIf { it.isNotBlank() } ?: info.name,
+                poster = merged.displayPoster ?: info.poster,
+                backdrop = merged.displayBackdrop ?: info.backdrop,
+                logo = merged.displayLogo ?: info.logo,
+                episodeDescription = merged.description ?: info.episodeDescription,
+                imdbRating = merged.imdbRating ?: info.imdbRating,
+                genres = merged.genres.ifEmpty { info.genres },
+                releaseInfo = merged.releaseInfo ?: info.releaseInfo
+            )
+        )
     }
 }
 
@@ -768,6 +983,16 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             item = item,
             language = metadataLanguage
         )
+        localizedEpisodeMetadata?.title
+            ?.takeIf { title -> title.isNotBlank() }
+            ?.takeUnless { title -> title == item.episodeDisplayTitle() }
+            ?.let { title ->
+                rememberContinueWatchingLocalizedEpisodeTitle(
+                    item = item,
+                    title = title,
+                    languageTag = metadataLanguage
+                )
+            }
 
         val existing = when (item) {
             is ContinueWatchingItem.InProgress -> item.displayMetadata
@@ -811,14 +1036,31 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         }
 
         when (item) {
-            is ContinueWatchingItem.InProgress -> item.copy(
-                displayMetadata = enrichedMetadata,
-                episodeDescription = localizedEpisodeMetadata?.overview
-                    ?: enrichedMetadata.description
-                    ?: item.episodeDescription,
-                genres = enrichedMetadata.genres.ifEmpty { item.genres },
-                releaseInfo = enrichedMetadata.releaseInfo ?: item.releaseInfo
-            )
+            is ContinueWatchingItem.InProgress -> {
+                val localizedEpisodeTitle = localizedEpisodeMetadata?.title?.takeIf { it.isNotBlank() }
+                val isEpisodeResume = item.progress.season != null && item.progress.episode != null
+                val visibleName = localizedEpisodeTitle
+                    ?: if (isEpisodeResume) {
+                        item.progress.name
+                    } else {
+                        enrichedMetadata.title?.takeIf { it.isNotBlank() } ?: item.progress.name
+                    }
+                item.copy(
+                    progress = item.progress.copy(
+                        name = visibleName,
+                        poster = enrichedMetadata.displayPoster ?: item.progress.poster,
+                        backdrop = enrichedMetadata.displayBackdrop ?: item.progress.backdrop,
+                        logo = enrichedMetadata.displayLogo ?: item.progress.logo,
+                        episodeTitle = localizedEpisodeTitle ?: item.progress.episodeTitle
+                    ),
+                    displayMetadata = enrichedMetadata,
+                    episodeDescription = localizedEpisodeMetadata?.overview
+                        ?: enrichedMetadata.description
+                        ?: item.episodeDescription,
+                    genres = enrichedMetadata.genres.ifEmpty { item.genres },
+                    releaseInfo = enrichedMetadata.releaseInfo ?: item.releaseInfo
+                )
+            }
             is ContinueWatchingItem.NextUp -> item.copy(
                 info = item.info.copy(
                     displayMetadata = enrichedMetadata,
@@ -1072,19 +1314,48 @@ private fun ContinueWatchingItem.episodeTextKeys(): List<ContinueWatchingEpisode
     return keys
 }
 
+private fun ContinueWatchingItem.textIdentityKeys(): List<String> {
+    val itemKind = when (this) {
+        is ContinueWatchingItem.InProgress -> "in_progress"
+        is ContinueWatchingItem.NextUp -> "next_up"
+    }
+    val contentType = contentType().trim().lowercase(Locale.ROOT)
+    val identities = linkedSetOf<String>()
+    canonicalOrContentKey()
+        .trim()
+        .lowercase(Locale.ROOT)
+        .takeIf { it.isNotEmpty() }
+        ?.let(identities::add)
+    contentId()
+        .trim()
+        .lowercase(Locale.ROOT)
+        .takeIf { it.isNotEmpty() }
+        ?.let(identities::add)
+    if (identities.isEmpty()) return emptyList()
+    val keys = ArrayList<String>(identities.size)
+    for (identity in identities) {
+        keys += "$itemKind|$contentType|$identity"
+        keys += "$contentType|$identity"
+        keys += identity
+    }
+    return keys
+}
+
 private fun ContinueWatchingItem.preserveEpisodeTextFrom(
     current: ContinueWatchingItem?
 ): ContinueWatchingItem {
     if (current == null) return this
     return when {
         this is ContinueWatchingItem.NextUp && current is ContinueWatchingItem.NextUp -> {
+            val name = current.info.name.preferredEpisodeTextOver(info.name) ?: info.name
             val title = current.info.episodeTitle.preferredEpisodeTextOver(info.episodeTitle)
             val description = current.info.episodeDescription.preferredEpisodeTextOver(info.episodeDescription)
-            if (title == info.episodeTitle && description == info.episodeDescription) {
+            if (name == info.name && title == info.episodeTitle && description == info.episodeDescription) {
                 this
             } else {
                 copy(
                     info = info.copy(
+                        name = name,
                         episodeTitle = title,
                         episodeDescription = description
                     )
@@ -1092,13 +1363,17 @@ private fun ContinueWatchingItem.preserveEpisodeTextFrom(
             }
         }
         this is ContinueWatchingItem.InProgress && current is ContinueWatchingItem.InProgress -> {
+            val name = current.progress.name.preferredEpisodeTextOver(progress.name) ?: progress.name
             val title = current.progress.episodeTitle.preferredEpisodeTextOver(progress.episodeTitle)
             val description = current.episodeDescription.preferredEpisodeTextOver(episodeDescription)
-            if (title == progress.episodeTitle && description == episodeDescription) {
+            if (name == progress.name && title == progress.episodeTitle && description == episodeDescription) {
                 this
             } else {
                 copy(
-                    progress = progress.copy(episodeTitle = title),
+                    progress = progress.copy(
+                        name = name,
+                        episodeTitle = title
+                    ),
                     episodeDescription = description
                 )
             }
@@ -1536,6 +1811,8 @@ private fun ContinueWatchingRecord.toContinueWatchingInProgress(
 }
 
 private fun ContinueWatchingRecord.primaryStableContentId(): String? {
+    if (!isSeriesType(contentTypeForUi())) return null
+
     val tmdb = displayIdentity?.providerIds?.tmdb
         ?: canonicalKey?.canonicalParent?.providerIds?.tmdb
         ?: idBundle.tmdb
@@ -1693,6 +1970,7 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
     val settings = currentTmdbSettings
     val currentItems = _displayContinueWatchingItems.value
     val currentTraktItems = _uiState.value.traktUpNextItems
+    val enrichmentLanguageTag = profileBoundary.currentLanguageTag()
     if (!isNonPlaybackHomeWorkAllowed()) return
     if (!shouldEnrichContinueWatchingProviderMetadata(currentItems, currentTraktItems, settings)) return
     if (currentItems.isEmpty() && currentTraktItems.isEmpty()) return
@@ -1701,12 +1979,15 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
     continueWatchingEnrichmentJob = viewModelScope.launch {
         try {
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
+            if (profileBoundary.currentLanguageTag() != enrichmentLanguageTag) return@launch
             val enrichedItems = enrichContinueWatchingItems(currentItems, settings)
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
+            if (profileBoundary.currentLanguageTag() != enrichmentLanguageTag) return@launch
             val enrichedTraktItems = enrichContinueWatchingNextUpItems(currentTraktItems, settings)
             if (_displayContinueWatchingItems.value != enrichedItems) {
                 _displayContinueWatchingItems.value = enrichedItems
             }
+            continueWatchingPublishedLanguageTag = enrichmentLanguageTag
             _uiState.update { state ->
                 state.copy(
                     traktUpNextItems = enrichedTraktItems

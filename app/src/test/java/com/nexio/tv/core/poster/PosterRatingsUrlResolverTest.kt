@@ -60,7 +60,7 @@ class PosterRatingsUrlResolverTest {
         assertNoRawPremiumUrl(resolved)
         assertFalse(resolved.orEmpty().contains("api.top-posters.com"))
         assertFalse(resolved.orEmpty().contains("ratingposterdb.com"))
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals("tmdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("movie-550", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -84,7 +84,7 @@ class PosterRatingsUrlResolverTest {
         assertNoRawPremiumUrl(resolved)
         assertFalse(resolved.orEmpty().contains("api.top-posters.com"))
         assertFalse(resolved.orEmpty().contains("ratingposterdb.com"))
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -113,7 +113,7 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertInternalArtworkRef(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
         assertNull(decision?.selectedCandidate?.providerTemplate)
     }
@@ -131,7 +131,7 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertInternalArtworkRef(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals("kitsu", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("7442", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -152,7 +152,7 @@ class PosterRatingsUrlResolverTest {
 
         assertInternalArtworkRef(resolved)
         assertNoRawPremiumUrl(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -173,7 +173,7 @@ class PosterRatingsUrlResolverTest {
 
         assertInternalArtworkRef(resolved)
         assertNoRawPremiumUrl(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals("tmdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("series-123", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -194,7 +194,7 @@ class PosterRatingsUrlResolverTest {
 
         assertInternalArtworkRef(resolved)
         assertNoRawPremiumUrl(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals("tvdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("121361", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -388,7 +388,7 @@ class PosterRatingsUrlResolverTest {
 
         assertInternalArtworkRef(resolved)
         assertNoRawPremiumUrl(resolved)
-        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved!!)
         assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
         assertNull(decision?.selectedCandidate?.providerTemplate)
     }
@@ -406,9 +406,27 @@ class PosterRatingsUrlResolverTest {
         assertInternalArtworkRef(resolved.poster)
         assertNoRawPremiumUrl(resolved.poster)
         assertEquals("rpdb", resolved.posterProviderTag)
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals(ArtworkOwnerKey.CanonicalContent("imdb:tt15940132"), decision?.ownerKey)
+    }
+
+    @Test
+    fun `meta preview premium projection keeps structured runtime asset for typed snapshot`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(id = "tt15940132", poster = "https://image.tmdb.org/t/p/w500/poster.jpg").copy(
+            firstPaintStableIds = ProviderIds(imdb = "tt15940132")
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        val structuredPoster = resolved.artwork?.poster as? ArtworkDisplayRef.RuntimeAsset
+        assertNotNull(structuredPoster)
+        structuredPoster!!
+        assertNotNull(structuredPoster.assetKey)
+        assertEquals(ArtworkType.POSTER, structuredPoster.imageType)
+        assertEquals("RPDB", cache.get(structuredPoster.decisionKey)?.selectedCandidate?.provider?.key)
     }
 
     @Test
@@ -428,7 +446,7 @@ class PosterRatingsUrlResolverTest {
         assertInternalArtworkRef(resolved.poster)
         assertNoRawPremiumUrl(resolved.poster)
         assertEquals("rpdb", resolved.posterProviderTag)
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
     }
 
@@ -449,7 +467,7 @@ class PosterRatingsUrlResolverTest {
         assertInternalArtworkRef(resolved.poster)
         assertNoRawPremiumUrl(resolved.poster)
         assertEquals("top_posters", resolved.posterProviderTag)
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals(ArtworkOwnerKey.CanonicalContent("tmdb:movie-550"), decision?.ownerKey)
     }
@@ -473,7 +491,7 @@ class PosterRatingsUrlResolverTest {
 
         assertInternalArtworkRef(resolved.poster)
         assertEquals(null, resolved.posterProviderTag)
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
         assertEquals(ArtworkOwnerKey.PreviewItem::class, decision?.ownerKey!!::class)
     }
@@ -486,7 +504,7 @@ class PosterRatingsUrlResolverTest {
 
         val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
 
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals(ArtworkOwnerKey.PreviewItem::class, decision?.ownerKey!!::class)
     }
 
@@ -582,7 +600,7 @@ class PosterRatingsUrlResolverTest {
 
         val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
 
-        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        val decision = decisionFromRefOrOnlyCached(cache, resolved.poster!!)
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
@@ -641,6 +659,16 @@ class PosterRatingsUrlResolverTest {
 
     private fun decisionKeyFromRef(value: String): ArtworkDecisionKey =
         ArtworkDecisionKey(value.substringAfter("nexio-artwork://decision/"))
+
+    private fun decisionFromRefOrOnlyCached(
+        cache: InMemoryArtworkDecisionCache,
+        value: String
+    ): ArtworkDecision? {
+        if (value.startsWith("nexio-artwork://decision/")) {
+            return cache.get(decisionKeyFromRef(value))
+        }
+        return cache.snapshotDecisionsForTesting().singleOrNull()
+    }
 
     private fun preview(id: String, poster: String?): MetaPreview =
         MetaPreview(

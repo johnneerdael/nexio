@@ -155,6 +155,10 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache, ArtworkDecisionCacheD
         decisions[key]
 
     @Synchronized
+    internal fun snapshotDecisionsForTesting(): List<ArtworkDecision> =
+        decisions.values.toList()
+
+    @Synchronized
     override fun lookup(
         key: ArtworkDecisionKey,
         requiredContext: ArtworkDecisionAuthorityContext?

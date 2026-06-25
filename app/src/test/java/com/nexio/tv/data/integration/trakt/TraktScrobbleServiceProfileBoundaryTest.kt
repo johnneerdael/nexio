@@ -12,6 +12,7 @@ import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
+import com.nexio.tv.data.repository.testTraktSession
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
@@ -62,6 +63,10 @@ class TraktScrobbleServiceProfileBoundaryTest {
             )
             every { hasRequiredCredentials() } returns true
             every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, ownerProfileId)
+            coEvery { mutationAccountScopedSession(any()) } answers {
+                val requested = firstArg<TrackingAuthSession>()
+                testTraktSession(profileId = requested.profileId)
+            }
         }
         val authGateway = TraktRepositoryAuthGateway(authService)
         val watchingNow = TraktWatchingNowStateController()

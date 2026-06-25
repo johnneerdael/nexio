@@ -328,6 +328,12 @@ private data class LiveContinueWatchingSnapshotEmission(
     val completedProgress: List<WatchProgress> = emptyList()
 )
 
+private data class LiveContinueWatchingProfileLanguage(
+    val profileId: Int,
+    val isAuthenticated: Boolean,
+    val languageTag: String
+)
+
 private data class NextUpTvdbProjectionOrder(
     val resolution: TvEpisodeOrderResolution,
     val providerIds: ProviderIds
@@ -434,6 +440,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val liveProfilesReady = mutableSetOf<Int>()
     private val profilesAwaitingRemoteReset = mutableSetOf<Int>()
     private val profilesThatObservedRemoteReset = mutableSetOf<Int>()
+    private val explicitResumeRemovalAliasesByProfile = mutableMapOf<Int, MutableMap<String, Long>>()
+    private val explicitResumeRemovalTtlMs = 10 * 60_000L
 
     init {
         synchronized(liveProfileGateLock) {
@@ -451,6 +459,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     markProfileAwaitingLiveReset(profileId)
                     persistedSnapshotReady.value = false
                     loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+                    runCatching {
+                        trackingProgressService.refreshNow()
+                    }.onFailure { error ->
+                        if (error is CancellationException) throw error
+                        Log.w(
+                            "ContinueWatching",
+                            "Failed to refresh continue watching after profile switch to $profileId",
+                            error
+                        )
+                    }
                 }
             }
         }
@@ -491,7 +509,18 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     }.distinctUntilChanged()
                 }
                 .flatMapLatest { (profileId, isAuthenticated) ->
-                    val languageTag = activeLanguageTag()
+                    observeActiveLanguageTags().map { languageTag ->
+                        LiveContinueWatchingProfileLanguage(
+                            profileId = profileId,
+                            isAuthenticated = isAuthenticated,
+                            languageTag = languageTag
+                        )
+                    }.distinctUntilChanged()
+                }
+                .flatMapLatest { active ->
+                    val profileId = active.profileId
+                    val isAuthenticated = active.isAuthenticated
+                    val languageTag = active.languageTag
                     if (!isAuthenticated) {
                         ownershipService?.removeRail(RailKeyFactory.continueWatching(profileId))
                         lastRefreshRequestMs = 0L
@@ -905,6 +934,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 val removed = current.snapshot.resumeItems.filter { it.videoId == videoId }
+                rememberExplicitResumeRemoval(current.profileId, removed)
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems - removed.toSet()
@@ -923,6 +953,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 val removed = current.snapshot.resumeItems.filter { it.contentId == showId }
+                rememberExplicitResumeRemoval(current.profileId, removed)
                 current.copy(
                     snapshot = current.snapshot.copy(
                         resumeItems = current.snapshot.resumeItems - removed.toSet()
@@ -940,6 +971,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun reinsertResumeEntry(entry: WatchProgress) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                forgetExplicitResumeRemoval(current.profileId, listOf(entry))
                 val merged = (current.snapshot.resumeItems + entry)
                     .sortedByDescending { it.lastWatched }
                     .distinctBy { it.videoId }
@@ -1046,6 +1078,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
+                forgetExplicitResumeRemoval(current.profileId, state.resumeItems)
                 val currentSnapshot = current.snapshot
                 val rollbackResume = currentSnapshot.resumeItems
                     .associateByTo(LinkedHashMap<String, WatchProgress>()) { it.videoId }
@@ -1143,15 +1176,24 @@ class ContinueWatchingSnapshotService @Inject constructor(
         traktUpNextEntries: List<TrackingNextUpEntry>
     ): ContinueWatchingSnapshot {
         val nowMs = System.currentTimeMillis()
-        val completionAnchors = completionAnchorsByContent(suppressionProgress)
-        val watchedAnchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(suppressionProgress)
+        val explicitRemovalAliases = explicitResumeRemovalAliases(profileId)
+        val visibleProgress = filterExplicitlyRemovedResumeProgress(
+            items = allProgress,
+            explicitRemovalAliases = explicitRemovalAliases
+        )
+        val visibleSuppressionProgress = filterExplicitlyRemovedResumeProgress(
+            items = suppressionProgress,
+            explicitRemovalAliases = explicitRemovalAliases
+        )
+        val completionAnchors = completionAnchorsByContent(visibleSuppressionProgress)
+        val watchedAnchors = ContinueWatchingCanonicalization.watchedAnchorsFromProgress(visibleSuppressionProgress)
         val projectionCache = TvdbEpisodeProjectionCache()
         val resumeItems = projectResumeItemsToCanonicalCoordinates(
-            items = selectResumeItemsForContinueWatching(allProgress),
+            items = selectResumeItemsForContinueWatching(visibleProgress),
             projectionCache = projectionCache
         )
             .filterNot { progress -> isResumeSuppressedByWatchedAnchors(progress, watchedAnchors) }
-        val localNextUpEntries = deriveLocalNextUpEntries(allProgress, projectionCache)
+        val localNextUpEntries = deriveLocalNextUpEntries(visibleProgress, projectionCache)
         // Indexed-for instead of `resumeItems.map { ... suspend ... }`. resolveOrFallback
         // suspends, and List.map's iterator pins resumeItems into the calling continuation
         // across every suspension (HARD RULE #4 in CLAUDE.md). Heap dump showed
@@ -1244,6 +1286,30 @@ class ContinueWatchingSnapshotService @Inject constructor(
             updatedAtMs = nowMs,
             scheduledReemit = scheduledReemit
         )
+    }
+
+    private fun filterExplicitlyRemovedResumeProgress(
+        items: List<WatchProgress>,
+        explicitRemovalAliases: Set<String>
+    ): List<WatchProgress> {
+        if (items.isEmpty() || explicitRemovalAliases.isEmpty()) return items
+        var filtered: MutableList<WatchProgress>? = null
+        for (i in items.indices) {
+            val progress = items[i]
+            val shouldSuppress = shouldTreatAsResumeForContinueWatching(progress) &&
+                resumeRetentionAliases(progress).any { alias -> alias in explicitRemovalAliases }
+            if (shouldSuppress) {
+                if (filtered == null) {
+                    filtered = ArrayList(items.size - 1)
+                    for (j in 0 until i) {
+                        filtered.add(items[j])
+                    }
+                }
+                continue
+            }
+            filtered?.add(progress)
+        }
+        return filtered ?: items
     }
 
     private suspend fun deriveLocalNextUpEntries(
@@ -2050,6 +2116,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         watchedAnchors: List<ContinueWatchingWatchedAnchor>
     ): List<WatchProgress> {
         if (previous.isEmpty()) return candidate
+        val explicitRemovalAliases = explicitResumeRemovalAliases(rawSnapshotState.value.profileId)
         val byKey = LinkedHashMap<String, WatchProgress>(candidate.size + previous.size)
         val seenAliases = linkedSetOf<String>()
         for (i in candidate.indices) {
@@ -2063,6 +2130,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val key = resumeRetentionKey(progress)
             val aliases = resumeRetentionAliases(progress)
             if (key in byKey || aliases.any { alias -> alias in seenAliases }) continue
+            if (aliases.any { alias -> alias in explicitRemovalAliases }) continue
             if (
                 isSuppressedByCompletionAnchor(
                     progress = progress,
@@ -2081,6 +2149,44 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         if (!retainedAny) return candidate
         return byKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private fun rememberExplicitResumeRemoval(profileId: Int, removed: List<WatchProgress>) {
+        if (profileId <= 0 || removed.isEmpty()) return
+        val nowMs = System.currentTimeMillis()
+        val aliases = explicitResumeRemovalAliasesByProfile.getOrPut(profileId) { mutableMapOf() }
+        pruneExplicitResumeRemovalAliases(aliases, nowMs)
+        for (i in removed.indices) {
+            resumeRetentionAliases(removed[i]).forEach { alias ->
+                aliases[alias] = nowMs
+            }
+        }
+    }
+
+    private fun forgetExplicitResumeRemoval(profileId: Int, entries: List<WatchProgress>) {
+        val aliases = explicitResumeRemovalAliasesByProfile[profileId] ?: return
+        for (i in entries.indices) {
+            resumeRetentionAliases(entries[i]).forEach { alias ->
+                aliases.remove(alias)
+            }
+        }
+        if (aliases.isEmpty()) explicitResumeRemovalAliasesByProfile.remove(profileId)
+    }
+
+    private fun explicitResumeRemovalAliases(profileId: Int): Set<String> {
+        val aliases = explicitResumeRemovalAliasesByProfile[profileId] ?: return emptySet()
+        pruneExplicitResumeRemovalAliases(aliases, System.currentTimeMillis())
+        if (aliases.isEmpty()) {
+            explicitResumeRemovalAliasesByProfile.remove(profileId)
+            return emptySet()
+        }
+        return aliases.keys.toSet()
+    }
+
+    private fun pruneExplicitResumeRemovalAliases(aliases: MutableMap<String, Long>, nowMs: Long) {
+        aliases.entries.removeIf { (_, removedAtMs) ->
+            nowMs - removedAtMs > explicitResumeRemovalTtlMs
+        }
     }
 
     private fun retainMissingNextUpItems(
@@ -3060,6 +3166,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun activeLanguageTag(): String =
         appContext?.let { AppLocaleResolver.resolveEffectiveAppLanguageTag(it) } ?: "en-US"
+
+    private fun observeActiveLanguageTags(): Flow<String> {
+        val context = appContext ?: return flowOf(activeLanguageTag())
+        return AppLocaleResolver.observeStoredLocaleTag(context)
+            .map { AppLocaleResolver.resolveEffectiveAppLanguageTag(context) }
+            .distinctUntilChanged()
+    }
 
     private fun activeProfileSession(): ActiveProfileSession =
         runCatching { profileManager?.activeProfileSession?.value }.getOrNull()

@@ -74,12 +74,18 @@ fun ProfileSelectionScreen(
         if (idx >= 0) idx else 0
     }
 
-    val focusRequesters = remember(profiles.size) { List(profiles.size) { FocusRequester() } }
+    val profileIds = profiles.map { it.id }
+    val focusRequesters = remember(profileIds) { List(profiles.size) { FocusRequester() } }
+    val rootFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(profiles.size) {
-        repeat(2) { withFrameNanos { } }
+    LaunchedEffect(profileIds, activeProfileId) {
         val targetIndex = profiles.indexOfFirst { it.id == activeProfileId }.takeIf { it >= 0 } ?: 0
-        runCatching { focusRequesters[targetIndex].requestFocus() }
+        focusedIndex = targetIndex
+        repeat(6) {
+            withFrameNanos { }
+            runCatching { rootFocusRequester.requestFocus() }
+            runCatching { focusRequesters[targetIndex].requestFocus() }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -99,10 +105,44 @@ fun ProfileSelectionScreen(
         activePinSessionId = nextPinSessionId
     }
 
+    fun selectProfile(profile: UserProfile) {
+        if (profilePinEnabled[profile.id] == true) {
+            openPinOverlay(profile)
+        } else {
+            onProfileSelected(profile.id)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NexioColors.Background),
+            .background(NexioColors.Background)
+            .focusRequester(rootFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type != KeyEventType.KeyDown || profiles.isEmpty()) {
+                    return@onPreviewKeyEvent false
+                }
+                when (keyEvent.key) {
+                    Key.DirectionLeft -> {
+                        focusedIndex = (focusedIndex - 1).coerceAtLeast(0)
+                        runCatching { focusRequesters.getOrNull(focusedIndex)?.requestFocus() }
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        focusedIndex = (focusedIndex + 1).coerceAtMost(profiles.lastIndex)
+                        runCatching { focusRequesters.getOrNull(focusedIndex)?.requestFocus() }
+                        true
+                    }
+                    Key.DirectionCenter,
+                    Key.Enter,
+                    Key.NumPadEnter -> {
+                        profiles.getOrNull(focusedIndex)?.let(::selectProfile)
+                        true
+                    }
+                    else -> false
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -123,11 +163,7 @@ fun ProfileSelectionScreen(
                     ) {
                         val profile = profiles.getOrNull(focusedIndex)
                         if (profile != null) {
-                            if (profilePinEnabled[profile.id] == true) {
-                                openPinOverlay(profile)
-                            } else {
-                                onProfileSelected(profile.id)
-                            }
+                            selectProfile(profile)
                         }
                         true
                     } else {
@@ -142,21 +178,13 @@ fun ProfileSelectionScreen(
                         isFocused = focusedIndex == index,
                         isPinLocked = isPinLocked,
                         focusRequester = focusRequesters[index],
+                        onFocused = {
+                            focusedIndex = index
+                        },
                         onClick = {
-                            if (isPinLocked) {
-                                openPinOverlay(profile)
-                            } else {
-                                onProfileSelected(profile.id)
-                            }
+                            selectProfile(profile)
                         },
                         modifier = Modifier
-                            .focusRequester(focusRequesters[index])
-                            .onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    focusedIndex = index
-                                }
-                            }
-                            .focusable()
                     )
                 }
             }
@@ -188,6 +216,7 @@ private fun ProfileCard(
     isFocused: Boolean,
     isPinLocked: Boolean,
     focusRequester: FocusRequester,
+    onFocused: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -208,6 +237,23 @@ private fun ProfileCard(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .width(120.dp)
+            .focusRequester(focusRequester)
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused) {
+                    onFocused()
+                }
+            }
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown &&
+                    (keyEvent.key == Key.DirectionCenter || keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
+                ) {
+                    onClick()
+                    true
+                } else {
+                    false
+                }
+            }
+            .focusable()
             .clickable(onClick = onClick)
     ) {
         Box {

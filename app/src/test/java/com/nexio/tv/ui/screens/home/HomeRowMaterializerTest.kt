@@ -53,6 +53,26 @@ class HomeRowMaterializerTest {
     }
 
     @Test
+    fun `persisted synthetic groups serve as fallback when live group is not publishable`() {
+        val keyA = HomeRailKey("a")
+        val liveRowA = row("liveA")
+        val persistedRowA = row("persistedA")
+        val effective = EffectiveHomeRailOrder.Empty.copy(visibleKeys = listOf(keyA))
+
+        val result = materializeHomeRows(
+            effectiveOrder = effective,
+            liveSyntheticGroupsByKey = mapOf(keyA to listOf(liveRowA)),
+            persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRowA)),
+            rawRowsByKey = emptyMap(),
+            pendingRowsByKey = emptyMap(),
+            publishPolicyByKey = emptyMap(),
+            isPublishableRow = { row -> row !== liveRowA },
+        )
+
+        assertEquals(listOf(persistedRowA), result)
+    }
+
+    @Test
     fun `output order matches effective visible keys order`() {
         val keyA = HomeRailKey("a")
         val keyB = HomeRailKey("b")

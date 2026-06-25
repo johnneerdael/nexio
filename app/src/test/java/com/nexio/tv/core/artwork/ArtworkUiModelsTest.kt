@@ -8,10 +8,27 @@ import org.junit.Test
 
 class ArtworkUiModelsTest {
     @Test
-    fun `runtime asset coil model uses decision URI so missing assets can materialize`() {
+    fun `runtime asset coil model prefers durable asset URI`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:thumbnail:tvdb:355567:S1E1"),
             assetKey = ArtworkAssetKey("artwork-asset:TVDB:thumbnail:urlHash:abc:variant:none:imageLang:en:policy:1"),
+            imageType = ArtworkType.THUMBNAIL,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace.empty()
+        )
+
+        assertEquals(
+            "nexio-artwork://asset/artwork-asset:TVDB:thumbnail:urlHash:abc:variant:none:imageLang:en:policy:1",
+            ref.toCoilModelOrNull()
+        )
+    }
+
+    @Test
+    fun `runtime asset coil model falls back to decision URI without asset key`() {
+        val ref = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("artwork-decision:thumbnail:tvdb:355567:S1E1"),
+            assetKey = null,
             imageType = ArtworkType.THUMBNAIL,
             selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB),
             sourceRole = ArtworkSourceRole.PRIMARY,

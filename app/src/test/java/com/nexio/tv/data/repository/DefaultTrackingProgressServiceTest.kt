@@ -25,6 +25,15 @@ class DefaultTrackingProgressServiceTest {
         every { this@mockk.state } returns flowOf(state)
     }
 
+    private fun multiProviderTrackingProviderStateService() = mockk<TrackingProviderStateService> {
+        val state = EffectiveTrackingProviderState(
+            effectiveProvider = TrackingProvider.TRAKT,
+            traktAuthenticated = true,
+            simklAuthenticated = true
+        )
+        every { this@mockk.state } returns flowOf(state)
+    }
+
     private fun unauthenticatedProviderStateService(
         storedProvider: TrackingProvider = TrackingProvider.TRAKT
     ) = mockk<TrackingProviderStateService> {
@@ -133,6 +142,25 @@ class DefaultTrackingProgressServiceTest {
             traktProgressService = traktService,
             simklProgressService = simklService,
             trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL)
+        )
+
+        val observed = service.observeRemoteSnapshotLoaded().firstValue()
+
+        assertEquals(false, observed)
+    }
+
+    @Test
+    fun `observeRemoteSnapshotLoaded waits for all active providers`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+
+        every { traktService.observeRemoteSnapshotLoaded() } returns flowOf(true)
+        every { simklService.observeRemoteSnapshotLoaded() } returns flowOf(false)
+
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = multiProviderTrackingProviderStateService()
         )
 
         val observed = service.observeRemoteSnapshotLoaded().firstValue()

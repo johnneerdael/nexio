@@ -21,6 +21,11 @@ import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
  * only published if their key's policy is `PUBLISH_ON_FIRST_PAINT`. Empty map (or
  * missing entries) falls back to the legacy behaviour of unconditional publish,
  * preserving the upstream contract that the pipeline pre-filters `pendingRowsByKey`.
+ *
+ * `isPublishableRow` lets callers reject rows that are technically present but would
+ * render as empty after surface-specific projection. When a higher-priority source has
+ * only rejected rows, materialization falls through to the next source instead of
+ * publishing an empty rail.
  */
 internal fun materializeHomeRows(
     effectiveOrder: EffectiveHomeRailOrder,
@@ -29,11 +34,29 @@ internal fun materializeHomeRows(
     rawRowsByKey: Map<HomeRailKey, CatalogRow>,
     pendingRowsByKey: Map<HomeRailKey, CatalogRow>,
     publishPolicyByKey: Map<HomeRailKey, RailPublishPolicy> = emptyMap(),
+    isPublishableRow: (CatalogRow) -> Boolean = { true },
 ): List<CatalogRow> = buildList {
     effectiveOrder.visibleKeys.forEach { key ->
-        liveSyntheticGroupsByKey[key]?.let { rows -> addAll(rows); return@forEach }
-        rawRowsByKey[key]?.let { row -> add(row); return@forEach }
-        persistedSyntheticGroupsByKey[key]?.let { rows -> addAll(rows); return@forEach }
+        liveSyntheticGroupsByKey[key]?.let { rows ->
+            val publishableRows = rows.filter(isPublishableRow)
+            if (publishableRows.isNotEmpty()) {
+                addAll(publishableRows)
+                return@forEach
+            }
+        }
+        rawRowsByKey[key]?.let { row ->
+            if (isPublishableRow(row)) {
+                add(row)
+                return@forEach
+            }
+        }
+        persistedSyntheticGroupsByKey[key]?.let { rows ->
+            val publishableRows = rows.filter(isPublishableRow)
+            if (publishableRows.isNotEmpty()) {
+                addAll(publishableRows)
+                return@forEach
+            }
+        }
         pendingRowsByKey[key]?.let { row ->
             // Only publish the pending placeholder when the rail's publish policy
             // explicitly allows first-paint placeholders. If the caller didn't supply

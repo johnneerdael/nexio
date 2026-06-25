@@ -5,7 +5,7 @@ import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 fun ArtworkDisplayRef?.toCoilModelOrNull(): Any? =
     when (this) {
         null -> null
-        is ArtworkDisplayRef.RuntimeAsset -> toDecisionArtworkString()
+        is ArtworkDisplayRef.RuntimeAsset -> toLegacyArtworkString()
         is ArtworkDisplayRef.Placeholder -> toLegacyArtworkString()
         is ArtworkDisplayRef.LegacyString -> value.toLegacyArtworkCoilModelOrNull(
             ownerKey = "legacy-string:${imageType.name.lowercase()}",
@@ -23,6 +23,3 @@ private fun String.isSafeArtworkUriString(): Boolean =
         startsWith("nexio-placeholder://") ||
         startsWith("content://") ||
         startsWith("file://")
-
-private fun ArtworkDisplayRef.RuntimeAsset.toDecisionArtworkString(): String =
-    "nexio-artwork://decision/${decisionKey.value}"

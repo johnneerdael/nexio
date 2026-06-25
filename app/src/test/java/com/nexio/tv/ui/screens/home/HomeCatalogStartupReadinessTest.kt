@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.KitsuCatalogIds
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
@@ -15,6 +17,7 @@ import com.nexio.tv.data.repository.MDBListListOption
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktPopularListOption
+import com.nexio.tv.data.repository.KitsuDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
@@ -1331,6 +1334,62 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `startup restore can retain stale enabled tmdb rows before source provenance catches up`() {
+        val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Cached TMDB Movie")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            rails = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)).toRail()),
+            heroItemKeys = listOf(tmdbItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
+        )
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+
+        val filtered = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = restored,
+            tmdbPrefs = prefs,
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            retainStaleEnabledRows = true
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.rails.map { it.catalogId })
+        assertEquals(listOf("tmdb:1"), filtered.heroItemKeys.map { it.contentId })
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.orderedGroupKeys)
+    }
+
+    @Test
+    fun `startup restore can retain stale enabled kitsu rows before source provenance catches up`() {
+        val kitsuItem = samplePreview("kitsu:1", ContentType.SERIES, "Cached Kitsu Anime")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            orderedGroupKeys = listOf(KitsuCatalogIds.TRENDING_ANIME),
+            rails = listOf(kitsuRow(KitsuCatalogIds.TRENDING_ANIME, listOf(kitsuItem)).toRail()),
+            heroItemKeys = listOf(kitsuItem).map { meta ->
+                RailItemKey(apiType = meta.apiType, contentId = meta.id)
+            }
+        )
+        val prefs = KitsuCatalogPreferences(
+            enabledCatalogs = setOf(KitsuCatalogIds.TRENDING_ANIME),
+            catalogOrder = listOf(KitsuCatalogIds.TRENDING_ANIME)
+        )
+
+        val filtered = filterRestoredHomeSnapshotKitsuRows(
+            snapshot = restored,
+            kitsuPrefs = prefs,
+            kitsuSnapshot = KitsuDiscoverySnapshot(),
+            retainStaleEnabledRows = true
+        )
+
+        assertEquals(listOf(KitsuCatalogIds.TRENDING_ANIME), filtered.rails.map { it.catalogId })
+        assertEquals(listOf("kitsu:1"), filtered.heroItemKeys.map { it.contentId })
+        assertEquals(listOf(KitsuCatalogIds.TRENDING_ANIME), filtered.orderedGroupKeys)
+    }
+
+    @Test
     fun `persisted tmdb rows are not current before catalog preferences are observed`() {
         val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
             tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES)),
@@ -1429,6 +1488,23 @@ class HomeCatalogStartupReadinessTest {
             catalogId = catalogId,
             catalogName = "TMDB $catalogId",
             type = ContentType.MOVIE,
+            items = items,
+            hasMore = false,
+            supportsSkip = false
+        )
+    }
+
+    private fun kitsuRow(
+        catalogId: String,
+        items: List<MetaPreview>
+    ): CatalogRow {
+        return CatalogRow(
+            addonId = "kitsu",
+            addonName = "Kitsu",
+            addonBaseUrl = "https://kitsu.io/api/edge",
+            catalogId = catalogId,
+            catalogName = "Kitsu $catalogId",
+            type = ContentType.SERIES,
             items = items,
             hasMore = false,
             supportsSkip = false

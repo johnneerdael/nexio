@@ -682,6 +682,66 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `explicitly removed resume row is not retained from previous snapshot`() = runTest {
+        val service = buildService()
+        val removedResume = resume(
+            contentId = "tt0103639",
+            videoId = "tt0103639",
+            lastWatched = 100_000L,
+            progressPercent = 11.6f
+        ).copy(name = "Aladdin")
+        val previous = ContinueWatchingSnapshot(
+            resumeItems = listOf(removedResume),
+            updatedAtMs = 100_000L
+        )
+        setPublishedSnapshot(service, snapshot = previous)
+
+        service.removeResumeEntry("tt0103639")
+
+        val retained = invokeRetainStableRowsFromPreviousSnapshot(
+            service = service,
+            candidate = ContinueWatchingSnapshot(updatedAtMs = 200_000L),
+            previous = previous,
+            completedProgress = emptyList()
+        )
+
+        assertEquals(emptyList<WatchProgress>(), retained.resumeItems)
+    }
+
+    @Test
+    fun `explicitly removed resume row is not reintroduced by remote playback emission`() = runTest {
+        val service = buildService()
+        val removedResume = resume(
+            contentId = "tt0317219",
+            videoId = "tt0317219",
+            lastWatched = 100_000L,
+            progressPercent = 0.05f,
+            source = WatchProgress.SOURCE_SIMKL_PLAYBACK
+        ).copy(name = "Cars")
+        val previous = ContinueWatchingSnapshot(
+            resumeItems = listOf(removedResume),
+            updatedAtMs = 100_000L
+        )
+        setPublishedSnapshot(service, snapshot = previous)
+
+        service.removeResumeEntry("tt0317219")
+
+        val rebuilt = service.buildRawSnapshotForTest(
+            allProgress = listOf(
+                removedResume.copy(
+                    lastWatched = 200_000L,
+                    source = WatchProgress.SOURCE_SIMKL_PLAYBACK
+                )
+            ),
+            nextUpEntries = emptyList(),
+            traktUpNextEntries = emptyList()
+        )
+
+        assertEquals(emptyList<WatchProgress>(), rebuilt.resumeItems)
+        assertTrue(rebuilt.records.isEmpty())
+    }
+
+    @Test
     fun `retained next up rows are suppressed by completed watched alias anchors`() {
         val service = buildService()
         val staleNightAgentNextUp = TrackingNextUpEntry(

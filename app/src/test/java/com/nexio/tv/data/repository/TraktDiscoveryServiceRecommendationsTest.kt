@@ -22,7 +22,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -139,6 +141,58 @@ class TraktDiscoveryServiceRecommendationsTest {
     }
 
     @Test
+    fun `observeSnapshot reuses public profile snapshot when active profile has no local discovery`() = runTest {
+        val traktApi = mockk<TraktApi>()
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
+        val enabledCatalogs = setOf(
+            TraktCatalogIds.TRENDING_MOVIES,
+            TraktCatalogIds.TRENDING_SHOWS
+        )
+        val reusableSnapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(
+                com.nexio.tv.domain.model.MetaPreview(
+                    id = "tt-public-movie",
+                    type = com.nexio.tv.domain.model.ContentType.MOVIE,
+                    rawType = "movie",
+                    name = "Public Movie",
+                    poster = null,
+                    posterShape = com.nexio.tv.domain.model.PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = null,
+                    releaseInfo = null,
+                    imdbRating = null,
+                    genres = emptyList()
+                )
+            ),
+            updatedAtMs = 321L
+        )
+        val snapshotStore = mockk<TraktDiscoverySnapshotStore>(relaxed = true)
+        every { snapshotStore.read(2) } returns null
+        every {
+            snapshotStore.readReusablePublicSnapshot(
+                profileId = 2,
+                enabledCatalogs = enabledCatalogs
+            )
+        } returns reusableSnapshot
+        val activeProfileId = MutableStateFlow(2)
+        val service = buildService(
+            traktApi = traktApi,
+            traktIntegrationProvider = traktIntegrationProvider,
+            profileManager = testProfileManager(activeProfileId),
+            enabledCatalogs = enabledCatalogs,
+            snapshotStoreOverride = snapshotStore
+        )
+
+        val snapshot = service.observeSnapshot(autoRefreshOnStart = false).first()
+
+        assertEquals(listOf("Public Movie"), snapshot.trendingMovieItems.map { it.name })
+        verify(exactly = 0) {
+            snapshotStore.write(reusableSnapshot, profileId = 2)
+        }
+    }
+
+    @Test
     fun `ensureFresh publishes calendar shows from trakt integration provider`() = runTest {
         val traktApi = mockk<TraktApi>()
         val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
@@ -181,7 +235,8 @@ class TraktDiscoveryServiceRecommendationsTest {
         traktApi: TraktApi,
         traktIntegrationProvider: TraktIntegrationProvider,
         profileManager: ProfileManager,
-        enabledCatalogs: Set<String> = setOf(TraktCatalogIds.RECOMMENDED_MOVIES)
+        enabledCatalogs: Set<String> = setOf(TraktCatalogIds.RECOMMENDED_MOVIES),
+        snapshotStoreOverride: TraktDiscoverySnapshotStore? = null
     ): TraktDiscoveryService {
         val authenticatedState = TraktAuthState(
             accessToken = "access",
@@ -206,8 +261,10 @@ class TraktDiscoveryServiceRecommendationsTest {
         coEvery { posterResolver.getActiveProvider() } returns null
         every { posterResolver.apply(any<com.nexio.tv.domain.model.Meta>(), null) } answers { firstArg() }
         every { posterResolver.apply(any<com.nexio.tv.domain.model.MetaPreview>(), null) } answers { firstArg() }
-        val snapshotStore = mockk<TraktDiscoverySnapshotStore>(relaxed = true)
-        every { snapshotStore.read(any()) } returns null
+        val snapshotStore = snapshotStoreOverride ?: mockk<TraktDiscoverySnapshotStore>(relaxed = true).also { store ->
+            every { store.read(any()) } returns null
+            every { store.readReusablePublicSnapshot(any(), any(), any()) } returns null
+        }
         val debugSettings = mockk<DebugSettingsDataStore>()
         every { debugSettings.diskFirstHomeStartupEnabled } returns flowOf(false)
         val outbox = mockk<TraktMutationOutboxCoordinator>(relaxed = true)

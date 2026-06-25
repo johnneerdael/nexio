@@ -211,6 +211,7 @@ class HomeViewModel @Inject constructor(
         internal const val CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY = 2
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
         internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 5000L
+        internal const val POST_STARTUP_HOME_REFRESH_MAX_MS = 120_000L
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
@@ -230,6 +231,9 @@ class HomeViewModel @Inject constructor(
             "manual_retry",
             "priority_hydration",
             "dismiss_trakt_recommendation"
+        )
+        private val PROFILE_SWITCH_DISK_SNAPSHOT_BACKGROUND_REFRESH_REASONS = setOf(
+            "profile_switch_hydration_refresh"
         )
         private val PROFILE_SWITCH_DISK_SNAPSHOT_BLOCKED_REFRESH_REASONS = setOf(
             "trakt_discovery",
@@ -491,6 +495,7 @@ class HomeViewModel @Inject constructor(
         val out = HashMap<String, MetaPreview>(itemsByAlias.size)
         val projectedByItemKey = HashMap<String, MetaPreview>(itemsByAlias.size)
         for ((alias, item) in itemsByAlias) {
+            if (item.display.title.isNullOrBlank()) continue
             val preview = projectedByItemKey.getOrPut(item.itemKey) { item.toMetaPreview() }
             out[alias] = preview
         }
@@ -795,6 +800,7 @@ class HomeViewModel @Inject constructor(
     internal var addonsCache: List<Addon> = emptyList()
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var homeCatalogRails: List<HomeCatalogRail> = emptyList()
+    internal var homeCatalogRailsObserved: Boolean = false
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
@@ -809,6 +815,9 @@ class HomeViewModel @Inject constructor(
     internal var catalogsLoadInProgress: Boolean = false
     internal var lastCatalogComputationSignature: String? = null
     internal var lastCatalogOrderDiagnosticsSignature: String? = null
+    internal var homeFrameDiagnosticsCount: Int = 0
+    internal var firstHomeFrameSignature: String? = null
+    internal var firstHomeFrameFinal: Boolean = false
     internal val migrationAttempted: MutableSet<Int> = mutableSetOf()
     internal data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
@@ -819,6 +828,7 @@ class HomeViewModel @Inject constructor(
     internal var pendingRestoredCatalogSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistJob: Job? = null
     internal var pendingHomeSnapshotPersist: HomeCatalogSnapshotStore.Snapshot? = null
+    internal var pendingResolvedHomeSnapshotItems: List<com.nexio.tv.domain.model.ResolvedDisplayItem>? = null
     internal var homeSnapshotPersistGeneration: Long = 0L
     internal val pendingProviderEnrichmentByItemId = linkedMapOf<String, TvMetadataEnrichment>()
     internal val pendingTomatoesEnrichmentByItemId = linkedMapOf<String, Double>()
@@ -861,6 +871,9 @@ class HomeViewModel @Inject constructor(
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
     internal var continueWatchingSnapshotVersion: Long = 0L
+    internal var continueWatchingPublishedLanguageTag: String? = null
+    internal var continueWatchingLocalizedEpisodeTitleLanguageTag: String? = null
+    internal val continueWatchingLocalizedEpisodeTitleByIdentity: MutableMap<String, String> = mutableMapOf()
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal val trailerPreviewLoadingIds = mutableStateMapOf<String, Boolean>()
@@ -944,6 +957,7 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var startupPerfTelemetryEnabled: Boolean = false
     internal var deferredStartupRefreshJob: Job? = null
+    internal var deferredTrackingProviderStateReconcileJob: Job? = null
     internal var pendingSerializedHomeRefreshReason: String? = null
     internal val syntheticCatalogStoreMutex = Mutex()
     internal val catalogRowsComputationMutex = Mutex()
@@ -1319,6 +1333,7 @@ class HomeViewModel @Inject constructor(
                     inMemoryHomeSnapshot = null
                     pendingRestoredCatalogSnapshot = null
                     pendingHomeSnapshotPersist = null
+                    pendingResolvedHomeSnapshotItems = null
                     invalidateHydratedHomeOverlayScope()
                     persistedTraktSyntheticGroups = emptyList()
                     persistedSimklSyntheticGroups = emptyList()
@@ -1380,17 +1395,45 @@ class HomeViewModel @Inject constructor(
     private fun observeTrackingProviderState() {
         viewModelScope.launch {
             trackingProviderStateService.state.collectLatest { state ->
-                val authChanged = activeProfileTraktAuthenticated != state.traktAuthenticated ||
-                    activeProfileSimklAuthenticated != state.simklAuthenticated
-                activeProfileTraktAuthenticated = state.traktAuthenticated
-                activeProfileSimklAuthenticated = state.simklAuthenticated
-                if (authChanged) {
-                    if (!state.traktAuthenticated) {
-                        clearTraktHomeState("tracking_auth_changed")
-                    }
-                    scheduleUpdateCatalogRows()
-                }
+                applyTrackingProviderState(state, reason = "tracking_auth_changed")
             }
+        }
+    }
+
+    private fun applyTrackingProviderState(
+        state: com.nexio.tv.data.repository.EffectiveTrackingProviderState,
+        reason: String
+    ) {
+        val authChanged = activeProfileTraktAuthenticated != state.traktAuthenticated ||
+            activeProfileSimklAuthenticated != state.simklAuthenticated
+        if (!authChanged) return
+
+        val wouldLoseAuthenticatedState =
+            (activeProfileTraktAuthenticated && !state.traktAuthenticated) ||
+                (activeProfileSimklAuthenticated && !state.simklAuthenticated)
+        if (wouldLoseAuthenticatedState && shouldSuppressProfileSwitchRefresh(reason)) {
+            scheduleTrackingProviderStateReconcileAfterProfileSwitch()
+            return
+        }
+
+        activeProfileTraktAuthenticated = state.traktAuthenticated
+        activeProfileSimklAuthenticated = state.simklAuthenticated
+        if (!state.traktAuthenticated) {
+            clearTraktHomeState(reason)
+        }
+        scheduleUpdateCatalogRows()
+    }
+
+    private fun scheduleTrackingProviderStateReconcileAfterProfileSwitch() {
+        deferredTrackingProviderStateReconcileJob?.cancel()
+        deferredTrackingProviderStateReconcileJob = viewModelScope.launch {
+            val waitMs = (suppressProfileSwitchRefreshUntilMs - SystemClock.elapsedRealtime())
+                .coerceAtLeast(0L) + 50L
+            delay(waitMs)
+            val state = withContext(Dispatchers.IO) {
+                trackingProviderStateService.currentState()
+            }
+            applyTrackingProviderState(state, reason = "tracking_auth_changed_deferred")
         }
     }
 
@@ -1427,17 +1470,23 @@ class HomeViewModel @Inject constructor(
                     resetProfileScopedHomeState("home_session:${session.profileId}")
                     try {
                         continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
-                        val hasDiskCacheState = loadActiveProfileDiskBackedHomeState(
+                        val diskBackedHomeState = loadActiveProfileDiskBackedHomeState(
                             reason = "home_session:${session.profileId}",
                             expectedGeneration = session.generation
                         )
                         if (isCurrentHomeProfileGeneration(session.generation)) {
-                            if (hasDiskCacheState) {
+                            if (
+                                diskBackedHomeState.hasRenderableHomeSnapshot ||
+                                diskBackedHomeState.hasSyntheticCatalogSnapshot
+                            ) {
                                 activateProfileSwitchDiskSnapshotMode(session.generation)
                             } else {
                                 clearProfileSwitchDiskSnapshotMode("profile_switch_no_disk_state")
                             }
-                            reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh = !hasDiskCacheState)
+                            reloadDiskCachedAddonCatalogsForActiveProfileSwitch(
+                                allowNetworkRefresh = true
+                            )
+                            runSerializedHomeRefreshIfNeeded("profile_switch_hydration_refresh")
                         }
                     } finally {
                         if (isCurrentHomeProfileGeneration(session.generation)) {
@@ -1717,6 +1766,9 @@ class HomeViewModel @Inject constructor(
 
     internal fun shouldBlockProfileSwitchDiskSnapshotRefresh(reason: String): Boolean {
         if (!isProfileSwitchDiskSnapshotModeActive()) return false
+        if (reason in PROFILE_SWITCH_DISK_SNAPSHOT_BACKGROUND_REFRESH_REASONS) {
+            return false
+        }
         if (reason in PROFILE_SWITCH_DISK_SNAPSHOT_ALLOWED_REFRESH_REASONS) {
             clearProfileSwitchDiskSnapshotMode("explicit_refresh:$reason")
             return false
@@ -1730,7 +1782,9 @@ class HomeViewModel @Inject constructor(
     }
 
     internal fun shouldSuppressProfileSwitchRefresh(reason: String): Boolean {
-        if (reason == "account_sync") return false
+        if (reason == "account_sync" || reason in PROFILE_SWITCH_DISK_SNAPSHOT_BACKGROUND_REFRESH_REASONS) {
+            return false
+        }
         val active = profileSwitchDiskHydrationActive ||
             SystemClock.elapsedRealtime() < suppressProfileSwitchRefreshUntilMs
         if (active) {
@@ -1883,6 +1937,7 @@ class HomeViewModel @Inject constructor(
         hydratedHomeOverlayObserverJob?.cancel()
         pendingProviderEnrichmentByItemId.clear()
         pendingHomeSnapshotPersist = null
+        pendingResolvedHomeSnapshotItems = null
         cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.values.forEach { it.cancel() }

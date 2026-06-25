@@ -146,11 +146,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
             val rowKey = homeCatalogGlobalKey(row)
             val oldItems = existingRowsByKey[rowKey]?.items.orEmpty()
-            val diff = diffCatalogItems(oldItems = oldItems, newItems = row.items)
-            val changedKeys = diff.addedOrChanged
-                .asSequence()
-                .map { "${it.apiType}:${it.id}" }
-                .toHashSet()
             val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
 
             val hydratedItems = ArrayList<MetaPreview>(row.items.size)
@@ -163,11 +158,15 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 }
                 val persistedFallback = oldItemsByKey[itemKey]
                 if (shouldReusePersistedHomeItem(
-                        itemChanged = itemKey in changedKeys,
-                        persistedFallback = persistedFallback
+                        itemChanged = itemKey !in oldItemsByKey,
+                        persistedFallback = persistedFallback,
+                        currentItem = item
                     )
                 ) {
-                    hydratedItems += persistedFallback!!
+                    hydratedItems += posterRatingsUrlResolver.applyArtworkRef(
+                        persistedFallback!!,
+                        artworkProviderSettings
+                    )
                     continue
                 }
                 val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
@@ -254,7 +253,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         hasResolvedAuthority: (String) -> Boolean = { false },
         onCatalogReady: suspend (String, CatalogRow, CatalogItemDiff) -> Unit,
         onRawCatalogBatchComplete: suspend () -> Unit = {},
-        onLog: (String, String?) -> Unit
+        onLog: (String, String?) -> Unit,
+        publishRawRowsImmediately: Boolean = true
     ): Int {
         var refreshedCatalogCount = 0
         refreshMutex.withLock {
@@ -300,8 +300,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         "catalogKey=$catalogKey total=${refreshed.items.size} retained=$retainedCount refreshed=$newCount removed=$removedCount"
                     )
 
-                    onCatalogReady(catalogKey, refreshed, diff)
-                    onLog("catalog_publish_ready", "catalogKey=$catalogKey")
+                    if (publishRawRowsImmediately) {
+                        onCatalogReady(catalogKey, refreshed, diff)
+                        onLog("catalog_publish_ready", "catalogKey=$catalogKey")
+                    } else {
+                        onLog("catalog_publish_deferred", "catalogKey=$catalogKey reason=awaiting_hydrated_batch")
+                    }
 
                     refreshedEntries += SerialRefreshEntry(
                         catalogKey = catalogKey,
@@ -330,15 +334,19 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 if (entryIndex >= hydratedRows.size) break
                 val entry = refreshedEntries[entryIndex]
                 val hydrated = hydratedRows[entryIndex]
-                if (hydrated != entry.row) {
+                if (hydrated != entry.row || !publishRawRowsImmediately) {
                     val currentRow = getCurrentRow(entry.catalogKey)
-                    val rowToPublish = currentRow?.let { current ->
-                        mergeHydratedCatalogRowIntoCurrent(
-                            rawRow = entry.row,
-                            hydratedRow = hydrated,
-                            currentRow = current
-                        )
-                    } ?: hydrated
+                    val rowToPublish = if (publishRawRowsImmediately) {
+                        currentRow?.let { current ->
+                            mergeHydratedCatalogRowIntoCurrent(
+                                rawRow = entry.row,
+                                hydratedRow = hydrated,
+                                currentRow = current
+                            )
+                        } ?: hydrated
+                    } else {
+                        hydrated
+                    }
                     if (rowToPublish != currentRow) {
                         onCatalogReady(
                             entry.catalogKey,
@@ -832,7 +840,28 @@ private fun ResolvedDisplayFieldSlots.toStaleResolved(): ResolvedDisplayFieldSlo
 
 internal fun shouldReusePersistedHomeItem(
     itemChanged: Boolean,
-    persistedFallback: MetaPreview?
+    persistedFallback: MetaPreview?,
+    currentItem: MetaPreview? = null
 ): Boolean {
-    return !itemChanged && persistedFallback?.tomatoesRating != null
+    if (itemChanged || persistedFallback == null) return false
+    if (persistedFallback.tomatoesRating != null) return true
+    return currentItem != null && persistedFallback.hasReusableHomeDisplayComparedTo(currentItem)
 }
+
+private fun MetaPreview.hasReusableHomeDisplayComparedTo(currentItem: MetaPreview): Boolean =
+    (!name.isBlank() && name != currentItem.name) ||
+        (!description.isNullOrBlank() && description != currentItem.description) ||
+        (!releaseInfo.isNullOrBlank() && releaseInfo != currentItem.releaseInfo) ||
+        (!runtime.isNullOrBlank() && runtime != currentItem.runtime) ||
+        imdbRating != null ||
+        ratingSource != null ||
+        tomatoesRating != null ||
+        genres.isNotEmpty() ||
+        originalLanguage != null ||
+        posterProviderTag != currentItem.posterProviderTag ||
+        hasReusableArtworkValue(poster, currentItem.poster) ||
+        hasReusableArtworkValue(background, currentItem.background) ||
+        hasReusableArtworkValue(logo, currentItem.logo)
+
+private fun hasReusableArtworkValue(persisted: String?, current: String?): Boolean =
+    !persisted.isNullOrBlank() && persisted != current

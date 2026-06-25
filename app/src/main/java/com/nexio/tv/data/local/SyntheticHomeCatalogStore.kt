@@ -62,9 +62,16 @@ class SyntheticHomeCatalogStore private constructor(
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 5
         private const val SNAPSHOT_DIR = "synthetic-home-catalog-v1"
+        private val REUSABLE_PUBLIC_TRAKT_CATALOGS = setOf(
+            TraktCatalogIds.TRENDING_MOVIES,
+            TraktCatalogIds.TRENDING_SHOWS,
+            TraktCatalogIds.POPULAR_MOVIES,
+            TraktCatalogIds.POPULAR_SHOWS
+        )
     }
 
     private val gson = Gson()
+    private val ioLock = Any()
 
     data class Snapshot(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
@@ -78,46 +85,84 @@ class SyntheticHomeCatalogStore private constructor(
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
-        return runCatching {
-            // CLAUDE.md hard rule #3: file-backed streaming. The legacy
-            // SharedPreferences-stored payload pinned 50+ KB of catalogRow JSON
-            // in prefs (heap-confirmed: 53 KiB catalogRow char[] entries from
-            // 2026-05-10 ANR investigation) and reads via prefs.getString +
-            // gson.fromJson(rawString, JsonObject::class) materialised the
-            // entire payload as a String for the parse.
-            val file = snapshotFileFor(profileId)
-            if (file.exists()) {
-                streamReadSnapshot(file)
-            } else {
-                migrateLegacySnapshotToFile(profileId, file)
+        return synchronized(ioLock) {
+            runCatching {
+                // CLAUDE.md hard rule #3: file-backed streaming. The legacy
+                // SharedPreferences-stored payload pinned 50+ KB of catalogRow JSON
+                // in prefs (heap-confirmed: 53 KiB catalogRow char[] entries from
+                // 2026-05-10 ANR investigation) and reads via prefs.getString +
+                // gson.fromJson(rawString, JsonObject::class) materialised the
+                // entire payload as a String for the parse.
+                val file = snapshotFileFor(profileId)
+                if (file.exists()) {
+                    streamReadSnapshot(file)
+                } else {
+                    migrateLegacySnapshotToFile(profileId, file)
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to restore synthetic home catalogs", error)
+                clear(profileId)
+            }.getOrNull()
+        }
+    }
+
+    fun readReusablePublicTraktSnapshot(
+        profileId: Int = activeProfileId(),
+        candidateProfileIds: Iterable<Int> = 1..4,
+        enabledCatalogs: Set<String>
+    ): Snapshot? {
+        return synchronized(ioLock) {
+            val reusableCatalogs = enabledCatalogs.intersect(REUSABLE_PUBLIC_TRAKT_CATALOGS)
+            if (reusableCatalogs.isEmpty()) return null
+
+            for (candidateProfileId in candidateProfileIds.distinct()) {
+                if (candidateProfileId == profileId) continue
+                val candidate = read(profileId = candidateProfileId) ?: continue
+                val reusableTraktGroups = candidate.traktGroups.filterReusablePublicTraktGroups(reusableCatalogs)
+                if (reusableTraktGroups.isNotEmpty()) {
+                    return Snapshot(
+                        traktGroups = reusableTraktGroups,
+                        updatedAtMs = candidate.updatedAtMs
+                    )
+                }
             }
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to restore synthetic home catalogs", error)
-            clear(profileId)
-        }.getOrNull()
+            for (candidateProfileId in candidateProfileIds.distinct()) {
+                if (candidateProfileId == profileId) continue
+                val reusable = readReusablePublicTraktSnapshotAnyLanguage(
+                    profileId = candidateProfileId,
+                    enabledCatalogs = reusableCatalogs
+                )
+                if (reusable != null) return reusable
+            }
+            null
+        }
     }
 
     fun write(
         snapshot: Snapshot,
         profileId: Int = activeProfileId()
     ) {
-        runCatching {
-            val target = snapshotFileFor(profileId)
-            target.parentFile?.mkdirs()
-            writeSnapshotToFile(snapshot, target)
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to persist synthetic home catalogs", error)
+        synchronized(ioLock) {
+            runCatching {
+                val target = snapshotFileFor(profileId)
+                target.parentFile?.mkdirs()
+                writeSnapshotToFile(snapshot, target)
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to persist synthetic home catalogs", error)
+            }
         }
     }
 
     fun clear(profileId: Int = activeProfileId()) {
-        runCatching {
-            snapshotFileFor(profileId).takeIf { it.exists() }?.delete()
-            // Also clear legacy prefs entry.
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(snapshotKey(profileId)).apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to clear synthetic home catalogs", error)
+        synchronized(ioLock) {
+            runCatching {
+                snapshotFileFor(profileId).takeIf { it.exists() }?.delete()
+                // Also clear legacy prefs entry.
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit().remove(snapshotKey(profileId)).apply()
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to clear synthetic home catalogs", error)
+            }
         }
     }
 
@@ -223,41 +268,131 @@ class SyntheticHomeCatalogStore private constructor(
         }.getOrNull()
     }
 
-    private fun writeSnapshotToFile(snapshot: Snapshot, target: File) {
-        val snapshotToWrite = snapshot.copy(updatedAtMs = System.currentTimeMillis())
-        val tempFile = File(target.parentFile, "${target.name}.tmp")
-        FileOutputStream(tempFile).use { fos ->
-            BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
-                JsonWriter(bw).use { writer ->
-                    writer.beginObject()
-                    writer.name("schemaVersion").value(SCHEMA_VERSION)
-                    writer.name("updatedAtMs").value(snapshotToWrite.updatedAtMs)
-                    writer.name("languageEpoch").value(metadataDiskCacheStore.currentLanguageEpoch())
-                    writer.name("languageTag").value(currentLanguageTag())
+    private fun readReusablePublicTraktSnapshotAnyLanguage(
+        profileId: Int,
+        enabledCatalogs: Set<String>
+    ): Snapshot? {
+        val files = reusableSnapshotFilesForProfile(profileId)
+        for (i in files.indices) {
+            val reusable = streamReadReusablePublicTraktSnapshot(files[i], enabledCatalogs)
+            if (reusable != null) return reusable
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val legacyPrefix = "$SNAPSHOT_KEY:p$profileId:"
+        val legacyEntries = prefs.all
+            .asSequence()
+            .filter { entry -> entry.key.startsWith(legacyPrefix) }
+            .mapNotNull { entry -> (entry.value as? String)?.takeIf { it.isNotBlank() } }
+            .toList()
+        for (i in legacyEntries.indices) {
+            val reusable = decodeReusablePublicTraktSnapshot(legacyEntries[i], enabledCatalogs)
+            if (reusable != null) return reusable
+        }
+        return null
+    }
 
-                    writer.name("traktGroups")
-                    gson.toJson(encodeGroups(snapshotToWrite.traktGroups), JsonArray::class.java, writer)
-                    writer.name("simklGroups")
-                    gson.toJson(encodeGroups(snapshotToWrite.simklGroups), JsonArray::class.java, writer)
-                    writer.name("mdbListGroups")
-                    gson.toJson(encodeGroups(snapshotToWrite.mdbListGroups), JsonArray::class.java, writer)
-                    writer.name("kitsuGroups")
-                    gson.toJson(encodeGroups(snapshotToWrite.kitsuGroups), JsonArray::class.java, writer)
-                    writer.name("tmdbGroups")
-                    gson.toJson(encodeGroups(snapshotToWrite.tmdbGroups), JsonArray::class.java, writer)
+    private fun reusableSnapshotFilesForProfile(profileId: Int): List<File> {
+        val current = snapshotFileFor(profileId)
+        val parent = current.parentFile ?: return if (current.exists()) listOf(current) else emptyList()
+        val matching = parent.listFiles { file ->
+            file.isFile &&
+                file.name.startsWith("p${profileId}_") &&
+                file.name.endsWith(".json")
+        }.orEmpty()
+        return matching.sortedWith(
+            compareByDescending<File> { it.absolutePath == current.absolutePath }
+                .thenByDescending { it.lastModified() }
+                .thenBy { it.name }
+        )
+    }
 
-                    snapshotToWrite.tmdbIncludeAdult?.let { writer.name("tmdbIncludeAdult").value(it) }
-                    snapshotToWrite.tmdbHideUnreleasedDigital?.let { writer.name("tmdbHideUnreleasedDigital").value(it) }
-                    writer.endObject()
+    private fun streamReadReusablePublicTraktSnapshot(
+        file: File,
+        enabledCatalogs: Set<String>
+    ): Snapshot? {
+        var schemaVersion = -1
+        var traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+        var updatedAtMs: Long = file.lastModified().takeIf { it > 0L } ?: 0L
+
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            return@runCatching null
+                        }
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "schemaVersion" -> {
+                                    schemaVersion = reader.nextInt()
+                                    if (schemaVersion != 4 && schemaVersion != SCHEMA_VERSION) {
+                                        return@runCatching null
+                                    }
+                                }
+                                "traktGroups" -> {
+                                    val element: JsonArray? = gson.fromJson(reader, JsonArray::class.java)
+                                    traktGroups = decodeGroups(element)
+                                        .filterReusablePublicTraktGroups(enabledCatalogs)
+                                }
+                                "updatedAtMs" -> {
+                                    updatedAtMs = reader.nextLong()
+                                }
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    }
                 }
             }
+            traktGroups.takeIf { it.isNotEmpty() }?.let { groups ->
+                Snapshot(traktGroups = groups, updatedAtMs = updatedAtMs)
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to stream-read reusable public Trakt synthetic catalogs", error)
+        }.getOrNull()
+    }
+
+    private fun writeSnapshotToFile(snapshot: Snapshot, target: File) {
+        val snapshotToWrite = snapshot.copy(updatedAtMs = System.currentTimeMillis())
+        val tempFile = File.createTempFile("${target.name}.", ".tmp", target.parentFile)
+        try {
+            FileOutputStream(tempFile).use { fos ->
+                BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8)).use { bw ->
+                    JsonWriter(bw).use { writer ->
+                        writer.beginObject()
+                        writer.name("schemaVersion").value(SCHEMA_VERSION)
+                        writer.name("updatedAtMs").value(snapshotToWrite.updatedAtMs)
+                        writer.name("languageEpoch").value(metadataDiskCacheStore.currentLanguageEpoch())
+                        writer.name("languageTag").value(currentLanguageTag())
+
+                        writer.name("traktGroups")
+                        gson.toJson(encodeGroups(snapshotToWrite.traktGroups), JsonArray::class.java, writer)
+                        writer.name("simklGroups")
+                        gson.toJson(encodeGroups(snapshotToWrite.simklGroups), JsonArray::class.java, writer)
+                        writer.name("mdbListGroups")
+                        gson.toJson(encodeGroups(snapshotToWrite.mdbListGroups), JsonArray::class.java, writer)
+                        writer.name("kitsuGroups")
+                        gson.toJson(encodeGroups(snapshotToWrite.kitsuGroups), JsonArray::class.java, writer)
+                        writer.name("tmdbGroups")
+                        gson.toJson(encodeGroups(snapshotToWrite.tmdbGroups), JsonArray::class.java, writer)
+
+                        snapshotToWrite.tmdbIncludeAdult?.let { writer.name("tmdbIncludeAdult").value(it) }
+                        snapshotToWrite.tmdbHideUnreleasedDigital?.let { writer.name("tmdbHideUnreleasedDigital").value(it) }
+                        writer.endObject()
+                    }
+                }
+            }
+            Files.move(
+                tempFile.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
         }
-        Files.move(
-            tempFile.toPath(),
-            target.toPath(),
-            StandardCopyOption.ATOMIC_MOVE,
-            StandardCopyOption.REPLACE_EXISTING
-        )
     }
 
     /**
@@ -299,6 +434,24 @@ class SyntheticHomeCatalogStore private constructor(
         )
     }
 
+    private fun decodeReusablePublicTraktSnapshot(
+        raw: String,
+        enabledCatalogs: Set<String>
+    ): Snapshot? {
+        val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+        val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
+        if (schemaVersion != 4 && schemaVersion != SCHEMA_VERSION) {
+            return null
+        }
+        val traktGroups = decodeGroups(root.getAsJsonArray("traktGroups"))
+            .filterReusablePublicTraktGroups(enabledCatalogs)
+        if (traktGroups.isEmpty()) return null
+        return Snapshot(
+            traktGroups = traktGroups,
+            updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
+        )
+    }
+
     private fun currentLanguageTag(): String {
         return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
@@ -311,6 +464,14 @@ class SyntheticHomeCatalogStore private constructor(
         return array
             ?.mapNotNull(::decodeGroup)
             .orEmpty()
+    }
+
+    private fun List<PersistedSyntheticCatalogGroup>.filterReusablePublicTraktGroups(
+        enabledCatalogs: Set<String>
+    ): List<PersistedSyntheticCatalogGroup> {
+        return filter { group ->
+            group.orderKey in enabledCatalogs && group.rows.isNotEmpty()
+        }
     }
 
     private fun encodeGroups(groups: List<PersistedSyntheticCatalogGroup>): JsonArray {

@@ -152,6 +152,78 @@ class HomeViewModelContinueWatchingTest {
     }
 
     @Test
+    fun `movie canonical records preserve resume content id for removal`() = runTest {
+        val resume = WatchProgress(
+            contentId = "tt0103639",
+            contentType = "movie",
+            name = "Aladdin",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tt0103639",
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 632_641L,
+            duration = 5_437_952L,
+            lastWatched = 200L,
+            source = WatchProgress.SOURCE_LOCAL
+        )
+        val identity = resume.toResumeIdentity(ContinueWatchingSource.LOCAL)
+        val record = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "tt0103639",
+            contentId = "tt0103639",
+            provider = TrackingProvider.TRAKT,
+            routingVersion = 1,
+            positionMs = resume.position,
+            durationMs = resume.duration,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = 200L,
+            canonicalKey = ContinueWatchingCanonicalKey(
+                mediaKind = MetadataMediaKind.MOVIE,
+                canonicalParent = ContentIdentity(
+                    canonicalProvider = ProviderId.TMDB,
+                    canonicalId = "812",
+                    providerIds = ProviderIds(imdb = "tt0103639", tmdb = "812")
+                ),
+                season = null,
+                episode = null,
+                profileId = 1
+            ),
+            episodeContext = null,
+            clickTimeDisplayMetadata = null,
+            displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "812",
+                providerIds = ProviderIds(imdb = "tt0103639", tmdb = "812")
+            ),
+            streamFetchIdentity = StreamFetchIdentity(
+                contentId = "tt0103639",
+                videoId = "tt0103639",
+                idScheme = StreamIdScheme.IMDB_MOVIE,
+                confidence = IdentityConfidence.HIGH,
+                trace = listOf("test")
+            ),
+            resumeIdentities = listOf(identity),
+            primaryResumeLookupKey = identity.lookupKey()
+        )
+
+        val items = buildContinueWatchingItemsForSnapshot(
+            snapshot = ContinueWatchingSnapshot(
+                resumeItems = listOf(resume),
+                records = listOf(record)
+            ),
+            nowMs = 1_000L
+        )
+
+        val item = items.single() as ContinueWatchingItem.InProgress
+        assertEquals(record.identityKey(), item.canonicalKey)
+        assertEquals("tt0103639", item.progress.contentId)
+        assertEquals("tt0103639", item.progress.videoId)
+    }
+
+    @Test
     fun `continue watching drops legacy tekenfilms resume ids`() = runTest {
         val legacyResume = WatchProgress(
             contentId = "tekenfilms:assepoester-1950",
