@@ -202,7 +202,7 @@ class DefaultTrackingScrobbleServiceTest {
         )
 
         coVerify(exactly = 1) { stateService.currentState(2) }
-        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 12f, 2) }
+        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 12f, 2, "session-2") }
         coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any()) }
     }
 
@@ -235,7 +235,7 @@ class DefaultTrackingScrobbleServiceTest {
         )
 
         coVerify(exactly = 1) { stateService.currentState(2) }
-        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f, 2) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f, 2, "session-2") }
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any()) }
     }
 }

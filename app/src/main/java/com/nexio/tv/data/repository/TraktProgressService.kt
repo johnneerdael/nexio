@@ -435,10 +435,14 @@ class TraktProgressService @Inject constructor(
     private val showNextUpActivityVersion get() = runtimeState().showNextUpActivityVersion
 
     private fun runtimeState(): TraktProgressRuntimeState {
+        return runtimeState(traktIntegrationProvider.currentTraktProfileId())
+    }
+
+    private fun runtimeState(profileId: Int): TraktProgressRuntimeState {
         return runtimeRegistry.stateFor(
             TrackingRuntimeSession(
                 provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
-                profileId = traktIntegrationProvider.currentTraktProfileId()
+                profileId = profileId
             )
         )
     }
@@ -686,11 +690,21 @@ class TraktProgressService @Inject constructor(
     }
 
     fun observeAllProgress(): Flow<List<WatchProgress>> {
+        return observeAllProgress(runtimeState())
+    }
+
+    fun observeAllProgress(profileId: Int): Flow<List<WatchProgress>> {
+        return observeAllProgress(runtimeState(profileId))
+    }
+
+    private fun observeAllProgress(
+        state: TraktProgressRuntimeState
+    ): Flow<List<WatchProgress>> {
         return combine(
-            remoteProgress,
-            optimisticProgress,
-            metadataState,
-            hasLoadedRemoteProgress
+            state.remoteProgress,
+            state.optimisticProgress,
+            state.metadataState,
+            state.hasLoadedRemoteProgress
         ) { remote, optimistic, metadata, loaded ->
             val now = System.currentTimeMillis()
             val validOptimistic = optimistic
@@ -717,10 +731,24 @@ class TraktProgressService @Inject constructor(
         return hasLoadedRemoteProgress
     }
 
+    fun observeRemoteSnapshotLoaded(profileId: Int): Flow<Boolean> {
+        return runtimeState(profileId).hasLoadedRemoteProgress
+    }
+
     fun observeContinueWatchingNextUp(): Flow<List<NextUpEntry>> {
+        return observeContinueWatchingNextUp(runtimeState())
+    }
+
+    fun observeContinueWatchingNextUp(profileId: Int): Flow<List<NextUpEntry>> {
+        return observeContinueWatchingNextUp(runtimeState(profileId))
+    }
+
+    private fun observeContinueWatchingNextUp(
+        state: TraktProgressRuntimeState
+    ): Flow<List<NextUpEntry>> {
         return combine(
-            myShowsNextUp,
-            metadataState
+            state.myShowsNextUp,
+            state.metadataState
         ) { nextUp, metadata ->
             nextUp.map { entry ->
                 val contentMetadata = metadata[entry.contentId]
@@ -737,9 +765,19 @@ class TraktProgressService @Inject constructor(
     }
 
     fun observeSyntheticContinueWatchingNextUp(): Flow<List<NextUpEntry>> {
+        return observeSyntheticContinueWatchingNextUp(runtimeState())
+    }
+
+    fun observeSyntheticContinueWatchingNextUp(profileId: Int): Flow<List<NextUpEntry>> {
+        return observeSyntheticContinueWatchingNextUp(runtimeState(profileId))
+    }
+
+    private fun observeSyntheticContinueWatchingNextUp(
+        state: TraktProgressRuntimeState
+    ): Flow<List<NextUpEntry>> {
         return combine(
-            myShowsNextUpAll,
-            metadataState
+            state.myShowsNextUpAll,
+            state.metadataState
         ) { nextUp, metadata ->
             nextUp.map { entry ->
                 val contentMetadata = metadata[entry.contentId]

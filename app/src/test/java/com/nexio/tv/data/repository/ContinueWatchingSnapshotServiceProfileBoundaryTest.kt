@@ -71,8 +71,12 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(false)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(false)
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
                 val trackingState = MutableStateFlow(
@@ -129,8 +133,12 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns remoteLoaded
+                every { observeRemoteSnapshotLoaded(any()) } returns remoteLoaded
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
                 every { state } returns providerState
@@ -172,6 +180,184 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
     }
 
     @Test
+    fun `profile snapshot ignores global tracking next up rows from another profile`() = runTest {
+        val activeProfileId = MutableStateFlow(2)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val persistedProfileIds = mutableListOf<Int>()
+        val persistedSnapshots = mutableListOf<ContinueWatchingSnapshot>()
+        val snapshotSlot = slot<ContinueWatchingSnapshot>()
+        val profileSlot = slot<Int>()
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+            every { write(capture(snapshotSlot), profileId = capture(profileSlot)) } answers {
+                persistedSnapshots += snapshotSlot.captured
+                persistedProfileIds += profileSlot.captured
+            }
+        }
+        val leakedProfileOneNextUp = TrackingNextUpEntry(
+            contentId = "series:profile-one",
+            name = "Profile One Only",
+            season = 1,
+            episode = 2,
+            episodeTitle = "Leak",
+            videoId = "series:profile-one:1:2",
+            firstAired = "2024-01-01T00:00:00.000Z",
+            firstAiredMs = 1L,
+            activityAtMs = 10L
+        )
+
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeProgress(2) } returns MutableStateFlow(listOf(sampleProgress("tt-profile-two")))
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(2) } returns MutableStateFlow(true)
+                every { observeAllProgress() } returns flowOf(listOf(sampleProgress("tt-profile-one")))
+                every { observeAllProgress(2) } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp() } returns flowOf(listOf(leakedProfileOneNextUp))
+                every { observeContinueWatchingNextUp(2) } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(listOf(leakedProfileOneNextUp))
+                every { observeSyntheticContinueWatchingNextUp(2) } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                val trackingState = MutableStateFlow(
+                    EffectiveTrackingProviderState(traktAuthenticated = true)
+                )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        awaitCondition {
+            persistedProfileIds.contains(2)
+        }
+
+        val profileTwoWrites = persistedProfileIds.zip(persistedSnapshots)
+            .filter { (profileId, _) -> profileId == 2 }
+            .map { (_, snapshot) -> snapshot }
+        assertFalse(
+            "Profile 2 must not persist global profile 1 next-up rows",
+            profileTwoWrites.any { snapshot ->
+                snapshot.nextUpItems.any { it.contentId == "series:profile-one" } ||
+                    snapshot.traktUpNextItems.any { it.contentId == "series:profile-one" } ||
+                    snapshot.resumeItems.any { it.contentId == "tt-profile-one" }
+            }
+        )
+    }
+
+    @Test
+    fun `first live publish after profile switch does not retain contaminated cached rows`() = runTest {
+        val activeProfileId = MutableStateFlow(1)
+        val profileSwitched = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns profileSwitched
+        }
+        val remoteLoaded = MutableStateFlow(false)
+        val profileOneProgress = MutableStateFlow(listOf(sampleProgress("tt-profile-one")))
+        val profileTwoProgress = MutableStateFlow(listOf(sampleProgress("tt-profile-two")))
+        val persistedProfileIds = mutableListOf<Int>()
+        val persistedSnapshots = mutableListOf<ContinueWatchingSnapshot>()
+        val snapshotSlot = slot<ContinueWatchingSnapshot>()
+        val profileSlot = slot<Int>()
+        val contaminatedProfileTwoSnapshot = ContinueWatchingSnapshot(
+            resumeItems = listOf(sampleProgress("tt-profile-one")),
+            records = listOf(
+                ContinueWatchingRecord(
+                    profileId = 2,
+                    parentId = "tt-profile-one",
+                    contentId = "tt-profile-one",
+                    provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+                    routingVersion = 1,
+                    positionMs = 100L,
+                    durationMs = 1_000L,
+                    episodeContext = null,
+                    clickTimeDisplayMetadata = null,
+                    source = ContinueWatchingRecord.Source.REMOTE,
+                    updatedAt = 10L
+                )
+            ),
+            updatedAtMs = 10L
+        )
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } answers {
+                when (firstArg<Int>()) {
+                    2 -> contaminatedProfileTwoSnapshot
+                    else -> null
+                }
+            }
+            every { write(capture(snapshotSlot), profileId = capture(profileSlot)) } answers {
+                persistedSnapshots += snapshotSlot.captured
+                persistedProfileIds += profileSlot.captured
+            }
+        }
+
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeProgress(1) } returns profileOneProgress
+                every { observeProgress(2) } returns profileTwoProgress
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded(any()) } returns remoteLoaded
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+                every { observeRemoteSnapshotLoaded() } returns remoteLoaded
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                val trackingState = MutableStateFlow(
+                    EffectiveTrackingProviderState(traktAuthenticated = true)
+                )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        activeProfileId.value = 2
+        profileSwitched.emit(2)
+        remoteLoaded.value = true
+
+        awaitCondition {
+            persistedProfileIds.zip(persistedSnapshots).any { (profileId, snapshot) ->
+                profileId == 2 && snapshot.resumeItems.any { it.contentId == "tt-profile-two" }
+            }
+        }
+
+        val profileTwoWrites = persistedProfileIds.zip(persistedSnapshots)
+            .filter { (profileId, snapshot) ->
+                profileId == 2 && snapshot.resumeItems.any { it.contentId == "tt-profile-two" }
+            }
+            .map { (_, snapshot) -> snapshot }
+        assertFalse(
+            "Profile 2 first live publish must not retain contaminated cached profile 1 rows",
+            profileTwoWrites.any { snapshot ->
+                snapshot.resumeItems.any { it.contentId == "tt-profile-one" } ||
+                    snapshot.records.any { it.contentId == "tt-profile-one" }
+            }
+        )
+    }
+
+    @Test
     fun `continue watching ownership rail is profile scoped and canonicalized`() = runTest {
         val activeProfileId = MutableStateFlow(7)
         val profileManager = mockk<ProfileManager> {
@@ -187,8 +373,12 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
                 val trackingState = MutableStateFlow(
@@ -240,8 +430,12 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             },
             trackingProviderStateService = mockk {
                 val trackingState = MutableStateFlow(

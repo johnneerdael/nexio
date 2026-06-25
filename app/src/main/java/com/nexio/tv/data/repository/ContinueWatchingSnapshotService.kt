@@ -328,6 +328,10 @@ private data class LiveContinueWatchingSnapshotEmission(
     val completedProgress: List<WatchProgress> = emptyList()
 )
 
+private data class LiveContinueWatchingPublishDecision(
+    val canRetainMissingRows: Boolean
+)
+
 private data class LiveContinueWatchingProfileLanguage(
     val profileId: Int,
     val isAuthenticated: Boolean,
@@ -439,13 +443,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val liveProfileGateLock = Any()
     private val liveProfilesReady = mutableSetOf<Int>()
     private val profilesAwaitingRemoteReset = mutableSetOf<Int>()
-    private val profilesThatObservedRemoteReset = mutableSetOf<Int>()
     private val explicitResumeRemovalAliasesByProfile = mutableMapOf<Int, MutableMap<String, Long>>()
     private val explicitResumeRemovalTtlMs = 10 * 60_000L
 
     init {
         synchronized(liveProfileGateLock) {
-            liveProfilesReady += activeProfileId()
+            profilesAwaitingRemoteReset += activeProfileId()
         }
         scope.coroutineContext[Job]?.invokeOnCompletion {
             reemitJob = null
@@ -500,10 +503,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
             }
         }
 
+        var lastLiveProfileId = activeProfileId()
         scope.launch {
             activeProfileIdFlow()
                 .distinctUntilChanged()
                 .flatMapLatest { profileId ->
+                    if (profileId != lastLiveProfileId) {
+                        markProfileAwaitingLiveReset(profileId)
+                        lastLiveProfileId = profileId
+                    }
                     trackingProviderStateService.stateForProfile(profileId).map { state ->
                         profileId to state.hasAuthenticatedProvider
                     }.distinctUntilChanged()
@@ -545,11 +553,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     } else {
                         hasSeenAuthenticatedSession = true
                         combine(
-                            trackingProgressService.observeRemoteSnapshotLoaded(),
+                            trackingProgressService.observeRemoteSnapshotLoaded(profileId),
                             watchProgressRepository.observeProgress(profileId),
-                            trackingProgressService.observeAllProgress(),
-                            trackingProgressService.observeContinueWatchingNextUp(),
-                            trackingProgressService.observeSyntheticContinueWatchingNextUp()
+                            trackingProgressService.observeAllProgress(profileId),
+                            trackingProgressService.observeContinueWatchingNextUp(profileId),
+                            trackingProgressService.observeSyntheticContinueWatchingNextUp(profileId)
                         ) { hasLoadedRemoteSnapshot, localProgress, trackingProgress, nextUpEntries, traktUpNextEntries ->
                             if (!hasLoadedRemoteSnapshot) {
                                 LiveContinueWatchingSnapshotEmission(
@@ -581,19 +589,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     }
                 }
                 .collectLatest { emission ->
-                    noteRemoteSnapshotState(
-                        profileId = emission.profileId,
-                        hasLoadedRemoteSnapshot = emission.hasLoadedRemoteSnapshot
-                    )
                     val snapshot = emission.snapshot ?: return@collectLatest
-                    if (!canPublishLiveSnapshot(emission.profileId)) {
-                        Log.d(
-                            "ContinueWatching",
-                            "Skipping live continue watching snapshot before profile=${emission.profileId} remote reset"
-                        )
-                        return@collectLatest
-                    }
-                    val publishSnapshot = if (emission.retainMissingRows) {
+                    val publishDecision = liveSnapshotPublishDecision(emission.profileId)
+                    val publishSnapshot = if (emission.retainMissingRows && publishDecision.canRetainMissingRows) {
                         retainStableRowsFromPreviousSnapshot(
                             candidate = snapshot,
                             previous = rawSnapshotState.value.snapshot,
@@ -3246,32 +3244,23 @@ class ContinueWatchingSnapshotService @Inject constructor(
         synchronized(liveProfileGateLock) {
             if (profileId !in liveProfilesReady) {
                 profilesAwaitingRemoteReset += profileId
-                profilesThatObservedRemoteReset -= profileId
             }
         }
     }
 
-    private fun noteRemoteSnapshotState(profileId: Int, hasLoadedRemoteSnapshot: Boolean) {
-        synchronized(liveProfileGateLock) {
-            if (!hasLoadedRemoteSnapshot && profileId in profilesAwaitingRemoteReset) {
-                profilesThatObservedRemoteReset += profileId
-            }
-        }
-    }
-
-    private fun canPublishLiveSnapshot(profileId: Int): Boolean {
+    private fun liveSnapshotPublishDecision(profileId: Int): LiveContinueWatchingPublishDecision {
         synchronized(liveProfileGateLock) {
             if (profileId !in profilesAwaitingRemoteReset) {
                 liveProfilesReady += profileId
-                return true
-            }
-            if (profileId !in profilesThatObservedRemoteReset) {
-                return false
+                return LiveContinueWatchingPublishDecision(
+                    canRetainMissingRows = true
+                )
             }
             profilesAwaitingRemoteReset -= profileId
-            profilesThatObservedRemoteReset -= profileId
             liveProfilesReady += profileId
-            return true
+            return LiveContinueWatchingPublishDecision(
+                canRetainMissingRows = false
+            )
         }
     }
 

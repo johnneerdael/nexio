@@ -25,6 +25,19 @@ class DefaultTrackingProgressServiceTest {
         every { this@mockk.state } returns flowOf(state)
     }
 
+    private fun profileScopedTrackingProviderStateService(
+        profileState: EffectiveTrackingProviderState
+    ) = mockk<TrackingProviderStateService> {
+        every { this@mockk.state } returns flowOf(
+            EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true
+            )
+        )
+        every { stateForProfile(any()) } returns flowOf(EffectiveTrackingProviderState())
+        every { stateForProfile(2) } returns flowOf(profileState)
+    }
+
     private fun multiProviderTrackingProviderStateService() = mockk<TrackingProviderStateService> {
         val state = EffectiveTrackingProviderState(
             effectiveProvider = TrackingProvider.TRAKT,
@@ -147,6 +160,66 @@ class DefaultTrackingProgressServiceTest {
         val observed = service.observeRemoteSnapshotLoaded().firstValue()
 
         assertEquals(false, observed)
+    }
+
+    @Test
+    fun `profile scoped observeAllProgress reads requested profile provider state`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+        val activeProfileProgress = listOf(sampleProgress("tt-active"))
+        val profileTwoProgress = listOf(sampleProgress("tt-profile-two"))
+
+        every { traktService.observeAllProgress() } returns flowOf(activeProfileProgress)
+        every { traktService.observeAllProgress(2) } returns flowOf(profileTwoProgress)
+        every { simklService.observeAllProgress() } returns flowOf(emptyList())
+        every { simklService.observeAllProgress(any()) } returns flowOf(emptyList())
+
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = profileScopedTrackingProviderStateService(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.TRAKT,
+                    traktAuthenticated = true
+                )
+            )
+        )
+
+        val observed = service.observeAllProgress(2).firstValue()
+
+        assertEquals(profileTwoProgress, observed)
+    }
+
+    @Test
+    fun `profile scoped next up reads requested profile provider state`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+        val activeNextUp = listOf(traktNextUp("series:active"))
+        val profileTwoNextUp = listOf(traktNextUp("series:profile-two"))
+
+        every { traktService.observeContinueWatchingNextUp() } returns flowOf(activeNextUp)
+        every { traktService.observeContinueWatchingNextUp(2) } returns flowOf(profileTwoNextUp)
+        every { traktService.observeSyntheticContinueWatchingNextUp() } returns flowOf(activeNextUp)
+        every { traktService.observeSyntheticContinueWatchingNextUp(2) } returns flowOf(profileTwoNextUp)
+        every { simklService.observeContinueWatchingNextUp() } returns flowOf(emptyList())
+        every { simklService.observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+        every { simklService.observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+        every { simklService.observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = profileScopedTrackingProviderStateService(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.TRAKT,
+                    traktAuthenticated = true
+                )
+            )
+        )
+
+        val observed = service.observeContinueWatchingNextUp(2).firstValue()
+
+        assertEquals("series:profile-two", observed.single().contentId)
     }
 
     @Test
@@ -315,4 +388,17 @@ class DefaultTrackingProgressServiceTest {
             progressPercent = 100f
         )
     }
+
+    private fun traktNextUp(contentId: String): TraktProgressService.NextUpEntry =
+        TraktProgressService.NextUpEntry(
+            contentId = contentId,
+            name = contentId,
+            season = 1,
+            episode = 1,
+            episodeTitle = null,
+            videoId = "$contentId:1:1",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 1L
+        )
 }

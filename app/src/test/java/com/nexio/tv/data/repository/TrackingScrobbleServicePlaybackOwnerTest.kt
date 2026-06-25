@@ -49,7 +49,7 @@ class TrackingScrobbleServicePlaybackOwnerTest {
 
         // verify the underlying trakt service got ownerProfileId = 1 (owner.ownerProfileId)
         coVerify(exactly = 1) {
-            trakt.scrobbleStart(any(), 10f, ownerProfileId = 1)
+            trakt.scrobbleStart(any(), 10f, ownerProfileId = 1, ownerSessionId = "session-1")
         }
     }
 

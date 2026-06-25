@@ -35,6 +35,12 @@ class TraktScrobbleServiceProfileBoundaryTest {
         }
         val authService = mockk<TraktAuthService> {
             coEvery { getAuthState(any()) } returns authenticatedState()
+            coEvery { mutationAccountScopedSession(any()) } answers {
+                firstArg<TrackingAuthSession>().copy(
+                    credentialHash = "credential-hash",
+                    accountIdHash = "account-hash"
+                )
+            }
             every { hasRequiredCredentials() } returns true
             every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 2)
         }
@@ -89,6 +95,12 @@ class TraktScrobbleServiceProfileBoundaryTest {
         }
         val authService = mockk<TraktAuthService> {
             coEvery { getAuthState(any()) } returns authenticatedState()
+            coEvery { mutationAccountScopedSession(any()) } answers {
+                firstArg<TrackingAuthSession>().copy(
+                    credentialHash = "credential-hash",
+                    accountIdHash = "account-hash"
+                )
+            }
             every { hasRequiredCredentials() } returns true
             every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         }

@@ -75,6 +75,12 @@ class TrackingProgressServiceProfileBoundaryRecheckTest {
         }
         val authService = mockk<TraktAuthService> {
             coEvery { getAuthState(any()) } returns authenticatedState()
+            coEvery { mutationAccountScopedSession(any()) } answers {
+                firstArg<TrackingAuthSession>().copy(
+                    credentialHash = "credential-hash",
+                    accountIdHash = "account-hash"
+                )
+            }
             every { hasRequiredCredentials() } returns true
             // The auth session for profile 1 is resolved to the *original* (stale) session "s1"
             every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
@@ -133,6 +139,12 @@ class TrackingProgressServiceProfileBoundaryRecheckTest {
         }
         val authService = mockk<TraktAuthService> {
             coEvery { getAuthState(any()) } returns authenticatedState()
+            coEvery { mutationAccountScopedSession(any()) } answers {
+                firstArg<TrackingAuthSession>().copy(
+                    credentialHash = "credential-hash",
+                    accountIdHash = "account-hash"
+                )
+            }
             every { hasRequiredCredentials() } returns true
             every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         }

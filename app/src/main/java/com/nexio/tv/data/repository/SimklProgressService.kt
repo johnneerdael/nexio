@@ -112,9 +112,13 @@ class SimklProgressService @Inject constructor(
     }
 
     fun observeAllProgress(): Flow<List<WatchProgress>> = remoteProgress
+    fun observeAllProgress(profileId: Int): Flow<List<WatchProgress>> = runtimeState(profileId).remoteProgress
     fun observeRemoteSnapshotLoaded(): Flow<Boolean> = loaded
+    fun observeRemoteSnapshotLoaded(profileId: Int): Flow<Boolean> = runtimeState(profileId).loaded
     fun observeContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> = nextUp
+    fun observeContinueWatchingNextUp(profileId: Int): Flow<List<TrackingNextUpEntry>> = runtimeState(profileId).nextUp
     fun observeSyntheticContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> = nextUp
+    fun observeSyntheticContinueWatchingNextUp(profileId: Int): Flow<List<TrackingNextUpEntry>> = runtimeState(profileId).nextUp
     fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
         episodeProgress.map { it[contentId].orEmpty() }
 
