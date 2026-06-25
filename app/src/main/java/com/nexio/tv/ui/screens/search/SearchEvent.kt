@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.search
 sealed interface SearchEvent {
     data class QueryChanged(val query: String) : SearchEvent
     data object SubmitSearch : SearchEvent
+    data class SelectImdbSuggestion(val title: String) : SearchEvent
     data object ClearRecentSearches : SearchEvent
 
     data class LoadMoreCatalog(

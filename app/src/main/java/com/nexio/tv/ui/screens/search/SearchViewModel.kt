@@ -233,6 +233,7 @@ class SearchViewModel @Inject constructor(
         when (event) {
             is SearchEvent.QueryChanged -> onQueryChanged(event.query)
             SearchEvent.SubmitSearch -> submitSearch()
+            is SearchEvent.SelectImdbSuggestion -> saveRecentSearch(event.title)
             SearchEvent.ClearRecentSearches -> clearRecentSearches()
             is SearchEvent.LoadMoreCatalog -> loadMoreCatalogItems(
                 catalogId = event.catalogId,
@@ -436,6 +437,15 @@ class SearchViewModel @Inject constructor(
         performSearch(_uiState.value.query)
     }
 
+    private fun saveRecentSearch(rawQuery: String) {
+        val query = rawQuery.trim()
+        if (query.length >= 2) {
+            viewModelScope.launch {
+                searchHistoryDataStore.saveRecentSearch(query, DEFAULT_MAX_RECENT_SEARCHES)
+            }
+        }
+    }
+
     private fun clearRecentSearches() {
         viewModelScope.launch {
             searchHistoryDataStore.clearRecentSearches()
@@ -456,11 +466,7 @@ class SearchViewModel @Inject constructor(
             )
         }
 
-        if (query.length >= 2) {
-            viewModelScope.launch {
-                searchHistoryDataStore.saveRecentSearch(query, DEFAULT_MAX_RECENT_SEARCHES)
-            }
-        }
+        saveRecentSearch(query)
 
         // Cancel any in-flight work from the previous query.
         searchJob?.cancel()

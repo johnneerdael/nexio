@@ -95,6 +95,40 @@ class SearchViewModelHistoryTest {
         assertEquals(listOf("Severance"), recentSearches)
     }
 
+    @Test
+    fun `select imdb suggestion persists primary title as recent history entry`() = runTest(dispatcher) {
+        val historyStore = searchHistoryDataStoreForTest()
+        historyStore.clearRecentSearches()
+        val viewModel = SearchViewModel(
+            addonRepository = EmptyAddonRepository(),
+            catalogRepository = EmptyCatalogRepository(),
+            layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
+            playerSettingsDataStore = playerSettingsDataStoreForTest(),
+            searchHistoryDataStore = historyStore,
+            imdbTitleSearchRepository = EmptyImdbTitleSearchRepository,
+            imdbPosterLookupService = mockk<ImdbPosterLookupService>().apply {
+                coEvery { lookupPosterUrl(any(), any(), any()) } returns null
+            },
+            debugSettingsDataStore = mockk<DebugSettingsDataStore>().apply {
+                every { searchPosterPreviewEnabled } returns flowOf(false)
+            },
+            tmdbDiscoveryService = EmptyTmdbDiscoveryClient().createService(),
+            tmdbCatalogSettingsDataStore = TmdbCatalogSettingsDataStore(
+                factory = profileDataStoreFactoryForTest(),
+                profileManager = testProfileManager()
+            )
+        )
+
+        viewModel.onEvent(SearchEvent.SelectImdbSuggestion("  The Matrix  "))
+        testScheduler.advanceUntilIdle()
+
+        val recentSearches = withTimeout(5_000) {
+            historyStore.recentSearches.first { it == listOf("The Matrix") }
+        }
+
+        assertEquals(listOf("The Matrix"), recentSearches)
+    }
+
     private object EmptyImdbTitleSearchRepository : ImdbTitleSearchRepository {
         override suspend fun search(query: String): List<ImdbSuggestion> = emptyList()
     }

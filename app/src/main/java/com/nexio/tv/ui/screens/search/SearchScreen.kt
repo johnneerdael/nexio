@@ -569,6 +569,7 @@ fun SearchScreen(
                         posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                         onSelect = { suggestion ->
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
+                            viewModel.onEvent(SearchEvent.SelectImdbSuggestion(suggestion.primaryTitle))
                             onNavigateToDetail(suggestion.tconst, type, "")
                         },
                         listMaxHeight = 280.dp,
@@ -645,6 +646,7 @@ fun SearchScreen(
                             posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                             onSelect = { suggestion ->
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
+                                viewModel.onEvent(SearchEvent.SelectImdbSuggestion(suggestion.primaryTitle))
                                 onNavigateToDetail(suggestion.tconst, type, "")
                             },
                             listMaxHeight = 280.dp,
