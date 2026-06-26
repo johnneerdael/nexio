@@ -269,11 +269,30 @@ class DefaultTrackingProgressServiceTest {
     }
 
     @Test
-    fun `observeRemoteSnapshotLoaded is ready when any active provider has loaded`() = runTest {
+    fun `observeRemoteSnapshotLoaded waits for every active provider to load`() = runTest {
         val traktService = mockk<TraktProgressService>()
         val simklService = mockk<SimklProgressService>()
 
         every { traktService.observeRemoteSnapshotLoaded() } returns flowOf(false)
+        every { simklService.observeRemoteSnapshotLoaded() } returns flowOf(true)
+
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = multiProviderTrackingProviderStateService()
+        )
+
+        val observed = service.observeRemoteSnapshotLoaded().firstValue()
+
+        assertEquals(false, observed)
+    }
+
+    @Test
+    fun `observeRemoteSnapshotLoaded is ready when all active providers have loaded`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+
+        every { traktService.observeRemoteSnapshotLoaded() } returns flowOf(true)
         every { simklService.observeRemoteSnapshotLoaded() } returns flowOf(true)
 
         val service = DefaultTrackingProgressService(
@@ -353,7 +372,7 @@ class DefaultTrackingProgressServiceTest {
     }
 
     @Test
-    fun `startup refresh does not force Trakt full account sync`() = runTest {
+    fun `startup refresh forces active providers immediately`() = runTest {
         val traktService = mockk<TraktProgressService>(relaxed = true)
         val simklService = mockk<SimklProgressService>(relaxed = true)
         val mdbListService = mockk<com.nexio.tv.data.integration.mdblist.MDBListProgressService>(relaxed = true)
@@ -389,8 +408,8 @@ class DefaultTrackingProgressServiceTest {
 
         service.refreshOnStartup()
 
-        coVerify(exactly = 1) { traktService.requestEventDrivenRefresh() }
-        coVerify(exactly = 0) { traktService.refreshNowImmediate() }
+        coVerify(exactly = 0) { traktService.requestEventDrivenRefresh() }
+        coVerify(exactly = 1) { traktService.refreshNowImmediate() }
         coVerify(exactly = 0) { simklService.refreshNow(2) }
         coVerify(exactly = 1) { simklService.refreshNowImmediate(2) }
         coVerify(exactly = 1) { mdbListService.refreshNowImmediate() }

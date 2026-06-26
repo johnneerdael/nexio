@@ -191,7 +191,7 @@ class DefaultTrackingProgressService @Inject constructor(
                 return snapshotLoadedFlowForProvider(active.single(), profileId)
             }
             return combine(active.map { provider -> snapshotLoadedFlowForProvider(provider, profileId) }) { loaded ->
-                loaded.any { it }
+                loaded.all { it }
             }
         }
 
@@ -386,7 +386,7 @@ class DefaultTrackingProgressService @Inject constructor(
         for (i in active.indices) {
             when (active[i]) {
                 TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate(profileId)
-                TrackingProvider.TRAKT -> traktProgressService.requestEventDrivenRefresh()
+                TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
                 TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
             }
         }
