@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailMembership
 import com.nexio.tv.core.profile.ProfileManager
@@ -11,6 +12,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -56,10 +58,11 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
         }
         val persisted = ContinueWatchingSnapshot(
-            resumeItems = listOf(sampleProgress("tt-persisted")),
+            resumeItems = listOf(sampleProgress("tt-persisted").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK)),
             updatedAtMs = 50L
         )
         val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
             every { read(1) } answers {
                 Thread.sleep(200L)
                 persisted
@@ -68,6 +71,7 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         val service = ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
                 every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(false)
@@ -114,7 +118,9 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             EffectiveTrackingProviderState(traktAuthenticated = true)
         )
         val remoteLoaded = MutableStateFlow(true)
-        val progress = MutableStateFlow(listOf(sampleProgress("tt-default-user")))
+        val progress = MutableStateFlow(
+            listOf(sampleProgress("tt-default-user").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+        )
         val persistedProfileIds = mutableListOf<Int>()
         val persistedSnapshots = mutableListOf<ContinueWatchingSnapshot>()
         val snapshotSlot = slot<ContinueWatchingSnapshot>()
@@ -129,12 +135,13 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
 
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { observeProgress(any()) } returns progress
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns remoteLoaded
                 every { observeRemoteSnapshotLoaded(any()) } returns remoteLoaded
-                every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeAllProgress(any()) } returns progress
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -156,13 +163,17 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
 
         activeProfileId.value = 2
         profileSwitched.emit(2)
-        progress.value = listOf(sampleProgress("tt-default-user", lastWatched = 2L))
+        progress.value = listOf(
+            sampleProgress("tt-default-user", lastWatched = 2L).copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK)
+        )
 
         remoteLoaded.value = false
         progress.value = emptyList()
         Thread.sleep(100L)
         remoteLoaded.value = true
-        progress.value = listOf(sampleProgress("tt-profile-two", lastWatched = 3L))
+        progress.value = listOf(
+            sampleProgress("tt-profile-two", lastWatched = 3L).copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK)
+        )
 
         awaitCondition {
             persistedProfileIds.zip(persistedSnapshots).any { (profileId, snapshot) ->
@@ -213,6 +224,8 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             watchProgressRepository = mockk {
                 every { observeProgress(any()) } returns MutableStateFlow(emptyList())
                 every { observeProgress(2) } returns MutableStateFlow(listOf(sampleProgress("tt-profile-two")))
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(2) } returns MutableStateFlow(listOf(sampleProgress("tt-profile-two")))
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
@@ -265,8 +278,12 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
             every { this@mockk.profileSwitched } returns profileSwitched
         }
         val remoteLoaded = MutableStateFlow(false)
-        val profileOneProgress = MutableStateFlow(listOf(sampleProgress("tt-profile-one")))
-        val profileTwoProgress = MutableStateFlow(listOf(sampleProgress("tt-profile-two")))
+        val profileOneProgress = MutableStateFlow(
+            listOf(sampleProgress("tt-profile-one").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+        )
+        val profileTwoProgress = MutableStateFlow(
+            listOf(sampleProgress("tt-profile-two").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+        )
         val persistedProfileIds = mutableListOf<Int>()
         val persistedSnapshots = mutableListOf<ContinueWatchingSnapshot>()
         val snapshotSlot = slot<ContinueWatchingSnapshot>()
@@ -306,12 +323,13 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
                 every { observeProgress(any()) } returns MutableStateFlow(emptyList())
-                every { observeProgress(1) } returns profileOneProgress
-                every { observeProgress(2) } returns profileTwoProgress
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded(any()) } returns remoteLoaded
                 every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeAllProgress(1) } returns profileOneProgress
+                every { observeAllProgress(2) } returns profileTwoProgress
                 every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeRemoteSnapshotLoaded() } returns remoteLoaded
@@ -358,6 +376,215 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
     }
 
     @Test
+    fun `first live publish retains durable same profile remote rows missing from partial provider refresh`() = runTest {
+        val activeProfileId = MutableStateFlow(2)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val retainedRemote = sampleProgress("tt-retained", lastWatched = 20L)
+            .copy(source = WatchProgress.SOURCE_SIMKL_PLAYBACK)
+        val freshRemote = sampleProgress("tt-fresh", lastWatched = 30L)
+            .copy(source = WatchProgress.SOURCE_SIMKL_PLAYBACK)
+        val persistedProfileIds = mutableListOf<Int>()
+        val persistedSnapshots = mutableListOf<ContinueWatchingSnapshot>()
+        val snapshotSlot = slot<ContinueWatchingSnapshot>()
+        val profileSlot = slot<Int>()
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+            every { read(2) } returns ContinueWatchingSnapshot(
+                resumeItems = listOf(retainedRemote, freshRemote),
+                updatedAtMs = 10L
+            )
+            every { readAnyLanguage(2) } returns ContinueWatchingSnapshot(
+                resumeItems = listOf(retainedRemote, freshRemote),
+                updatedAtMs = 10L
+            )
+            every { write(capture(snapshotSlot), profileId = capture(profileSlot)) } answers {
+                persistedSnapshots += snapshotSlot.captured
+                persistedProfileIds += profileSlot.captured
+            }
+        }
+
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
+                every { observeAllProgress(any()) } returns flowOf(listOf(freshRemote))
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                val trackingState = MutableStateFlow(
+                    EffectiveTrackingProviderState(simklAuthenticated = true)
+                )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        awaitCondition {
+            persistedProfileIds.zip(persistedSnapshots).any { (profileId, snapshot) ->
+                profileId == 2 &&
+                    snapshot.resumeItems.any { it.contentId == retainedRemote.contentId } &&
+                    snapshot.resumeItems.any { it.contentId == freshRemote.contentId }
+            }
+        }
+    }
+
+    @Test
+    fun `inactive profile live emission cannot borrow active session to overwrite its durable snapshot`() = runTest {
+        val activeProfileId = MutableStateFlow(2)
+        val activeProfileSession = MutableStateFlow(
+            ActiveProfileSession(
+                profileId = 2,
+                sessionId = "session-profile-2",
+                sessionOrdinal = 1L,
+                startedAtMs = 1L
+            )
+        )
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.activeProfileSession } returns activeProfileSession
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val attemptedWrites = mutableListOf<Int>()
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+            every { readAnyLanguage(2) } answers {
+                activeProfileSession.value = ActiveProfileSession(
+                    profileId = 1,
+                    sessionId = "session-profile-1",
+                    sessionOrdinal = 2L,
+                    startedAtMs = 2L
+                )
+                null
+            }
+            every { write(any(), profileId = any()) } answers {
+                attemptedWrites += secondArg<Int>()
+            }
+        }
+
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
+                every { observeAllProgress(any()) } returns flowOf(
+                    listOf(sampleProgress("tt-profile-two").copy(source = WatchProgress.SOURCE_SIMKL_PLAYBACK))
+                )
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                val trackingState = MutableStateFlow(
+                    EffectiveTrackingProviderState(simklAuthenticated = true)
+                )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        awaitCondition {
+            activeProfileSession.value.profileId == 1
+        }
+        Thread.sleep(100L)
+
+        assertFalse(
+            "A stale profile 2 emission must not persist after active session moves to profile 1",
+            attemptedWrites.contains(2)
+        )
+    }
+
+    @Test
+    fun `empty durable publish does not overwrite non empty persisted remote snapshot`() = runTest {
+        val activeProfileId = MutableStateFlow(2)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val persistedRemote = sampleProgress("tt-retained", lastWatched = 20L)
+            .copy(source = WatchProgress.SOURCE_SIMKL_PLAYBACK)
+        val persisted = ContinueWatchingSnapshot(
+            resumeItems = listOf(persistedRemote),
+            updatedAtMs = 10L
+        )
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+            every { read(2) } returns persisted
+            every { hasPersistedRowsAnyLanguage(2) } returns true
+        }
+        val service = ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
+                every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                val trackingState = MutableStateFlow(
+                    EffectiveTrackingProviderState(simklAuthenticated = true)
+                )
+                every { state } returns trackingState
+                every { stateForProfile(any()) } returns trackingState
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        service.publishSnapshotForTest(
+            displaySnapshot = ContinueWatchingSnapshot(updatedAtMs = 30L),
+            persistedSnapshot = ContinueWatchingSnapshot(updatedAtMs = 30L),
+            profileId = 2
+        )
+
+        verify(exactly = 0) {
+            snapshotStore.write(
+                match { snapshot ->
+                    snapshot.resumeItems.isEmpty() &&
+                        snapshot.nextUpItems.isEmpty() &&
+                        snapshot.traktUpNextItems.isEmpty()
+                },
+                profileId = 2
+            )
+        }
+    }
+
+    @Test
     fun `continue watching ownership rail is profile scoped and canonicalized`() = runTest {
         val activeProfileId = MutableStateFlow(7)
         val profileManager = mockk<ProfileManager> {
@@ -369,12 +596,15 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         coEvery { ownershipService.upsertRailMembership(capture(capturedMembership)) } returns Unit
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { observeProgress(any()) } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
                 every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
-                every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeAllProgress(any()) } returns flowOf(
+                    listOf(sampleProgress("series:tt0944947").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+                )
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -391,7 +621,9 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
             },
             metadataDiskCacheStore = mockk(relaxed = true),
-            snapshotStore = mockk(relaxed = true),
+            snapshotStore = mockk(relaxed = true) {
+                every { read(any()) } returns null
+            },
             profileManager = profileManager,
             ownershipService = ownershipService
         )
@@ -426,12 +658,15 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
 
         ContinueWatchingSnapshotService(
             watchProgressRepository = mockk {
-                every { observeProgress(any()) } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+                every { observeProgress(any()) } returns MutableStateFlow(emptyList())
+                every { observeSessionProgress(any()) } returns MutableStateFlow(emptyList())
             },
             trackingProgressService = mockk {
                 every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
                 every { observeRemoteSnapshotLoaded(any()) } returns MutableStateFlow(true)
-                every { observeAllProgress(any()) } returns flowOf(emptyList())
+                every { observeAllProgress(any()) } returns flowOf(
+                    listOf(sampleProgress("series:tt0944947").copy(source = WatchProgress.SOURCE_TRAKT_PLAYBACK))
+                )
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())

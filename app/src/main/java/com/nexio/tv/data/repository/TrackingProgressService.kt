@@ -210,24 +210,18 @@ class DefaultTrackingProgressService @Inject constructor(
         state: EffectiveTrackingProviderState,
         profileId: Int? = null
     ): Flow<List<TrackingNextUpEntry>> {
-            if (!state.canReadEffectiveProvider) {
+            val active = state.activeProviders
+            if (active.isEmpty()) {
                 return flowOf(emptyList())
             }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> return (profileId
-                    ?.let(simklProgressService::observeContinueWatchingNextUp)
-                    ?: simklProgressService.observeContinueWatchingNextUp())
+            if (active.size == 1) {
+                return continueWatchingNextUpFlowForProvider(active.single(), profileId)
                     .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
-                TrackingProvider.TRAKT -> return (profileId
-                    ?.let(traktProgressService::observeContinueWatchingNextUp)
-                    ?: traktProgressService.observeContinueWatchingNextUp())
-                    .mapLatest { items ->
-                        tvdbContinueWatchingTimingEnricher.enrich(
-                            items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
-                        )
-                    }
-                TrackingProvider.MDBLIST -> return flowOf(emptyList())
             }
+            return combine(active.map { provider -> continueWatchingNextUpFlowForProvider(provider, profileId) }) { providerRows ->
+                providerRows.flatMap { it }
+                    .sortedByDescending { it.activityAtMs }
+            }.mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
         }
 
     override fun observeSyntheticContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> =
@@ -244,25 +238,51 @@ class DefaultTrackingProgressService @Inject constructor(
         state: EffectiveTrackingProviderState,
         profileId: Int? = null
     ): Flow<List<TrackingNextUpEntry>> {
-            if (!state.canReadEffectiveProvider) {
+            val active = state.activeProviders
+            if (active.isEmpty()) {
                 return flowOf(emptyList())
             }
-            when (state.effectiveProvider) {
-                TrackingProvider.SIMKL -> return (profileId
-                    ?.let(simklProgressService::observeSyntheticContinueWatchingNextUp)
-                    ?: simklProgressService.observeSyntheticContinueWatchingNextUp())
+            if (active.size == 1) {
+                return syntheticContinueWatchingNextUpFlowForProvider(active.single(), profileId)
                     .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
-                TrackingProvider.TRAKT -> return (profileId
-                    ?.let(traktProgressService::observeSyntheticContinueWatchingNextUp)
-                    ?: traktProgressService.observeSyntheticContinueWatchingNextUp())
-                    .mapLatest { items ->
-                        tvdbContinueWatchingTimingEnricher.enrich(
-                            items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
-                        )
-                    }
-                TrackingProvider.MDBLIST -> return flowOf(emptyList())
             }
+            return combine(active.map { provider -> syntheticContinueWatchingNextUpFlowForProvider(provider, profileId) }) { providerRows ->
+                providerRows.flatMap { it }
+                    .sortedByDescending { it.activityAtMs }
+            }.mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
         }
+
+    private fun continueWatchingNextUpFlowForProvider(
+        provider: TrackingProvider,
+        profileId: Int? = null
+    ): Flow<List<TrackingNextUpEntry>> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> profileId
+                ?.let(simklProgressService::observeContinueWatchingNextUp)
+                ?: simklProgressService.observeContinueWatchingNextUp()
+            TrackingProvider.TRAKT -> (profileId
+                ?.let(traktProgressService::observeContinueWatchingNextUp)
+                ?: traktProgressService.observeContinueWatchingNextUp())
+                .mapLatest { items -> items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry) }
+            TrackingProvider.MDBLIST -> flowOf(emptyList())
+        }
+    }
+
+    private fun syntheticContinueWatchingNextUpFlowForProvider(
+        provider: TrackingProvider,
+        profileId: Int? = null
+    ): Flow<List<TrackingNextUpEntry>> {
+        return when (provider) {
+            TrackingProvider.SIMKL -> profileId
+                ?.let(simklProgressService::observeSyntheticContinueWatchingNextUp)
+                ?: simklProgressService.observeSyntheticContinueWatchingNextUp()
+            TrackingProvider.TRAKT -> (profileId
+                ?.let(traktProgressService::observeSyntheticContinueWatchingNextUp)
+                ?: traktProgressService.observeSyntheticContinueWatchingNextUp())
+                .mapLatest { items -> items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry) }
+            TrackingProvider.MDBLIST -> flowOf(emptyList())
+        }
+    }
 
     override fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
@@ -365,7 +385,7 @@ class DefaultTrackingProgressService @Inject constructor(
         val active = state.activeProviders.toList()
         for (i in active.indices) {
             when (active[i]) {
-                TrackingProvider.SIMKL -> simklProgressService.refreshNow(profileId)
+                TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate(profileId)
                 TrackingProvider.TRAKT -> traktProgressService.requestEventDrivenRefresh()
                 TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
             }

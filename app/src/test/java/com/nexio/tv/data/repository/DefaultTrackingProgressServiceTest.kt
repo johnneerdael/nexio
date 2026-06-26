@@ -223,6 +223,52 @@ class DefaultTrackingProgressServiceTest {
     }
 
     @Test
+    fun `multi provider next up includes Trakt and Simkl when Simkl is effective provider`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+        val traktNextUp = listOf(traktNextUp("series:trakt").copy(activityAtMs = 20L))
+        val simklNextUp = listOf(
+            TrackingNextUpEntry(
+                contentId = "series:simkl",
+                name = "series:simkl",
+                season = 1,
+                episode = 2,
+                episodeTitle = null,
+                videoId = "series:simkl:1:2",
+                firstAired = null,
+                firstAiredMs = 0L,
+                activityAtMs = 10L
+            )
+        )
+        val trackingProviderStateService = mockk<TrackingProviderStateService> {
+            every { state } returns flowOf(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.SIMKL,
+                    traktAuthenticated = true,
+                    simklAuthenticated = true
+                )
+            )
+        }
+
+        every { traktService.observeContinueWatchingNextUp() } returns flowOf(traktNextUp)
+        every { traktService.observeSyntheticContinueWatchingNextUp() } returns flowOf(traktNextUp)
+        every { simklService.observeContinueWatchingNextUp() } returns flowOf(simklNextUp)
+        every { simklService.observeSyntheticContinueWatchingNextUp() } returns flowOf(simklNextUp)
+
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = trackingProviderStateService
+        )
+
+        val observed = service.observeContinueWatchingNextUp().firstValue()
+        val synthetic = service.observeSyntheticContinueWatchingNextUp().firstValue()
+
+        assertEquals(listOf("series:trakt", "series:simkl"), observed.map { it.contentId })
+        assertEquals(listOf("series:trakt", "series:simkl"), synthetic.map { it.contentId })
+    }
+
+    @Test
     fun `observeRemoteSnapshotLoaded is ready when any active provider has loaded`() = runTest {
         val traktService = mockk<TraktProgressService>()
         val simklService = mockk<SimklProgressService>()
@@ -345,8 +391,8 @@ class DefaultTrackingProgressServiceTest {
 
         coVerify(exactly = 1) { traktService.requestEventDrivenRefresh() }
         coVerify(exactly = 0) { traktService.refreshNowImmediate() }
-        coVerify(exactly = 1) { simklService.refreshNow(2) }
-        coVerify(exactly = 0) { simklService.refreshNowImmediate() }
+        coVerify(exactly = 0) { simklService.refreshNow(2) }
+        coVerify(exactly = 1) { simklService.refreshNowImmediate(2) }
         coVerify(exactly = 1) { mdbListService.refreshNowImmediate() }
     }
 

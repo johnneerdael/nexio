@@ -623,20 +623,43 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 .collectLatest { emission ->
                     val snapshot = emission.snapshot ?: return@collectLatest
                     val publishDecision = liveSnapshotPublishDecision(emission.profileId)
-                    val publishSnapshot = if (emission.retainMissingRows && publishDecision.canRetainMissingRows) {
-                        retainStableRowsFromPreviousSnapshot(
-                            candidate = snapshot,
-                            previous = rawSnapshotState.value.snapshot,
-                            completedProgress = emission.completedProgress
+                    val retentionBase = if (emission.retainMissingRows) {
+                        liveRetentionBase(
+                            profileId = emission.profileId,
+                            canUseCurrentSnapshot = publishDecision.canRetainMissingRows
                         )
+                    } else {
+                        null
+                    }
+                    val publishSnapshot = if (emission.retainMissingRows) {
+                        if (retentionBase != null) {
+                            retainStableRowsFromPreviousSnapshot(
+                                candidate = snapshot,
+                                previous = retentionBase,
+                                completedProgress = emission.completedProgress
+                            )
+                        } else {
+                            snapshot
+                        }
                     } else {
                         snapshot
                     }
+                    val publishPersistedSnapshot = if (emission.retainMissingRows && retentionBase != null) {
+                        emission.persistedSnapshot?.let { persistedSnapshot ->
+                            retainStableRowsFromPreviousSnapshot(
+                                candidate = persistedSnapshot,
+                                previous = retentionBase,
+                                completedProgress = emission.completedProgress
+                            )
+                        }
+                    } else {
+                        emission.persistedSnapshot
+                    }
                     updateSnapshot(
                         snapshot = publishSnapshot,
-                        persistedSnapshot = emission.persistedSnapshot,
+                        persistedSnapshot = publishPersistedSnapshot,
                         profileId = emission.profileId,
-                        resultSession = activeProfileSession()
+                        resultSession = sessionForProfile(emission.profileId)
                     )
                 }
         }
@@ -680,6 +703,25 @@ class ContinueWatchingSnapshotService @Inject constructor(
             persistedSnapshotReady.value = true
         }
     }
+
+    private suspend fun readPersistedSnapshotForRetention(profileId: Int): ContinueWatchingSnapshot? {
+        return snapshotStore.readAnyLanguage(profileId)
+            ?.let { persisted -> upgradeStaleRouteSnapshots(sanitizePersistedSnapshot(persisted)) }
+    }
+
+    private suspend fun liveRetentionBase(
+        profileId: Int,
+        canUseCurrentSnapshot: Boolean
+    ): ContinueWatchingSnapshot? {
+        val current = rawSnapshotState.value
+            .takeIf { canUseCurrentSnapshot && it.profileId == profileId }
+            ?.snapshot
+        if (current != null && current.hasContinueWatchingRows()) return current
+        return readPersistedSnapshotForRetention(profileId) ?: current
+    }
+
+    private fun ContinueWatchingSnapshot.hasContinueWatchingRows(): Boolean =
+        resumeItems.isNotEmpty() || nextUpItems.isNotEmpty() || traktUpNextItems.isNotEmpty()
 
     fun observeSnapshot(): Flow<ProfileOwnedContinueWatchingSnapshot> {
         return combine(snapshotState, persistedSnapshotReady) { snapshot, ready ->
@@ -3156,15 +3198,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
             }
         }
         if (durableHydrated != null) {
-            syncContinueWatchingRail(durableHydrated, profileId)
-            snapshotStore.write(durableHydrated, profileId = profileId)
-            emitWrite(
-                profileId = profileId,
-                recordCount = durableHydrated.resumeItems.size +
-                    durableHydrated.nextUpItems.size +
-                    durableHydrated.traktUpNextItems.size
-            )
-            activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
+            val hasDurableRows = durableHydrated.hasContinueWatchingRows()
+            val hasPersistedRows = snapshotStore.hasPersistedRowsAnyLanguage(profileId)
+            val shouldWriteDurable = hasDurableRows || !hasPersistedRows
+            if (shouldWriteDurable) {
+                syncContinueWatchingRail(durableHydrated, profileId)
+                snapshotStore.write(durableHydrated, profileId = profileId)
+                emitWrite(
+                    profileId = profileId,
+                    recordCount = durableHydrated.resumeItems.size +
+                        durableHydrated.nextUpItems.size +
+                        durableHydrated.traktUpNextItems.size
+                )
+                activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
+            }
         }
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = displayHydrated)
         rawSnapshotState.value = owned

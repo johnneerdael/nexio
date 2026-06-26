@@ -72,10 +72,8 @@ class SimklProgressServiceTest {
                             "type": "episode",
                             "episode": {
                               "season": 1,
-                              "episode": 5,
-                              "title": "Episode 5",
-                              "tvdb_season": 1,
-                              "tvdb_number": 5
+                              "number": 5,
+                              "title": "Episode 5"
                             },
                             "show": {
                               "title": "Breaking Bad",

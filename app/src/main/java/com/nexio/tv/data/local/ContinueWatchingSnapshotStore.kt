@@ -117,7 +117,7 @@ class ContinueWatchingSnapshotStore private constructor(
             }
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore continue watching snapshot", error)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
@@ -126,12 +126,56 @@ class ContinueWatchingSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ) {
         runCatching {
+            if (!snapshot.hasContinueWatchingRows() && hasPersistedRowsAnyLanguage(profileId)) {
+                Log.d(TAG, "Skipping empty continue watching snapshot overwrite for profile=$profileId")
+                return@runCatching
+            }
             val target = snapshotFileFor(profileId)
             target.parentFile?.mkdirs()
             writeSnapshotToFile(snapshot, target)
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist continue watching snapshot", error)
         }
+    }
+
+    fun hasPersistedRowsAnyLanguage(profileId: Int = activeProfileId()): Boolean {
+        return runCatching {
+            val file = snapshotFileFor(profileId)
+            if (!file.exists()) return@runCatching false
+            FileInputStream(file).use { fis ->
+                BufferedReader(InputStreamReader(fis, Charsets.UTF_8)).use { br ->
+                    JsonReader(br).use { reader ->
+                        if (reader.peek() != JsonToken.BEGIN_OBJECT) return@runCatching false
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "resumeItems", "movieProgressItems", "nextUpItems", "traktUpNextItems" -> {
+                                    if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                                        if (reader.arrayHasAnyElement()) {
+                                            return@runCatching true
+                                        }
+                                    } else {
+                                        reader.skipValue()
+                                    }
+                                }
+                                else -> reader.skipValue()
+                            }
+                        }
+                        false
+                    }
+                }
+            }
+        }.getOrDefault(false)
+    }
+
+    fun readAnyLanguage(profileId: Int = activeProfileId()): ContinueWatchingSnapshot? {
+        return runCatching {
+            val file = snapshotFileFor(profileId)
+            if (!file.exists()) return@runCatching null
+            streamReadSnapshot(file, validateLanguage = false)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to restore continue watching snapshot for retention", error)
+        }.getOrNull()
     }
 
     fun clear(profileId: Int = activeProfileId()) {
@@ -151,7 +195,10 @@ class ContinueWatchingSnapshotStore private constructor(
         return File(parent, "p${profileId}.json")
     }
 
-    private fun streamReadSnapshot(file: File): ContinueWatchingSnapshot? {
+    private fun streamReadSnapshot(
+        file: File,
+        validateLanguage: Boolean = true
+    ): ContinueWatchingSnapshot? {
         val expectedLanguageTag = currentLanguageTag()
         var schemaVersion = -1
         var languageTag: String? = null
@@ -187,7 +234,7 @@ class ContinueWatchingSnapshotStore private constructor(
                                 }
                                 "languageTag" -> {
                                     languageTag = reader.nextString().trim()
-                                    if (languageTag.isNullOrBlank() || languageTag != expectedLanguageTag) {
+                                    if (languageTag.isNullOrBlank() || (validateLanguage && languageTag != expectedLanguageTag)) {
                                         return@runCatching null
                                     }
                                 }
@@ -283,6 +330,19 @@ class ContinueWatchingSnapshotStore private constructor(
             Log.w(TAG, "Failed to stream-read continue watching snapshot", error)
         }.getOrNull()
     }
+
+    private fun JsonReader.arrayHasAnyElement(): Boolean {
+        beginArray()
+        val hasElement = hasNext()
+        while (hasNext()) {
+            skipValue()
+        }
+        endArray()
+        return hasElement
+    }
+
+    private fun ContinueWatchingSnapshot.hasContinueWatchingRows(): Boolean =
+        resumeItems.isNotEmpty() || nextUpItems.isNotEmpty() || traktUpNextItems.isNotEmpty()
 
     private fun decodeNextUpItemArray(array: JsonArray): List<TrackingNextUpEntry> {
         if (array.size() == 0) return emptyList()

@@ -257,6 +257,7 @@ class SimklProgressService @Inject constructor(
                         ?: return@forEach
                     val episodeNumber = episode.numberValue("tvdb_number")?.toInt()
                         ?: episode.numberValue("episode")?.toInt()
+                        ?: episode.numberValue("number")?.toInt()
                         ?: return@forEach
                     val playbackId = item.numberValue("id")?.toLong() ?: return@forEach
                     put("$contentId:$seasonNumber:$episodeNumber", playbackId)
@@ -560,6 +561,7 @@ class SimklProgressService @Inject constructor(
             ?: return null
         val episodeNumber = episode.numberValue("tvdb_number")?.toInt()
             ?: episode.numberValue("episode")?.toInt()
+            ?: episode.numberValue("number")?.toInt()
             ?: return null
         val runtimeMs = ((show.numberValue("runtime")?.toLong() ?: 45L) * 60_000L).coerceAtLeast(1L)
         val percent = item.numberValue("progress")?.toFloat() ?: return null
