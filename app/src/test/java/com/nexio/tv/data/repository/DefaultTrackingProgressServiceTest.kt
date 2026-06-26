@@ -223,12 +223,12 @@ class DefaultTrackingProgressServiceTest {
     }
 
     @Test
-    fun `observeRemoteSnapshotLoaded waits for all active providers`() = runTest {
+    fun `observeRemoteSnapshotLoaded is ready when any active provider has loaded`() = runTest {
         val traktService = mockk<TraktProgressService>()
         val simklService = mockk<SimklProgressService>()
 
-        every { traktService.observeRemoteSnapshotLoaded() } returns flowOf(true)
-        every { simklService.observeRemoteSnapshotLoaded() } returns flowOf(false)
+        every { traktService.observeRemoteSnapshotLoaded() } returns flowOf(false)
+        every { simklService.observeRemoteSnapshotLoaded() } returns flowOf(true)
 
         val service = DefaultTrackingProgressService(
             traktProgressService = traktService,
@@ -238,7 +238,7 @@ class DefaultTrackingProgressServiceTest {
 
         val observed = service.observeRemoteSnapshotLoaded().firstValue()
 
-        assertEquals(false, observed)
+        assertEquals(true, observed)
     }
 
     @Test
@@ -287,6 +287,12 @@ class DefaultTrackingProgressServiceTest {
                 traktAuthenticated = false,
                 simklAuthenticated = true
             )
+            every { currentProfileId() } returns 2
+            coEvery { currentState(2) } returns EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.SIMKL,
+                traktAuthenticated = false,
+                simklAuthenticated = true
+            )
         }
         val service = DefaultTrackingProgressService(
             traktProgressService = traktService,
@@ -296,7 +302,7 @@ class DefaultTrackingProgressServiceTest {
 
         service.refreshNow()
 
-        coVerify(exactly = 1) { simklService.refreshNowImmediate() }
+        coVerify(exactly = 1) { simklService.refreshNowImmediate(2) }
         coVerify(exactly = 0) { traktService.refreshNowImmediate() }
     }
 
@@ -320,6 +326,13 @@ class DefaultTrackingProgressServiceTest {
                 simklAuthenticated = true,
                 mdbListAuthenticated = true
             )
+            every { currentProfileId() } returns 2
+            coEvery { currentState(2) } returns EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.TRAKT,
+                traktAuthenticated = true,
+                simklAuthenticated = true,
+                mdbListAuthenticated = true
+            )
         }
         val service = DefaultTrackingProgressService(
             traktProgressService = traktService,
@@ -332,7 +345,7 @@ class DefaultTrackingProgressServiceTest {
 
         coVerify(exactly = 1) { traktService.requestEventDrivenRefresh() }
         coVerify(exactly = 0) { traktService.refreshNowImmediate() }
-        coVerify(exactly = 1) { simklService.refreshNow() }
+        coVerify(exactly = 1) { simklService.refreshNow(2) }
         coVerify(exactly = 0) { simklService.refreshNowImmediate() }
         coVerify(exactly = 1) { mdbListService.refreshNowImmediate() }
     }

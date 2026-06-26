@@ -84,6 +84,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val metadataFailureState = MutableStateFlow<Map<String, Long>>(emptyMap())
+    private val sessionProgressState = MutableStateFlow<Map<Int, List<WatchProgress>>>(emptyMap())
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private val metadataHydrationLimit = 30
@@ -228,7 +229,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
                     combine(
-                        trackingProgressService.observeAllProgress()
+                        trackingProgressService.observeAllProgress(profileId)
                             .onStart {
                                 // Emit local-cache-backed continue watching immediately on app start
                                 // while the first Trakt snapshot is still loading.
@@ -252,6 +253,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 }
             }
     }
+
+    override fun observeSessionProgress(profileId: Int): Flow<List<WatchProgress>> =
+        sessionProgressState
+            .map { entries -> entries[profileId].orEmpty() }
+            .distinctUntilChanged()
 
     override fun observeContinueWatching(profileId: Int): Flow<List<WatchProgress>> =
         observeProgress(profileId).map { list -> list.filter { it.isInProgress() } }
@@ -330,6 +336,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         syncRemote: Boolean
     ) {
         assertCanWriteProfileState(profileSession)
+        upsertSessionProgress(profileSession.profileId, progress)
         watchProgressPreferences.saveProgress(profileSession.profileId, progress)
 
         if (syncRemote && trackingProviderStateService.currentState(profileSession.profileId).hasAuthenticatedProvider) {
@@ -344,6 +351,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         episode: Int?
     ) {
         assertCanWriteProfileState(profileSession)
+        removeSessionProgress(profileSession.profileId, contentId, season, episode)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) {
@@ -400,6 +408,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         episode: Int?
     ) {
         assertCanWriteProfileState(profileSession)
+        removeSessionProgress(profileSession.profileId, contentId, season, episode)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, season, episode)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) {
@@ -434,6 +443,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     override suspend fun clearShowProgress(profileSession: ActiveProfileSession, contentId: String) {
         assertCanWriteProfileState(profileSession)
+        removeSessionProgress(profileSession.profileId, contentId, null, null)
         watchProgressPreferences.removeProgress(profileSession.profileId, contentId, null, null)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         if (!providerState.hasAuthenticatedProvider) {
@@ -506,6 +516,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
             progressPercent = 100f,
             lastWatched = now
         )
+        removeSessionProgress(
+            profileId = profileSession.profileId,
+            contentId = completed.contentId,
+            season = completed.season,
+            episode = completed.episode
+        )
         watchProgressPreferences.saveProgress(profileSession.profileId, completed)
         val providerState = trackingProviderStateService.currentState(profileSession.profileId)
         val sessions = accountSessionsForActiveProviders(providerState, profileSession)
@@ -542,6 +558,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun clearAll(profileSession: ActiveProfileSession) {
         assertCanWriteProfileState(profileSession)
         trackingProgressService.clearOptimistic()
+        clearSessionProgress(profileSession.profileId)
         watchProgressPreferences.clearAll(profileSession.profileId)
     }
 
@@ -672,6 +689,54 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             progress.contentId
         }
+    }
+
+    private fun upsertSessionProgress(profileId: Int, progress: WatchProgress) {
+        sessionProgressState.update { current ->
+            val profileItems = current[profileId].orEmpty()
+            val mergedByKey = LinkedHashMap<String, WatchProgress>(profileItems.size + 1)
+            for (i in profileItems.indices) {
+                val item = profileItems[i]
+                mergedByKey[progressKey(item)] = item
+            }
+            mergedByKey[progressKey(progress)] = progress
+            current + (profileId to mergedByKey.values.sortedByDescending { it.lastWatched })
+        }
+    }
+
+    private fun removeSessionProgress(
+        profileId: Int,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ) {
+        sessionProgressState.update { current ->
+            val profileItems = current[profileId].orEmpty()
+            if (profileItems.isEmpty()) return@update current
+            val retained = ArrayList<WatchProgress>(profileItems.size)
+            for (i in profileItems.indices) {
+                val item = profileItems[i]
+                if (!matchesProgressRemoval(item, contentId, season, episode)) {
+                    retained += item
+                }
+            }
+            if (retained.isEmpty()) current - profileId else current + (profileId to retained)
+        }
+    }
+
+    private fun clearSessionProgress(profileId: Int) {
+        sessionProgressState.update { current -> current - profileId }
+    }
+
+    private fun matchesProgressRemoval(
+        progress: WatchProgress,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): Boolean {
+        if (progress.contentId != contentId && progress.videoId != contentId) return false
+        if (season == null && episode == null) return true
+        return progress.season == season && progress.episode == episode
     }
 
     private fun mergeProgressLists(

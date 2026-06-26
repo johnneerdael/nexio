@@ -165,7 +165,7 @@ class SimklProgressServiceTest {
     }
 
     @Test
-    fun `second refresh uses stored activity timestamps as date_from`() = runTest {
+    fun `cold refresh ignores stored cursors for memory only snapshots`() = runTest {
         val authStore = mockAuthStore()
         val syncStateStore = mockk<SimklProgressSyncStateStore>(relaxed = true) {
             every { read() } returns com.nexio.tv.data.local.SimklProgressSyncState(
@@ -189,11 +189,11 @@ class SimklProgressServiceTest {
 
         service.refreshNowImmediate()
 
-        assertTrue(recordedPaths.any { it.contains("/sync/playback/movies") && it.contains("date_from=") })
-        assertTrue(recordedPaths.any { it.contains("/sync/playback/episodes") && it.contains("date_from=") })
-        assertTrue(recordedPaths.any { it.contains("/sync/all-items/movies/") && it.contains("date_from=") })
-        assertTrue(recordedPaths.any { it.contains("/sync/all-items/shows/") && it.contains("date_from=") })
-        assertTrue(recordedPaths.any { it.contains("/sync/all-items/anime/") && it.contains("date_from=") })
+        assertTrue(recordedPaths.any { it.contains("/sync/playback/movies") && !it.contains("date_from=") })
+        assertTrue(recordedPaths.any { it.contains("/sync/playback/episodes") && !it.contains("date_from=") })
+        assertTrue(recordedPaths.any { it.contains("/sync/all-items/movies/") && !it.contains("date_from=") })
+        assertTrue(recordedPaths.any { it.contains("/sync/all-items/shows/") && !it.contains("date_from=") })
+        assertTrue(recordedPaths.any { it.contains("/sync/all-items/anime/") && !it.contains("date_from=") })
     }
 
     @Test

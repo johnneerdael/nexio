@@ -27,6 +27,7 @@ import io.mockk.slot
 import io.mockk.verify
 import javax.inject.Provider
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -69,6 +70,56 @@ class WatchProgressRepositoryProviderRoutingTest {
         repo.upsertProgress(profileSession, sampleEpisodeProgress(), syncRemote = true)
 
         verify(exactly = 0) { trackingProgressService.applyOptimisticProgress(any()) }
+    }
+
+    @Test
+    fun `session progress starts empty even when persisted local progress exists`() = runTest {
+        val persisted = sampleMovieProgress("tmdb:old-local")
+        val preferences = mockk<WatchProgressPreferences>(relaxed = true) {
+            every { observeRawProgress(1) } returns flowOf(listOf(persisted))
+        }
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(),
+            preferences = preferences
+        )
+
+        assertEquals(emptyList<WatchProgress>(), repo.observeSessionProgress(1).first())
+    }
+
+    @Test
+    fun `session progress emits only current process writes`() = runTest {
+        val progress = sampleMovieProgress("tmdb:session-local")
+        val repo = repository(providerState = EffectiveTrackingProviderState())
+
+        repo.upsertProgress(profileSession, progress, syncRemote = false)
+
+        assertEquals(listOf(progress), repo.observeSessionProgress(1).first())
+    }
+
+    @Test
+    fun `authenticated observeProgress uses profile scoped remote progress`() = runTest {
+        val trackingProgressService = mockTrackingProgressService()
+        val profileOneProgress = sampleMovieProgress("tmdb:p1", source = WatchProgress.SOURCE_TRAKT_PLAYBACK)
+        val profileTwoProgress = sampleMovieProgress("tmdb:p2", source = WatchProgress.SOURCE_SIMKL_PLAYBACK)
+        every { trackingProgressService.observeAllProgress(1) } returns flowOf(listOf(profileOneProgress))
+        every { trackingProgressService.observeAllProgress(2) } returns flowOf(listOf(profileTwoProgress))
+        val preferences = mockk<WatchProgressPreferences>(relaxed = true) {
+            every { observeRawProgress(any()) } returns flowOf(emptyList())
+        }
+        val repo = repository(
+            providerState = EffectiveTrackingProviderState(
+                traktAuthenticated = true,
+                simklAuthenticated = true
+            ),
+            trackingProgressService = trackingProgressService,
+            preferences = preferences
+        )
+
+        val observed = repo.observeProgress(profileId = 2).first { it.isNotEmpty() }
+
+        assertEquals(listOf(profileTwoProgress), observed)
+        verify(exactly = 1) { trackingProgressService.observeAllProgress(2) }
+        verify(exactly = 0) { trackingProgressService.observeAllProgress() }
     }
 
     @Test
@@ -495,9 +546,13 @@ class WatchProgressRepositoryProviderRoutingTest {
     private fun mockTrackingProgressService(): TrackingProgressService {
         return mockk(relaxed = true) {
             every { observeAllProgress() } returns flowOf(emptyList())
+            every { observeAllProgress(any()) } returns flowOf(emptyList())
             every { observeRemoteSnapshotLoaded() } returns flowOf(true)
+            every { observeRemoteSnapshotLoaded(any()) } returns flowOf(true)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp(any()) } returns flowOf(emptyList())
             every { observeEpisodeProgress(any()) } returns flowOf(emptyMap())
             every { observeMovieWatched(any()) } returns flowOf(false)
             coEvery { resolvePlaybackDeleteIdsForOutbox(any(), any(), any()) } returns emptyList()
@@ -520,6 +575,29 @@ class WatchProgressRepositoryProviderRoutingTest {
             duration = 100L,
             lastWatched = 1234L,
             progressPercent = 100f
+        )
+    }
+
+    private fun sampleMovieProgress(
+        contentId: String,
+        source: String = WatchProgress.SOURCE_LOCAL
+    ): WatchProgress {
+        return WatchProgress(
+            contentId = contentId,
+            contentType = "movie",
+            name = contentId,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = contentId,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 50L,
+            duration = 100L,
+            lastWatched = 1234L,
+            progressPercent = 50f,
+            source = source
         )
     }
 

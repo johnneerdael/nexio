@@ -324,6 +324,7 @@ private data class LiveContinueWatchingSnapshotEmission(
     val profileId: Int,
     val hasLoadedRemoteSnapshot: Boolean,
     val snapshot: ContinueWatchingSnapshot?,
+    val persistedSnapshot: ContinueWatchingSnapshot? = snapshot,
     val retainMissingRows: Boolean = false,
     val completedProgress: List<WatchProgress> = emptyList()
 )
@@ -463,7 +464,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     persistedSnapshotReady.value = false
                     loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
                     runCatching {
-                        trackingProgressService.refreshNow()
+                        trackingProgressService.refreshNow(profileId)
                     }.onFailure { error ->
                         if (error is CancellationException) throw error
                         Log.w(
@@ -534,19 +535,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         lastRefreshRequestMs = 0L
                         cancelReemitScheduling()
                         hasSeenAuthenticatedSession = false
-                        watchProgressRepository.observeProgress(profileId)
-                            .map { allProgress ->
+                        watchProgressRepository.observeSessionProgress(profileId)
+                            .map { sessionProgress ->
                                 LiveContinueWatchingSnapshotEmission(
                                     profileId = profileId,
                                     hasLoadedRemoteSnapshot = true,
                                     snapshot = buildRawSnapshot(
                                         profileId = profileId,
                                         languageTag = languageTag,
-                                        allProgress = allProgress,
-                                        suppressionProgress = allProgress,
+                                        allProgress = sessionProgress,
+                                        suppressionProgress = sessionProgress,
                                         nextUpEntries = emptyList(),
                                         traktUpNextEntries = emptyList()
                                     ),
+                                    persistedSnapshot = null,
                                     retainMissingRows = false
                                 )
                             }
@@ -554,20 +556,42 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         hasSeenAuthenticatedSession = true
                         combine(
                             trackingProgressService.observeRemoteSnapshotLoaded(profileId),
-                            watchProgressRepository.observeProgress(profileId),
+                            watchProgressRepository.observeSessionProgress(profileId),
                             trackingProgressService.observeAllProgress(profileId),
                             trackingProgressService.observeContinueWatchingNextUp(profileId),
                             trackingProgressService.observeSyntheticContinueWatchingNextUp(profileId)
-                        ) { hasLoadedRemoteSnapshot, localProgress, trackingProgress, nextUpEntries, traktUpNextEntries ->
+                        ) { hasLoadedRemoteSnapshot, sessionProgress, trackingProgress, nextUpEntries, traktUpNextEntries ->
                             if (!hasLoadedRemoteSnapshot) {
-                                LiveContinueWatchingSnapshotEmission(
-                                    profileId = profileId,
-                                    hasLoadedRemoteSnapshot = false,
-                                    snapshot = null
-                                )
+                                if (sessionProgress.isEmpty()) {
+                                    LiveContinueWatchingSnapshotEmission(
+                                        profileId = profileId,
+                                        hasLoadedRemoteSnapshot = false,
+                                        snapshot = null,
+                                        persistedSnapshot = null
+                                    )
+                                } else {
+                                    LiveContinueWatchingSnapshotEmission(
+                                        profileId = profileId,
+                                        hasLoadedRemoteSnapshot = false,
+                                        snapshot = buildRawSnapshot(
+                                            profileId = profileId,
+                                            languageTag = languageTag,
+                                            allProgress = sessionProgress,
+                                            suppressionProgress = sessionProgress,
+                                            nextUpEntries = emptyList(),
+                                            traktUpNextEntries = emptyList()
+                                        ),
+                                        persistedSnapshot = null,
+                                        retainMissingRows = true
+                                    )
+                                }
                             } else {
+                                val displayProgress = mergeLiveResumeProgress(
+                                    sessionProgress = sessionProgress,
+                                    trackingProgress = trackingProgress
+                                )
                                 val suppressionProgress = mergeSuppressionProgress(
-                                    localProgress = localProgress,
+                                    localProgress = displayProgress,
                                     trackingProgress = trackingProgress
                                 )
                                 LiveContinueWatchingSnapshotEmission(
@@ -576,8 +600,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                     snapshot = buildRawSnapshot(
                                         profileId = profileId,
                                         languageTag = languageTag,
-                                        allProgress = localProgress,
+                                        allProgress = displayProgress,
                                         suppressionProgress = suppressionProgress,
+                                        nextUpEntries = nextUpEntries,
+                                        traktUpNextEntries = traktUpNextEntries
+                                    ),
+                                    persistedSnapshot = buildRawSnapshot(
+                                        profileId = profileId,
+                                        languageTag = languageTag,
+                                        allProgress = trackingProgress,
+                                        suppressionProgress = trackingProgress,
                                         nextUpEntries = nextUpEntries,
                                         traktUpNextEntries = traktUpNextEntries
                                     ),
@@ -602,6 +634,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     }
                     updateSnapshot(
                         snapshot = publishSnapshot,
+                        persistedSnapshot = emission.persistedSnapshot,
                         profileId = emission.profileId,
                         resultSession = activeProfileSession()
                     )
@@ -694,7 +727,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ) {
                 return@withLock
             }
-            trackingProgressService.refreshOnStartup()
+            trackingProgressService.refreshOnStartup(activeProfileId())
             lastRefreshRequestMs = lockedNow
         }
     }
@@ -1162,6 +1195,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
             allProgress = allProgress,
             nextUpEntries = nextUpEntries,
             traktUpNextEntries = traktUpNextEntries
+        )
+    }
+
+    @VisibleForTesting
+    internal suspend fun publishSnapshotForTest(
+        displaySnapshot: ContinueWatchingSnapshot,
+        persistedSnapshot: ContinueWatchingSnapshot?,
+        profileId: Int = activeProfileId()
+    ): Boolean {
+        return publishRawSnapshot(
+            displaySnapshot = displaySnapshot,
+            persistedSnapshot = persistedSnapshot,
+            profileId = profileId,
+            resultSession = sessionForProfile(profileId)
         )
     }
 
@@ -2861,9 +2908,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
             records = snapshot.records,
             projectionCache = projectionCache
         )
+        val durableResumeItems = preProjectedResumeItems.filter { progress ->
+            isRemotePlaybackSource(progress.source)
+        }
         return sanitizeSnapshot(
             if (
-                preProjectedResumeItems === snapshot.resumeItems &&
+                durableResumeItems == snapshot.resumeItems &&
                 preProjectedNextUpItems === snapshot.nextUpItems &&
                 preProjectedTraktUpNextItems === snapshot.traktUpNextItems &&
                 preProjectedRecords === snapshot.records
@@ -2871,7 +2921,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 snapshot
             } else {
                 snapshot.copy(
-                    resumeItems = preProjectedResumeItems,
+                    resumeItems = durableResumeItems,
                     nextUpItems = preProjectedNextUpItems,
                     traktUpNextItems = preProjectedTraktUpNextItems,
                     records = preProjectedRecords
@@ -3064,24 +3114,61 @@ class ContinueWatchingSnapshotService @Inject constructor(
         profileId: Int = activeProfileId(),
         resultSession: ActiveProfileSession = sessionForProfile(profileId)
     ): Boolean {
-        val normalized = sanitizeSnapshot(snapshot)
-        val hydrated = hydrateSnapshotMetadata(
-            snapshot = normalized,
+        return publishRawSnapshot(
+            displaySnapshot = snapshot,
+            persistedSnapshot = snapshot,
+            profileId = profileId,
+            resultSession = resultSession
+        )
+    }
+
+    private suspend fun prepareRawSnapshot(
+        snapshot: ContinueWatchingSnapshot,
+        fallbackMetadata: Map<String, HomeDisplayMetadata>
+    ): ContinueWatchingSnapshot {
+        return hydrateSnapshotMetadata(
+            snapshot = sanitizeSnapshot(snapshot),
+            fallbackMetadata = fallbackMetadata
+        )
+    }
+
+    private suspend fun publishRawSnapshot(
+        displaySnapshot: ContinueWatchingSnapshot,
+        persistedSnapshot: ContinueWatchingSnapshot?,
+        profileId: Int = activeProfileId(),
+        resultSession: ActiveProfileSession = sessionForProfile(profileId)
+    ): Boolean {
+        val displayHydrated = prepareRawSnapshot(
+            snapshot = displaySnapshot,
             fallbackMetadata = rawSnapshotState.value.snapshot.displayMetadataByItemKey
         )
         if (!canPublishProfileWrite(resultSession)) {
             return false
         }
-        syncContinueWatchingRail(hydrated, profileId)
-        snapshotStore.write(hydrated, profileId = profileId)
-        emitWrite(
-            profileId = profileId,
-            recordCount = hydrated.resumeItems.size + hydrated.nextUpItems.size + hydrated.traktUpNextItems.size
-        )
-        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
+        val durableHydrated = persistedSnapshot?.let { durable ->
+            if (durable === displaySnapshot) {
+                displayHydrated
+            } else {
+                prepareRawSnapshot(
+                    snapshot = durable,
+                    fallbackMetadata = displayHydrated.displayMetadataByItemKey
+                )
+            }
+        }
+        if (durableHydrated != null) {
+            syncContinueWatchingRail(durableHydrated, profileId)
+            snapshotStore.write(durableHydrated, profileId = profileId)
+            emitWrite(
+                profileId = profileId,
+                recordCount = durableHydrated.resumeItems.size +
+                    durableHydrated.nextUpItems.size +
+                    durableHydrated.traktUpNextItems.size
+            )
+            activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
+        }
+        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = displayHydrated)
         rawSnapshotState.value = owned
-        activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
-        lastRefreshRequestMs = hydrated.updatedAtMs
+        lastRefreshRequestMs = displayHydrated.updatedAtMs
         return true
     }
 
@@ -3147,11 +3234,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun updateSnapshot(
         snapshot: ContinueWatchingSnapshot,
+        persistedSnapshot: ContinueWatchingSnapshot? = snapshot,
         profileId: Int = activeProfileId(),
         resultSession: ActiveProfileSession = sessionForProfile(profileId)
     ) {
-        val published = persistRawSnapshot(
-            snapshot = snapshot,
+        val published = publishRawSnapshot(
+            displaySnapshot = snapshot,
+            persistedSnapshot = persistedSnapshot,
             profileId = profileId,
             resultSession = resultSession
         )
@@ -3226,6 +3315,32 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         return mergedByKey.values.sortedByDescending { it.lastWatched }
     }
+
+    private fun mergeLiveResumeProgress(
+        sessionProgress: List<WatchProgress>,
+        trackingProgress: List<WatchProgress>
+    ): List<WatchProgress> {
+        if (sessionProgress.isEmpty()) return trackingProgress
+        if (trackingProgress.isEmpty()) return sessionProgress
+        val mergedByKey = LinkedHashMap<String, WatchProgress>(sessionProgress.size + trackingProgress.size)
+        for (i in sessionProgress.indices) {
+            val progress = sessionProgress[i]
+            mergedByKey[liveProgressKey(progress)] = progress
+        }
+        for (i in trackingProgress.indices) {
+            val progress = trackingProgress[i]
+            mergedByKey[liveProgressKey(progress)] = progress
+        }
+        return mergedByKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private fun liveProgressKey(progress: WatchProgress): String =
+        listOf(
+            progress.contentType.trim().lowercase(Locale.ROOT),
+            progress.contentId.trim().lowercase(Locale.ROOT),
+            progress.season?.toString().orEmpty(),
+            progress.episode?.toString().orEmpty()
+        ).joinToString("|")
 
     private fun suppressionProgressKey(progress: WatchProgress): String =
         listOf(

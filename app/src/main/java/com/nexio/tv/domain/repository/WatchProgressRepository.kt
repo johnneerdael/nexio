@@ -13,6 +13,12 @@ interface WatchProgressRepository {
     
     fun observeProgress(profileId: Int): Flow<List<WatchProgress>>
 
+    /**
+     * Observe local progress recorded during the current app process only.
+     * This backs transient continue-watching rows before a tracker snapshot catches up.
+     */
+    fun observeSessionProgress(profileId: Int): Flow<List<WatchProgress>>
+
     fun observeContinueWatching(profileId: Int): Flow<List<WatchProgress>>
     
     /**

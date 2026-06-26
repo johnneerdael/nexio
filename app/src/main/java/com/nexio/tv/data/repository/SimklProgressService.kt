@@ -165,7 +165,10 @@ class SimklProgressService @Inject constructor(
      * reconcile paths where multiple adapters may settle in quick succession.
      */
     suspend fun refreshNow() {
-        val profileId = currentProfileId()
+        refreshNow(currentProfileId())
+    }
+
+    suspend fun refreshNow(profileId: Int) {
         refreshDebounceMutex.withLock {
             refreshDebounceJob?.cancel()
             refreshDebounceJob = debounceScope.launch {
@@ -180,7 +183,10 @@ class SimklProgressService @Inject constructor(
      * needs fresh state right away (app startup, foreground resume, user-initiated refresh).
      */
     suspend fun refreshNowImmediate() {
-        val profileId = currentProfileId()
+        refreshNowImmediate(currentProfileId())
+    }
+
+    suspend fun refreshNowImmediate(profileId: Int) {
         refreshDebounceMutex.withLock {
             refreshDebounceJob?.cancel()
         }
@@ -217,7 +223,7 @@ class SimklProgressService @Inject constructor(
         )
 
         if (!runtime.loaded.value || playbackActivity != runtime.lastPlaybackActivityAt) {
-            val playbackDateFrom = runtime.lastPlaybackActivityAt
+            val playbackDateFrom = if (runtime.loaded.value) runtime.lastPlaybackActivityAt else null
             val moviePlaybacks = fetchJsonArrayAsObjects(
                 url = buildPlaybackUrl("movies", playbackDateFrom),
                 accessToken = accessToken
@@ -269,6 +275,8 @@ class SimklProgressService @Inject constructor(
             removedFromListActivity != runtime.lastRemovedFromListActivityAt
         ) {
             val allDateFrom = if (removedFromListActivity != runtime.lastRemovedFromListActivityAt) {
+                null
+            } else if (!runtime.loaded.value) {
                 null
             } else {
                 runtime.lastAllActivityAt

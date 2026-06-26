@@ -68,7 +68,13 @@ interface TrackingProgressService {
     fun clearOptimistic()
     fun invalidateLocalizedMetadata()
     suspend fun refreshOnStartup()
+    suspend fun refreshOnStartup(profileId: Int) {
+        refreshOnStartup()
+    }
     suspend fun refreshNow()
+    suspend fun refreshNow(profileId: Int) {
+        refreshNow()
+    }
     suspend fun resolvePlaybackDeleteIdsForOutbox(
         contentId: String,
         season: Int?,
@@ -185,7 +191,7 @@ class DefaultTrackingProgressService @Inject constructor(
                 return snapshotLoadedFlowForProvider(active.single(), profileId)
             }
             return combine(active.map { provider -> snapshotLoadedFlowForProvider(provider, profileId) }) { loaded ->
-                loaded.all { it }
+                loaded.any { it }
             }
         }
 
@@ -335,11 +341,15 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        val state = trackingProviderStateService.currentState()
+        refreshNow(trackingProviderStateService.currentProfileId())
+    }
+
+    override suspend fun refreshNow(profileId: Int) {
+        val state = trackingProviderStateService.currentState(profileId)
         val active = state.activeProviders.toList()
         for (i in active.indices) {
             when (active[i]) {
-                TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
+                TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate(profileId)
                 TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
                 TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
             }
@@ -347,11 +357,15 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override suspend fun refreshOnStartup() {
-        val state = trackingProviderStateService.currentState()
+        refreshOnStartup(trackingProviderStateService.currentProfileId())
+    }
+
+    override suspend fun refreshOnStartup(profileId: Int) {
+        val state = trackingProviderStateService.currentState(profileId)
         val active = state.activeProviders.toList()
         for (i in active.indices) {
             when (active[i]) {
-                TrackingProvider.SIMKL -> simklProgressService.refreshNow()
+                TrackingProvider.SIMKL -> simklProgressService.refreshNow(profileId)
                 TrackingProvider.TRAKT -> traktProgressService.requestEventDrivenRefresh()
                 TrackingProvider.MDBLIST -> mdbListProgressService?.refreshNowImmediate()
             }
