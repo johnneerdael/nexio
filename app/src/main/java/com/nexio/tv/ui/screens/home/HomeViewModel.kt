@@ -1469,7 +1469,11 @@ class HomeViewModel @Inject constructor(
                     suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                     resetProfileScopedHomeState("home_session:${session.profileId}")
                     try {
-                        continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+                        continueWatchingSnapshotService.reloadPersistedSnapshotForProfile(
+                            profileId = session.profileId,
+                            clearWhenMissing = true
+                        )
+                        publishCurrentContinueWatchingSnapshotForSession(session)
                         val diskBackedHomeState = loadActiveProfileDiskBackedHomeState(
                             reason = "home_session:${session.profileId}",
                             expectedGeneration = session.generation

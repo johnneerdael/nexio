@@ -61,9 +61,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -462,7 +464,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 manager.profileSwitched.collectLatest { profileId ->
                     markProfileAwaitingLiveReset(profileId)
                     persistedSnapshotReady.value = false
-                    loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+                    loadPersistedSnapshotForProfile(profileId, clearWhenMissing = true)
                     runCatching {
                         trackingProgressService.refreshNow(profileId)
                     }.onFailure { error ->
@@ -549,7 +551,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                                         traktUpNextEntries = emptyList()
                                     ),
                                     persistedSnapshot = null,
-                                    retainMissingRows = false
+                                    retainMissingRows = true
                                 )
                             }
                     } else {
@@ -666,7 +668,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     suspend fun reloadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean = true) {
-        loadPersistedSnapshotForActiveProfile(clearWhenMissing = clearWhenMissing)
+        loadPersistedSnapshotForProfile(activeProfileId(), clearWhenMissing = clearWhenMissing)
+    }
+
+    suspend fun reloadPersistedSnapshotForProfile(
+        profileId: Int,
+        clearWhenMissing: Boolean = true
+    ) {
+        loadPersistedSnapshotForProfile(profileId, clearWhenMissing = clearWhenMissing)
     }
 
     fun rescheduleAirTimeAlarmFromSnapshot() {
@@ -674,8 +683,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
+        loadPersistedSnapshotForProfile(activeProfileId(), clearWhenMissing = clearWhenMissing)
+    }
+
+    private suspend fun loadPersistedSnapshotForProfile(
+        profileId: Int,
+        clearWhenMissing: Boolean
+    ) {
         try {
-            val profileId = activeProfileId()
             val persisted = snapshotStore.read(profileId)
             if (persisted == null) {
                 if (clearWhenMissing) {
@@ -716,12 +731,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val current = rawSnapshotState.value
             .takeIf { canUseCurrentSnapshot && it.profileId == profileId }
             ?.snapshot
-        if (current != null && current.hasContinueWatchingRows()) return current
-        return readPersistedSnapshotForRetention(profileId) ?: current
+        val persisted = readPersistedSnapshotForRetention(profileId)
+        return when {
+            persisted != null &&
+                persisted.continueWatchingRowCount() > (current?.continueWatchingRowCount() ?: 0) -> persisted
+            current != null && current.hasContinueWatchingRows() -> current
+            else -> persisted ?: current
+        }
     }
 
     private fun ContinueWatchingSnapshot.hasContinueWatchingRows(): Boolean =
         resumeItems.isNotEmpty() || nextUpItems.isNotEmpty() || traktUpNextItems.isNotEmpty()
+
+    private fun ContinueWatchingSnapshot.continueWatchingRowCount(): Int =
+        resumeItems.size + nextUpItems.size + traktUpNextItems.size
 
     fun observeSnapshot(): Flow<ProfileOwnedContinueWatchingSnapshot> {
         return combine(snapshotState, persistedSnapshotReady) { snapshot, ready ->
@@ -743,16 +766,21 @@ class ContinueWatchingSnapshotService @Inject constructor(
      */
     fun observeProfileSnapshot(profileId: Int): Flow<ContinueWatchingSnapshot> {
         require(profileId > 0) { "observeProfileSnapshot.profileId must be positive, got $profileId" }
-        return observeSnapshot()
-            .filter { it.profileId == profileId }
+        return observeOwnedProfileSnapshot(profileId)
             .map { it.snapshot }
     }
 
     fun observeContinueWatching(profileId: Int): Flow<List<ContinueWatchingRecord>> {
         require(profileId > 0) { "profileId must be positive" }
-        return observeSnapshot()
-            .filter { it.profileId == profileId }
+        return observeOwnedProfileSnapshot(profileId)
             .map { owned -> owned.toContinueWatchingRecords() }
+    }
+
+    private fun observeOwnedProfileSnapshot(profileId: Int): Flow<ProfileOwnedContinueWatchingSnapshot> {
+        return flow {
+            reloadPersistedSnapshotForProfile(profileId, clearWhenMissing = true)
+            emitAll(observeSnapshot().filter { it.profileId == profileId })
+        }
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
@@ -854,6 +882,17 @@ class ContinueWatchingSnapshotService @Inject constructor(
      * to look up the exact [WatchProgress] for rollback of an optimistic mutation.
      */
     fun currentRawResumeItems(): List<WatchProgress> = rawSnapshotState.value.snapshot.resumeItems
+
+    fun currentSnapshotForProfile(profileId: Int): ContinueWatchingSnapshot? =
+        rawSnapshotState.value
+            .takeIf { it.profileId == profileId }
+            ?.snapshot
+
+    suspend fun persistedSnapshotForProfile(profileId: Int): ContinueWatchingSnapshot? =
+        readPersistedSnapshotForRetention(profileId)
+
+    suspend fun rawPersistedSnapshotForProfile(profileId: Int): ContinueWatchingSnapshot? =
+        snapshotStore.readAnyLanguage(profileId)
 
     suspend fun hydrateFromResolvedDisplaySurface(
         profileId: Int,
@@ -1297,10 +1336,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         val records = ContinueWatchingMerger.merge(resolvedRecords)
             .filterRecordsWithPrimaryStableIds()
-        val stableResumeLookupKeys = records.flatMapTo(linkedSetOf()) { it.resumeLookupKeys }
-        val stableResumeItems = filterResumeItemsWithPrimaryStableIds(
+        val stableResumeItems = selectPrimaryResumeItemsForStableRecords(
             items = resumeItems,
-            stableRecordResumeLookupKeys = stableResumeLookupKeys
+            stableRecords = records
         )
         val normalizedProviderNextUpItems = normalizeFilterProjectDedupeNextUpEntries(
             entries = nextUpEntries,
@@ -2703,10 +2741,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ContinueWatchingCanonicalization.isMainFeedAiredNextUp(entry, nowMs)
         }
         val stableRecords = snapshot.records.filterRecordsWithPrimaryStableIds()
-        val stableResumeLookupKeys = stableRecords.flatMapTo(linkedSetOf()) { it.resumeLookupKeys }
-        val stableResumeItems = filterResumeItemsWithPrimaryStableIds(
+        val stableResumeItems = selectPrimaryResumeItemsForStableRecords(
             items = resumeItems,
-            stableRecordResumeLookupKeys = stableResumeLookupKeys
+            stableRecords = stableRecords
         )
         val stableNextUpItems = sanitizedNextUpItems.filter(::hasPrimaryStableId)
         val stableTraktUpNextItems = sanitizedTraktUpNextItems.filter(::hasPrimaryStableId)
@@ -2777,15 +2814,24 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return if (filtered.size == records.size) records else filtered
     }
 
-    private fun filterResumeItemsWithPrimaryStableIds(
+    private fun selectPrimaryResumeItemsForStableRecords(
         items: List<WatchProgress>,
-        stableRecordResumeLookupKeys: Set<String>
+        stableRecords: List<ContinueWatchingRecord>
     ): List<WatchProgress> {
         if (items.isEmpty()) return items
+        if (stableRecords.isEmpty()) return items
+        val primaryResumeLookupKeys = stableRecords
+            .mapNotNullTo(linkedSetOf()) { it.primaryResumeLookupKey }
+        val mergedAliasLookupKeys = stableRecords
+            .flatMapTo(linkedSetOf()) { it.resumeLookupKeys }
         val filtered = items.filter { progress ->
-            hasPrimaryStableId(progress) ||
-                runCatching { progress.toSafeResumeIdentity().lookupKey() in stableRecordResumeLookupKeys }
-                    .getOrDefault(false)
+            val lookupKey = runCatching { progress.toSafeResumeIdentity().lookupKey() }.getOrNull()
+            when {
+                lookupKey == null -> hasPrimaryStableId(progress)
+                lookupKey in primaryResumeLookupKeys -> true
+                lookupKey in mergedAliasLookupKeys -> false
+                else -> hasPrimaryStableId(progress)
+            }
         }
         return if (filtered.size == items.size) items else filtered
     }

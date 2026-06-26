@@ -85,21 +85,19 @@ class HomeViewModelContinueWatchingProfileScopedTest {
 
         assertEquals(listOf(1, 2), observedProfiles)
         assertEquals(
-            listOf(firstSession, firstSession, firstSession, secondSession, secondSession, secondSession),
+            listOf(firstSession, firstSession, secondSession, secondSession),
             emissions.map { it.session }
         )
         assertTrue(emissions[0] is ProfileScopedEmission.Loading)
         assertTrue(emissions[1] is ProfileScopedEmission.Success)
-        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
-        assertTrue(emissions[2] is ProfileScopedEmission.Success)
-        assertTrue(emissions[3] is ProfileScopedEmission.Loading)
-        assertTrue(emissions[4] is ProfileScopedEmission.Success)
-        assertEquals(ContinueWatchingSnapshot(), (emissions[4] as ProfileScopedEmission.Success).value)
-        assertTrue(emissions[5] is ProfileScopedEmission.Success)
+        assertEquals(11L, (emissions[1] as ProfileScopedEmission.Success).value.updatedAtMs)
+        assertTrue(emissions[2] is ProfileScopedEmission.Loading)
+        assertTrue(emissions[3] is ProfileScopedEmission.Success)
+        assertEquals(22L, (emissions[3] as ProfileScopedEmission.Success).value.updatedAtMs)
     }
 
     @Test
-    fun `home policy emits empty snapshot while waiting for profile snapshot`() = runTest {
+    fun `home policy does not emit empty snapshot while waiting for profile snapshot`() = runTest {
         val session = homeSession(profileId = 1, profileSessionKey = "profile:1:runtime:1")
         val activeSession = MutableStateFlow(session)
         val snapshotFlow = MutableSharedFlow<ContinueWatchingSnapshot>()
@@ -117,12 +115,9 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         advanceUntilIdle()
         job.cancel()
 
-        assertEquals(2, emissions.size)
+        assertEquals(1, emissions.size)
         assertEquals(session, emissions[0].session)
-        assertEquals(session, emissions[1].session)
         assertTrue(emissions[0] is ProfileScopedEmission.Loading)
-        assertTrue(emissions[1] is ProfileScopedEmission.Success)
-        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
     }
 
     @Test
@@ -162,14 +157,12 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         job.cancel()
 
         assertEquals(listOf(1), observedProfiles)
-        assertEquals(3, emissions.size)
+        assertEquals(2, emissions.size)
         assertEquals(firstSession, emissions[0].session)
         assertEquals(firstSession, emissions[1].session)
-        assertEquals(firstSession, emissions[2].session)
         assertTrue(emissions[0] is ProfileScopedEmission.Loading)
         assertTrue(emissions[1] is ProfileScopedEmission.Success)
-        assertEquals(ContinueWatchingSnapshot(), (emissions[1] as ProfileScopedEmission.Success).value)
-        assertTrue(emissions[2] is ProfileScopedEmission.Success)
+        assertEquals(33L, (emissions[1] as ProfileScopedEmission.Success).value.updatedAtMs)
     }
 
     @Test
@@ -289,7 +282,7 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         assertTrue(source.contains(".distinctUntilChangedBy { it.profileSessionKey }"))
         assertTrue(source.contains(".flatMapLatest { session ->"))
         assertTrue(source.contains("observeProfileSnapshot(session.profileId)"))
-        assertTrue(source.contains("ProfileScopedEmission.Success(session = session, value = ContinueWatchingSnapshot())"))
+        assertFalse(source.contains("ProfileScopedEmission.Success(session = session, value = ContinueWatchingSnapshot())"))
         assertTrue(source.contains("isCurrentHomeSession(session)"))
         assertFalse(source.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
     }
@@ -300,7 +293,7 @@ class HomeViewModelContinueWatchingProfileScopedTest {
         val source = sourceFile.readText()
         val functionStart = source.indexOf("private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession")
         val cancelIndex = source.indexOf("continueWatchingEnrichmentJob?.cancel()", functionStart)
-        val transformIndex = source.indexOf("buildContinueWatchingItemsForSnapshot(snapshot, nowMs)", functionStart)
+        val transformIndex = source.indexOf("buildContinueWatchingItemsForSnapshot(publishSnapshot, nowMs)", functionStart)
         val eligibilityIndex = source.indexOf("shouldEnrichContinueWatchingProviderMetadata", functionStart)
 
         assertTrue(functionStart >= 0)

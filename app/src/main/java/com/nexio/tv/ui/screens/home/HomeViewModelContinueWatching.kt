@@ -342,7 +342,6 @@ internal fun continueWatchingProfileScopedEmissions(
                 }
                 .onStart {
                     emit(ProfileScopedEmission.Loading(session))
-                    emit(ProfileScopedEmission.Success(session = session, value = ContinueWatchingSnapshot()))
                 }
                 .catch { error ->
                     if (error is CancellationException) throw error
@@ -506,6 +505,15 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         Log.d(HomeViewModel.TAG, "Skipping stale continue watching snapshot")
         return
     }
+    val persistedSnapshot = continueWatchingSnapshotService
+        .rawPersistedSnapshotForProfile(session.profileId)
+    val publishSnapshot = when {
+        persistedSnapshot != null &&
+            persistedSnapshot.continueWatchingRowCount() > snapshot.continueWatchingRowCount() -> persistedSnapshot
+        snapshot.hasContinueWatchingRows() -> snapshot
+        persistedSnapshot?.hasContinueWatchingRows() == true -> persistedSnapshot
+        else -> snapshot
+    }
     continueWatchingEnrichmentJob?.cancel()
     continueWatchingEnrichmentJob = null
     continueWatchingSnapshotVersion += 1L
@@ -523,7 +531,7 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
     }
 
     val nowMs = System.currentTimeMillis()
-    val rawItems = buildContinueWatchingItemsForSnapshot(snapshot, nowMs)
+    val rawItems = buildContinueWatchingItemsForSnapshot(publishSnapshot, nowMs)
     // Apply anime projection dedup: kitsu:X S3E1 and tvdb:Y S3E1 that map to the same
     // projected coordinate collapse to one entry, eliminating cross-source duplicates.
     val projectedKeys = try {
@@ -544,8 +552,8 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
             languageTag = snapshotLanguageTag
         )
     )
-    val traktUpNextRawItems = snapshot.traktUpNextItems.map { entry ->
-        entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+    val traktUpNextRawItems = publishSnapshot.traktUpNextItems.map { entry ->
+        entry.toContinueWatchingNextUp(publishSnapshot.displayMetadataByItemKey, nowMs)
     }.filter { it.info.hasAired }
     val traktUpNextItemsWithoutOverlaySidecars = preserveContinueWatchingEpisodeText(
         incoming = traktUpNextRawItems,
@@ -730,6 +738,19 @@ private suspend fun HomeViewModel.applyContinueWatchingSnapshotForSession(
         }
     }
 }
+
+internal suspend fun HomeViewModel.publishCurrentContinueWatchingSnapshotForSession(
+    session: HomeProfileSession
+) {
+    val snapshot = continueWatchingSnapshotService.currentSnapshotForProfile(session.profileId) ?: return
+    applyContinueWatchingSnapshotForSession(session, snapshot)
+}
+
+private fun ContinueWatchingSnapshot.hasContinueWatchingRows(): Boolean =
+    resumeItems.isNotEmpty() || nextUpItems.isNotEmpty() || traktUpNextItems.isNotEmpty()
+
+private fun ContinueWatchingSnapshot.continueWatchingRowCount(): Int =
+    resumeItems.size + nextUpItems.size + traktUpNextItems.size
 
 private fun List<ContinueWatchingItem>.debugContinueWatchingTitles(): String =
     take(5).joinToString(separator = " |") { item ->

@@ -1236,17 +1236,42 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktUpNextEntries = emptyList()
             )
 
-            assertEquals(listOf(unresolved, remoteImdb, localTvdb), snapshot.resumeItems)
+            assertEquals(listOf(unresolved, remoteImdb), snapshot.resumeItems)
             assertEquals(2, snapshot.records.size)
             val citadel = snapshot.records.single { it.canonicalKey == citadelKey }
             assertEquals(2, citadel.resumeIdentities.size)
             assertTrue(citadel.resumeLookupKeys.contains(localTvdb.toResumeIdentity().lookupKey()))
             assertTrue(citadel.resumeLookupKeys.contains(remoteImdb.toResumeIdentity().lookupKey()))
+            assertEquals(remoteImdb.toResumeIdentity().lookupKey(), citadel.primaryResumeLookupKey)
             assertEquals("nl", citadel.languageTag)
             val unresolvedRecord = snapshot.records.single { it.identityConfidence == IdentityConfidence.LOW }
             assertEquals("addon:unknown", unresolvedRecord.parentId)
             assertTrue(unresolvedRecord.identityWarnings.single().contains("unresolved"))
         }
+
+    @Test
+    fun `live retention base prefers persisted snapshot when it has more cached rows`() {
+        val source = java.io.File(
+            "app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt"
+        ).readText()
+        val functionStart = source.indexOf("private suspend fun liveRetentionBase(")
+        val currentIndex = source.indexOf("val current = rawSnapshotState.value", functionStart)
+        val persistedIndex = source.indexOf("val persisted = readPersistedSnapshotForRetention(profileId)", functionStart)
+        val rowCountComparisonIndex = source.indexOf(
+            "persisted.continueWatchingRowCount() > (current?.continueWatchingRowCount() ?: 0)",
+            functionStart
+        )
+        val currentFallbackIndex = source.indexOf(
+            "current != null && current.hasContinueWatchingRows() -> current",
+            functionStart
+        )
+
+        assertTrue(functionStart >= 0)
+        assertTrue(currentIndex > functionStart)
+        assertTrue(persistedIndex > currentIndex)
+        assertTrue(rowCountComparisonIndex > persistedIndex)
+        assertTrue(currentFallbackIndex > rowCountComparisonIndex)
+    }
 
     @Test
     fun `hydrated display imdb bridges retained local episode with newer remote tmdb episode`() {
