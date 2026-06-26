@@ -209,17 +209,22 @@ class SimklProgressService @Inject constructor(
             method = "POST",
             accessToken = accessToken
         )
+        if (activities == null) {
+            Log.w("SimklProgress", "Skipping SIMKL progress refresh because activities fetch failed")
+            runtime.loaded.value = true
+            return
+        }
 
         val playbackActivity = maxOfNotNull(
-            activities?.getAsJsonObject("tv_shows")?.stringValue("playback"),
-            activities?.getAsJsonObject("anime")?.stringValue("playback"),
-            activities?.getAsJsonObject("movies")?.stringValue("playback")
+            activities.getAsJsonObject("tv_shows")?.stringValue("playback"),
+            activities.getAsJsonObject("anime")?.stringValue("playback"),
+            activities.getAsJsonObject("movies")?.stringValue("playback")
         )
-        val allActivity = activities?.stringValue("all")
+        val allActivity = activities.stringValue("all")
         val removedFromListActivity = maxOfNotNull(
-            activities?.getAsJsonObject("tv_shows")?.stringValue("removed_from_list"),
-            activities?.getAsJsonObject("anime")?.stringValue("removed_from_list"),
-            activities?.getAsJsonObject("movies")?.stringValue("removed_from_list")
+            activities.getAsJsonObject("tv_shows")?.stringValue("removed_from_list"),
+            activities.getAsJsonObject("anime")?.stringValue("removed_from_list"),
+            activities.getAsJsonObject("movies")?.stringValue("removed_from_list")
         )
 
         if (!runtime.loaded.value || playbackActivity != runtime.lastPlaybackActivityAt) {
@@ -232,43 +237,51 @@ class SimklProgressService @Inject constructor(
                 url = buildPlaybackUrl("episodes", playbackDateFrom),
                 accessToken = accessToken
             )
-            val playbackDelta = (moviePlaybacks.mapNotNull(::mapMoviePlayback) + episodePlaybacks.mapNotNull(::mapEpisodePlayback))
-                .sortedByDescending { it.lastWatched }
-            runtime.remoteProgress.value = if (playbackDateFrom == null) {
-                playbackDelta
-            } else {
-                mergePlaybackDelta(runtime.remoteProgress.value, playbackDelta)
-            }
-            val playbackIdDelta = buildMap {
-                moviePlaybacks.forEach { item ->
-                    val movie = item.getAsJsonObject("movie") ?: return@forEach
-                    val ids = movie.getAsJsonObject("ids") ?: return@forEach
-                    val contentId = ids.toCanonicalContentId() ?: return@forEach
-                    val playbackId = item.numberValue("id")?.toLong() ?: return@forEach
-                    put(contentId, playbackId)
+            if (moviePlaybacks != null && episodePlaybacks != null) {
+                val playbackDelta = (moviePlaybacks.mapNotNull(::mapMoviePlayback) + episodePlaybacks.mapNotNull(::mapEpisodePlayback))
+                    .sortedByDescending { it.lastWatched }
+                runtime.remoteProgress.value = if (playbackDateFrom == null) {
+                    playbackDelta
+                } else {
+                    mergePlaybackDelta(runtime.remoteProgress.value, playbackDelta)
                 }
-                episodePlaybacks.forEach { item ->
-                    val show = item.getAsJsonObject("show") ?: return@forEach
-                    val ids = show.getAsJsonObject("ids") ?: return@forEach
-                    val contentId = ids.toCanonicalContentId() ?: return@forEach
-                    val episode = item.getAsJsonObject("episode") ?: return@forEach
-                    val seasonNumber = episode.numberValue("tvdb_season")?.toInt()
-                        ?: episode.numberValue("season")?.toInt()
-                        ?: return@forEach
-                    val episodeNumber = episode.numberValue("tvdb_number")?.toInt()
-                        ?: episode.numberValue("episode")?.toInt()
-                        ?: episode.numberValue("number")?.toInt()
-                        ?: return@forEach
-                    val playbackId = item.numberValue("id")?.toLong() ?: return@forEach
-                    put("$contentId:$seasonNumber:$episodeNumber", playbackId)
+                val playbackIdDelta = buildMap {
+                    for (i in moviePlaybacks.indices) {
+                        val item = moviePlaybacks[i]
+                        val movie = item.getAsJsonObject("movie")
+                        val ids = movie?.getAsJsonObject("ids")
+                        val contentId = ids?.toCanonicalContentId()
+                        val playbackId = item.numberValue("id")?.toLong()
+                        if (contentId != null && playbackId != null) {
+                            put(contentId, playbackId)
+                        }
+                    }
+                    for (i in episodePlaybacks.indices) {
+                        val item = episodePlaybacks[i]
+                        val show = item.getAsJsonObject("show")
+                        val ids = show?.getAsJsonObject("ids")
+                        val contentId = ids?.toCanonicalContentId()
+                        val episode = item.getAsJsonObject("episode")
+                        val seasonNumber = episode?.numberValue("tvdb_season")?.toInt()
+                            ?: episode?.numberValue("season")?.toInt()
+                        val episodeNumber = episode?.numberValue("tvdb_number")?.toInt()
+                            ?: episode?.numberValue("episode")?.toInt()
+                            ?: episode?.numberValue("number")?.toInt()
+                        val playbackId = item.numberValue("id")?.toLong()
+                        if (contentId != null && seasonNumber != null && episodeNumber != null && playbackId != null) {
+                            put("$contentId:$seasonNumber:$episodeNumber", playbackId)
+                        }
+                    }
                 }
-            }
-            runtime.playbackIdsByKey.value = if (playbackDateFrom == null) {
-                playbackIdDelta
+                runtime.playbackIdsByKey.value = if (playbackDateFrom == null) {
+                    playbackIdDelta
+                } else {
+                    runtime.playbackIdsByKey.value + playbackIdDelta
+                }
+                runtime.lastPlaybackActivityAt = playbackActivity
             } else {
-                runtime.playbackIdsByKey.value + playbackIdDelta
+                Log.w("SimklProgress", "Skipping SIMKL playback progress update because playback fetch failed")
             }
-            runtime.lastPlaybackActivityAt = playbackActivity
         }
 
         if (!runtime.loaded.value ||
@@ -294,23 +307,27 @@ class SimklProgressService @Inject constructor(
                 url = buildAllItemsUrl("anime", allDateFrom, "full_anime_seasons"),
                 accessToken = accessToken
             )
-            runtime.watchedMovies.value = if (allDateFrom == null) {
-                buildWatchedMovies(moviesRoot)
+            if (moviesRoot != null && showsRoot != null && animeRoot != null) {
+                runtime.watchedMovies.value = if (allDateFrom == null) {
+                    buildWatchedMovies(moviesRoot)
+                } else {
+                    mergeWatchedMovies(runtime.watchedMovies.value, moviesRoot)
+                }
+                runtime.nextUp.value = if (allDateFrom == null) {
+                    buildNextUp(showsRoot, animeRoot)
+                } else {
+                    mergeNextUp(runtime.nextUp.value, showsRoot, animeRoot)
+                }
+                runtime.episodeProgress.value = if (allDateFrom == null) {
+                    buildEpisodeProgressMap(showsRoot, animeRoot)
+                } else {
+                    mergeEpisodeProgress(runtime.episodeProgress.value, showsRoot, animeRoot)
+                }
+                runtime.lastAllActivityAt = allActivity
+                runtime.lastRemovedFromListActivityAt = removedFromListActivity
             } else {
-                mergeWatchedMovies(runtime.watchedMovies.value, moviesRoot)
+                Log.w("SimklProgress", "Skipping SIMKL all-items update because all-items fetch failed")
             }
-            runtime.nextUp.value = if (allDateFrom == null) {
-                buildNextUp(showsRoot, animeRoot)
-            } else {
-                mergeNextUp(runtime.nextUp.value, showsRoot, animeRoot)
-            }
-            runtime.episodeProgress.value = if (allDateFrom == null) {
-                buildEpisodeProgressMap(showsRoot, animeRoot)
-            } else {
-                mergeEpisodeProgress(runtime.episodeProgress.value, showsRoot, animeRoot)
-            }
-            runtime.lastAllActivityAt = allActivity
-            runtime.lastRemovedFromListActivityAt = removedFromListActivity
         }
 
         runtime.loaded.value = true
@@ -612,8 +629,8 @@ class SimklProgressService @Inject constructor(
     private suspend fun fetchJsonArrayAsObjects(
         url: String,
         accessToken: String
-    ): List<JsonObject> {
-        val array = fetchJsonArray(url = url, accessToken = accessToken) ?: return emptyList()
+    ): List<JsonObject>? {
+        val array = fetchJsonArray(url = url, accessToken = accessToken) ?: return null
         return array.mapNotNull { element ->
             runCatching { element.asJsonObject }.getOrNull()
         }

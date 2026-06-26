@@ -293,6 +293,46 @@ class SimklProgressServiceTest {
         assertTrue((1 to 4) !in episodeMap.keys)
     }
 
+    @Test
+    fun `remote auth failure preserves previous SIMKL progress instead of publishing empty`() = runTest {
+        val authStore = mockAuthStore()
+        val syncStateStore = mockk<SimklProgressSyncStateStore>(relaxed = true) {
+            every { read() } returns com.nexio.tv.data.local.SimklProgressSyncState()
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val newUrl = server.url(original.url.encodedPath + if (original.url.encodedQuery != null) "?" + original.url.encodedQuery else "")
+                chain.proceed(original.newBuilder().url(newUrl).build())
+            }
+            .build()
+
+        val transport = SimklProgressTransport(client, SimklRequestGate())
+        val service = SimklProgressService(transport, authStore, syncStateStore)
+
+        service.refreshNowImmediate()
+        val progressBeforeFailure = service.observeAllProgress().first()
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.path?.substringBefore('?')) {
+                    "/sync/activities" -> MockResponse()
+                        .setResponseCode(401)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("""{"code":401,"error":"user_token_failed"}""")
+                    else -> MockResponse().setResponseCode(500)
+                }
+            }
+        }
+
+        service.refreshNowImmediate()
+
+        assertEquals(true, service.observeRemoteSnapshotLoaded().first())
+        assertEquals(progressBeforeFailure, service.observeAllProgress().first())
+        assertEquals(listOf(124L), service.resolvePlaybackDeleteIdsForOutbox("tt1375666", null, null))
+        assertEquals(listOf(123L), service.resolvePlaybackDeleteIdsForOutbox("tt0903747", 1, 5))
+    }
+
     private fun mockAuthStore(): SimklAuthDataStore {
         val state = MutableStateFlow(SimklAuthState(accessToken = "token"))
         return mockk {
