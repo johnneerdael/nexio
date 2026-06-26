@@ -29,6 +29,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -140,5 +141,48 @@ class TraktViewModelPriorityHydrationTest {
         coVerify(exactly = 1) {
             discoveryService.ensureFresh(force = true, profileId = 1)
         }
+    }
+
+    @Test
+    fun `onSyncNow surfaces reconnect required when Trakt refresh grant is invalid`() = runTest(dispatcher) {
+        val authService = mockk<TraktAuthService>(relaxed = true)
+        val authDataStore = mockk<TraktAuthDataStore>()
+        val progressService = mockk<TraktProgressService>(relaxed = true)
+        val discoveryService = mockk<TraktDiscoveryService>(relaxed = true)
+        val scrobbleService = mockk<TraktScrobbleService>(relaxed = true)
+        val settingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
+
+        every { authService.hasRequiredCredentials() } returns true
+        coEvery { authService.refreshTokenIfNeeded(force = true) } returns false
+        every { authDataStore.state } returns MutableStateFlow(
+            TraktAuthState(
+                accessToken = "token",
+                refreshToken = "refresh",
+                username = "JohnNeerdael"
+            )
+        )
+        every { settingsDataStore.catalogPreferences } returns MutableStateFlow(TraktCatalogPreferences())
+        every { discoveryService.observeSnapshot() } returns MutableStateFlow(TraktDiscoverySnapshot())
+        every { scrobbleService.observeWatchingNowState() } returns MutableStateFlow(
+            TraktScrobbleService.WatchingNowState()
+        )
+
+        val viewModel = TraktViewModel(
+            TraktSettingsAuthGateway(authService), authDataStore, progressService, discoveryService,
+            scrobbleService, settingsDataStore, CatalogPriorityHydrationNotifier(), mockk(relaxed = true),
+            testProfileManager(), context
+        )
+
+        viewModel.onSyncNow()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Trakt authorization expired or was revoked. Reconnect Trakt to sync.",
+            viewModel.uiState.value.errorMessage
+        )
+        assertEquals(null, viewModel.uiState.value.statusMessage)
+        assertFalse(viewModel.uiState.value.isLoading)
+        coVerify(exactly = 0) { progressService.refreshNow() }
     }
 }

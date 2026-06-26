@@ -169,14 +169,26 @@ class TraktViewModel @Inject constructor(
     fun onSyncNow() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, statusMessage = "Syncing...") }
+            if (!traktAuthService.refreshTokenIfNeeded(force = true)) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isStatsLoading = false,
+                        errorMessage = "Trakt authorization expired or was revoked. Reconnect Trakt to sync.",
+                        statusMessage = null
+                    )
+                }
+                return@launch
+            }
             traktProgressService.refreshNow()
-            traktAuthService.fetchUserSettings()
+            val username = traktAuthService.fetchUserSettings()
             val stats = traktProgressService.getCachedStats(forceRefresh = true)
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     isStatsLoading = false,
                     connectedStats = stats ?: it.connectedStats,
+                    username = username ?: it.username,
                     statusMessage = "Sync completed"
                 )
             }

@@ -15,5 +15,7 @@ class TraktSettingsAuthGateway @Inject constructor(
 
     suspend fun fetchUserSettings() = authService.fetchUserSettings()
 
+    suspend fun refreshTokenIfNeeded(force: Boolean = false) = authService.refreshTokenIfNeeded(force = force)
+
     suspend fun getCurrentAuthState() = authService.getCurrentAuthState()
 }
