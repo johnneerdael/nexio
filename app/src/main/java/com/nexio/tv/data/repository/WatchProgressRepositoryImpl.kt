@@ -361,13 +361,18 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (sessions.isEmpty()) return
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
-            val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
             val envelopes = mutableListOf<TraktMutationEnvelope>()
             for (i in sessions.indices) {
                 val session = sessions[i]
                 when (session.provider) {
                     TrackingProvider.TRAKT,
                     TrackingProvider.SIMKL -> {
+                        val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
+                            provider = session.provider,
+                            contentId = contentId,
+                            season = season,
+                            episode = episode
+                        )
                         for (playbackIndex in playbackIds.indices) {
                             envelopes += buildPlaybackDeleteEnvelope(
                                 provider = session.provider,
@@ -451,11 +456,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         val sessions = accountSessionsForActiveProviders(providerState, profileSession)
         if (sessions.isEmpty()) return
-        val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
-            contentId = contentId,
-            season = null,
-            episode = null
-        )
         trackingProgressService.applyOptimisticRemoval(contentId, null, null)
         runCatching {
             val envelopes = mutableListOf<TraktMutationEnvelope>()
@@ -464,6 +464,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 when (session.provider) {
                     TrackingProvider.TRAKT,
                     TrackingProvider.SIMKL -> {
+                        val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
+                            provider = session.provider,
+                            contentId = contentId,
+                            season = null,
+                            episode = null
+                        )
                         for (playbackIndex in playbackIds.indices) {
                             envelopes += buildPlaybackDeleteEnvelope(
                                 provider = session.provider,

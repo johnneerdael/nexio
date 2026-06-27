@@ -253,7 +253,7 @@ class SimklProgressService @Inject constructor(
                         val contentId = ids?.toCanonicalContentId()
                         val playbackId = item.numberValue("id")?.toLong()
                         if (contentId != null && playbackId != null) {
-                            put(contentId, playbackId)
+                            ids.toContentIdAliases().forEach { alias -> put(alias, playbackId) }
                         }
                     }
                     for (i in episodePlaybacks.indices) {
@@ -269,7 +269,9 @@ class SimklProgressService @Inject constructor(
                             ?: episode?.numberValue("number")?.toInt()
                         val playbackId = item.numberValue("id")?.toLong()
                         if (contentId != null && seasonNumber != null && episodeNumber != null && playbackId != null) {
-                            put("$contentId:$seasonNumber:$episodeNumber", playbackId)
+                            ids.toContentIdAliases().forEach { alias ->
+                                put("$alias:$seasonNumber:$episodeNumber", playbackId)
+                            }
                         }
                     }
                 }
@@ -645,6 +647,19 @@ class SimklProgressService @Inject constructor(
         numberValue("simkl")?.toString()?.let { return "simkl:$it" }
         numberValue("simkl_id")?.toString()?.let { return "simkl:$it" }
         return null
+    }
+
+    private fun JsonObject.toContentIdAliases(): Set<String> {
+        val aliases = linkedSetOf<String>()
+        stringValue("imdb")?.let { aliases += it }
+        stringValue("tmdb")?.let { aliases += "tmdb:$it" }
+        numberValue("tmdb")?.toString()?.let { aliases += "tmdb:$it" }
+        stringValue("simkl")?.let { aliases += "simkl:$it" }
+        stringValue("simkl_id")?.let { aliases += "simkl:$it" }
+        numberValue("simkl")?.toString()?.let { aliases += "simkl:$it" }
+        numberValue("simkl_id")?.toString()?.let { aliases += "simkl:$it" }
+        toCanonicalContentId()?.let { aliases += it }
+        return aliases
     }
 
     private fun JsonObject.stringValue(key: String): String? =

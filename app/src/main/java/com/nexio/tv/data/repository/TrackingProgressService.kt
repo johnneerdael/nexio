@@ -80,6 +80,12 @@ interface TrackingProgressService {
         season: Int?,
         episode: Int?
     ): List<Long>
+    suspend fun resolvePlaybackDeleteIdsForOutbox(
+        provider: TrackingProvider,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): List<Long> = resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
     suspend fun resolveSeasonEpisodeTraktIds(
         showContentId: String,
         season: Int,
@@ -400,6 +406,29 @@ class DefaultTrackingProgressService @Inject constructor(
         val state = trackingProviderStateService.currentState()
         if (!state.canReadEffectiveProvider) return emptyList()
         return when (state.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklProgressService.resolvePlaybackDeleteIdsForOutbox(
+                contentId = contentId,
+                season = season,
+                episode = episode
+            )
+            TrackingProvider.TRAKT -> traktProgressService.resolvePlaybackDeleteIdsForOutbox(
+                contentId = contentId,
+                season = season,
+                episode = episode
+            )
+            TrackingProvider.MDBLIST -> emptyList()
+        }
+    }
+
+    override suspend fun resolvePlaybackDeleteIdsForOutbox(
+        provider: TrackingProvider,
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): List<Long> {
+        val state = trackingProviderStateService.currentState()
+        if (provider !in state.activeProviders) return emptyList()
+        return when (provider) {
             TrackingProvider.SIMKL -> simklProgressService.resolvePlaybackDeleteIdsForOutbox(
                 contentId = contentId,
                 season = season,

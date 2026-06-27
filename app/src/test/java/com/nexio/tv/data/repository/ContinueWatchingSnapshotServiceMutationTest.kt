@@ -2193,6 +2193,62 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `removeResumeEntry removes raw resume and record by hydrated display aliases`() = runTest {
+        val service = buildService()
+        val rawProgress = resume(
+            contentId = "tt9794044",
+            videoId = "tt9794044:2:2",
+            season = 2,
+            episode = 2,
+            lastWatched = 1779060482000L,
+            source = WatchProgress.SOURCE_SIMKL_PLAYBACK
+        )
+        val displayedProgress = rawProgress.copy(
+            contentId = "tmdb:114922",
+            videoId = "tmdb:114922:2:2"
+        )
+        val record = ContinueWatchingRecord(
+            profileId = 1,
+            parentId = "series:tmdb:114922",
+            contentId = "series:tmdb:114922:s2e2",
+            provider = com.nexio.tv.domain.model.TrackingProvider.SIMKL,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = rawProgress.position,
+            durationMs = rawProgress.duration,
+            episodeContext = ContinueWatchingRecord.EpisodeContext(2, 2),
+            clickTimeDisplayMetadata = null,
+            source = ContinueWatchingRecord.Source.REMOTE,
+            updatedAt = rawProgress.lastWatched,
+            displayIdentity = ContentIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "114922",
+                providerIds = ProviderIds(imdb = "tt9794044", tmdb = "114922", tvdb = "393268")
+            ),
+            resumeIdentities = listOf(rawProgress.toSafeResumeIdentity()),
+            idBundle = ContinueWatchingIdBundle(
+                imdb = "tt9794044",
+                tmdb = "114922",
+                tvdb = "393268",
+                season = 2,
+                episode = 2
+            )
+        )
+        setRawSnapshot(
+            service,
+            ContinueWatchingSnapshot(
+                resumeItems = listOf(rawProgress),
+                records = listOf(record),
+                updatedAtMs = 1779060482000L
+            )
+        )
+
+        service.removeResumeEntry(displayedProgress)
+
+        assertTrue(rawSnapshot(service).resumeItems.isEmpty())
+        assertTrue(rawSnapshot(service).records.isEmpty())
+    }
+
+    @Test
     fun `buildRawSnapshot suppresses older resume when watched show anchor is newer coordinate`() = runTest {
         val service = buildService()
         val oldResume = resume(

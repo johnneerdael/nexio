@@ -29,6 +29,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.core.anime.AnimeIdMappingService
@@ -999,14 +1000,18 @@ class TraktProgressService @Inject constructor(
         val playbackMovies = getPlayback("movies", force = true)
         val playbackEpisodes = getPlayback("episodes", force = true)
         val target = contentId.trim()
+        val movieTargetAliases = playbackDeleteTargetAliases(target, MediaKind.MOVIE)
+        val showTargetAliases = playbackDeleteTargetAliases(target, MediaKind.SHOW)
 
         val movieIds = playbackMovies
-            .filter { normalizeContentId(it.movie?.ids) == target }
+            .filter { item -> item.movie?.ids?.let { ids -> playbackIdsMatch(ids, MediaKind.MOVIE, movieTargetAliases) } == true }
             .mapNotNull { it.id }
 
         val episodeIds = playbackEpisodes
             .filter { item ->
-                val sameContent = normalizeContentId(item.show?.ids, kind = MediaKind.SHOW) == target
+                val sameContent = item.show?.ids?.let { ids ->
+                    playbackIdsMatch(ids, MediaKind.SHOW, showTargetAliases)
+                } == true
                 val sameEpisode = if (season != null && episode != null) {
                     item.episode?.season == season && item.episode.number == episode
                 } else {
@@ -1017,6 +1022,24 @@ class TraktProgressService @Inject constructor(
             .mapNotNull { it.id }
 
         return (movieIds + episodeIds).distinct()
+    }
+
+    private fun playbackDeleteTargetAliases(contentId: String, kind: MediaKind): Set<String> {
+        val ids = toTraktIds(parseContentIds(contentId))
+        return buildSet {
+            val trimmed = contentId.trim()
+            if (trimmed.isNotBlank()) add(trimmed)
+            addAll(traktIdLookupKeySet(ids, kind))
+        }
+    }
+
+    private fun playbackIdsMatch(
+        ids: TraktIdsDto,
+        kind: MediaKind,
+        targetAliases: Set<String>
+    ): Boolean {
+        if (targetAliases.isEmpty()) return false
+        return traktIdLookupKeySet(ids, kind).any { alias -> alias in targetAliases }
     }
 
     internal suspend fun reconcileQueuedHistoryRemoveSuccess(
@@ -1263,13 +1286,23 @@ class TraktProgressService @Inject constructor(
         } else {
             remoteProgress.value
         }
+        val watchedMovieAnchors = if (activityChanged || initialLoad) {
+            fetchWatchedMovieProgressSnapshot(forceRefresh = force)
+        } else {
+            remoteProgress.value.filter { progress ->
+                progress.contentType == "movie" && progress.source == WatchProgress.SOURCE_TRAKT_HISTORY
+            }
+        }
         val watchedShows = if (initialLoad) {
             getWatchedShowsSnapshot(forceRefresh = activityChanged || force).also { watchedShowsIndex = it }
         } else {
             watchedShowsIndex
         }
         val progressSnapshot = mergeWatchedShowAnchors(
-            progress = baseProgressSnapshot,
+            progress = mergeWatchedMovieAnchors(
+                progress = baseProgressSnapshot,
+                watchedMovies = watchedMovieAnchors
+            ),
             watchedShows = watchedShows
         )
         if (activityChanged) {
@@ -1472,17 +1505,22 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun getWatchedMoviesSnapshot(forceRefresh: Boolean): Set<String> {
+        return getWatchedMovieItemsSnapshot(forceRefresh)
+            .flatMap { item -> traktIdLookupKeys(item.movie?.ids, MediaKind.MOVIE) }
+            .toSet()
+    }
+
+    private suspend fun getWatchedMovieItemsSnapshot(forceRefresh: Boolean): List<TraktWatchedMovieItemDto> {
         if (forceRefresh) {
             traktIntegrationProvider.invalidateWatchedSnapshot(TraktWatchedKind.MOVIES)
         }
-        val items = when (val result = traktIntegrationProvider.getWatched(type = "movies")) {
+        return when (val result = traktIntegrationProvider.getWatched(type = "movies")) {
             is IntegrationCallResult.Success -> result.value
             else -> {
                 trace("watched-movies fetch: request returned null (network/auth failure)")
-                return emptySet()
+                emptyList()
             }
         }
-        return items.flatMap { item -> traktIdLookupKeys(item.movie?.ids, MediaKind.MOVIE) }.toSet()
     }
 
     private fun canonicalLookupKey(contentId: String): String {
@@ -1631,6 +1669,23 @@ class TraktProgressService @Inject constructor(
         for (i in anchors.indices) {
             val anchor = anchors[i]
             mergedByKey[progressKey(anchor)] = anchor
+        }
+        return mergedByKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private fun mergeWatchedMovieAnchors(
+        progress: List<WatchProgress>,
+        watchedMovies: List<WatchProgress>
+    ): List<WatchProgress> {
+        if (watchedMovies.isEmpty()) return progress
+        val mergedByKey = linkedMapOf<String, WatchProgress>()
+        for (i in watchedMovies.indices) {
+            val row = watchedMovies[i]
+            mergedByKey[progressKey(row)] = row
+        }
+        for (i in progress.indices) {
+            val row = progress[i]
+            mergedByKey[progressKey(row)] = row
         }
         return mergedByKey.values.sortedByDescending { it.lastWatched }
     }
@@ -2078,6 +2133,7 @@ class TraktProgressService @Inject constructor(
         force: Boolean = false,
         mode: TraktProgressRefreshMode = TraktProgressRefreshMode.INCREMENTAL
     ): List<WatchProgress> {
+        val completedMovies = fetchWatchedMovieProgressSnapshot(forceRefresh = force)
         val recentCompletedEpisodes =
             if (
                 mode == TraktProgressRefreshMode.BOOT_CRITICAL ||
@@ -2092,6 +2148,12 @@ class TraktProgressService @Inject constructor(
 
         val mergedByKey = linkedMapOf<String, WatchProgress>()
 
+        completedMovies
+            .sortedByDescending { it.lastWatched }
+            .forEach { progress ->
+                mergedByKey[progressKey(progress)] = progress
+            }
+
         recentCompletedEpisodes
             .sortedByDescending { it.lastWatched }
             .forEach { progress ->
@@ -2105,6 +2167,40 @@ class TraktProgressService @Inject constructor(
             }
 
         return mergedByKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private suspend fun fetchWatchedMovieProgressSnapshot(forceRefresh: Boolean): List<WatchProgress> {
+        val watchedMovies = getWatchedMovieItemsSnapshot(forceRefresh)
+        if (watchedMovies.isEmpty()) return emptyList()
+        val out = ArrayList<WatchProgress>(watchedMovies.size)
+        for (i in watchedMovies.indices) {
+            mapWatchedMovieItem(watchedMovies[i])?.let { out += it }
+        }
+        return out
+    }
+
+    private fun mapWatchedMovieItem(item: TraktWatchedMovieItemDto): WatchProgress? {
+        val movie = item.movie ?: return null
+        val contentId = normalizeContentId(movie.ids, kind = MediaKind.MOVIE)
+        if (contentId.isBlank()) return null
+        return WatchProgress(
+            contentId = contentId,
+            contentType = "movie",
+            name = movie.title ?: contentId,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = contentId,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 1L,
+            duration = 1L,
+            lastWatched = parseIsoToMillis(item.lastWatchedAt),
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY,
+            traktMovieId = movie.ids?.trakt
+        )
     }
 
     private suspend fun fetchIncrementalProgressSnapshot(force: Boolean = false): List<WatchProgress> {

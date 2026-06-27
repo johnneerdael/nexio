@@ -272,7 +272,8 @@ private data class CanonicalRecordRemovalRef(
     val contentId: String,
     val videoId: String? = null,
     val season: Int? = null,
-    val episode: Int? = null
+    val episode: Int? = null,
+    val aliases: Set<String> = emptySet()
 )
 
 private fun ContinueWatchingSnapshot.withCanonicalRecordsRemovedFor(
@@ -285,7 +286,10 @@ private fun ContinueWatchingSnapshot.withCanonicalRecordsRemovedFor(
             if (contentId.isBlank()) return@mapNotNull null
             ref.copy(
                 contentId = contentId,
-                videoId = ref.videoId?.trim()?.takeIf { it.isNotBlank() }
+                videoId = ref.videoId?.trim()?.takeIf { it.isNotBlank() },
+                aliases = ref.aliases.mapNotNullTo(linkedSetOf()) { alias ->
+                    alias.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
+                }
             )
         }
     if (normalizedRefs.isEmpty()) return this
@@ -299,6 +303,7 @@ private fun ContinueWatchingSnapshot.withCanonicalRecordsRemovedFor(
 
 private fun ContinueWatchingRecord.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
     if (resumeIdentities.any { identity -> identity.matchesRemovalRef(ref) }) return true
+    if (ref.aliases.isNotEmpty() && removalAliases().any { alias -> alias in ref.aliases }) return true
     if (ref.videoId != null && contentId == ref.videoId) return true
     if (parentId != ref.contentId) return false
     if (ref.season == null && ref.episode == null) return true
@@ -309,18 +314,65 @@ private fun ContinueWatchingRecord.matchesRemovalRef(ref: CanonicalRecordRemoval
 
 private fun ResumeIdentity.matchesRemovalRef(ref: CanonicalRecordRemovalRef): Boolean {
     if (ref.videoId != null && videoId == ref.videoId) return true
+    if (ref.aliases.isNotEmpty() && removalAliases().any { alias -> alias in ref.aliases }) return true
     if (contentId != ref.contentId) return false
     if (ref.season == null && ref.episode == null) return true
     return season == ref.season && episode == ref.episode
 }
 
-private fun WatchProgress.toCanonicalRecordRemovalRef(): CanonicalRecordRemovalRef =
+private fun WatchProgress.toCanonicalRecordRemovalRef(aliases: Set<String> = emptySet()): CanonicalRecordRemovalRef =
     CanonicalRecordRemovalRef(
         contentId = contentId,
         videoId = videoId,
         season = season,
-        episode = episode
+        episode = episode,
+        aliases = aliases
     )
+
+private fun ContinueWatchingRecord.removalAliases(): Set<String> {
+    val aliases = linkedSetOf<String>()
+    val suffix = episodeContext?.let { ":s${it.season}e${it.number}" } ?: ""
+    fun add(raw: String?) {
+        val value = raw?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return
+        aliases += value
+        if (value.startsWith("series:") || value.startsWith("movie:")) {
+            aliases += value.substringAfter(':')
+        }
+    }
+    fun addProvider(provider: String, id: String?) {
+        val value = id?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return
+        aliases += "$provider:$value$suffix"
+        aliases += "series:$provider:$value$suffix"
+        aliases += "movie:$provider:$value$suffix"
+        if (provider == "imdb") aliases += value + suffix
+    }
+    add(parentId)
+    add(contentId)
+    for (i in resumeIdentities.indices) {
+        add(resumeIdentities[i].contentId)
+        add(resumeIdentities[i].videoId)
+    }
+    addProvider("imdb", idBundle.imdb)
+    addProvider("tmdb", idBundle.tmdb)
+    addProvider("tvdb", idBundle.tvdb)
+    addProvider("trakt", idBundle.trakt)
+    addProvider("simkl", idBundle.simkl)
+    return aliases
+}
+
+private fun ResumeIdentity.removalAliases(): Set<String> {
+    val aliases = linkedSetOf<String>()
+    fun add(raw: String?) {
+        val value = raw?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return
+        aliases += value
+        if (value.startsWith("series:") || value.startsWith("movie:")) {
+            aliases += value.substringAfter(':')
+        }
+    }
+    add(contentId)
+    add(videoId)
+    return aliases
+}
 
 private data class LiveContinueWatchingSnapshotEmission(
     val profileId: Int,
@@ -1053,6 +1105,33 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     ).withCanonicalRecordsRemovedFor(
                         removed.map { it.toCanonicalRecordRemovalRef() }
                     )
+                )
+            }
+        }
+    }
+
+    suspend fun removeResumeEntry(progress: WatchProgress) {
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                val removalAliases = resumeRetentionAliases(progress)
+                val removed = current.snapshot.resumeItems.filter { candidate ->
+                    candidate.videoId == progress.videoId ||
+                        resumeRetentionAliases(candidate).any { alias -> alias in removalAliases }
+                }
+                rememberExplicitResumeRemoval(current.profileId, removed.ifEmpty { listOf(progress) })
+                val refs = if (removed.isEmpty()) {
+                    listOf(progress.toCanonicalRecordRemovalRef(removalAliases))
+                } else {
+                    removed.map { removedProgress ->
+                        removedProgress.toCanonicalRecordRemovalRef(
+                            aliases = resumeRetentionAliases(removedProgress) + removalAliases
+                        )
+                    }
+                }
+                current.copy(
+                    snapshot = current.snapshot.copy(
+                        resumeItems = current.snapshot.resumeItems - removed.toSet()
+                    ).withCanonicalRecordsRemovedFor(refs)
                 )
             }
         }
@@ -2593,18 +2672,23 @@ class ContinueWatchingSnapshotService @Inject constructor(
         allProgress: List<WatchProgress>
     ): Map<String, ContinueWatchingCompletionAnchor> {
         val anchors = linkedMapOf<String, ContinueWatchingCompletionAnchor>()
-        allProgress.forEach { progress ->
+        for (i in allProgress.indices) {
+            val progress = allProgress[i]
             val contentId = progress.contentId.trim()
-            if (contentId.isBlank()) return@forEach
-            if (!progress.isCompleted()) return@forEach
+            if (contentId.isBlank()) continue
+            if (!progress.isCompleted()) continue
             val anchor = ContinueWatchingCompletionAnchor(
                 season = progress.season,
                 episode = progress.episode,
                 lastWatched = progress.lastWatched
             )
-            val existing = anchors[contentId]
-            if (existing == null || shouldPreferCompletionAnchor(existing, anchor)) {
-                anchors[contentId] = anchor
+            val keys = linkedSetOf(contentId)
+            keys += resumeRetentionAliases(progress)
+            for (key in keys) {
+                val existing = anchors[key]
+                if (existing == null || shouldPreferCompletionAnchor(existing, anchor)) {
+                    anchors[key] = anchor
+                }
             }
         }
         return anchors

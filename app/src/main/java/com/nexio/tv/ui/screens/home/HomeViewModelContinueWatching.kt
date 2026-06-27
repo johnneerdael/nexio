@@ -1536,7 +1536,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
             "removeContinueWatching requested contentId=$contentId season=$season episode=$episode isNextUp=$isNextUp"
         )
         if (capturedProgress != null) {
-            continueWatchingSnapshotService.removeResumeEntry(capturedProgress.videoId)
+            continueWatchingSnapshotService.removeResumeEntry(capturedProgress)
         }
         runCatching {
             watchProgressRepository.removeProgress(

@@ -341,7 +341,9 @@ class WatchProgressRepositoryProviderRoutingTest {
         every { trackingProgressService.observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
         every { trackingProgressService.observeEpisodeProgress(any()) } returns flowOf(emptyMap())
         every { trackingProgressService.observeMovieWatched(any()) } returns flowOf(false)
-        coEvery { trackingProgressService.resolvePlaybackDeleteIdsForOutbox("tt1520211", 1, 2) } returns listOf(44L)
+        coEvery {
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(TrackingProvider.SIMKL, "tt1520211", 1, 2)
+        } returns listOf(44L)
 
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopeSlot = slot<TraktMutationEnvelope>()
@@ -367,8 +369,11 @@ class WatchProgressRepositoryProviderRoutingTest {
     fun `removeProgress fans out playback clear to every authenticated tracker`() = runTest {
         val trackingProgressService = mockTrackingProgressService()
         coEvery {
-            trackingProgressService.resolvePlaybackDeleteIdsForOutbox("tt1520211", 1, 2)
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(TrackingProvider.TRAKT, "tt1520211", 1, 2)
         } returns listOf(44L)
+        coEvery {
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(TrackingProvider.SIMKL, "tt1520211", 1, 2)
+        } returns listOf(55L)
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopes = mutableListOf<TraktMutationEnvelope>()
         coEvery { outbox.enqueueAndDrain(capture(envelopes)) } answers { envelopes.last() }
@@ -398,13 +403,26 @@ class WatchProgressRepositoryProviderRoutingTest {
             setOf(TrackingProvider.TRAKT, TrackingProvider.SIMKL, TrackingProvider.MDBLIST),
             envelopes.map { it.provider }.toSet()
         )
+        assertEquals(
+            44L,
+            envelopes.first { it.provider == TrackingProvider.TRAKT }
+                .payload.get("playbackId").asLong
+        )
+        assertEquals(
+            55L,
+            envelopes.first { it.provider == TrackingProvider.SIMKL }
+                .payload.get("playbackId").asLong
+        )
     }
 
     @Test
     fun `clearShowProgress fans out show history remove even without playback ids`() = runTest {
         val trackingProgressService = mockTrackingProgressService()
         coEvery {
-            trackingProgressService.resolvePlaybackDeleteIdsForOutbox("tt0108778", null, null)
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(TrackingProvider.TRAKT, "tt0108778", null, null)
+        } returns emptyList()
+        coEvery {
+            trackingProgressService.resolvePlaybackDeleteIdsForOutbox(TrackingProvider.SIMKL, "tt0108778", null, null)
         } returns emptyList()
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopes = mutableListOf<TraktMutationEnvelope>()
@@ -556,6 +574,7 @@ class WatchProgressRepositoryProviderRoutingTest {
             every { observeEpisodeProgress(any()) } returns flowOf(emptyMap())
             every { observeMovieWatched(any()) } returns flowOf(false)
             coEvery { resolvePlaybackDeleteIdsForOutbox(any(), any(), any()) } returns emptyList()
+            coEvery { resolvePlaybackDeleteIdsForOutbox(any<TrackingProvider>(), any(), any(), any()) } returns emptyList()
         }
     }
 

@@ -149,6 +149,20 @@ internal fun traktIdLookupKeys(ids: TraktIdsDto?, kind: MediaKind): List<String>
     }
 }
 
+internal fun traktIdLookupKeySet(ids: TraktIdsDto?, kind: MediaKind): Set<String> {
+    if (ids == null) return emptySet()
+    val normalized = normalizeContentId(ids = ids, kind = kind)
+    val legacyNormalized = normalizeContentId(ids = ids)
+    return buildSet {
+        traktIdLookupKeys(ids, kind).forEach { key ->
+            val trimmed = key.trim()
+            if (trimmed.isNotEmpty()) add(trimmed)
+        }
+        if (normalized.isNotBlank()) add(normalized)
+        if (legacyNormalized.isNotBlank()) add(legacyNormalized)
+    }
+}
+
 /**
  * Returns the id form to use as a Trakt API path segment (e.g. /shows/{id}/...).
  * Trakt accepts trakt slug, trakt id, and imdb id reliably; tvdb is not accepted
